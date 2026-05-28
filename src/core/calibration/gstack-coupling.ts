@@ -19,7 +19,7 @@
  *      and DO NOT throw — calibration data writes are independent of gstack.
  *
  * Namespace:
- *   Every entry's `key` starts with 'gbrain:calibration:v0.36.1.0:' so an
+ *   Every entry's `key` starts with 'voltmind:calibration:v0.36.1.0:' so an
  *   `--undo-wave v0.36.1.0` can later prune these via
  *   `gstack-learnings-prune` (Lane D / T17).
  */
@@ -66,7 +66,7 @@ export interface GstackLearningEntry {
 export type GstackWriter = (entry: GstackLearningEntry) => Promise<void> | void;
 
 /** v0.36.1.0 — namespace prefix. Lane D `--undo-wave` filters on this. */
-export const GSTACK_LEARNING_NAMESPACE = 'gbrain:calibration:v0.36.1.0:';
+export const GSTACK_LEARNING_NAMESPACE = 'voltmind:calibration:v0.36.1.0:';
 
 /** Build the learning entry from a resolution event. Pure. */
 export function buildLearningEntry(event: IncorrectResolutionEvent): GstackLearningEntry {
@@ -80,7 +80,7 @@ export function buildLearningEntry(event: IncorrectResolutionEvent): GstackLearn
     ? ` Pattern: ${event.activeBiasTags.join(', ')}.`
     : '';
   return {
-    skill: 'gbrain-calibration',
+    skill: 'voltmind-calibration',
     type: 'observation',
     key: `${GSTACK_LEARNING_NAMESPACE}take-${event.takeId}${tagSuffix}`,
     insight:

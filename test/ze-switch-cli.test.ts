@@ -1,5 +1,5 @@
 /**
- * v0.36.0.0 (T3) — `gbrain ze-switch` CLI tests.
+ * v0.36.0.0 (T3) — `voltmind ze-switch` CLI tests.
  *
  * Pins:
  *  - --dry-run prints a plan, applies nothing
@@ -106,7 +106,7 @@ describe('--help', () => {
   test('exits 0 with usage text', async () => {
     const r = await captureExit(() => runZeSwitch(['--help'], engine));
     expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain('gbrain ze-switch');
+    expect(r.stdout).toContain('voltmind ze-switch');
     expect(r.stdout).toContain('--dry-run');
     expect(r.stdout).toContain('--undo');
   });

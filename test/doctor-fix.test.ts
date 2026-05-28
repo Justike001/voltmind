@@ -1,5 +1,5 @@
 /**
- * CLI integration tests for `gbrain doctor --fix` / `--dry-run`.
+ * CLI integration tests for `voltmind doctor --fix` / `--dry-run`.
  * Spawns the actual CLI against tmpdir skill fixtures to prove the
  * arg-parsing wiring and stdout/file-state contract hold end-to-end.
  */
@@ -24,7 +24,7 @@ afterEach(() => {
 function makeGitFixture(skills: Record<string, string>): string {
   // doctor finds repo root by looking for skills/RESOLVER.md — so wrap the
   // fixture in a dir with skills/ inside and a RESOLVER.md stub.
-  const root = mkdtempSync(join(tmpdir(), "gbrain-doctorfix-"));
+  const root = mkdtempSync(join(tmpdir(), "voltmind-doctorfix-"));
   fixtures.push(root);
   const skillsDir = join(root, "skills");
   mkdirSync(skillsDir, { recursive: true });
@@ -59,7 +59,7 @@ function runDoctor(cwd: string, args: string[]): { stdout: string; stderr: strin
   return { stdout: res.stdout, stderr: res.stderr, status: res.status ?? -1 };
 }
 
-describe("gbrain doctor --fix CLI integration", () => {
+describe("voltmind doctor --fix CLI integration", () => {
   test("--fix --dry-run proposes a fix and does not write", () => {
     const root = makeGitFixture({
       demo: "## Iron Law: Back-Linking (MANDATORY)\n\nbody paragraph.\n",

@@ -35,17 +35,17 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
-  cwd = mkdtempSync(join(tmpdir(), 'gbrain-resolver-'));
+  cwd = mkdtempSync(join(tmpdir(), 'voltmind-resolver-'));
 });
 
 describe('source-resolver silent-fallback tiers (codex P1-F)', () => {
-  describe('tier 3 — .gbrain-source dotfile', () => {
+  describe('tier 3 — .voltmind-source dotfile', () => {
     test('valid dotfile content (registered source) is honored', async () => {
       await engine.executeRaw(
         `INSERT INTO sources (id, name, config) VALUES ('alpha', 'alpha', '{}'::jsonb)
          ON CONFLICT (id) DO NOTHING`,
       );
-      writeFileSync(join(cwd, '.gbrain-source'), 'alpha\n');
+      writeFileSync(join(cwd, '.voltmind-source'), 'alpha\n');
       const resolved = await resolveSourceId(engine, null, cwd);
       expect(resolved).toBe('alpha');
     });
@@ -53,20 +53,20 @@ describe('source-resolver silent-fallback tiers (codex P1-F)', () => {
     test('underscore in dotfile content silently falls through (strict regex rejects)', async () => {
       // The strict regex rejects underscores. Pre-PR the permissive regex
       // accepted them. After: invalid content falls through to next tier.
-      writeFileSync(join(cwd, '.gbrain-source'), 'has_underscore\n');
+      writeFileSync(join(cwd, '.voltmind-source'), 'has_underscore\n');
       // No other tier signal — falls through to tier 6 'default'
       const resolved = await resolveSourceId(engine, null, cwd);
       expect(resolved).toBe('default');
     });
 
     test('whitespace-only dotfile content silently falls through', async () => {
-      writeFileSync(join(cwd, '.gbrain-source'), '   \n');
+      writeFileSync(join(cwd, '.voltmind-source'), '   \n');
       const resolved = await resolveSourceId(engine, null, cwd);
       expect(resolved).toBe('default');
     });
 
     test('uppercase in dotfile content silently falls through', async () => {
-      writeFileSync(join(cwd, '.gbrain-source'), 'DEFAULT\n');
+      writeFileSync(join(cwd, '.voltmind-source'), 'DEFAULT\n');
       const resolved = await resolveSourceId(engine, null, cwd);
       expect(resolved).toBe('default');
     });
@@ -116,21 +116,21 @@ describe('source-resolver silent-fallback tiers (codex P1-F)', () => {
     });
   });
 
-  describe('tier 2 — GBRAIN_SOURCE env (throw-on-invalid contract)', () => {
+  describe('tier 2 — VOLTMIND_SOURCE env (throw-on-invalid contract)', () => {
     test('valid env value is honored', async () => {
       await engine.executeRaw(
         `INSERT INTO sources (id, name, config) VALUES ('delta', 'delta', '{}'::jsonb)
          ON CONFLICT (id) DO NOTHING`,
       );
-      await withEnv({ GBRAIN_SOURCE: 'delta' }, async () => {
+      await withEnv({ VOLTMIND_SOURCE: 'delta' }, async () => {
         const resolved = await resolveSourceId(engine, null, cwd);
         expect(resolved).toBe('delta');
       });
     });
 
-    test('underscore in GBRAIN_SOURCE THROWS (tier-2 contract)', async () => {
-      await withEnv({ GBRAIN_SOURCE: 'has_underscore' }, async () => {
-        await expect(resolveSourceId(engine, null, cwd)).rejects.toThrow(/GBRAIN_SOURCE/);
+    test('underscore in VOLTMIND_SOURCE THROWS (tier-2 contract)', async () => {
+      await withEnv({ VOLTMIND_SOURCE: 'has_underscore' }, async () => {
+        await expect(resolveSourceId(engine, null, cwd)).rejects.toThrow(/VOLTMIND_SOURCE/);
       });
     });
   });

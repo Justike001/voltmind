@@ -42,7 +42,7 @@ describe('v0.38 migrations v81 + v82 (smoke)', () => {
   test('v82 accepts JSONB shape for per-source snapshot', async () => {
     const snapshot = {
       default: {
-        pack_name: 'gbrain-base',
+        pack_name: 'voltmind-base',
         pack_version: '1.0.0',
         manifest_sha8: 'abcd1234',
         alias_closure_resolved: { person: ['person'] },

@@ -1,6 +1,6 @@
 # Skillpack RESOLVER.md (table format, ships in the bundled skills/)
 
-The conventional gbrain-shape resolver. Merges with `../AGENTS.md` (compact
+The conventional voltmind-shape resolver. Merges with `../AGENTS.md` (compact
 list, the workspace dispatcher) via the D-CX-14 multi-resolver merge.
 
 ## Brain operations

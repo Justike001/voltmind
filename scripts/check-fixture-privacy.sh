@@ -12,7 +12,7 @@
 #   - 'wintermute' / 'openclaw' (real downstream agent names)
 #   - 'palantir' (real company per Garry's history)
 #   - common real-fund names (sequoia, andreessen, founders fund, etc.)
-#   - 'ycombinator' / 'y combinator' (the org running gbrain)
+#   - 'ycombinator' / 'y combinator' (the org running voltmind)
 #
 # Allowed (placeholder convention):
 #   - alice-example / bob-example / charlie-example / diana-example

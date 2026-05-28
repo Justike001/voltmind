@@ -44,7 +44,7 @@ function buildTenOutOfTenPack(dir: string, version = '0.1.0'): SkillpackManifest
     author: 'Garry Tan',
     license: 'MIT',
     homepage: 'https://example.com/ten-of-ten',
-    gbrain_min_version: '0.36.0',
+    voltmind_min_version: '0.36.0',
     skills: ['skills/judge-foo', 'skills/judge-bar'],
     unit_tests: ['test/**/*.test.ts'],
     e2e_tests: ['e2e/**/*.test.ts'],
@@ -333,7 +333,7 @@ describe('describeRubric — pure-data export', () => {
 describe('audit — JSONL log', () => {
   test('logSkillpackEvent appends a line', async () => {
     const auditDir = mkdtempSync(join(tmp, 'audit-1-'));
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, () => {
       logSkillpackEvent({ event: 'scaffold_third_party', pack: 'foo', outcome: 'ok' });
       const file = currentAuditFilePath();
       expect(existsSync(file)).toBe(true);
@@ -345,7 +345,7 @@ describe('audit — JSONL log', () => {
 
   test('readRecentSkillpackEvents returns chronological events', async () => {
     const auditDir = mkdtempSync(join(tmp, 'audit-2-'));
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, () => {
       logSkillpackEvent({ event: 'search', pack: 'foo', outcome: 'ok' });
       logSkillpackEvent({ event: 'doctor_run', pack: 'foo', outcome: 'ok' });
       const events = readRecentSkillpackEvents(7);
@@ -357,7 +357,7 @@ describe('audit — JSONL log', () => {
 
   test('readRecentSkillpackEvents skips malformed lines without throwing', async () => {
     const auditDir = mkdtempSync(join(tmp, 'audit-3-'));
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, () => {
       const file = currentAuditFilePath();
       mkdirSync(auditDir, { recursive: true });
       writeFileSync(file, '{not json}\n{"ts":"2026-01-01","event":"search","outcome":"ok"}\n');

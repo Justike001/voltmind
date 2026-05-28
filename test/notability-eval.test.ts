@@ -13,9 +13,9 @@
  *      precision@HIGH < 0.75; fail PR if < 0.50.
  *
  * The harness runs against the public-anonymized fixture (40 cases) by
- * default. Operators with a private fixture (`~/.gbrain/eval/
- * notability-real.jsonl`, mined + hand-confirmed via `gbrain notability-
- * eval`) can opt into the larger run by setting GBRAIN_NOTABILITY_EVAL_REAL=1.
+ * default. Operators with a private fixture (`~/.voltmind/eval/
+ * notability-real.jsonl`, mined + hand-confirmed via `voltmind notability-
+ * eval`) can opt into the larger run by setting VOLTMIND_NOTABILITY_EVAL_REAL=1.
  *
  * Sample size justification: the public fixture has 14 HIGH cases.
  * For precision@HIGH = 0.75 with a 95% CI ±10pp, n=14 gives roughly
@@ -179,9 +179,9 @@ describe('JSONL utilities', () => {
     expect(out[1]?.valid).toBe(2);
   });
 
-  test('default paths resolve under ~/.gbrain/eval/', () => {
-    expect(defaultMiningOutPath()).toContain('.gbrain/eval/notability-mining-candidates.jsonl');
-    expect(defaultReviewOutPath()).toContain('.gbrain/eval/notability-real.jsonl');
+  test('default paths resolve under ~/.voltmind/eval/', () => {
+    expect(defaultMiningOutPath()).toContain('.voltmind/eval/notability-mining-candidates.jsonl');
+    expect(defaultReviewOutPath()).toContain('.voltmind/eval/notability-real.jsonl');
   });
 });
 

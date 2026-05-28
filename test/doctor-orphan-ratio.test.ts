@@ -149,7 +149,7 @@ describe('runDoctor — orphan_ratio check (local surface, D5)', () => {
     const report = await runDoctorJson();
     const check = findCheck(report, 'orphan_ratio');
     expect(check!.status).toBe('warn');
-    expect(check!.message).toContain('gbrain extract links --by-mention');
+    expect(check!.message).toContain('voltmind extract links --by-mention');
   });
 
   test('very high orphan ratio (>0.8) → fail with urgency fix-hint', async () => {
@@ -174,7 +174,7 @@ describe('runDoctor — orphan_ratio check (local surface, D5)', () => {
     const report = await runDoctorJson();
     const check = findCheck(report, 'orphan_ratio');
     expect(check!.status).toBe('fail');
-    expect(check!.message).toContain('gbrain extract links --by-mention');
+    expect(check!.message).toContain('voltmind extract links --by-mention');
   });
 
   test('zero entity pages → vacuous status ok', async () => {
@@ -219,15 +219,15 @@ describe('cross-surface parity contract', () => {
   test('source greps: both surfaces reference the same fix command', () => {
     const doctor = readFileSync('src/commands/doctor.ts', 'utf8');
     const remote = readFileSync('src/core/doctor-remote.ts', 'utf8');
-    expect(doctor).toContain('gbrain extract links --by-mention');
-    expect(remote).toContain('gbrain extract links --by-mention');
+    expect(doctor).toContain('voltmind extract links --by-mention');
+    expect(remote).toContain('voltmind extract links --by-mention');
   });
 
   test('source greps: local hint is self-fix; thin-client hint points at operator', () => {
     const doctor = readFileSync('src/commands/doctor.ts', 'utf8');
     const remote = readFileSync('src/core/doctor-remote.ts', 'utf8');
     // Local hint: just the command (user can run it).
-    expect(doctor).toContain('Run: gbrain extract links --by-mention');
+    expect(doctor).toContain('Run: voltmind extract links --by-mention');
     // Thin-client hint: ask the operator.
     expect(remote).toMatch(/Ask the brain operator/i);
   });

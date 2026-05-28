@@ -17,8 +17,8 @@ import { retrofitWrap } from '../../src/core/progressive-batch/retrofit-wrap.ts'
 
 function auditEnv(): Record<string, string> {
   return {
-    GBRAIN_AUDIT_DIR: mkdtempSync(join(tmpdir(), 'rw-audit-')),
-    GBRAIN_PROGRESSIVE_BATCH_AUTO: '1',
+    VOLTMIND_AUDIT_DIR: mkdtempSync(join(tmpdir(), 'rw-audit-')),
+    VOLTMIND_PROGRESSIVE_BATCH_AUTO: '1',
   };
 }
 

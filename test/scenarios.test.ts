@@ -8,17 +8,17 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { listScenarios, loadScenario, readBrief } from '../src/core/claw-test/scenarios.ts';
 
-const ORIG_ROOT = process.env.GBRAIN_CLAW_SCENARIOS_DIR;
+const ORIG_ROOT = process.env.VOLTMIND_CLAW_SCENARIOS_DIR;
 let root: string;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'scenarios-'));
-  process.env.GBRAIN_CLAW_SCENARIOS_DIR = root;
+  process.env.VOLTMIND_CLAW_SCENARIOS_DIR = root;
 });
 
 afterEach(() => {
-  if (ORIG_ROOT !== undefined) process.env.GBRAIN_CLAW_SCENARIOS_DIR = ORIG_ROOT;
-  else delete process.env.GBRAIN_CLAW_SCENARIOS_DIR;
+  if (ORIG_ROOT !== undefined) process.env.VOLTMIND_CLAW_SCENARIOS_DIR = ORIG_ROOT;
+  else delete process.env.VOLTMIND_CLAW_SCENARIOS_DIR;
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -109,24 +109,24 @@ describe('readBrief', () => {
 
 describe('shipped scenarios load cleanly', () => {
   test('fresh-install loads from default fixtures root', () => {
-    delete process.env.GBRAIN_CLAW_SCENARIOS_DIR;
+    delete process.env.VOLTMIND_CLAW_SCENARIOS_DIR;
     try {
       const cfg = loadScenario('fresh-install');
       expect(cfg.kind).toBe('fresh-install');
       expect(cfg.expectedPhases.length).toBeGreaterThan(0);
     } finally {
-      process.env.GBRAIN_CLAW_SCENARIOS_DIR = root;
+      process.env.VOLTMIND_CLAW_SCENARIOS_DIR = root;
     }
   });
 
   test('upgrade-from-v0.18 loads from default fixtures root', () => {
-    delete process.env.GBRAIN_CLAW_SCENARIOS_DIR;
+    delete process.env.VOLTMIND_CLAW_SCENARIOS_DIR;
     try {
       const cfg = loadScenario('upgrade-from-v0.18');
       expect(cfg.kind).toBe('upgrade');
       expect(cfg.fromVersion).toBe('0.18.0');
     } finally {
-      process.env.GBRAIN_CLAW_SCENARIOS_DIR = root;
+      process.env.VOLTMIND_CLAW_SCENARIOS_DIR = root;
     }
   });
 });

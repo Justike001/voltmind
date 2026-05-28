@@ -2,7 +2,7 @@
  * E2E: v0.11.0 migration-flow against real Postgres + temp $HOME.
  *
  * Exercises the full orchestrator from Phase A (schema apply via
- * `gbrain init --migrate-only`) through Phase G (completed.jsonl append),
+ * `voltmind init --migrate-only`) through Phase G (completed.jsonl append),
  * skipping Phase F (autopilot install) to avoid writing a launchd plist
  * or crontab entry on the CI host. Worker supervision + autopilot-cycle
  * handler are covered by the unit-layer tests (test/handlers.test.ts and
@@ -36,21 +36,21 @@ const DATABASE_URL = process.env.DATABASE_URL ?? '';
 
 let tmp: string;
 let origHome: string | undefined;
-let origGbrainHome: string | undefined;
+let origVoltmindHome: string | undefined;
 let origPath: string | undefined;
 let fakeBinDir: string;
 const CLI_PATH = join(import.meta.dir, '..', '..', 'src', 'cli.ts');
 
-// Module-level PATH shim. The orchestrator shells out to `gbrain init
-// --migrate-only` and `gbrain jobs smoke`. On source-install test envs
-// there's no `gbrain` on $PATH. Install a tiny bash shim that `exec`s
+// Module-level PATH shim. The orchestrator shells out to `voltmind init
+// --migrate-only` and `voltmind jobs smoke`. On source-install test envs
+// there's no `voltmind` on $PATH. Install a tiny bash shim that `exec`s
 // `bun run src/cli.ts` and prepend it to $PATH before any tests import
 // the orchestrator. Running at module-init (not beforeAll) guarantees
 // the shim exists before Bun's test runner loads described blocks.
 if (!SKIP) {
   origPath = process.env.PATH;
-  fakeBinDir = mkdtempSync(join(tmpdir(), 'gbrain-e2e-bin-'));
-  const shim = join(fakeBinDir, 'gbrain');
+  fakeBinDir = mkdtempSync(join(tmpdir(), 'voltmind-e2e-bin-'));
+  const shim = join(fakeBinDir, 'voltmind');
   writeFileSync(
     shim,
     `#!/usr/bin/env bash\nexec bun run "${CLI_PATH}" "$@"\n`,
@@ -61,17 +61,17 @@ if (!SKIP) {
 }
 
 function freshTempHome(label: string) {
-  const dir = mkdtempSync(join(tmpdir(), `gbrain-e2e-migration-${label}-`));
-  // preferences.ts's gbrainDir() returns `$HOME/.gbrain` when GBRAIN_HOME
-  // is unset. Test fixtures write to `$dir/.gbrain/...`, so set HOME only
-  // and clear any inherited GBRAIN_HOME (which would route prefs to $dir
-  // directly, no .gbrain suffix).
+  const dir = mkdtempSync(join(tmpdir(), `voltmind-e2e-migration-${label}-`));
+  // preferences.ts's voltmindDir() returns `$HOME/.voltmind` when VOLTMIND_HOME
+  // is unset. Test fixtures write to `$dir/.voltmind/...`, so set HOME only
+  // and clear any inherited VOLTMIND_HOME (which would route prefs to $dir
+  // directly, no .voltmind suffix).
   process.env.HOME = dir;
-  delete process.env.GBRAIN_HOME;
-  // Seed config so Phase A's `gbrain init --migrate-only` has a target.
-  mkdirSync(join(dir, '.gbrain'), { recursive: true });
+  delete process.env.VOLTMIND_HOME;
+  // Seed config so Phase A's `voltmind init --migrate-only` has a target.
+  mkdirSync(join(dir, '.voltmind'), { recursive: true });
   writeFileSync(
-    join(dir, '.gbrain', 'config.json'),
+    join(dir, '.voltmind', 'config.json'),
     JSON.stringify({ engine: 'postgres', database_url: DATABASE_URL }, null, 2) + '\n',
     { mode: 0o600 },
   );
@@ -84,15 +84,15 @@ beforeAll(() => {
     return;
   }
   origHome = process.env.HOME;
-  origGbrainHome = process.env.GBRAIN_HOME;
+  origVoltmindHome = process.env.VOLTMIND_HOME;
 });
 
 afterAll(() => {
   if (SKIP) return;
   if (origHome === undefined) delete process.env.HOME;
   else process.env.HOME = origHome;
-  if (origGbrainHome === undefined) delete process.env.GBRAIN_HOME;
-  else process.env.GBRAIN_HOME = origGbrainHome;
+  if (origVoltmindHome === undefined) delete process.env.VOLTMIND_HOME;
+  else process.env.VOLTMIND_HOME = origVoltmindHome;
   if (origPath === undefined) delete process.env.PATH;
   else process.env.PATH = origPath;
   try { if (fakeBinDir) rmSync(fakeBinDir, { recursive: true, force: true }); } catch { /* best-effort */ }
@@ -122,7 +122,7 @@ describeE2E('E2E: v0.11.0 orchestrator against live Postgres', () => {
     expect(['complete', 'partial']).toContain(result.status);
 
     // Phase D: preferences.json exists with 0o600 + mode=pain_triggered.
-    const prefsPath = join(tmp, '.gbrain', 'preferences.json');
+    const prefsPath = join(tmp, '.voltmind', 'preferences.json');
     expect(existsSync(prefsPath)).toBe(true);
     expect(statSync(prefsPath).mode & 0o777).toBe(0o600);
     const prefs = loadPreferences();
@@ -163,7 +163,7 @@ describeE2E('E2E: v0.11.0 orchestrator against live Postgres', () => {
 
   test('host rewrite: builtin handlers auto-rewritten, non-builtins queued as JSONL TODOs', async () => {
     tmp = freshTempHome('host-rewrite');
-    // Fixture: AGENTS.md + cron/jobs.json with a mix of gbrain-builtin and
+    // Fixture: AGENTS.md + cron/jobs.json with a mix of voltmind-builtin and
     // non-builtin handlers.
     const claudeDir = join(tmp, '.claude');
     mkdirSync(claudeDir, { recursive: true });
@@ -189,7 +189,7 @@ describeE2E('E2E: v0.11.0 orchestrator against live Postgres', () => {
     // Builtins rewritten in place; non-builtins left alone.
     const cronAfter = JSON.parse(readFileSync(join(claudeDir, 'cron', 'jobs.json'), 'utf-8'));
     expect(cronAfter.jobs[0].kind).toBe('shell');       // sync (builtin)
-    expect(cronAfter.jobs[0].cmd).toContain('gbrain jobs submit sync');
+    expect(cronAfter.jobs[0].cmd).toContain('voltmind jobs submit sync');
     expect(cronAfter.jobs[1].kind).toBe('agentTurn');   // ea-inbox-sweep (non-builtin)
     expect(cronAfter.jobs[2].kind).toBe('shell');       // embed (builtin)
     expect(cronAfter.jobs[3].kind).toBe('agentTurn');   // morning-briefing (non-builtin)
@@ -205,11 +205,11 @@ describeE2E('E2E: v0.11.0 orchestrator against live Postgres', () => {
 
     // AGENTS.md got the marker injected.
     const agentsMdAfter = readFileSync(join(claudeDir, 'AGENTS.md'), 'utf-8');
-    expect(agentsMdAfter).toContain('gbrain:subagent-routing v0.11.0');
+    expect(agentsMdAfter).toContain('voltmind:subagent-routing v0.11.0');
     expect(agentsMdAfter).toContain('skills/conventions/subagent-routing.md');
 
-    // JSONL TODO file written under ~/.gbrain/migrations/.
-    const jsonlPath = join(tmp, '.gbrain', 'migrations', 'pending-host-work.jsonl');
+    // JSONL TODO file written under ~/.voltmind/migrations/.
+    const jsonlPath = join(tmp, '.voltmind', 'migrations', 'pending-host-work.jsonl');
     expect(existsSync(jsonlPath)).toBe(true);
     const lines = readFileSync(jsonlPath, 'utf-8').split('\n').filter(l => l.trim());
     expect(lines.length).toBe(2);
@@ -226,9 +226,9 @@ describeE2E('E2E: v0.11.0 orchestrator against live Postgres', () => {
   test('resumable: partial run → orchestrator re-run → complete', async () => {
     tmp = freshTempHome('resumable');
     // Simulate a stopgap-written partial entry BEFORE running the orchestrator.
-    mkdirSync(join(tmp, '.gbrain', 'migrations'), { recursive: true });
+    mkdirSync(join(tmp, '.voltmind', 'migrations'), { recursive: true });
     writeFileSync(
-      join(tmp, '.gbrain', 'migrations', 'completed.jsonl'),
+      join(tmp, '.voltmind', 'migrations', 'completed.jsonl'),
       JSON.stringify({
         version: '0.11.0',
         status: 'partial',

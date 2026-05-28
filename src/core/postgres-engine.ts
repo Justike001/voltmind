@@ -129,13 +129,13 @@ export class PostgresEngine implements BrainEngine {
     const url = config.database_url;
     if (config.poolSize) {
       // Instance-level connection for worker isolation. resolvePoolSize lets
-      // GBRAIN_POOL_SIZE cap below the caller's requested size when set — the
+      // VOLTMIND_POOL_SIZE cap below the caller's requested size when set — the
       // env var is a user escape hatch, so it wins.
       const url = config.database_url;
       if (!url) throw new GBrainError('No database URL', 'database_url is missing', 'Provide --url');
       const size = Math.min(config.poolSize, db.resolvePoolSize(config.poolSize));
       // Honor PgBouncer transaction-mode detection on worker-instance pools too.
-      // Without this, `gbrain jobs work` against a Supabase pooler URL hits
+      // Without this, `voltmind jobs work` against a Supabase pooler URL hits
       // "prepared statement does not exist" under load just like the module
       // singleton did before v0.15.4.
       const prepare = db.resolvePrepare(url);
@@ -152,8 +152,8 @@ export class PostgresEngine implements BrainEngine {
         // Silence postgres NOTICE-level messages by default. See db.ts for
         // rationale (stdout-parsing callers like jobs-submit --json break when
         // idempotent CREATE migrations flood stdout). Opt back in with
-        // GBRAIN_PG_NOTICES=1.
-        onnotice: process.env.GBRAIN_PG_NOTICES === '1' ? undefined : () => {},
+        // VOLTMIND_PG_NOTICES=1.
+        onnotice: process.env.VOLTMIND_PG_NOTICES === '1' ? undefined : () => {},
       };
       if (Object.keys(timeouts).length > 0) {
         opts.connection = timeouts;
@@ -1357,7 +1357,7 @@ export class PostgresEngine implements BrainEngine {
     const symbolKind = opts?.symbolKind;
 
     if (opts?.limit && opts.limit > MAX_SEARCH_LIMIT) {
-      console.warn(`[gbrain] Warning: search limit clamped from ${opts.limit} to ${MAX_SEARCH_LIMIT}`);
+      console.warn(`[voltmind] Warning: search limit clamped from ${opts.limit} to ${MAX_SEARCH_LIMIT}`);
     }
 
     const detailLow = opts?.detail === 'low';
@@ -1519,7 +1519,7 @@ export class PostgresEngine implements BrainEngine {
     const symbolKind = opts?.symbolKind;
 
     if (opts?.limit && opts.limit > MAX_SEARCH_LIMIT) {
-      console.warn(`[gbrain] Warning: search limit clamped from ${opts.limit} to ${MAX_SEARCH_LIMIT}`);
+      console.warn(`[voltmind] Warning: search limit clamped from ${opts.limit} to ${MAX_SEARCH_LIMIT}`);
     }
 
     // Source-aware ranking applies here too — searchKeywordChunks is the
@@ -1634,7 +1634,7 @@ export class PostgresEngine implements BrainEngine {
     const symbolKind = opts?.symbolKind;
 
     if (opts?.limit && opts.limit > MAX_SEARCH_LIMIT) {
-      console.warn(`[gbrain] Warning: search limit clamped from ${opts.limit} to ${MAX_SEARCH_LIMIT}`);
+      console.warn(`[voltmind] Warning: search limit clamped from ${opts.limit} to ${MAX_SEARCH_LIMIT}`);
     }
 
     const vecStr = '[' + Array.from(embedding).join(',') + ']';
@@ -1724,7 +1724,7 @@ export class PostgresEngine implements BrainEngine {
     // ResolvedColumn, undefined) and produces a canonical descriptor.
     //
     // v0.36 Phase 3: 'embedding_multimodal' is the unified column populated
-    // by `gbrain reindex --multimodal`. Carries BOTH text and image content
+    // by `voltmind reindex --multimodal`. Carries BOTH text and image content
     // in Voyage multimodal-3 space — no modality filter; the column itself
     // is the discriminator (rows without embedding_multimodal aren't searched).
     const resolvedCol = normalizeEngineColumn(opts?.embeddingColumn);
@@ -2032,7 +2032,7 @@ export class PostgresEngine implements BrainEngine {
     // embedding IS NULL regardless.
     //
     // D7: source_id scoping. NULL/undefined = scan all sources;
-    // a value scopes to that source so `gbrain embed --stale --source X`
+    // a value scopes to that source so `voltmind embed --stale --source X`
     // does what it says.
     if (opts?.sourceId === undefined) {
       const [row] = await sql`
@@ -2146,7 +2146,7 @@ export class PostgresEngine implements BrainEngine {
     //
     // D7: optional source_id filter. NULL/undefined = scan all sources
     // (pre-existing behavior); a value scopes to that source so
-    // `gbrain embed --stale --source X` actually does what it says.
+    // `voltmind embed --stale --source X` actually does what it says.
     //
     // v0.41 (D4+D8): NOT (frontmatter ? 'embed_skip') filter applied via
     // the always-JOINed pages row. Soft-blocked pages won't surface in
@@ -2659,7 +2659,7 @@ export class PostgresEngine implements BrainEngine {
 
     // v0.41.18.0 D12: filter mentions OUT of backlink-count for search
     // ranking. `link_source='mentions'` rows are auto-linked body-text
-    // mentions from `gbrain extract links --by-mention`; they're
+    // mentions from `voltmind extract links --by-mention`; they're
     // graph-completeness signal, NOT human-intent signal. Counting them
     // toward backlinks would shift search ranking globally on first
     // --by-mention run, boosting popular-mention pages over intentional-
@@ -3943,7 +3943,7 @@ export class PostgresEngine implements BrainEngine {
       RETURNING 1
     `;
     if (result.length === 0) {
-      throw new GBrainError('TAKE_ROW_NOT_FOUND', `take not found at page_id=${pageId} row=${rowNum}`, 'list takes for this page with `gbrain takes <slug>` to see valid row numbers');
+      throw new GBrainError('TAKE_ROW_NOT_FOUND', `take not found at page_id=${pageId} row=${rowNum}`, 'list takes for this page with `voltmind takes <slug>` to see valid row numbers');
     }
   }
 
@@ -3957,7 +3957,7 @@ export class PostgresEngine implements BrainEngine {
       const [existing] = await tx`
         SELECT resolved_at FROM takes WHERE page_id = ${pageId} AND row_num = ${oldRow}
       `;
-      if (!existing) throw new GBrainError('TAKE_ROW_NOT_FOUND', `take not found at page_id=${pageId} row=${oldRow}`, 'list takes with `gbrain takes <slug>`');
+      if (!existing) throw new GBrainError('TAKE_ROW_NOT_FOUND', `take not found at page_id=${pageId} row=${oldRow}`, 'list takes with `voltmind takes <slug>`');
       if ((existing as { resolved_at?: unknown }).resolved_at) {
         throw new GBrainError('TAKE_RESOLVED_IMMUTABLE', `take ${pageId}#${oldRow} is resolved`, 'resolved bets are immutable; add a new take instead');
       }
@@ -3981,7 +3981,7 @@ export class PostgresEngine implements BrainEngine {
   async resolveTake(pageId: number, rowNum: number, resolution: TakeResolution): Promise<void> {
     const sql = this.sql;
     const [existing] = await sql`SELECT resolved_at FROM takes WHERE page_id = ${pageId} AND row_num = ${rowNum}`;
-    if (!existing) throw new GBrainError('TAKE_ROW_NOT_FOUND', `take not found at page_id=${pageId} row=${rowNum}`, 'list takes for this page with `gbrain takes <slug>` to see valid row numbers');
+    if (!existing) throw new GBrainError('TAKE_ROW_NOT_FOUND', `take not found at page_id=${pageId} row=${rowNum}`, 'list takes for this page with `voltmind takes <slug>` to see valid row numbers');
     if ((existing as { resolved_at?: unknown }).resolved_at) {
       throw new GBrainError('TAKE_ALREADY_RESOLVED', `take ${pageId}#${rowNum} already resolved`, 'resolution is immutable; add a new take to record a new outcome');
     }
@@ -4275,7 +4275,7 @@ export class PostgresEngine implements BrainEngine {
     // not 0. Semantically an empty brain has no coverage problem to penalize
     // — there's nothing to embed, nothing to link, nothing to orphan. The
     // pre-fix "empty = 0" caused fresh-init brains to score as critically
-    // unhealthy on `gbrain doctor`, which was a structural surprise to users
+    // unhealthy on `voltmind doctor`, which was a structural surprise to users
     // who'd just successfully run init. PGLite path has the same fix.
     const embedCoverageScore = pageCount === 0 ? 35 : Math.round(embedCoverage * 35);
     const linkDensityScore = pageCount === 0 ? 25 : Math.round(linkDensity * 25);
@@ -4646,7 +4646,7 @@ export class PostgresEngine implements BrainEngine {
     const since = filter?.since ?? new Date(0);
     const tool = filter?.tool ?? null;
     // id DESC tiebreaker so same-millisecond inserts return deterministically
-    // — without this, `gbrain eval export --since` could dupe or miss rows
+    // — without this, `voltmind eval export --since` could dupe or miss rows
     // across non-overlapping windows.
     const rows = tool
       ? await sql`

@@ -150,12 +150,12 @@ function freezeClock(at: number) { mockNow = at; }
 function advanceClock(deltaMs: number) { mockNow += deltaMs; }
 
 async function startTest(cfg: FakeEngineConfig & { lruCap?: number; ipLimit?: number; tokenLimit?: number; corsOrigin?: string; bodyCap?: number; trustProxy?: boolean } = {}): Promise<TestServer> {
-  if (cfg.corsOrigin) process.env.GBRAIN_HTTP_CORS_ORIGIN = cfg.corsOrigin;
-  else delete process.env.GBRAIN_HTTP_CORS_ORIGIN;
-  if (cfg.bodyCap) process.env.GBRAIN_HTTP_MAX_BODY_BYTES = String(cfg.bodyCap);
-  else delete process.env.GBRAIN_HTTP_MAX_BODY_BYTES;
-  if (cfg.trustProxy) process.env.GBRAIN_HTTP_TRUST_PROXY = '1';
-  else delete process.env.GBRAIN_HTTP_TRUST_PROXY;
+  if (cfg.corsOrigin) process.env.VOLTMIND_HTTP_CORS_ORIGIN = cfg.corsOrigin;
+  else delete process.env.VOLTMIND_HTTP_CORS_ORIGIN;
+  if (cfg.bodyCap) process.env.VOLTMIND_HTTP_MAX_BODY_BYTES = String(cfg.bodyCap);
+  else delete process.env.VOLTMIND_HTTP_MAX_BODY_BYTES;
+  if (cfg.trustProxy) process.env.VOLTMIND_HTTP_TRUST_PROXY = '1';
+  else delete process.env.VOLTMIND_HTTP_TRUST_PROXY;
 
   const engine = makeFakeEngine(cfg);
   const clock = () => mockNow || Date.now();
@@ -347,7 +347,7 @@ describe('http-transport: tools/call dispatch', () => {
 // --------------------------------------------------------------------------
 
 describe('http-transport: CORS', () => {
-  test('10. no GBRAIN_HTTP_CORS_ORIGIN + browser request → no ACAO header', async () => {
+  test('10. no VOLTMIND_HTTP_CORS_ORIGIN + browser request → no ACAO header', async () => {
     const srv = await startTest({});
     try {
       const r = await fetch(`${srv.url}/health`, { headers: { 'Origin': 'https://evil.example' } });

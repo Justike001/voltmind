@@ -1,9 +1,9 @@
 /**
  * Tests for IngestionTestHarness — the publisher-facing test utility
- * exported at gbrain/ingestion/test-harness.
+ * exported at voltmind/ingestion/test-harness.
  *
  * The harness IS the publisher contract. These tests pin its behavior so
- * skillpack authors can rely on it across gbrain minor versions.
+ * skillpack authors can rely on it across voltmind minor versions.
  */
 
 import { describe, expect, test } from 'bun:test';

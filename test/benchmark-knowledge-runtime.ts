@@ -1,5 +1,5 @@
 /**
- * Knowledge Runtime Benchmark — does the branch actually improve gbrain?
+ * Knowledge Runtime Benchmark — does the branch actually improve voltmind?
  *
  * Three measurable comparisons, each isolating one claim the PR makes.
  * All run in-process against PGLite with mocked resolvers. Deterministic,
@@ -8,7 +8,7 @@
  * 1. TIME-TO-QUERYABLE: seed pages via put_page OPERATION, immediately
  *    query timeline. With auto_timeline ON (branch default), timeline is
  *    populated at write-time; with auto_timeline OFF (master behavior),
- *    timeline is empty until user runs `gbrain extract timeline`.
+ *    timeline is empty until user runs `voltmind extract timeline`.
  *    Metric: % of expected timeline queries that return correct answers
  *    immediately after ingest.
  *

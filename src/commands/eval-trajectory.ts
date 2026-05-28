@@ -1,16 +1,16 @@
 /**
- * gbrain eval trajectory <entity-slug> — chronological typed-claim
+ * voltmind eval trajectory <entity-slug> — chronological typed-claim
  * trajectory + regression detection + narrative drift score.
  *
  * v0.35.4 (T6) — pure data fn + JSON formatter + human formatter +
- * thin-client routing seam. Mirrors `gbrain salience` / `gbrain anomalies`
+ * thin-client routing seam. Mirrors `voltmind salience` / `voltmind anomalies`
  * shape so the four temporal-axis read CLIs feel consistent.
  *
  * Usage:
- *   gbrain eval trajectory companies/acme-example
- *   gbrain eval trajectory companies/acme-example --metric mrr
- *   gbrain eval trajectory companies/acme-example --since 2026-01-01 --until 2026-07-31
- *   gbrain eval trajectory companies/acme-example --json
+ *   voltmind eval trajectory companies/acme-example
+ *   voltmind eval trajectory companies/acme-example --metric mrr
+ *   voltmind eval trajectory companies/acme-example --since 2026-01-01 --until 2026-07-31
+ *   voltmind eval trajectory companies/acme-example --json
  */
 
 import type { BrainEngine } from '../core/engine.ts';
@@ -50,16 +50,16 @@ interface WireTrajectoryResult {
   schema_version: number;
 }
 
-const HELP = `Usage: gbrain eval trajectory <entity-slug> [options]
+const HELP = `Usage: voltmind eval trajectory <entity-slug> [options]
 
 Show the chronological claim trajectory for an entity (typed metric values
 over time, plus regressions and narrative drift score).
 
 Examples:
-  gbrain eval trajectory companies/acme-example
-  gbrain eval trajectory companies/acme-example --metric mrr
-  gbrain eval trajectory companies/acme-example --since 2026-01-01 --until 2026-07-31
-  gbrain eval trajectory companies/acme-example --json
+  voltmind eval trajectory companies/acme-example
+  voltmind eval trajectory companies/acme-example --metric mrr
+  voltmind eval trajectory companies/acme-example --since 2026-01-01 --until 2026-07-31
+  voltmind eval trajectory companies/acme-example --json
 
 Options:
   --metric M          Filter to a single canonical metric (mrr, arr, team_size, …)

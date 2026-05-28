@@ -15,7 +15,7 @@
  * For sites that NEED ramp (the markdown reindex flow via
  * post-upgrade-reembed), callers opt INTO interactive abort via the
  * primitive's `interactiveAbortMs` Policy field or the
- * `GBRAIN_PROGRESSIVE_BATCH_STAGES` env var.
+ * `VOLTMIND_PROGRESSIVE_BATCH_STAGES` env var.
  *
  * Hermetic: pure orchestration. No I/O of its own.
  */
@@ -40,7 +40,7 @@ export interface RetrofitWrapOpts<T> {
   /**
    * D21: behavior parity. When the existing site previously had no
    * Ctrl-C grace AND no budget gating, default to opt-out. Operators
-   * opt INTO ramp via `GBRAIN_PROGRESSIVE_BATCH_STAGES` env var.
+   * opt INTO ramp via `VOLTMIND_PROGRESSIVE_BATCH_STAGES` env var.
    */
   interactiveAbortMs?: number;
   /**

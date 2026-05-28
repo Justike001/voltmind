@@ -2,7 +2,7 @@
  * E2E plugin-shape test for `src/openclaw-context-engine.ts`.
  *
  * The 21-test unit suite at `test/context-engine.test.ts` exercises
- * `createGBrainContextEngine` directly — that's the ENGINE, not the PLUGIN.
+ * `createVoltMindContextEngine` directly — that's the ENGINE, not the PLUGIN.
  * This file tests the plugin discovery + registration path that OpenClaw
  * will actually walk at runtime.
  *
@@ -43,8 +43,8 @@ describe('openclaw-context-engine plugin entry', () => {
   it('default export has the expected plugin-entry shape', () => {
     const entry = pluginEntry as PluginEntryShape;
     expect(entry).toBeDefined();
-    expect(entry.id).toBe('gbrain-context-engine');
-    expect(entry.name).toBe('GBrain Context Engine');
+    expect(entry.id).toBe('voltmind-context-engine');
+    expect(entry.name).toBe('VoltMind Context Engine');
     expect(typeof entry.description).toBe('string');
     expect(entry.description.length).toBeGreaterThan(0);
     expect(typeof entry.register).toBe('function');
@@ -79,7 +79,7 @@ describe('openclaw-context-engine plugin entry', () => {
       },
     });
 
-    const tmp = mkdtempSync(join(tmpdir(), 'gbrain-plugin-e2e-'));
+    const tmp = mkdtempSync(join(tmpdir(), 'voltmind-plugin-e2e-'));
     try {
       mkdirSync(join(tmp, 'memory'), { recursive: true });
       writeFileSync(join(tmp, 'memory', 'heartbeat-state.json'), '{}');

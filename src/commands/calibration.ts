@@ -1,17 +1,17 @@
 /**
- * v0.36.1.0 (T7) — `gbrain calibration` CLI.
+ * v0.36.1.0 (T7) — `voltmind calibration` CLI.
  *
  * Reads the latest calibration profile from the DB and prints it. Mirror of
- * the v0.29 `gbrain salience` / `gbrain anomalies` shape (pure data fn + JSON
+ * the v0.29 `voltmind salience` / `voltmind anomalies` shape (pure data fn + JSON
  * formatter + human formatter + thin CLI dispatch).
  *
  * Sub-commands:
- *   gbrain calibration                              — print active profile for default holder
- *   gbrain calibration --holder <id>                — print for a specific holder
- *   gbrain calibration --json                       — machine output
- *   gbrain calibration --regenerate                 — run the calibration_profile phase now
- *   gbrain calibration --undo-wave <version>        — D18 undo command (Lane D adds the impl)
- *   gbrain calibration ab-report                    — D19 A/B harness report (Lane D adds the impl)
+ *   voltmind calibration                              — print active profile for default holder
+ *   voltmind calibration --holder <id>                — print for a specific holder
+ *   voltmind calibration --json                       — machine output
+ *   voltmind calibration --regenerate                 — run the calibration_profile phase now
+ *   voltmind calibration --undo-wave <version>        — D18 undo command (Lane D adds the impl)
+ *   voltmind calibration ab-report                    — D19 A/B harness report (Lane D adds the impl)
  *
  * MCP op: `get_calibration_profile` (scope: read) routes the same read path.
  * Source-scoping via sourceScopeOpts(ctx) on the MCP path keeps multi-source
@@ -21,7 +21,7 @@
 import type { BrainEngine } from '../core/engine.ts';
 import { runPhaseCalibrationProfile } from '../core/cycle/calibration-profile.ts';
 import { sourceScopeOpts, type OperationContext } from '../core/operations.ts';
-import type { GBrainConfig } from '../core/config.ts';
+import type { VoltMindConfig } from '../core/config.ts';
 import { GBrainError } from '../core/types.ts';
 
 export interface CalibrationProfileRow {
@@ -76,7 +76,7 @@ export function formatProfileText(profile: CalibrationProfileRow | null, holder:
     return (
       `No calibration profile yet for holder "${holder}".\n` +
       `Build one by resolving 5+ takes then running:\n` +
-      `  gbrain dream --phase calibration_profile\n` +
+      `  voltmind dream --phase calibration_profile\n` +
       `Or wait for the next autopilot cycle.`
     );
   }
@@ -108,7 +108,7 @@ export function formatProfileText(profile: CalibrationProfileRow | null, holder:
 }
 
 /** Build an OperationContext shape suitable for the cycle phase from a CLI engine. */
-function ctxFromCli(engine: BrainEngine, config: GBrainConfig, sourceId: string): OperationContext {
+function ctxFromCli(engine: BrainEngine, config: VoltMindConfig, sourceId: string): OperationContext {
   return {
     engine,
     config,
@@ -155,7 +155,7 @@ function parseArgs(args: string[]): { sub?: string; opts: RunCalibrationArgs } {
 export async function runCalibration(
   engine: BrainEngine,
   args: string[],
-  config: GBrainConfig,
+  config: VoltMindConfig,
 ): Promise<void> {
   const { opts } = parseArgs(args);
   const holder = opts.holder ?? 'garry';

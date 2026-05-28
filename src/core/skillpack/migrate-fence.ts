@@ -1,8 +1,8 @@
 /**
- * skillpack/migrate-fence.ts — `gbrain skillpack migrate-fence`.
+ * skillpack/migrate-fence.ts — `voltmind skillpack migrate-fence`.
  *
  * One-shot conversion for users running on the old (v0.19–v0.32.x)
- * managed-block model. Strips the `<!-- gbrain:skillpack:begin -->` /
+ * managed-block model. Strips the `<!-- voltmind:skillpack:begin -->` /
  * `end -->` markers and the manifest receipt comment, but preserves
  * every row inside the fence verbatim. Rows become user-owned routing
  * the agent can still see during the transition to frontmatter-based
@@ -27,19 +27,19 @@ import { copyArtifacts, walkSourceDir } from './copy.ts';
 import { findGbrainRoot, loadBundleManifest } from './bundle.ts';
 import { findResolverFile } from '../resolver-filenames.ts';
 
-const MANAGED_BEGIN = '<!-- gbrain:skillpack:begin -->';
-const MANAGED_END = '<!-- gbrain:skillpack:end -->';
+const MANAGED_BEGIN = '<!-- voltmind:skillpack:begin -->';
+const MANAGED_END = '<!-- voltmind:skillpack:end -->';
 const RECEIPT_RE =
-  /<!-- gbrain:skillpack:manifest cumulative-slugs="([^"]*)" version="([^"]*)" -->/;
+  /<!-- voltmind:skillpack:manifest cumulative-slugs="([^"]*)" version="([^"]*)" -->/;
 const ROW_RE = /`skills\/([^/]+)\/SKILL\.md`/g;
 
 export interface MigrateFenceOptions {
   /** Absolute path to the target workspace (parent of skills/). */
   targetWorkspace: string;
-  /** Absolute path to gbrain repo root (source-of-truth bundle). When
+  /** Absolute path to voltmind repo root (source-of-truth bundle). When
    *  unset, copy-missing-skills is skipped (caller's resolver-file
    *  scrub still runs). */
-  gbrainRoot?: string;
+  voltmindRoot?: string;
   /** Dry-run: preview, no writes. */
   dryRun?: boolean;
 }
@@ -65,7 +65,7 @@ export interface MigrateFenceResult {
 }
 
 /**
- * Parse a resolver file's content for the gbrain managed-block fence.
+ * Parse a resolver file's content for the voltmind managed-block fence.
  * Returns null when no fence is present. Returns a structured shape
  * with begin/end offsets when present.
  */
@@ -186,7 +186,7 @@ export function resolveFenceSlugs(parsed: ParsedFence): {
  */
 export function stripFence(content: string, parsed: ParsedFence): string {
   // Walk the block, removing only the begin marker line, the receipt
-  // comment line, the gbrain-installed comment line, and the end
+  // comment line, the voltmind-installed comment line, and the end
   // marker line. Everything else (rows, blank lines, surrounding
   // whitespace) is preserved.
   const before = content.slice(0, parsed.beginIdx);
@@ -198,10 +198,10 @@ export function stripFence(content: string, parsed: ParsedFence): string {
 
   // Strip the receipt comment line (regex-friendly).
   const innerSansReceipt = inner.replace(RECEIPT_RE, '');
-  // Strip the "Installed by gbrain X.Y.Z — do not hand-edit" reminder
+  // Strip the "Installed by voltmind X.Y.Z — do not hand-edit" reminder
   // (matches even when version varies).
   const innerSansReminder = innerSansReceipt.replace(
-    /<!-- Installed by gbrain [^>]*-->/,
+    /<!-- Installed by voltmind [^>]*-->/,
     '',
   );
 
@@ -260,12 +260,12 @@ export function runMigrateFence(opts: MigrateFenceOptions): MigrateFenceResult {
   const { slugs, usedRowFallback } = resolveFenceSlugs(parsed);
 
   // Copy any missing skills additively (uses scaffold's underlying
-  // mechanic via copyArtifacts). Optional — when gbrainRoot is unset,
+  // mechanic via copyArtifacts). Optional — when voltmindRoot is unset,
   // only the fence is stripped.
   const skillsCopied: string[] = [];
   const skillsAlreadyPresent: string[] = [];
-  if (opts.gbrainRoot) {
-    const root = opts.gbrainRoot;
+  if (opts.voltmindRoot) {
+    const root = opts.voltmindRoot;
     const manifest = loadBundleManifest(root);
     const bundleSet = new Set(manifest.skills.map(s => s.replace(/^skills\//, '')));
     for (const slug of slugs) {
@@ -306,10 +306,10 @@ export function runMigrateFence(opts: MigrateFenceOptions): MigrateFenceResult {
   };
 }
 
-// Convenience: auto-discover gbrainRoot via findGbrainRoot when caller
+// Convenience: auto-discover voltmindRoot via findGbrainRoot when caller
 // doesn't pass one. Used by the CLI dispatch.
 export function runMigrateFenceAuto(opts: MigrateFenceOptions): MigrateFenceResult {
-  if (opts.gbrainRoot) return runMigrateFence(opts);
+  if (opts.voltmindRoot) return runMigrateFence(opts);
   const root = findGbrainRoot();
-  return runMigrateFence({ ...opts, gbrainRoot: root ?? undefined });
+  return runMigrateFence({ ...opts, voltmindRoot: root ?? undefined });
 }

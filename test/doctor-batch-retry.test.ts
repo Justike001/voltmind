@@ -1,7 +1,7 @@
 // v0.41.18.0 — batch_retry_health doctor check (codex H-9 thresholds).
 //
 // Hermetic: never touches a real engine. Stubs the audit-writer read by
-// pointing GBRAIN_AUDIT_DIR at a tempdir and writing synthetic events.
+// pointing VOLTMIND_AUDIT_DIR at a tempdir and writing synthetic events.
 
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
@@ -35,7 +35,7 @@ function writeEvent(now: Date, event: Record<string, unknown>) {
 
 describe('checkBatchRetryHealth — ok states', () => {
   test('no events in window = ok', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       const check = await checkBatchRetryHealth(stubEngine);
       expect(check.status).toBe('ok');
       expect(check.message).toContain('No exhausted batch retries');
@@ -43,7 +43,7 @@ describe('checkBatchRetryHealth — ok states', () => {
   });
 
   test('only successful retries = ok with recovery count', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       const now = new Date();
       writeEvent(now, { site: 'extract.links_inc', batch_size: 100, attempt: 1, outcome: 'success', delay_ms: 1000, error_message_summary: 'blip' });
       writeEvent(now, { site: 'extract.links_inc', batch_size: 100, attempt: 2, outcome: 'success', delay_ms: 3000, error_message_summary: 'blip' });
@@ -54,7 +54,7 @@ describe('checkBatchRetryHealth — ok states', () => {
   });
 
   test('1-2 exhausted from same site (under per-site threshold of 3) = ok', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       const now = new Date();
       writeEvent(now, { site: 'extract.links_inc', batch_size: 100, attempt: 4, outcome: 'exhausted', delay_ms: 0, error_message_summary: 'breaker' });
       writeEvent(now, { site: 'extract.links_inc', batch_size: 100, attempt: 4, outcome: 'exhausted', delay_ms: 0, error_message_summary: 'breaker' });
@@ -67,7 +67,7 @@ describe('checkBatchRetryHealth — ok states', () => {
 
 describe('checkBatchRetryHealth — warn states (codex H-9 thresholds)', () => {
   test('>=3 exhausted from same site in 24h = warn', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       const now = new Date();
       for (let i = 0; i < 3; i++) {
         writeEvent(now, { site: 'extract.links_inc', batch_size: 100, attempt: 4, outcome: 'exhausted', delay_ms: 0, error_message_summary: 'breaker' });
@@ -75,12 +75,12 @@ describe('checkBatchRetryHealth — warn states (codex H-9 thresholds)', () => {
       const check = await checkBatchRetryHealth(stubEngine);
       expect(check.status).toBe('warn');
       expect(check.message).toContain('extract.links_inc');
-      expect(check.message).toContain('GBRAIN_BULK_MAX_RETRIES');
+      expect(check.message).toContain('VOLTMIND_BULK_MAX_RETRIES');
     });
   });
 
   test('>=5 cross-site exhausted in 24h = warn', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       const now = new Date();
       // 2 from one site, 2 from another, 1 from a third = 5 total, none >=3 per site.
       writeEvent(now, { site: 'extract.links_inc', batch_size: 100, attempt: 4, outcome: 'exhausted', delay_ms: 0, error_message_summary: 'a' });
@@ -96,7 +96,7 @@ describe('checkBatchRetryHealth — warn states (codex H-9 thresholds)', () => {
 
 describe('checkBatchRetryHealth — fail state', () => {
   test('>=20 exhausted in 24h = fail (sustained breaker)', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       const now = new Date();
       for (let i = 0; i < 20; i++) {
         writeEvent(now, { site: 'extract.links_inc', batch_size: 100, attempt: 4, outcome: 'exhausted', delay_ms: 0, error_message_summary: 'breaker' });
@@ -109,17 +109,17 @@ describe('checkBatchRetryHealth — fail state', () => {
 });
 
 describe('checkBatchRetryHealth — codex M-10 env validation at doctor time', () => {
-  test('invalid GBRAIN_BULK_MAX_RETRIES surfaces at doctor time with paste-ready hint', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir, GBRAIN_BULK_MAX_RETRIES: '-1' }, async () => {
+  test('invalid VOLTMIND_BULK_MAX_RETRIES surfaces at doctor time with paste-ready hint', async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir, VOLTMIND_BULK_MAX_RETRIES: '-1' }, async () => {
       const check = await checkBatchRetryHealth(stubEngine);
       expect(check.status).toBe('warn');
-      expect(check.message).toContain('GBRAIN_BULK_*');
-      expect(check.message).toContain('export GBRAIN_BULK_MAX_RETRIES');
+      expect(check.message).toContain('VOLTMIND_BULK_*');
+      expect(check.message).toContain('export VOLTMIND_BULK_MAX_RETRIES');
     });
   });
 
-  test('valid GBRAIN_BULK_MAX_RETRIES=0 (debug-mode disable) is accepted', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir, GBRAIN_BULK_MAX_RETRIES: '0' }, async () => {
+  test('valid VOLTMIND_BULK_MAX_RETRIES=0 (debug-mode disable) is accepted', async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir, VOLTMIND_BULK_MAX_RETRIES: '0' }, async () => {
       const check = await checkBatchRetryHealth(stubEngine);
       expect(check.status).toBe('ok'); // 0 retries is valid; no exhausted events either
     });
@@ -128,7 +128,7 @@ describe('checkBatchRetryHealth — codex M-10 env validation at doctor time', (
 
 describe('checkBatchRetryHealth — codex H-9 corruption tolerance', () => {
   test('corrupted JSONL lines are counted, not crashed-on', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       const now = new Date();
       writeEvent(now, { site: 'extract.links_inc', batch_size: 100, attempt: 1, outcome: 'success', delay_ms: 1000, error_message_summary: 'a' });
       const filename = `${BATCH_RETRY_FEATURE_NAME}-${now.getUTCFullYear()}-W${String(getIsoWeek(now)).padStart(2, '0')}.jsonl`;

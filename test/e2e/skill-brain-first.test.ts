@@ -84,12 +84,12 @@ let workspace: Workspace;
 beforeEach(() => {
   workspace = copyFixturesIntoTempWorkspace();
   // Redirect audit dir to the tempdir so the snapshot file doesn't pollute
-  // the real $GBRAIN_AUDIT_DIR.
-  process.env.GBRAIN_AUDIT_DIR = join(workspace.dir, 'audit');
+  // the real $VOLTMIND_AUDIT_DIR.
+  process.env.VOLTMIND_AUDIT_DIR = join(workspace.dir, 'audit');
 });
 
 afterEach(() => {
-  delete process.env.GBRAIN_AUDIT_DIR;
+  delete process.env.VOLTMIND_AUDIT_DIR;
   workspace.cleanup();
 });
 
@@ -202,7 +202,7 @@ describe('skill_brain_first E2E (fixture corpus)', () => {
 
   test('AUDIT: first doctor run bootstraps snapshot + writes detected events for current violators', () => {
     skillBrainFirstCheck(workspace.skillsDir);
-    const auditDir = process.env.GBRAIN_AUDIT_DIR!;
+    const auditDir = process.env.VOLTMIND_AUDIT_DIR!;
     expect(existsSync(join(auditDir, 'skill-brain-first-snapshot.json'))).toBe(true);
     // Read the audit file and confirm detected events are present.
     const files = readdirSync(auditDir).filter(f => f.startsWith('skill-brain-first-') && f.endsWith('.jsonl'));
@@ -214,7 +214,7 @@ describe('skill_brain_first E2E (fixture corpus)', () => {
 
   test('AUDIT: second doctor run with no transitions produces zero new audit lines (A2 contract)', () => {
     skillBrainFirstCheck(workspace.skillsDir); // first run bootstraps
-    const auditDir = process.env.GBRAIN_AUDIT_DIR!;
+    const auditDir = process.env.VOLTMIND_AUDIT_DIR!;
     const files = readdirSync(auditDir).filter(f => f.endsWith('.jsonl'));
     const initialLength = files.length > 0
       ? readFileSync(join(auditDir, files[0]), 'utf-8').split('\n').filter(l => l.length > 0).length
@@ -230,7 +230,7 @@ describe('skill_brain_first E2E (fixture corpus)', () => {
     skillBrainFirstCheck(workspace.skillsDir); // bootstrap
     autoFixDryViolations(workspace.skillsDir); // resolve violations
     skillBrainFirstCheck(workspace.skillsDir); // post-fix scan
-    const auditDir = process.env.GBRAIN_AUDIT_DIR!;
+    const auditDir = process.env.VOLTMIND_AUDIT_DIR!;
     const files = readdirSync(auditDir).filter(f => f.endsWith('.jsonl'));
     const audit = readFileSync(join(auditDir, files[0]), 'utf-8');
     // The post-fix run should have written resolved events for the

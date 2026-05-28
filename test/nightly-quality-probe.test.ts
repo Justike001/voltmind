@@ -112,7 +112,7 @@ function makeDeps(overrides: Partial<NightlyProbeDeps> = {}): NightlyProbeDeps {
 
 describe('runNightlyQualityProbe (DI stub harness)', () => {
   test('disabled config → outcome: disabled, no audit row', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditTmp }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditTmp }, async () => {
       const r = await runNightlyQualityProbe(makeDeps({ isEnabled: async () => false }));
       expect(r.outcome).toBe('disabled');
       expect(r.exit_code).toBe(0);
@@ -123,7 +123,7 @@ describe('runNightlyQualityProbe (DI stub harness)', () => {
   });
 
   test('enabled + no embedding key → outcome: no_embedding_key with audit row', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditTmp }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditTmp }, async () => {
       const r = await runNightlyQualityProbe(makeDeps({ hasEmbeddingProvider: async () => false }));
       expect(r.outcome).toBe('no_embedding_key');
       const events = await readEvents();
@@ -134,7 +134,7 @@ describe('runNightlyQualityProbe (DI stub harness)', () => {
 
   test('enabled + recent run within 24h → outcome: rate_limited', async () => {
     // Pre-seed a recent audit event by running the probe once first.
-    await withEnv({ GBRAIN_AUDIT_DIR: auditTmp }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditTmp }, async () => {
       // First run succeeds.
       await runNightlyQualityProbe(makeDeps());
       // Second run, same hour → rate_limited.
@@ -147,7 +147,7 @@ describe('runNightlyQualityProbe (DI stub harness)', () => {
   });
 
   test('enabled + PASS summary → outcome: pass with audit row', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditTmp }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditTmp }, async () => {
       const r = await runNightlyQualityProbe(makeDeps());
       expect(r.outcome).toBe('pass');
       expect(r.exit_code).toBe(0);
@@ -160,7 +160,7 @@ describe('runNightlyQualityProbe (DI stub harness)', () => {
   });
 
   test('enabled + FAIL summary → outcome: fail', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditTmp }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditTmp }, async () => {
       const r = await runNightlyQualityProbe(makeDeps({
         runCrossModalBatch: async () => ({
           exitCode: 1,
@@ -179,7 +179,7 @@ describe('runNightlyQualityProbe (DI stub harness)', () => {
   });
 
   test('runLongMemEval throws → outcome: error with audit row', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditTmp }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditTmp }, async () => {
       const r = await runNightlyQualityProbe(makeDeps({
         runLongMemEval: async () => { throw new Error('longmemeval blew up'); },
       }));
@@ -192,7 +192,7 @@ describe('runNightlyQualityProbe (DI stub harness)', () => {
   });
 
   test('missing fixture → outcome: error', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditTmp }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditTmp }, async () => {
       const r = await runNightlyQualityProbe(makeDeps({
         resolveRepoRoot: async () => '/this/repo/root/does/not/exist',
       }));
@@ -204,7 +204,7 @@ describe('runNightlyQualityProbe (DI stub harness)', () => {
   });
 
   test('audit event records fixture_sha8 on successful runs', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditTmp }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditTmp }, async () => {
       const r = await runNightlyQualityProbe(makeDeps());
       expect(r.outcome).toBe('pass');
       const events = await readEvents();
@@ -234,7 +234,7 @@ describe('computeNightlyQualityProbeHealthCheck — pure doctor branch coverage'
     expect(check.name).toBe('nightly_quality_probe_health');
     expect(check.status).toBe('ok');
     expect(check.message).toMatch(/disabled \(opt-in\)/);
-    expect(check.message).toMatch(/gbrain config set autopilot\.nightly_quality_probe\.enabled true/);
+    expect(check.message).toMatch(/voltmind config set autopilot\.nightly_quality_probe\.enabled true/);
   });
 
   test('enabled + no events → ok pending', async () => {

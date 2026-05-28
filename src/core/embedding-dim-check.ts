@@ -1,21 +1,21 @@
 /**
  * Detect existing-brain embedding-dimension mismatch (v0.28.5 — A4).
  *
- * `gbrain init --embedding-dimensions N` on an existing brain whose
+ * `voltmind init --embedding-dimensions N` on an existing brain whose
  * `content_chunks.embedding` column is a different `vector(M)` would
  * silently create a config/column drift: the config gets templated to N
  * but the column stays at M. The first sync write blows up with
  * "expected M, got N" — the silent-corruption pattern v0.28.5 is shipped
  * to kill.
  *
- * Loud-failure path: `gbrain init` AND `gbrain doctor` both consult this
+ * Loud-failure path: `voltmind init` AND `voltmind doctor` both consult this
  * helper. On mismatch they emit the same inline ALTER recipe (see
  * `embeddingMismatchMessage`) plus a pointer to `docs/embedding-migrations.md`.
  */
 
 import type { BrainEngine } from './engine.ts';
 import { PGVECTOR_HNSW_VECTOR_MAX_DIMS } from './vector-index.ts';
-import { gbrainPath } from './config.ts';
+import { voltmindPath } from './config.ts';
 import { resolveRecipe } from './ai/model-resolver.ts';
 import type { Recipe } from './ai/types.ts';
 import { AIConfigError } from './ai/errors.ts';
@@ -46,7 +46,7 @@ export const PGVECTOR_COLUMN_MAX_DIMS = 16000;
  * v0.37 (D9): runtime guard for the deferred-setup mode.
  *
  * Init's `--no-embedding` opt-in writes `embedding_disabled: true` to
- * config.json. Every embed callsite (CLI: `gbrain embed`, `gbrain import`;
+ * config.json. Every embed callsite (CLI: `voltmind embed`, `voltmind import`;
  * library: `runEmbedCore`) consults this guard so the user gets a clear
  * "configure embedding first" message rather than an opaque gateway error
  * at first vector write.
@@ -68,9 +68,9 @@ export function assertEmbeddingEnabled(cfg: { embedding_disabled?: boolean } | n
     throw new EmbeddingDisabledError(
       'This brain was initialized with `--no-embedding` (deferred setup).\n' +
       'Configure an embedding provider before running embed / import:\n' +
-      '  gbrain config set embedding_model <provider>:<model>\n' +
-      '  gbrain config set embedding_dimensions <N>\n' +
-      '  gbrain init --force --embedding-model <provider>:<model>   # re-init to size schema\n',
+      '  voltmind config set embedding_model <provider>:<model>\n' +
+      '  voltmind config set embedding_dimensions <N>\n' +
+      '  voltmind init --force --embedding-model <provider>:<model>   # re-init to size schema\n',
     );
   }
 }
@@ -131,12 +131,12 @@ export async function readContentChunksEmbeddingDim(engine: BrainEngine): Promis
  *
  * - **PGLite** has no native pgvector extension (the WASM build can't
  *   `ALTER COLUMN TYPE vector(N)`), so the only path is wipe-and-reinit
- *   via `gbrain init --pglite --embedding-model X --embedding-dimensions N`.
+ *   via `voltmind init --pglite --embedding-model X --embedding-dimensions N`.
  *   The recipe derives the active database path so users don't paste a
- *   stale literal that ignores `GBRAIN_HOME` / `--path` / their config.
+ *   stale literal that ignores `VOLTMIND_HOME` / `--path` / their config.
  * - **Postgres** keeps the existing four-step SQL recipe.
  *
- * The old recipe pointed at `gbrain config set embedding_model X` which
+ * The old recipe pointed at `voltmind config set embedding_model X` which
  * is a no-op for the embed pipeline (the embed gateway reads file plane,
  * not DB plane). After Lane C.2 that command refuses; the recipe now
  * points at the actual fix path.
@@ -155,9 +155,9 @@ export interface EmbeddingMismatchOpts {
   engineKind: 'pglite' | 'postgres';
   /**
    * Active PGLite database path. Used only for the PGLite branch; if
-   * omitted, falls back to the default `gbrainPath('brain.pglite')`.
+   * omitted, falls back to the default `voltmindPath('brain.pglite')`.
    * Resolving at the call site is preferred because the caller knows
-   * about `--path` flags and `GBRAIN_HOME` overrides.
+   * about `--path` flags and `VOLTMIND_HOME` overrides.
    */
   databasePath?: string;
 }
@@ -169,7 +169,7 @@ export function embeddingMismatchMessage(opts: EmbeddingMismatchOpts): string {
     : `Refusing to silently re-template existing brain.`;
 
   if (engineKind === 'pglite') {
-    const activePath = databasePath ?? gbrainPath('brain.pglite');
+    const activePath = databasePath ?? voltmindPath('brain.pglite');
     const modelArg = requestedModel ? ` --embedding-model ${requestedModel}` : '';
     const lines = [
       header,
@@ -183,14 +183,14 @@ export function embeddingMismatchMessage(opts: EmbeddingMismatchOpts): string {
       ``,
       `Recommended (one command):`,
       ``,
-      `  gbrain reinit-pglite${modelArg} --embedding-dimensions ${requestedDims}`,
+      `  voltmind reinit-pglite${modelArg} --embedding-dimensions ${requestedDims}`,
       ``,
       `Or by hand:`,
       ``,
       `  mv ${activePath} ${activePath}.bak`,
-      `  gbrain init --pglite${modelArg} --embedding-dimensions ${requestedDims}`,
-      `  gbrain sync   # re-imports your brain repo from disk`,
-      `  gbrain embed --stale`,
+      `  voltmind init --pglite${modelArg} --embedding-dimensions ${requestedDims}`,
+      `  voltmind sync   # re-imports your brain repo from disk`,
+      `  voltmind embed --stale`,
       ``,
       `Full guide: docs/embedding-migrations.md`,
     ];
@@ -223,8 +223,8 @@ export function embeddingMismatchMessage(opts: EmbeddingMismatchOpts): string {
     `  COMMIT;`,
     ``,
     `Then re-init config (file plane is canonical post-v0.37):`,
-    `  gbrain init --supabase${modelArg} --embedding-dimensions ${requestedDims}`,
-    `  gbrain embed --stale`,
+    `  voltmind init --supabase${modelArg} --embedding-dimensions ${requestedDims}`,
+    `  voltmind embed --stale`,
     ``,
     `Full guide: docs/embedding-migrations.md`,
   ];
@@ -279,7 +279,7 @@ export function resolveSchemaEmbeddingDim(opts: ResolveSchemaEmbeddingDimOpts): 
         ok: false,
         error:
           `Provider "${recipe.id}" does not offer embedding models. ` +
-          `Pick a recipe with an embedding touchpoint (gbrain providers list).`,
+          `Pick a recipe with an embedding touchpoint (voltmind providers list).`,
       };
     }
     return validateDimAgainstTouchpoint(parsed.modelId, recipe, tp.default_dims, tp.dims_options, opts.embedding_dimensions);
@@ -321,7 +321,7 @@ export function resolveSchemaMultimodalDim(opts: ResolveSchemaMultimodalDimOpts)
         error:
           `Provider "${recipe.id}" does not support multimodal embeddings. ` +
           `Configured recipes that do: voyage (voyage-multimodal-3). ` +
-          `Run \`gbrain providers list\` to see touchpoint coverage.`,
+          `Run \`voltmind providers list\` to see touchpoint coverage.`,
       };
     }
     if (tp.multimodal_models && !tp.multimodal_models.includes(parsed.modelId)) {
@@ -469,7 +469,7 @@ function isCustomDimValidForProvider(
 // dies with an opaque pgvector error. Two surfaces close the gap:
 //
 //   1. `readFactsEmbeddingDim(engine)` — column-type probe used by the
-//      `gbrain doctor` `embedding_dim_mismatch` check to surface drift.
+//      `voltmind doctor` `embedding_dim_mismatch` check to surface drift.
 //   2. `assertFactsEmbeddingDimMatchesConfig(engine)` — preflight thrown
 //      at the top of every fact-writing path (extract-conversation-facts
 //      startup, the cycle extract_facts phase, facts:absorb op). Result
@@ -678,7 +678,7 @@ export async function assertFactsEmbeddingDimMatchesConfig(engine: BrainEngine):
     ``,
     recipe,
     ``,
-    `Or run \`gbrain doctor --json\` for the full diagnostic + fix surface.`,
+    `Or run \`voltmind doctor --json\` for the full diagnostic + fix surface.`,
   ].join('\n');
   const err = new FactsEmbeddingDimMismatchError(
     message,

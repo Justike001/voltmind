@@ -14,7 +14,7 @@
  *   SUP_HEALTH_INTERVAL_MS — how often healthCheck fires (default: 999_999 off)
  *   SUP_ALLOW_SHELL_JOBS   — "1" to set allowShellJobs:true, else false
  *   SUP_QUEUE              — queue name (default: 'default')
- *   SUP_AUDIT_DIR          — GBRAIN_AUDIT_DIR override (default: tmpdir/supervisor-test)
+ *   SUP_AUDIT_DIR          — VOLTMIND_AUDIT_DIR override (default: tmpdir/supervisor-test)
  */
 
 import { MinionSupervisor } from '../../src/core/minions/supervisor.ts';
@@ -42,7 +42,7 @@ const allowShellJobs = process.env.SUP_ALLOW_SHELL_JOBS === '1';
 const queueName = process.env.SUP_QUEUE ?? 'default';
 
 if (process.env.SUP_AUDIT_DIR) {
-  process.env.GBRAIN_AUDIT_DIR = process.env.SUP_AUDIT_DIR;
+  process.env.VOLTMIND_AUDIT_DIR = process.env.SUP_AUDIT_DIR;
 }
 
 const supervisorPid = process.pid;

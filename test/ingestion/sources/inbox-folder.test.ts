@@ -20,7 +20,7 @@ let tmpRoot: string;
 let inboxDir: string;
 
 beforeEach(() => {
-  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-inbox-test-'));
+  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-inbox-test-'));
   inboxDir = path.join(tmpRoot, 'inbox');
 });
 

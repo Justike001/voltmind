@@ -44,7 +44,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
-  tmpRoot = mkdtempSync(join(tmpdir(), 'gbrain-search-by-image-op-'));
+  tmpRoot = mkdtempSync(join(tmpdir(), 'voltmind-search-by-image-op-'));
   fetchHandler = async () => new Response(
     JSON.stringify({
       data: [{ embedding: Array.from({ length: 1024 }, () => 0.1), index: 0 }],

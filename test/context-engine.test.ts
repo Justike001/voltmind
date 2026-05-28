@@ -1,5 +1,5 @@
 /**
- * Tests for the gbrain-context OpenClaw context engine.
+ * Tests for the voltmind-context OpenClaw context engine.
  *
  * Validates:
  * - Engine creation with correct info
@@ -13,7 +13,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createGBrainContextEngine, ENGINE_ID, ENGINE_NAME, __resetSdkLoadStateForTests } from '../src/core/context-engine.ts';
+import { createVoltMindContextEngine, ENGINE_ID, ENGINE_NAME, __resetSdkLoadStateForTests } from '../src/core/context-engine.ts';
 
 interface WorkspaceOpts {
   heartbeat?: Record<string, unknown>;
@@ -23,7 +23,7 @@ interface WorkspaceOpts {
 }
 
 function makeWorkspace(opts: WorkspaceOpts = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'gbrain-ce-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'voltmind-ce-test-'));
   mkdirSync(join(dir, 'memory'), { recursive: true });
   mkdirSync(join(dir, 'ops'), { recursive: true });
   writeFileSync(join(dir, 'memory', 'heartbeat-state.json'), JSON.stringify(opts.heartbeat ?? {}));
@@ -37,7 +37,7 @@ function makeWorkspace(opts: WorkspaceOpts = {}) {
   return dir;
 }
 
-describe('gbrain-context engine', () => {
+describe('voltmind-context engine', () => {
   let tmpDir: string;
 
   afterEach(() => {
@@ -46,7 +46,7 @@ describe('gbrain-context engine', () => {
 
   it('has correct engine info', () => {
     tmpDir = makeWorkspace();
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
     expect(engine.info.id).toBe(ENGINE_ID);
     expect(engine.info.name).toBe(ENGINE_NAME);
     expect(engine.info.ownsCompaction).toBe(false);
@@ -63,7 +63,7 @@ describe('gbrain-context engine', () => {
         },
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -82,7 +82,7 @@ describe('gbrain-context engine', () => {
 
   it('uses US/Pacific when no location set', async () => {
     tmpDir = makeWorkspace();
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -96,7 +96,7 @@ describe('gbrain-context engine', () => {
 
   it('passes messages through unchanged', async () => {
     tmpDir = makeWorkspace({ heartbeat: { garryAwake: true } });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const messages = [
       { role: 'user' as const, content: 'hello' },
@@ -113,7 +113,7 @@ describe('gbrain-context engine', () => {
 
   it('ingest is a no-op that returns ingested: true', async () => {
     tmpDir = makeWorkspace();
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.ingest({
       sessionId: 'test-session',
@@ -130,7 +130,7 @@ describe('gbrain-context engine', () => {
         currentLocation: { city: 'San Francisco', timezone: 'US/Pacific' },
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -148,7 +148,7 @@ describe('gbrain-context engine', () => {
         currentLocation: { city: 'Tokyo', timezone: 'Asia/Tokyo' },
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -161,9 +161,9 @@ describe('gbrain-context engine', () => {
   });
 
   it('handles missing workspace files gracefully', async () => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-ce-test-'));
+    tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-ce-test-'));
     // No memory directory at all
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -177,7 +177,7 @@ describe('gbrain-context engine', () => {
 
   it('estimates tokens from message content', async () => {
     tmpDir = makeWorkspace({ heartbeat: { garryAwake: true } });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const messages = [
       { role: 'user' as const, content: 'a'.repeat(400) },
@@ -209,7 +209,7 @@ describe('gbrain-context engine', () => {
         ],
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -238,7 +238,7 @@ describe('gbrain-context engine', () => {
         ],
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -268,7 +268,7 @@ describe('gbrain-context engine', () => {
         ],
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -291,7 +291,7 @@ describe('gbrain-context engine', () => {
         events: [],
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -306,7 +306,7 @@ describe('gbrain-context engine', () => {
       heartbeat: { garryAwake: true },
       tasks: `# Current Tasks\n\n## Today\n\n- [ ] **DM @charlie-example re: agent-fork PR** — needs merge\n- [ ] **Post open source manifesto** — from a-team\n- [x] ~~Reply to bob-example~~ — DONE\n\n## Next up\n- [ ] Something later`,
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -331,7 +331,7 @@ describe('gbrain-context engine', () => {
       },
       tasks: '# Current Tasks\n\n## Today\n\nAll done!',
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -354,7 +354,7 @@ describe('gbrain-context engine', () => {
         ],
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -383,7 +383,7 @@ describe('gbrain-context engine', () => {
         ],
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -429,7 +429,7 @@ describe('gbrain-context engine', () => {
         ],
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -453,7 +453,7 @@ describe('gbrain-context engine', () => {
       heartbeat: { garryAwake: true },
       tasks: taskMd,
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',
@@ -479,7 +479,7 @@ describe('gbrain-context engine', () => {
       heartbeat: { garryAwake: true },
       tasks: oversized,
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'oversized',
@@ -500,7 +500,7 @@ describe('gbrain-context engine', () => {
     // (or returns a different shape) gets caught immediately.
     __resetSdkLoadStateForTests();
     tmpDir = makeWorkspace();
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.compact({
       sessionId: 'fallback-test',
@@ -520,7 +520,7 @@ describe('gbrain-context engine', () => {
     tmpDir = makeWorkspace();
 
     // Engine factory must NOT trigger SDK load.
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
     expect(engine.info.id).toBe(ENGINE_ID);
     expect(engine.info.ownsCompaction).toBe(false);
 
@@ -546,7 +546,7 @@ describe('gbrain-context engine', () => {
         currentLocation: { city: 'San Francisco', timezone: 'US/Pacific' },
       },
     });
-    const engine = createGBrainContextEngine({ workspaceDir: tmpDir });
+    const engine = createVoltMindContextEngine({ workspaceDir: tmpDir });
 
     const result = await engine.assemble({
       sessionId: 'test-session',

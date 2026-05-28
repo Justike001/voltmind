@@ -1,7 +1,7 @@
 /**
  * v0.31.2 walker hardening regression tests.
  *
- * Closes the bug class where `gbrain sync --strategy code` could hang on
+ * Closes the bug class where `voltmind sync --strategy code` could hang on
  * repos with self-referencing symlinks (the gstack `.claude/skills/gstack
  * -> repo-root` dev pattern was the trigger). Pins:
  *
@@ -24,7 +24,7 @@ import { withEnv } from './helpers/with-env.ts';
 let tmp: string;
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-walker-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-walker-'));
 });
 
 afterEach(() => {
@@ -33,7 +33,7 @@ afterEach(() => {
 
 describe('collectSyncableFiles symlink + cycle hardening', () => {
   test('1. self-referencing symlink does not loop', async () => {
-    await withEnv({ GBRAIN_EMBEDDING_MULTIMODAL: undefined }, () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MULTIMODAL: undefined }, () => {
       writeFileSync(join(tmp, 'README.md'), '# top\n');
       // Symlink "loop" inside tempdir pointing back to itself.
       symlinkSync(tmp, join(tmp, 'loop'));
@@ -49,7 +49,7 @@ describe('collectSyncableFiles symlink + cycle hardening', () => {
   });
 
   test('2. symlink chain through real dirs does not loop', async () => {
-    await withEnv({ GBRAIN_EMBEDDING_MULTIMODAL: undefined }, () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MULTIMODAL: undefined }, () => {
       // a/ contains a real subdir b/, which contains a symlink "back" -> a.
       // The lstat skip catches "back" before recursion. If somehow it
       // missed, the inode-cycle Map catches the second visit to a/.
@@ -67,7 +67,7 @@ describe('collectSyncableFiles symlink + cycle hardening', () => {
   });
 
   test('3. max-depth bailout terminates pathological deep trees', async () => {
-    await withEnv({ GBRAIN_EMBEDDING_MULTIMODAL: undefined }, () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MULTIMODAL: undefined }, () => {
       // Build a 40-level real directory tree. 32 is the default cap; the
       // file at the deepest level is intentionally past the bailout so we
       // can assert it is NOT collected (and the walker still terminates).
@@ -87,7 +87,7 @@ describe('collectSyncableFiles symlink + cycle hardening', () => {
   });
 
   test('4. strategy filter admits the right files', async () => {
-    await withEnv({ GBRAIN_EMBEDDING_MULTIMODAL: undefined }, () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MULTIMODAL: undefined }, () => {
       writeFileSync(join(tmp, 'README.md'), '# r\n');
       writeFileSync(join(tmp, 'foo.ts'), '// f\n');
       writeFileSync(join(tmp, 'bar.py'), '# b\n');
@@ -103,7 +103,7 @@ describe('collectSyncableFiles symlink + cycle hardening', () => {
   });
 
   test('5. dot-prefixed dirs and node_modules still skipped', async () => {
-    await withEnv({ GBRAIN_EMBEDDING_MULTIMODAL: undefined }, () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MULTIMODAL: undefined }, () => {
       writeFileSync(join(tmp, 'real.md'), 'r\n');
       mkdirSync(join(tmp, '.git'));
       writeFileSync(join(tmp, '.git/HEAD'), 'ref: refs/heads/main\n');
@@ -128,21 +128,21 @@ describe('collectSyncableFiles symlink + cycle hardening', () => {
     writeFileSync(join(tmp, 'j.jpg'), Buffer.from([0xff, 0xd8, 0xff]));
 
     // Off → markdown only.
-    await withEnv({ GBRAIN_EMBEDDING_MULTIMODAL: undefined }, () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MULTIMODAL: undefined }, () => {
       const off = collectSyncableFiles(tmp, { strategy: 'markdown' });
       expect(off.map(f => f.split('/').pop()).sort()).toEqual(['r.md']);
     });
 
     // On → markdown + images (preserves v0.27.1 F2 collectMarkdownFiles
     // behavior; codex C5 carve-out).
-    await withEnv({ GBRAIN_EMBEDDING_MULTIMODAL: 'true' }, () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MULTIMODAL: 'true' }, () => {
       const on = collectSyncableFiles(tmp, { strategy: 'markdown' });
       expect(on.map(f => f.split('/').pop()).sort()).toEqual(['j.jpg', 'p.png', 'r.md']);
     });
   });
 
   test('7. deterministic ordering — two walks return identical arrays (codex C8)', async () => {
-    await withEnv({ GBRAIN_EMBEDDING_MULTIMODAL: undefined }, () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MULTIMODAL: undefined }, () => {
       // runImport's checkpoint resume at import.ts:68-74 is index-based
       // against a sorted file list. Unstable order skips the wrong files
       // on resume.

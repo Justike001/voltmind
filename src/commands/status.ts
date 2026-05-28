@@ -1,9 +1,9 @@
 /**
- * `gbrain status` — single-screen brain health dashboard.
+ * `voltmind status` — single-screen brain health dashboard.
  *
  * The command that answers "is my brain healthy and working?" without
- * making operators run five other commands (gbrain sources status, gbrain
- * stats, gbrain jobs supervisor status, gbrain jobs list, tail audit logs).
+ * making operators run five other commands (voltmind sources status, voltmind
+ * stats, voltmind jobs supervisor status, voltmind jobs list, tail audit logs).
  *
  * Six sections:
  *   - Sync       — per-source last_sync_at + staleness
@@ -37,7 +37,7 @@
 
 import type { BrainEngine } from '../core/engine.ts';
 import { existsSync, readFileSync } from 'node:fs';
-import { gbrainPath, loadConfig, isThinClient } from '../core/config.ts';
+import { voltmindPath, loadConfig, isThinClient } from '../core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../core/mcp-client.ts';
 import {
   buildSyncStatusReport,
@@ -229,7 +229,7 @@ async function buildQueueCounts(engine: BrainEngine): Promise<QueueCounts> {
   const counts: QueueCounts = { active: 0, waiting: 0, completed: 0, failed: 0, dead: 0 };
   try {
     // Live counts, NO time window (codex MAJOR-6). Old stuck waiting/active
-    // jobs are the failure mode `gbrain status` should surface, not hide.
+    // jobs are the failure mode `voltmind status` should surface, not hide.
     const rows = await engine.executeRaw<Row>(
       `SELECT status, COUNT(*)::text AS count FROM minion_jobs GROUP BY status`,
     );
@@ -266,7 +266,7 @@ function buildWorkerSummary(): WorkerSummary {
 }
 
 function buildAutopilotStatus(): AutopilotStatus {
-  const lockPath = gbrainPath('autopilot.lock');
+  const lockPath = voltmindPath('autopilot.lock');
   const lockfile_present = existsSync(lockPath);
   let pid: number | null = null;
   let running = false;
@@ -399,7 +399,7 @@ async function buildThinClientReport(
 function renderHuman(report: StatusReport): string {
   const lines: string[] = [];
   lines.push('');
-  lines.push('GBrain Status');
+  lines.push('VoltMind Status');
   lines.push('=============');
   lines.push(`Mode: ${report.mode}  ·  ${report.generated_at}`);
   lines.push('');
@@ -499,9 +499,9 @@ function renderHuman(report: StatusReport): string {
       if (a.running) {
         lines.push(`  running (PID ${a.pid})`);
       } else if (a.lockfile_present) {
-        lines.push(`  stale lockfile (PID ${a.pid ?? '?'} not alive). Run \`gbrain autopilot --install\` to restart.`);
+        lines.push(`  stale lockfile (PID ${a.pid ?? '?'} not alive). Run \`voltmind autopilot --install\` to restart.`);
       } else {
-        lines.push('  not running. Install with `gbrain autopilot --install`.');
+        lines.push('  not running. Install with `voltmind autopilot --install`.');
       }
     }
     lines.push('');
@@ -568,7 +568,7 @@ export async function runStatus(
   const sectionFlag = parseSectionFlag(args);
   if (sectionFlag === 'usage_error') {
     stderr(
-      `gbrain status: invalid --section. Valid: ${VALID_SECTIONS.join('|')}\n`,
+      `voltmind status: invalid --section. Valid: ${VALID_SECTIONS.join('|')}\n`,
     );
     return { exitCode: 2 };
   }
@@ -584,13 +584,13 @@ export async function runStatus(
       report = await buildThinClientReport(cfg, { sections });
     } else {
       if (!engine) {
-        stderr('gbrain status: no engine connected (DB unreachable?). Run `gbrain doctor` to diagnose.\n');
+        stderr('voltmind status: no engine connected (DB unreachable?). Run `voltmind doctor` to diagnose.\n');
         return { exitCode: 1 };
       }
       report = await buildLocalReport(engine, { sections });
     }
   } catch (err) {
-    stderr(`gbrain status: snapshot failed: ${(err as Error).message}\n`);
+    stderr(`voltmind status: snapshot failed: ${(err as Error).message}\n`);
     return { exitCode: 1 };
   }
 

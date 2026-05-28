@@ -18,7 +18,7 @@ import { buildGitInvocation } from '../../src/commands/sync.ts';
 let repoPath: string;
 
 beforeAll(() => {
-  repoPath = mkdtempSync(join(tmpdir(), 'gbrain-cjk-git-'));
+  repoPath = mkdtempSync(join(tmpdir(), 'voltmind-cjk-git-'));
   execFileSync('git', ['-C', repoPath, 'init', '--quiet']);
   execFileSync('git', ['-C', repoPath, 'config', 'user.email', 'cjk-test@example.com']);
   execFileSync('git', ['-C', repoPath, 'config', 'user.name', 'CJK Test']);

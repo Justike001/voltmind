@@ -3,7 +3,7 @@
  * at least one citation marker.
  *
  * "Citation marker" is one of:
- *   - [Source: ...]                        (explicit gbrain citation form)
+ *   - [Source: ...]                        (explicit voltmind citation form)
  *   - [text](https://...) or (http://...)  (inline URL link)
  *   - [Source: [label](url)]               (wrapped form)
  *

@@ -1,17 +1,17 @@
 /**
  * v0.41.8.0 — IRON-RULE regression for #1247, #1269, #1290.
  *
- * Pre-fix: `gbrain search`, `gbrain query`, `gbrain get` on PGLite
+ * Pre-fix: `voltmind search`, `voltmind query`, `voltmind get` on PGLite
  * printed results then hung at ~95-98% CPU until SIGKILL.
  *
  * Post-fix: each command exits 0 within a few seconds.
  *
  * This test spawns the CLI as a real subprocess against a hermetic
- * GBRAIN_HOME tempdir, seeds a brain with 2 pages, runs each verb
+ * VOLTMIND_HOME tempdir, seeds a brain with 2 pages, runs each verb
  * with a hard timeout, and asserts exit 0. Without the drain helper
  * in cli.ts, every variant would time out.
  *
- * Bonus assertion: `gbrain serve --http` (a daemon) MUST stay alive
+ * Bonus assertion: `voltmind serve --http` (a daemon) MUST stay alive
  * after the first request — the narrow force-exit guard added in
  * v0.41.8.0 is supposed to fire ONLY on op-dispatch drain timeout,
  * NEVER for daemons. This catches any future regression where the
@@ -45,7 +45,7 @@ import { join, resolve } from 'path';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 const BIN_CACHE = join(REPO_ROOT, 'test', '.cache');
-const SHIM_PATH = join(BIN_CACHE, 'gbrain-pglite-exit-shim.sh');
+const SHIM_PATH = join(BIN_CACHE, 'voltmind-pglite-exit-shim.sh');
 
 beforeAll(() => {
   // Same shim pattern as claw-test e2e: bun --compile can't bundle
@@ -63,10 +63,10 @@ let repoSourceDir: string;
 let runEnv: NodeJS.ProcessEnv;
 
 beforeAll(() => {
-  tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-pglite-exit-'));
-  repoSourceDir = mkdtempSync(join(tmpdir(), 'gbrain-pglite-exit-src-'));
+  tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-pglite-exit-'));
+  repoSourceDir = mkdtempSync(join(tmpdir(), 'voltmind-pglite-exit-src-'));
 
-  // Seed a tiny git repo with 2 markdown pages so `gbrain sync` has
+  // Seed a tiny git repo with 2 markdown pages so `voltmind sync` has
   // something to import. The pages contain the literal token 'foxtrot'
   // so search has a deterministic keyword hit.
   writeFileSync(
@@ -88,7 +88,7 @@ beforeAll(() => {
   // Strip embedding-provider env vars so init doesn't refuse on the
   // multi-provider ambiguity check. We don't need embeddings — sync
   // runs with --no-embed below and search/get are keyword-only paths.
-  runEnv = { ...process.env, GBRAIN_HOME: tmpHome };
+  runEnv = { ...process.env, VOLTMIND_HOME: tmpHome };
   delete runEnv.VOYAGE_API_KEY;
   delete runEnv.ZEROENTROPY_API_KEY;
   delete runEnv.OPENAI_API_KEY;
@@ -107,7 +107,7 @@ beforeAll(() => {
   );
   if (initResult.status !== 0) {
     throw new Error(
-      `gbrain init failed (code=${initResult.status}):\n` +
+      `voltmind init failed (code=${initResult.status}):\n` +
         `STDOUT:\n${initResult.stdout}\n` +
         `STDERR:\n${initResult.stderr}`,
     );
@@ -127,7 +127,7 @@ beforeAll(() => {
   );
   if (syncResult.status !== 0) {
     throw new Error(
-      `gbrain sync failed (code=${syncResult.status}):\n` +
+      `voltmind sync failed (code=${syncResult.status}):\n` +
         `STDOUT:\n${syncResult.stdout}\n` +
         `STDERR:\n${syncResult.stderr}`,
     );
@@ -174,7 +174,7 @@ function runWithTimeout(
 }
 
 describe('v0.41.8.0 — PGLite CLI read commands exit cleanly (#1247/#1269/#1290)', () => {
-  test('gbrain search "foxtrot" exits 0 within 15s', async () => {
+  test('voltmind search "foxtrot" exits 0 within 15s', async () => {
     const { code, stdout, stderr, durationMs } = await runWithTimeout(
       ['search', 'foxtrot', '--limit', '3'],
       15_000,
@@ -192,7 +192,7 @@ describe('v0.41.8.0 — PGLite CLI read commands exit cleanly (#1247/#1269/#1290
     expect(stdout.length).toBeGreaterThan(0);
   }, 30_000);
 
-  test('gbrain get returns a page body and exits 0 within 15s', async () => {
+  test('voltmind get returns a page body and exits 0 within 15s', async () => {
     const { code, stdout, stderr, durationMs } = await runWithTimeout(
       ['get', 'alpha'],
       15_000,
@@ -207,7 +207,7 @@ describe('v0.41.8.0 — PGLite CLI read commands exit cleanly (#1247/#1269/#1290
     expect(stdout).toContain('foxtrot');
   }, 30_000);
 
-  test('gbrain query without --no-expand exits 0 within 15s (no API key)', async () => {
+  test('voltmind query without --no-expand exits 0 within 15s (no API key)', async () => {
     // Without an API key, expansion + vector branches degrade
     // gracefully. The op still runs the keyword path and returns
     // results. The DRAIN is what we're testing, not query quality.
@@ -228,7 +228,7 @@ describe('v0.41.8.0 — PGLite CLI read commands exit cleanly (#1247/#1269/#1290
 });
 
 describe('v0.41.8.0 — daemon survival (regression guard for narrow force-exit)', () => {
-  test('gbrain serve --http stays alive past the timeout window', async () => {
+  test('voltmind serve --http stays alive past the timeout window', async () => {
     // Pick a likely-free ephemeral port. We're testing "still alive
     // 3 seconds after startup" — if the force-exit guard misfired
     // on 'serve', the process would die immediately after binding.
@@ -268,7 +268,7 @@ describe('v0.41.8.0 — daemon survival (regression guard for narrow force-exit)
 
     if (!wasAlive) {
       throw new Error(
-        `gbrain serve --http exited within 3s (code=${earlyCode}). ` +
+        `voltmind serve --http exited within 3s (code=${earlyCode}). ` +
           `If the narrow force-exit guard misclassified 'serve' as a ` +
           `non-daemon command, this is the regression.`,
       );

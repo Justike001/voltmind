@@ -56,7 +56,7 @@ function git(repoPath: string, args: string[]): string {
 }
 
 function createGitFixture(sourceId: string, pages: number): string {
-  const repoPath = mkdtempSync(join(tmpdir(), `gbrain-rescue-${sourceId}-`));
+  const repoPath = mkdtempSync(join(tmpdir(), `voltmind-rescue-${sourceId}-`));
   git(repoPath, ['init', '--quiet']);
   git(repoPath, ['config', 'user.email', 'test@example.com']);
   git(repoPath, ['config', 'user.name', 'Test']);

@@ -174,7 +174,7 @@ describe('cache gate end-to-end (PGLite)', () => {
     // deleted_at is in the trigger allow-list (NULL IS DISTINCT FROM
     // timestamp), so the trigger fires and bumps p1.generation. Layer 2
     // sees the mismatch and invalidates. Hard-delete (a raw DELETE FROM
-    // pages) is admin-only via `gbrain pages purge-deleted` and is best-
+    // pages) is admin-only via `voltmind pages purge-deleted` and is best-
     // effort cache-wise (MAX(generation) doesn't strictly decrease, so
     // the bookmark may serve the row until TTL — acceptable for the
     // rare hard-delete path).

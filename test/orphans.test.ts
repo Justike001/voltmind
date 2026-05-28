@@ -89,7 +89,7 @@ describe('shouldExclude', () => {
   test('does NOT exclude a normal content page', () => {
     expect(shouldExclude('companies/acme')).toBe(false);
     expect(shouldExclude('people/jane-doe')).toBe(false);
-    expect(shouldExclude('projects/gbrain')).toBe(false);
+    expect(shouldExclude('projects/voltmind')).toBe(false);
   });
 
   test('does NOT exclude a page ending with log-like text that is not /log', () => {
@@ -107,7 +107,7 @@ describe('deriveDomain', () => {
 
   test('falls back to first slug segment', () => {
     expect(deriveDomain(null, 'people/jane-doe')).toBe('people');
-    expect(deriveDomain(undefined, 'projects/gbrain')).toBe('projects');
+    expect(deriveDomain(undefined, 'projects/voltmind')).toBe('projects');
   });
 
   test('returns root for single-segment slugs with no frontmatter', () => {

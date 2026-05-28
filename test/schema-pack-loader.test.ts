@@ -34,7 +34,7 @@ import {
 } from '../src/core/schema-pack/index.ts';
 
 const minimalManifest = (overrides: Partial<SchemaPackManifest> = {}): unknown => ({
-  api_version: 'gbrain-schema-pack-v1',
+  api_version: 'voltmind-schema-pack-v1',
   name: 'test-pack',
   version: '1.0.0',
   description: 'unit test pack',
@@ -56,7 +56,7 @@ describe('manifest-v1: parse + validate', () => {
   test('rejects wrong api_version', () => {
     expect(() => parseSchemaPackManifest({
       ...minimalManifest() as Record<string, unknown>,
-      api_version: 'gbrain-skillpack-v1',
+      api_version: 'voltmind-skillpack-v1',
     })).toThrow(/unsupported api_version/);
   });
 
@@ -258,8 +258,8 @@ describe('per-source bindings', () => {
 });
 
 describe('7-tier resolution (D13)', () => {
-  test('default to gbrain-base when nothing set', () => {
-    expect(resolveActivePackName({ remote: false })).toEqual({ pack_name: 'gbrain-base', source: 'default' });
+  test('default to voltmind-base when nothing set', () => {
+    expect(resolveActivePackName({ remote: false })).toEqual({ pack_name: 'voltmind-base', source: 'default' });
   });
 
   test('per-call wins when remote=false', () => {
@@ -353,7 +353,7 @@ describe('YAML mini-parser', () => {
 
 describe('loadPackFromString end-to-end', () => {
   test('YAML round-trip', () => {
-    const yaml = `api_version: gbrain-schema-pack-v1
+    const yaml = `api_version: voltmind-schema-pack-v1
 name: minimal
 version: 0.1.0
 description: a tiny pack
@@ -365,7 +365,7 @@ extends: null`;
 
   test('JSON round-trip', () => {
     const json = JSON.stringify({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'json-pack',
       version: '0.1.0',
       description: '',
@@ -393,10 +393,10 @@ describe('ReDoS guard', () => {
 
 describe('candidate-audit', () => {
   test('isAuditVerbose respects env var', async () => {
-    await withEnv({ GBRAIN_SCHEMA_AUDIT_VERBOSE: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_AUDIT_VERBOSE: undefined }, async () => {
       expect(isAuditVerbose()).toBe(false);
     });
-    await withEnv({ GBRAIN_SCHEMA_AUDIT_VERBOSE: '1' }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_AUDIT_VERBOSE: '1' }, async () => {
       expect(isAuditVerbose()).toBe(true);
     });
   });

@@ -49,7 +49,7 @@ export const GET_RECENT_TRANSCRIPTS_DESCRIPTION =
   "'what have I been thinking about', or anything personal/emotional. Raw " +
   "transcripts are the canonical source for the user's own state — polished pages " +
   "summarize and flatten. Local-only: rejects remote (MCP/HTTP) callers with a " +
-  "clear permission_denied; call via the gbrain CLI.";
+  "clear permission_denied; call via the voltmind CLI.";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Redirect hints appended to existing op descriptions
@@ -82,13 +82,13 @@ export const SEARCH_DESCRIPTION =
 
 export const FIND_CONTRADICTIONS_DESCRIPTION =
   "v0.32.6 — return suspected-contradiction findings from the most recent " +
-  "`gbrain eval suspected-contradictions` probe run, optionally filtered by slug " +
+  "`voltmind eval suspected-contradictions` probe run, optionally filtered by slug " +
   "and/or severity. Use this when the user asks 'what's inconsistent in my " +
   "brain', 'show me contradictions about Acme', 'high-severity issues only', or " +
   "wants to act on the probe's findings without re-running it. Returns " +
   "{contradictions: [{a, b, severity, axis, confidence, resolution_command}]}. " +
   "Reads the cached run row — does NOT trigger a new probe; users run " +
-  "`gbrain eval suspected-contradictions` for that.";
+  "`voltmind eval suspected-contradictions` for that.";
 
 export const FIND_TRAJECTORY_DESCRIPTION =
   "v0.35.4 — return the chronological claim trajectory for an entity (typed " +
@@ -102,7 +102,7 @@ export const FIND_TRAJECTORY_DESCRIPTION =
   "drift_score: number|null, schema_version: 1}`. Drift score 0 = stable narrative, " +
   "1 = every consecutive claim is unrelated; null when fewer than 3 typed points " +
   "exist. Visibility-filtered for remote callers (world-only); source-scoped by " +
-  "the caller's OAuth source binding. Pair with `gbrain founder scorecard <slug>` " +
+  "the caller's OAuth source binding. Pair with `voltmind founder scorecard <slug>` " +
   "for an aggregated rollup of the same data.";
 
 // ──────────────────────────────────────────────────────────────────────────────

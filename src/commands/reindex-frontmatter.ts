@@ -1,9 +1,9 @@
 /**
- * v0.29.1 — `gbrain reindex-frontmatter`.
+ * v0.29.1 — `voltmind reindex-frontmatter`.
  *
  * Recovery / explicit-rebuild path for `pages.effective_date`. Useful when:
  *   - The user edited frontmatter dates after import and wants the effective_date
- *     column refreshed without a full `gbrain sync`.
+ *     column refreshed without a full `voltmind sync`.
  *   - The post-upgrade backfill orchestrator finished but the user wants to
  *     re-walk a subset (e.g. just `meetings/`) after fixing some frontmatter.
  *   - The precedence rules change between releases and the user wants to
@@ -36,7 +36,7 @@ export interface ReindexFrontmatterOpts {
   force?: boolean;
   /**
    * v0.41.15.0 (T12, D9): accepted for API consistency with the other
-   * `gbrain reindex --workers N` surfaces but currently INFORMATIONAL
+   * `voltmind reindex --workers N` surfaces but currently INFORMATIONAL
    * ONLY. reindex-frontmatter delegates to `backfillEffectiveDate`
    * which has its own internal batching and doesn't expose a worker
    * count. The work is pure CPU (date precedence resolution per row,
@@ -177,7 +177,7 @@ export async function reindexFrontmatterCli(args: string[]): Promise<void> {
   const { loadConfig, toEngineConfig } = await import('../core/config.ts');
   const cfg = loadConfig();
   if (!cfg) {
-    console.error('No gbrain config; run `gbrain init` first.');
+    console.error('No voltmind config; run `voltmind init` first.');
     process.exit(1);
   }
   const engineConfig = toEngineConfig(cfg);

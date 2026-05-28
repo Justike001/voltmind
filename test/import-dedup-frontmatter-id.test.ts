@@ -1,8 +1,8 @@
 /**
  * v0.41.13 (#1309) — overlapping-ingest-roots dedup via findDuplicatePage.
  *
- * Bug class (infiniteGameExp): `gbrain import /vault/Subdir/` then
- * `gbrain import /vault/` re-ingested the same files under different
+ * Bug class (infiniteGameExp): `voltmind import /vault/Subdir/` then
+ * `voltmind import /vault/` re-ingested the same files under different
  * slugs. Slug-only dedup at importFromContent missed the duplicate
  * because the slugs differed; the engine wrote both rows, doubling
  * search clutter and inflating backlink counts.
@@ -44,7 +44,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
-  tmpRoot = mkdtempSync(join(tmpdir(), 'gbrain-dedup-fm-'));
+  tmpRoot = mkdtempSync(join(tmpdir(), 'voltmind-dedup-fm-'));
 });
 
 function makeFile(rel: string, body: string): { path: string; rel: string } {
@@ -103,7 +103,7 @@ describe('#1309 — overlapping-ingest-roots dedup', () => {
   });
 
   test('different frontmatter.id (and therefore different content_hash) imports both, no dedup signal', async () => {
-    // gbrain's content_hash includes the frontmatter (minus captured_at /
+    // voltmind's content_hash includes the frontmatter (minus captured_at /
     // ingested_at). Two pages with different `id:` in frontmatter
     // therefore have DIFFERENT content_hashes regardless of body text,
     // so dedup never matches and both index naturally. This pins that

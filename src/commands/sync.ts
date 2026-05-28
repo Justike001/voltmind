@@ -183,8 +183,8 @@ export interface SyncOpts {
    */
   concurrency?: number;
   /**
-   * Internal: skip acquiring the gbrain-sync DB lock. Set by the cycle
-   * handler (cycle.ts) which already holds gbrain-cycle and therefore
+   * Internal: skip acquiring the voltmind-sync DB lock. Set by the cycle
+   * handler (cycle.ts) which already holds voltmind-cycle and therefore
    * already serializes against other cycle runs. CLI sync, jobs handler,
    * and any external caller leave this undefined so they take the lock.
    *
@@ -197,17 +197,17 @@ export interface SyncOpts {
    * callers that already know which lock id they want.
    *
    * Defaults to:
-   *   - `gbrain-sync:<sourceId>` when `opts.sourceId` is set
+   *   - `voltmind-sync:<sourceId>` when `opts.sourceId` is set
    *     (multi-source / federated brains; the per-source invariant)
-   *   - `gbrain-sync` (the legacy global lock) when `sourceId` is unset
+   *   - `voltmind-sync` (the legacy global lock) when `sourceId` is unset
    *     (single-default-source brains; preserves bit-for-bit behavior
    *      for installs that never set up multiple sources)
    *
    * Why source-id keyed by default (v0.40.3.0):
    *   PR #1314 originally only changed the lock id inside the parallel
    *   `sync --all` fan-out. That introduced a worse race than the global
-   *   lock fixes — `gbrain sync --all` (per-source lock) running
-   *   concurrently with `gbrain sync --source foo` (global lock) would
+   *   lock fixes — `voltmind sync --all` (per-source lock) running
+   *   concurrently with `voltmind sync --source foo` (global lock) would
    *   both write source foo simultaneously. The fix: every source-scoped
    *   sync (CLI, --all fan-out, cycle, jobs handler) defaults to the
    *   per-source lock. Same source = same lock id, always.
@@ -446,12 +446,12 @@ async function writeChunkerVersion(
 }
 
 /**
- * v0.40 Federated Sync v2: `gbrain sync trigger --source <id> [--priority high|normal|low]`
+ * v0.40 Federated Sync v2: `voltmind sync trigger --source <id> [--priority high|normal|low]`
  *
  * Push-trigger entry point. Wraps `queue.add('sync', ...)` with priority -10
  * (above autopilot's 0) so push-triggered syncs preempt scheduled ones.
  * Use cases: GitHub webhook handler (POST /webhooks/github), CLI nudge after
- * a manual git pull, scripted dispatch from `gbrain sources federate`.
+ * a manual git pull, scripted dispatch from `voltmind sources federate`.
  *
  * Sets `auto_embed_backfill: true` so the extended sync handler (T6/T7)
  * auto-enqueues an embed-backfill job after the sync settles.
@@ -460,7 +460,7 @@ async function writeChunkerVersion(
  */
 export async function runSyncTrigger(engine: BrainEngine, args: string[]): Promise<void> {
   if (args.includes('--help') || args.includes('-h')) {
-    console.log(`Usage: gbrain sync trigger --source <id> [--priority high|normal|low]
+    console.log(`Usage: voltmind sync trigger --source <id> [--priority high|normal|low]
 
 Queue a push-triggered sync job for one source. Prints the resulting job id
 on stdout. The autopilot worker picks it up and runs performSync against the
@@ -468,13 +468,13 @@ named source; if the sync added/modified pages, an embed-backfill job is
 auto-enqueued (subject to D6 budget cap + D19 source-level cooldown).
 
 Use cases:
-  - GitHub webhook → 'gbrain sync trigger --source <repo>'
+  - GitHub webhook → 'voltmind sync trigger --source <repo>'
   - Manual nudge after 'git pull' inside a federated source
   - Programmatic triggers from CI / shell automation
 
 See also:
-  gbrain sources webhook set <id>   Set up GitHub-signed push webhook
-  gbrain sources status             Per-source sync + embed coverage
+  voltmind sources webhook set <id>   Set up GitHub-signed push webhook
+  voltmind sources status             Per-source sync + embed coverage
 `);
     return;
   }
@@ -482,7 +482,7 @@ See also:
   const sourceIdArg = args.find((a, i) => args[i - 1] === '--source') ?? null;
   if (!sourceIdArg) {
     console.error('Error: --source <id> is required');
-    console.error("Usage: gbrain sync trigger --source <id> [--priority high|normal|low]");
+    console.error("Usage: voltmind sync trigger --source <id> [--priority high|normal|low]");
     process.exit(2);
   }
 
@@ -498,7 +498,7 @@ See also:
   const { fetchSource } = await import('../core/sources-load.ts');
   const source = await fetchSource(engine, sourceIdArg);
   if (!source) {
-    console.error(`Source "${sourceIdArg}" not found. List with: gbrain sources list`);
+    console.error(`Source "${sourceIdArg}" not found. List with: voltmind sources list`);
     process.exit(1);
   }
 
@@ -538,7 +538,7 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
   // the lock and race on the final commit + bookmark write.
   //
   // skipLock is reserved for callers that already serialize via another
-  // mechanism (e.g. cycle.ts holds gbrain-cycle for the broader scope).
+  // mechanism (e.g. cycle.ts holds voltmind-cycle for the broader scope).
   if (opts.skipLock) {
     return await performSyncInner(engine, opts);
   }
@@ -589,14 +589,14 @@ async function formatLockBusyMessage(engine: BrainEngine, lockKey: string): Prom
   if (!snap) {
     return (
       `Another sync is in progress (lock ${lockKey} held). ` +
-      `Wait for it to finish, or run 'gbrain doctor' if it has been more than 30 minutes.`
+      `Wait for it to finish, or run 'voltmind doctor' if it has been more than 30 minutes.`
     );
   }
 
   const ageHuman = formatAgeHuman(snap.age_ms);
-  const breakHint = lockKey.startsWith('gbrain-sync:')
-    ? `gbrain sync --break-lock --source ${lockKey.slice('gbrain-sync:'.length)}`
-    : `gbrain sync --break-lock`;
+  const breakHint = lockKey.startsWith('voltmind-sync:')
+    ? `voltmind sync --break-lock --source ${lockKey.slice('voltmind-sync:'.length)}`
+    : `voltmind sync --break-lock`;
   const ttlNote = snap.ttl_expired ? ' [TTL expired]' : '';
   return (
     `Another sync is in progress (lock ${lockKey} held by pid ${snap.holder_pid} on ${snap.holder_host}, ` +
@@ -608,7 +608,7 @@ async function formatLockBusyMessage(engine: BrainEngine, lockKey: string): Prom
 }
 
 /**
- * v0.41.6.0 D3: `gbrain sync --break-lock` / `--force-break-lock` worker.
+ * v0.41.6.0 D3: `voltmind sync --break-lock` / `--force-break-lock` worker.
  * Returns the process exit code (0 = lock cleared or absent; 1 = refused).
  *
  * Safe path (`force=false`): refuses unless the holder is on this host
@@ -694,7 +694,7 @@ async function runBreakLock(
       // Distinguish the two cases for the operator.
       if (snap.last_refreshed_at === null) {
         console.error(`Lock ${lockKey} has NULL last_refreshed_at (pre-v98 brain or migration window).`);
-        console.error('Run `gbrain apply-migrations --yes` to land v98, OR use --force-break-lock if you know the holder is dead.');
+        console.error('Run `voltmind apply-migrations --yes` to land v98, OR use --force-break-lock if you know the holder is dead.');
       } else {
         const ageStr = snap.ms_since_last_refresh != null ? formatAgeHuman(snap.ms_since_last_refresh) : 'unknown';
         console.error(`Refusing to break lock ${lockKey}: last refresh was ${ageStr} ago, within --max-age=${opts.maxAgeSeconds}s window.`);
@@ -715,7 +715,7 @@ async function runBreakLock(
       }));
     } else if (deleted) {
       console.log(`Force-broke lock ${lockKey} (was held by pid ${snap.holder_pid} on ${snap.holder_host}, age ${formatAgeHuman(snap.age_ms)}).`);
-      console.log('WARNING: the holder may still be writing. Verify with `gbrain doctor` before re-running.');
+      console.log('WARNING: the holder may still be writing. Verify with `voltmind doctor` before re-running.');
     } else {
       console.log(`Lock ${lockKey} was already cleared by another process between our check and DELETE (race-safe).`);
     }
@@ -843,21 +843,21 @@ function buildPartialResult(opts: {
 async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<SyncResult> {
   // v0.41.8.0 (D9 / #1342): phase breadcrumbs. The #1342 reporter saw
   // ZERO stderr output before their sync hang, which made the bug
-  // impossible to triage. Mirror the existing `[gbrain phase] sync.git_pull`
+  // impossible to triage. Mirror the existing `[voltmind phase] sync.git_pull`
   // pattern at the major phase boundaries so the next #1342-shaped
   // report names WHICH phase spun. Doesn't fix #1342 but converts
   // "hung with no output" into actionable diagnostic data.
-  serr(`[gbrain phase] sync.resolve_repo`);
+  serr(`[voltmind phase] sync.resolve_repo`);
   // Resolve repo path
   const repoPath = opts.repoPath || await readSyncAnchor(engine, opts.sourceId, 'repo_path');
   if (!repoPath) {
     const hint = opts.sourceId
-      ? `Source "${opts.sourceId}" has no local_path. Run: gbrain sources add ${opts.sourceId} --path <path>`
-      : `No repo path specified. Use --repo or run gbrain init with --repo first.`;
+      ? `Source "${opts.sourceId}" has no local_path. Run: voltmind sources add ${opts.sourceId} --path <path>`
+      : `No repo path specified. Use --repo or run voltmind init with --repo first.`;
     throw new Error(hint);
   }
 
-  serr(`[gbrain phase] sync.load_active_pack`);
+  serr(`[voltmind phase] sync.load_active_pack`);
   // v0.39 T1.5: load active pack ONCE at sync entry; pass to every per-file
   // importFile call below. Codex perf finding #7: per-file loadActivePack adds
   // disk/YAML/hash overhead × thousands of files. Best-effort: pack load
@@ -882,7 +882,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
   // we recover from missing/no-git/not-a-dir by re-cloning, refuse on
   // url-drift or corruption with structured hints.
   if (opts.sourceId) {
-    serr(`[gbrain phase] sync.validate_repo_state`);
+    serr(`[voltmind phase] sync.validate_repo_state`);
     const { validateRepoState } = await import('../core/git-remote.ts');
     const { recloneIfMissing } = await import('../core/sources-ops.ts');
     const cfgRows = await engine.executeRaw<{ config: unknown }>(
@@ -903,7 +903,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
         case 'no-git':
         case 'not-a-dir':
           serr(
-            `[gbrain] auto-recovery: re-cloning "${opts.sourceId}" (clone state: ${state}).`,
+            `[voltmind] auto-recovery: re-cloning "${opts.sourceId}" (clone state: ${state}).`,
           );
           await recloneIfMissing(engine, opts.sourceId);
           break;
@@ -911,14 +911,14 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
           throw new Error(
             `Source "${opts.sourceId}" clone at ${repoPath} is corrupted ` +
               `(\`git remote get-url origin\` failed). Run: ` +
-              `gbrain sources remove ${opts.sourceId} --confirm-destructive && ` +
-              `gbrain sources add ${opts.sourceId} --url ${remoteUrl}`,
+              `voltmind sources remove ${opts.sourceId} --confirm-destructive && ` +
+              `voltmind sources add ${opts.sourceId} --url ${remoteUrl}`,
           );
         case 'url-drift':
           throw new Error(
             `Source "${opts.sourceId}" clone at ${repoPath} has a remote ` +
               `that differs from config.remote_url=${remoteUrl}. ` +
-              `Re-clone with: gbrain sources rebase-clone ${opts.sourceId} ` +
+              `Re-clone with: voltmind sources rebase-clone ${opts.sourceId} ` +
               `(if available, else: sources remove + sources add).`,
           );
       }
@@ -927,10 +927,10 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
 
   // Validate git repo
   if (!existsSync(join(repoPath, '.git'))) {
-    throw new Error(`Not a git repository: ${repoPath}. GBrain sync requires a git-initialized repo.`);
+    throw new Error(`Not a git repository: ${repoPath}. VoltMind sync requires a git-initialized repo.`);
   }
 
-  serr(`[gbrain phase] sync.detect_head`);
+  serr(`[voltmind phase] sync.detect_head`);
   // Detect detached HEAD up front so the working-tree fallback fires for both
   // the default sync and `--no-pull` callers. Only the actual git pull is
   // gated on opts.noPull.
@@ -976,7 +976,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
 
   if (!opts.noPull && !detachedHead && originRemotePresent) {
     const _t0 = Date.now();
-    serr(`[gbrain phase] sync.git_pull start`);
+    serr(`[voltmind phase] sync.git_pull start`);
     try {
       const { pullRepo } = await import('../core/git-remote.ts');
       // v0.41.13.0 (T3 / D-V4-mech-7): if the operator set --timeout,
@@ -986,10 +986,10 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
       // timeout (ETIMEDOUT / SIGTERM on err.cause) from ordinary pull
       // failure.
       pullRepo(repoPath);
-      serr(`[gbrain phase] sync.git_pull done ${Date.now() - _t0}ms`);
+      serr(`[voltmind phase] sync.git_pull done ${Date.now() - _t0}ms`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      serr(`[gbrain phase] sync.git_pull error ${Date.now() - _t0}ms (${msg.slice(0, 80)})`);
+      serr(`[voltmind phase] sync.git_pull error ${Date.now() - _t0}ms (${msg.slice(0, 80)})`);
       // v0.41.13.0 (T3 / D-V4-mech-7): pullRepo wraps execFileSync errors
       // in GitOperationError, so `error.code === 'ETIMEDOUT'` and
       // `error.signal === 'SIGTERM'` live on `.cause`, NOT on the top-
@@ -1125,7 +1125,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
   // `index.md`, `README.md` — files that fail `isSyncable` precisely
   // because they're metafiles by convention, not because the user
   // "removed" them from the strategy. infiniteGameExp's domain `log.md`
-  // pages had been indexed by an older gbrain version (or via direct
+  // pages had been indexed by an older voltmind version (or via direct
   // put_page) and were silently dropped on every subsequent sync. The
   // fix uses `unsyncableReason` (factored from `isSyncable` so they
   // cannot drift) to skip the delete when the reason is `'metafile'`.
@@ -1134,8 +1134,8 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
   // `manifest.deleted` is filtered upstream at sync.ts:757 via the same
   // `isSyncable` call, so `rm log.md` followed by sync also doesn't
   // delete the page. That's the same pre-fix behavior — removing the
-  // page requires `gbrain pages purge-deleted` or a direct MCP delete.
-  // Filed as v0.42+ follow-up for a `gbrain pages remove <slug>` surface.
+  // page requires `voltmind pages purge-deleted` or a direct MCP delete.
+  // Filed as v0.42+ follow-up for a `voltmind pages remove <slug>` surface.
   const unsyncableModified = manifest.modified.filter(p => !isSyncable(p, syncOpts));
   // v0.18.0+ multi-source: scope getPage + deletePage to opts.sourceId so
   // unsyncable cleanup in source A doesn't accidentally sweep same-slug
@@ -1468,7 +1468,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
   // sibling Conductor workspace), the chunks we just imported reflect a
   // different tree than `headCommit` claims. Refuse to advance last_commit
   // so the next sync re-walks against the new HEAD. The lock from CODEX-2
-  // prevents *this* gbrain process from stepping on itself; this gate
+  // prevents *this* voltmind process from stepping on itself; this gate
   // catches drift caused by external `git` commands the lock cannot see.
   try {
     const currentHead = git(repoPath, ['rev-parse', 'HEAD']);
@@ -1489,7 +1489,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
   const elapsed = Date.now() - start;
 
   // Bug 9 — gate the sync bookmark on success. If any per-file parse
-  // failed, record it to ~/.gbrain/sync-failures.jsonl and DO NOT advance
+  // failed, record it to ~/.voltmind/sync-failures.jsonl and DO NOT advance
   // sync.last_commit. The next sync re-walks the same diff and re-attempts
   // the failed files. Escape hatches: --skip-failed acknowledges the
   // current set, --retry-failed re-parses before running the normal sync.
@@ -1503,7 +1503,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
         `\nSync blocked: ${failedFiles.length} file(s) failed to parse:\n` +
         `${codeBreakdown}\n\n` +
         `Fix the YAML frontmatter in the files above and re-run, or use ` +
-        `'gbrain sync --skip-failed' to acknowledge and move on.`,
+        `'voltmind sync --skip-failed' to acknowledge and move on.`,
       );
       // Update last_run + repo_path (progress on infra) but NOT last_commit.
       await engine.setConfig('sync.last_run', new Date().toISOString());
@@ -1631,12 +1631,12 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
       if (e instanceof EmbeddingDimMismatchError) {
         serr('\n' + e.recipeMessage + '\n');
         serr(`Tip: pass --no-embed to sync without embedding, then`);
-        serr(`run 'gbrain embed --stale' after fixing the schema.\n`);
+        serr(`run 'voltmind embed --stale' after fixing the schema.\n`);
       }
       // Other errors stay best-effort — rate limits, transient network.
     }
   } else if (noEmbed || totalChanges > 100) {
-    slog(`Text imported. Run 'gbrain embed --stale' to generate embeddings.`);
+    slog(`Text imported. Run 'voltmind embed --stale' to generate embeddings.`);
   }
 
   return {
@@ -1665,7 +1665,7 @@ async function performFullSync(
   //
   // v0.31.2 (codex C6): use the strategy-aware walker. Pre-fix this
   // hardcoded `collectMarkdownFiles(repoPath)` and filtered with
-  // default-markdown `isSyncable(rel)`, so `gbrain sync --strategy
+  // default-markdown `isSyncable(rel)`, so `voltmind sync --strategy
   // code --dry-run` always reported zero files even when ~1500 code
   // files were waiting.
   if (opts.dryRun) {
@@ -1706,14 +1706,14 @@ async function performFullSync(
   // v0.30.x: thread sourceId so performFullSync routes pages to the named
   // source (incremental path already does this).
   const _fullImportT0 = Date.now();
-  serr(`[gbrain phase] sync.fullsync.import start strategy=${opts.strategy ?? 'markdown'}`);
+  serr(`[voltmind phase] sync.fullsync.import start strategy=${opts.strategy ?? 'markdown'}`);
   const result = await runImport(engine, importArgs, {
     commit: headCommit,
     strategy: opts.strategy,
     sourceId: opts.sourceId,
   });
   serr(
-    `[gbrain phase] sync.fullsync.import done ${Date.now() - _fullImportT0}ms ` +
+    `[voltmind phase] sync.fullsync.import done ${Date.now() - _fullImportT0}ms ` +
     `imported=${result.imported} skipped=${result.skipped} errors=${result.errors}`,
   );
 
@@ -1776,7 +1776,7 @@ async function performFullSync(
       if (e instanceof EmbeddingDimMismatchError) {
         serr('\n' + e.recipeMessage + '\n');
         serr(`Tip: pass --no-embed to sync without embedding, then`);
-        serr(`run 'gbrain embed --stale' after fixing the schema.\n`);
+        serr(`run 'voltmind embed --stale' after fixing the schema.\n`);
       }
       // Other errors stay best-effort.
     }
@@ -1797,7 +1797,7 @@ async function performFullSync(
 }
 
 export async function runSync(engine: BrainEngine, args: string[]) {
-  // v0.40 Federated Sync v2: `gbrain sync trigger` subcommand
+  // v0.40 Federated Sync v2: `voltmind sync trigger` subcommand
   // Routes to runSyncTrigger which queues a 'sync' minion job with
   // auto_embed_backfill=true. Falls through to the normal sync path
   // if 'trigger' isn't the first arg.
@@ -1809,21 +1809,21 @@ export async function runSync(engine: BrainEngine, args: string[]) {
   // passed. Pre-fix this was unreachable because the dispatcher's generic
   // CLI-only short-circuit fired first; sync is now in CLI_ONLY_SELF_HELP.
   if (args.includes('--help') || args.includes('-h')) {
-    console.log(`Usage: gbrain sync [options]
+    console.log(`Usage: voltmind sync [options]
 
 Sync the brain repo's text content into the engine, then embed.
 
 Options:
   --no-embed           Skip the embed step. Use this when the embed
                        provider is misconfigured or you want to defer
-                       embedding (run 'gbrain embed --stale' later).
+                       embedding (run 'voltmind embed --stale' later).
   --workers N          Run the import phase with N parallel workers
                        (alias: --concurrency). Default: 4 when the
                        diff is >100 files, else serial.
   --source <id>        Scope sync to a single source. Defaults to the
                        brain's default source.
   --repo <path>        Path to the brain repo. Defaults to the path
-                       saved by 'gbrain init'.
+                       saved by 'voltmind init'.
   --full               Force a full re-sync (rare; usually incremental).
   --dry-run            Show what would be synced without writing.
   --skip-failed        Acknowledge previously-recorded sync failures so
@@ -1837,7 +1837,7 @@ Options:
   --parallel N         (with --all) Run up to N sources concurrently.
                        Default: min(sourceCount, --workers, 4). Each
                        source takes its own per-source DB lock
-                       (gbrain-sync:<source_id>) so independent sources
+                       (voltmind-sync:<source_id>) so independent sources
                        sync without contending. Total live Postgres
                        connections per wave ≈ parallel × workers × 2
                        (per-file pool) + parent pool. Pass --parallel 1
@@ -1851,8 +1851,8 @@ Options:
   --yes                Accept any interactive prompts (CI / non-TTY).
 
 See also:
-  gbrain embed --stale    Re-embed all stale chunks (post --no-embed).
-  gbrain doctor           Diagnose dim mismatches and other sync issues.
+  voltmind embed --stale    Re-embed all stale chunks (post --no-embed).
+  voltmind doctor           Diagnose dim mismatches and other sync issues.
 `);
     return;
   }
@@ -1874,7 +1874,7 @@ See also:
   // holder is local-host + (TTL-expired OR PID-dead+60s-old) before
   // deleting the row. --force-break-lock skips the liveness check. Both
   // are refused when combined with --all (per-source invocation required;
-  // v0.40 lock keys are gbrain-sync:<sourceId>).
+  // v0.40 lock keys are voltmind-sync:<sourceId>).
   const breakLock = args.includes('--break-lock');
   const forceBreakLock = args.includes('--force-break-lock');
 
@@ -1920,7 +1920,7 @@ See also:
       }
       let worstExit = 0;
       for (const src of activeSources) {
-        const lockKey = `gbrain-sync:${src.id}`;
+        const lockKey = `voltmind-sync:${src.id}`;
         const exit = await runBreakLock(engine, lockKey, src.id, {
           force: forceBreakLock,
           json: jsonOut,
@@ -1932,7 +1932,7 @@ See also:
     }
     const sourceArg = args.find((a, i) => args[i - 1] === '--source');
     const sourceId = sourceArg ?? 'default';
-    const lockKey = `gbrain-sync:${sourceId}`;
+    const lockKey = `voltmind-sync:${sourceId}`;
     const exit = await runBreakLock(engine, lockKey, sourceId, {
       force: forceBreakLock,
       json: jsonOut,
@@ -2001,7 +2001,7 @@ See also:
   // combined with --all, each source gets its OWN AbortController + countdown
   // inside runOne so the budget is per-source, not shared across the fan-out.
   //
-  // Validation: --timeout requires --source OR --all. Bare `gbrain sync
+  // Validation: --timeout requires --source OR --all. Bare `voltmind sync
   // --timeout 60` (no source scope) is rejected at parse time — the natural
   // single-source case requires the user to either name the source or opt
   // into the global fan-out, so the error message tells them which to add.
@@ -2041,7 +2041,7 @@ See also:
   // no flag, no env, no dotfile is present.
   //
   // v0.41.13 (#1434): always call the resolver, not just when explicit/env
-  // is set. Pre-fix, `gbrain sync` without --source skipped resolution and
+  // is set. Pre-fix, `voltmind sync` without --source skipped resolution and
   // left sourceId undefined — which the engine treated as the seeded
   // 'default' source. Users with a single non-default registered source
   // (studiovault, etc.) silently routed every write to a source holding
@@ -2063,7 +2063,7 @@ See also:
   // v0.19.0 — `sync --all` iterates all registered sources with a
   // local_path. Sources are the canonical v0.18.0 abstraction: per-source
   // last_commit, last_sync_at, config.federated flags. Per-source
-  // bookmarks live in the sources table (not ~/.gbrain/config.json),
+  // bookmarks live in the sources table (not ~/.voltmind/config.json),
   // which is why this path replaced Garry's OpenClaw `multi-repo.ts` shim.
   //
   // Only sources with a non-null local_path participate. A GitHub-only
@@ -2074,7 +2074,7 @@ See also:
       `SELECT id, name, local_path, config FROM sources WHERE local_path IS NOT NULL`,
     );
     if (!sources || sources.length === 0) {
-      console.log('No sources with local_path configured. Use `gbrain sources add <id> --path <path>` first.');
+      console.log('No sources with local_path configured. Use `voltmind sources add <id> --path <path>` first.');
       return;
     }
 
@@ -2279,7 +2279,7 @@ See also:
         `Error: ${flag} is not supported under parallel sync.\n` +
         `       (the sync-failures log is brain-global and parallel acks race).\n` +
         `       Re-run with --serial for the recovery flow:\n` +
-        `         gbrain sync --all --serial ${flag}`,
+        `         voltmind sync --all --serial ${flag}`,
       );
       process.exit(1);
     }
@@ -2444,7 +2444,7 @@ See also:
     // until next clean run). v0.41.13.0 (T7 / D-V3-5): partial also skips —
     // conservative posture matches blocked_by_failures. Resolve the effective
     // repo path so the wire-up fires in the common case where the user runs
-    // `gbrain sync` without passing --repo every time.
+    // `voltmind sync` without passing --repo every time.
     if (
       result.status !== 'dry_run' &&
       result.status !== 'blocked_by_failures' &&
@@ -2584,7 +2584,7 @@ export async function syncOneSource(
     sourceId: src.id,
     strategy: cfg.strategy,
     concurrency: shared.concurrency,
-    // lockId defaults to `gbrain-sync:${src.id}` via the invariant in
+    // lockId defaults to `voltmind-sync:${src.id}` via the invariant in
     // performSync (no explicit override needed — sourceId triggers it).
   };
   const result = await withSourcePrefix(src.id, () => performSync(engine, repoOpts));
@@ -2592,7 +2592,7 @@ export async function syncOneSource(
 }
 
 /**
- * v0.40.3.0 — read-only per-source dashboard for `gbrain sources status`.
+ * v0.40.3.0 — read-only per-source dashboard for `voltmind sources status`.
  *
  * Aggregates from existing tables (no schema changes):
  *   - sources:        last_commit, last_sync_at, archived, config.syncEnabled
@@ -2606,7 +2606,7 @@ export async function syncOneSource(
  *   - sync-failures.jsonl: unacknowledged failures (brain-global; the
  *     JSONL log isn't per-source. v0.40.4 TODO source-scopes it.)
  *
- * Staleness thresholds match `gbrain doctor`'s sync-freshness rule
+ * Staleness thresholds match `voltmind doctor`'s sync-freshness rule
  * (24h / 72h). Sources that have NEVER synced (last_sync_at IS NULL)
  * report `staleness_hours: null` so callers can disambiguate "first run
  * pending" from "32h since last successful sync".
@@ -2651,7 +2651,7 @@ export async function buildSyncStatusReport(
   // at Voyage / multimodal / any non-default column get accurate counts
   // for the column they actually use (D16 → A, Codex P2 #10).
   const { resolveEmbeddingColumn, quoteIdentifier } = await import('../core/search/embedding-column.ts');
-  // loadConfig() returns null when ~/.gbrain/config.json is missing.
+  // loadConfig() returns null when ~/.voltmind/config.json is missing.
   // resolveEmbeddingColumn handles missing fields via its own
   // gateway-fallback chain, so a minimal stub satisfies the call shape.
   const cfg = loadConfig() ?? ({ engine: engine.kind } as Parameters<typeof resolveEmbeddingColumn>[1]);
@@ -2792,7 +2792,7 @@ export async function buildSyncStatusReport(
 /**
  * v0.40.3.0 — render a `SyncStatusReport` as a human-readable table.
  *
- * `sink` defaults to `process.stdout` so the bare `gbrain sources status`
+ * `sink` defaults to `process.stdout` so the bare `voltmind sources status`
  * invocation writes its table to stdout. `--json` callers don't use
  * this — they emit `JSON.stringify(report)` to stdout directly.
  */
@@ -2839,7 +2839,7 @@ export function printSyncStatusReport(
   write(`\nUnacknowledged sync failures (brain-wide): ${report.unacknowledged_failures}`);
   const severe = report.sources.filter((s) => s.staleness_class === 'severe').length;
   if (severe > 0) {
-    write(`WARNING: ${severe} source(s) are SEVERELY stale (>72h). Run \`gbrain sync --all\` to refresh.`);
+    write(`WARNING: ${severe} source(s) are SEVERELY stale (>72h). Run \`voltmind sync --all\` to refresh.`);
   }
 }
 
@@ -2853,7 +2853,7 @@ export function printSyncStatusReport(
  * a stable comment header so it's grep-able and editable.
  *
  * Skipped (with actionable warning) when:
- *   - GBRAIN_NO_GITIGNORE=1 — D23 escape hatch for shared-repo setups
+ *   - VOLTMIND_NO_GITIGNORE=1 — D23 escape hatch for shared-repo setups
  *   - The repo is a git submodule (`.git` is a file not a directory) —
  *     D49 lock; submodule .gitignore changes don't survive parent updates
  *
@@ -2874,7 +2874,7 @@ export function manageGitignore(
   repoPath: string,
   engineKind?: 'pglite' | 'postgres',
 ): void {
-  if (process.env.GBRAIN_NO_GITIGNORE === '1') {
+  if (process.env.VOLTMIND_NO_GITIGNORE === '1') {
     return;
   }
 
@@ -2966,7 +2966,7 @@ export function manageGitignore(
   if (gitignoreContent && !gitignoreContent.endsWith('\n')) {
     gitignoreContent += '\n';
   }
-  gitignoreContent += '\n# Auto-managed by gbrain (db_only directories)\n';
+  gitignoreContent += '\n# Auto-managed by voltmind (db_only directories)\n';
   gitignoreContent += linesToAdd.join('\n') + '\n';
 
   try {
@@ -3006,8 +3006,8 @@ function printSyncResult(result: SyncResult, sink: NodeJS.WriteStream = process.
       break; // already printed in performSync
     case 'blocked_by_failures':
       write(`Sync BLOCKED at ${result.toCommit.slice(0, 8)}: ${result.failedFiles ?? 0} file(s) failed to parse.`);
-      write(`  See ~/.gbrain/sync-failures.jsonl for details, or run 'gbrain doctor'.`);
-      write(`  Fix the files then re-run 'gbrain sync', or 'gbrain sync --skip-failed' to move on.`);
+      write(`  See ~/.voltmind/sync-failures.jsonl for details, or run 'voltmind doctor'.`);
+      write(`  Fix the files then re-run 'voltmind sync', or 'voltmind sync --skip-failed' to move on.`);
       break;
     case 'partial':
       // v0.41.13.0 (T7 / D-V3-5): --timeout fired before the bookmark write
@@ -3020,7 +3020,7 @@ function printSyncResult(result: SyncResult, sink: NodeJS.WriteStream = process.
         `imported ${result.filesImported ?? 0} of ${result.added + result.modified} file(s), ` +
         `reason=${result.reason ?? 'timeout'}.`,
       );
-      write(`  Re-run 'gbrain sync' to continue (last_commit unchanged; safe to retry).`);
+      write(`  Re-run 'voltmind sync' to continue (last_commit unchanged; safe to retry).`);
       break;
   }
 }

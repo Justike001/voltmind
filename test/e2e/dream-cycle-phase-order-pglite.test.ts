@@ -61,7 +61,7 @@ async function setupRig(): Promise<TestRig> {
   await engine.connect({ engine: 'pglite' } as never);
   await engine.initSchema();
 
-  const brainDir = mkdtempSync(join(tmpdir(), 'gbrain-cycle8-'));
+  const brainDir = mkdtempSync(join(tmpdir(), 'voltmind-cycle8-'));
   execSync('git init', { cwd: brainDir, stdio: 'pipe' });
   execSync('git config user.email test@test.co', { cwd: brainDir, stdio: 'pipe' });
   execSync('git config user.name test', { cwd: brainDir, stdio: 'pipe' });
@@ -203,7 +203,7 @@ describe('E2E full cycle phase order', () => {
   test('synthInputFile flag is plumbed through runCycle to runPhaseSynthesize', async () => {
     const rig = await setupRig();
     try {
-      const transcript = join(tmpdir(), `gbrain-e2e-cycle8-input-${Date.now()}.txt`);
+      const transcript = join(tmpdir(), `voltmind-e2e-cycle8-input-${Date.now()}.txt`);
       writeFileSync(transcript, 'sample conversation '.repeat(300));
       try {
         await withoutAnthropicKey(async () => {

@@ -1,7 +1,7 @@
 /**
  * v0.28.5 (A4) — Existing-brain dimension-mismatch detection unit tests.
  *
- * Pairs with `gbrain init` and `gbrain doctor`'s loud-failure paths. Validates
+ * Pairs with `voltmind init` and `voltmind doctor`'s loud-failure paths. Validates
  * that:
  *   1. readContentChunksEmbeddingDim correctly reports null on a fresh brain.
  *   2. After initSchema, it returns the actual templated dim (1536 default).
@@ -124,7 +124,7 @@ describe('embeddingMismatchMessage', () => {
     expect(msg).toContain('vector(1536)');
     expect(msg).toContain('vector(1280)');
     expect(msg).toContain('mv /tmp/test-brain.pglite /tmp/test-brain.pglite.bak');
-    expect(msg).toContain('gbrain init --pglite --embedding-model zeroentropyai:zembed-1 --embedding-dimensions 1280');
+    expect(msg).toContain('voltmind init --pglite --embedding-model zeroentropyai:zembed-1 --embedding-dimensions 1280');
     expect(msg).toContain('PGLite cannot ALTER vector column types');
     // Must NOT contain the Postgres-only SQL recipe.
     expect(msg).not.toContain('ALTER TABLE content_chunks ALTER COLUMN');
@@ -138,11 +138,11 @@ describe('embeddingMismatchMessage', () => {
       source: 'init',
       engineKind: 'pglite',
     });
-    // Default falls back to gbrainPath('brain.pglite').
+    // Default falls back to voltmindPath('brain.pglite').
     expect(msg).toMatch(/mv .+brain\.pglite .+brain\.pglite\.bak/);
   });
 
-  test('PGLite branch must NOT recommend `gbrain config set embedding_model` (no-op after Lane C.2)', () => {
+  test('PGLite branch must NOT recommend `voltmind config set embedding_model` (no-op after Lane C.2)', () => {
     const msg = embeddingMismatchMessage({
       currentDims: 1536,
       requestedDims: 1280,
@@ -150,10 +150,10 @@ describe('embeddingMismatchMessage', () => {
       source: 'doctor',
       engineKind: 'pglite',
     });
-    // The pre-v0.37 recipe pointed at `gbrain config set embedding_model X`
+    // The pre-v0.37 recipe pointed at `voltmind config set embedding_model X`
     // which is a no-op after C.2. Recipe must point at init instead.
-    expect(msg).not.toContain('gbrain config set embedding_model');
-    expect(msg).not.toContain('gbrain config set embedding_dimensions');
+    expect(msg).not.toContain('voltmind config set embedding_model');
+    expect(msg).not.toContain('voltmind config set embedding_dimensions');
   });
 });
 

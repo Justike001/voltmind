@@ -1,9 +1,9 @@
 /**
- * gbrain skillify check — 11-item post-task audit.
+ * voltmind skillify check — 11-item post-task audit.
  *
  * Promoted from `scripts/skillify-check.ts` (D-CX-2). The legacy
  * script stays as a thin shim so existing callers keep working, but
- * the CLI entry point is now `gbrain skillify check`.
+ * the CLI entry point is now `voltmind skillify check`.
  *
  * 11-item checklist (essay Step 3-10 + v0.27.x cross-modal eval):
  *   1. SKILL.md exists
@@ -13,11 +13,11 @@
  *   5. LLM evals (optional)
  *   6. Resolver entry
  *   7. Resolver trigger eval (heuristic via `test/resolver.test.ts`)
- *   8. check-resolvable gate (runs `gbrain check-resolvable --json`)
+ *   8. check-resolvable gate (runs `voltmind check-resolvable --json`)
  *   9. E2E smoke (required copy of #4 for required-gate semantics)
  *  10. Brain filing (only when the script writes pages)
  *  11. Cross-modal eval (INFORMATIONAL; required:false). Looks for a
- *      receipt at `gbrainPath('eval-receipts')/<slug>-<sha8>.json`
+ *      receipt at `voltmindPath('eval-receipts')/<slug>-<sha8>.json`
  *      bound to the current SKILL.md content hash (T10=A,T7=C in
  *      plans/radiant-napping-lerdorf.md). A missing or stale receipt
  *      surfaces as a non-blocking note, not a failure.
@@ -27,7 +27,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { basename, dirname, join, resolve } from 'path';
 import { spawnSync } from 'child_process';
 
-import { gbrainPath } from '../core/config.ts';
+import { voltmindPath } from '../core/config.ts';
 import {
   describeReceiptStatus,
   findReceiptForSkill,
@@ -92,13 +92,13 @@ let _resolverCache: ResolverResult | null = null;
 function runCheckResolvableCached(): ResolverResult {
   if (_resolverCache) return _resolverCache;
   try {
-    const res = spawnSync('gbrain', ['check-resolvable', '--json'], {
+    const res = spawnSync('voltmind', ['check-resolvable', '--json'], {
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024,
     });
     if (res.error || res.status === null) {
       const reason = res.error?.message ?? 'spawn returned null status';
-      console.error(`[skillify] gbrain check-resolvable not runnable: ${reason}`);
+      console.error(`[skillify] voltmind check-resolvable not runnable: ${reason}`);
       _resolverCache = { ok: false, detail: `check-resolvable unavailable: ${reason}` };
       return _resolverCache;
     }
@@ -110,7 +110,7 @@ function runCheckResolvableCached(): ResolverResult {
       const err = payload.error ? ` (${payload.error})` : '';
       _resolverCache = {
         ok: false,
-        detail: `${count} issue(s)${err} — run: gbrain check-resolvable`,
+        detail: `${count} issue(s)${err} — run: voltmind check-resolvable`,
       };
     }
     return _resolverCache;
@@ -294,7 +294,7 @@ function runSkillifyCheckTarget(target: string, root: string): CheckResult {
   // explicitly: either via the canonical Convention callout, or via
   // 'brain_first: exempt' in frontmatter, or by absence of external
   // refs entirely. This is a REQUIRED gate — non-compliant skills fail
-  // `gbrain skillify check` with exit 1 so new skills can't be born
+  // `voltmind skillify check` with exit 1 so new skills can't be born
   // non-compliant.
   const brainFirst = checkBrainFirstCompliance(skillMd, skillName);
   items.push(check('Brain-first compliance', brainFirst.passed, brainFirst.detail));
@@ -321,9 +321,9 @@ function runSkillifyCheckTarget(target: string, root: string): CheckResult {
  * receipts return passed=true *for the audit* — item 11 is informational
  * (T7=C) — but the detail string makes the status visible.
  *
- * Reads the receipt from `gbrainPath('eval-receipts')` (T5 correction:
- * this resolves to <GBRAIN_HOME>/.gbrain/eval-receipts/, NOT the legacy
- * <GBRAIN_HOME>/eval-receipts/ that the original plan claimed).
+ * Reads the receipt from `voltmindPath('eval-receipts')` (T5 correction:
+ * this resolves to <VOLTMIND_HOME>/.voltmind/eval-receipts/, NOT the legacy
+ * <VOLTMIND_HOME>/eval-receipts/ that the original plan claimed).
  */
 function lookupCrossModalReceipt(
   skillMdPath: string,
@@ -334,7 +334,7 @@ function lookupCrossModalReceipt(
   }
   let status: ReceiptStatus;
   try {
-    status = findReceiptForSkill(skillMdPath, gbrainPath('eval-receipts'));
+    status = findReceiptForSkill(skillMdPath, voltmindPath('eval-receipts'));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { passed: true, detail: `receipt lookup failed: ${msg}` };
@@ -424,7 +424,7 @@ function recentlyModified(root: string, days: number = 7): string[] {
   return candidates;
 }
 
-const HELP = `gbrain skillify check [path] [--recent] [--json]
+const HELP = `voltmind skillify check [path] [--recent] [--json]
 
 Run the 10-item skillify audit (post-task). Reports whether each item
 passes and what to create next.
@@ -439,7 +439,7 @@ Exit code 0 when all REQUIRED items pass; 1 otherwise.
 `;
 
 /**
- * Entry point invoked by `gbrain skillify check`. The outer
+ * Entry point invoked by `voltmind skillify check`. The outer
  * dispatcher passes args with the subcommand already stripped.
  */
 export async function runSkillifyCheckInline(args: string[]): Promise<void> {

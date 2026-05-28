@@ -30,8 +30,8 @@ async function setupRig(): Promise<TestRig> {
   const engine = new PGLiteEngine();
   await engine.connect({ engine: 'pglite' } as never);
   await engine.initSchema();
-  const brainDir = mkdtempSync(join(tmpdir(), 'gbrain-synth-brain-'));
-  const corpusDir = mkdtempSync(join(tmpdir(), 'gbrain-synth-corpus-'));
+  const brainDir = mkdtempSync(join(tmpdir(), 'voltmind-synth-brain-'));
+  const corpusDir = mkdtempSync(join(tmpdir(), 'voltmind-synth-corpus-'));
   return {
     engine,
     brainDir,
@@ -45,9 +45,9 @@ async function setupRig(): Promise<TestRig> {
 }
 
 /**
- * Run `body` with ANTHROPIC_API_KEY temporarily cleared AND GBRAIN_HOME
+ * Run `body` with ANTHROPIC_API_KEY temporarily cleared AND VOLTMIND_HOME
  * pointed at a fresh tmpdir, restoring both on return — even on throw — so
- * the developer's real ~/.gbrain/config.json never leaks the anthropic_api_key
+ * the developer's real ~/.voltmind/config.json never leaks the anthropic_api_key
  * into the test's hasAnthropicKey() probe. Required after the v0.41 gateway-
  * adapter rework: makeJudgeClient now checks BOTH env AND config file (the
  * same hasAnthropicKey() pattern think/index.ts uses since v0.35.5.0), so
@@ -55,17 +55,17 @@ async function setupRig(): Promise<TestRig> {
  */
 async function withoutAnthropicKey<T>(body: () => Promise<T>): Promise<T> {
   const savedKey = process.env.ANTHROPIC_API_KEY;
-  const savedHome = process.env.GBRAIN_HOME;
-  const tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-synth-isol-'));
+  const savedHome = process.env.VOLTMIND_HOME;
+  const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-synth-isol-'));
   delete process.env.ANTHROPIC_API_KEY;
-  process.env.GBRAIN_HOME = tmpHome;
+  process.env.VOLTMIND_HOME = tmpHome;
   try {
     return await body();
   } finally {
     if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = savedKey;
-    if (savedHome === undefined) delete process.env.GBRAIN_HOME;
-    else process.env.GBRAIN_HOME = savedHome;
+    if (savedHome === undefined) delete process.env.VOLTMIND_HOME;
+    else process.env.VOLTMIND_HOME = savedHome;
     try { rmSync(tmpHome, { recursive: true, force: true }); } catch { /* */ }
   }
 }
@@ -259,7 +259,7 @@ describe('E2E synthesize — cooldown', () => {
       await rig.engine.setConfig('dream.synthesize.enabled', 'true');
       await rig.engine.setConfig('dream.synthesize.session_corpus_dir', rig.corpusDir);
       await rig.engine.setConfig('dream.synthesize.last_completion_ts', new Date().toISOString());
-      const adHoc = join(tmpdir(), `gbrain-synth-ad-hoc-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
+      const adHoc = join(tmpdir(), `voltmind-synth-ad-hoc-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
       writeFileSync(adHoc, 'hello world '.repeat(300));
       try {
         await withoutAnthropicKey(async () => {
@@ -376,7 +376,7 @@ describe('E2E synthesize — round-trip self-consumption guard (v0.23.2)', () =>
   }, 30_000);
 
   test('round-trip: bypassDreamGuard=true re-enables ingestion of marked output', async () => {
-    // Power-user escape hatch (`gbrain dream --unsafe-bypass-dream-guard`).
+    // Power-user escape hatch (`voltmind dream --unsafe-bypass-dream-guard`).
     // The same marked file that was skipped above now gets discovered when
     // bypassDreamGuard is set at the phase entry. Proves the bypass plumbing
     // reaches discoverTranscripts at phase scope, not just at the

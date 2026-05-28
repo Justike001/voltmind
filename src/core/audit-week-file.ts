@@ -1,6 +1,6 @@
 /**
  * v0.37.x — single source of truth for the ISO-week filename math used by
- * every gbrain audit JSONL writer (shell-audit, phantom-audit,
+ * every voltmind audit JSONL writer (shell-audit, phantom-audit,
  * slug-fallback-audit, budget-tracker audit, dream-budget audit).
  *
  * Why: each of those modules grew its own copy of the same ISO-week math
@@ -17,7 +17,7 @@
  *   - Year-boundary correctness is pinned by `test/core/audit-week-file.test.ts`.
  */
 
-import { gbrainPath } from './config.ts';
+import { voltmindPath } from './config.ts';
 
 /**
  * Compute the ISO-8601 week number (1..53) and corresponding ISO week-year
@@ -48,12 +48,12 @@ export function isoWeekFilename(prefix: string, now: Date = new Date()): string 
 }
 
 /**
- * Resolve the audit directory: honors `GBRAIN_AUDIT_DIR` env override,
- * falls back to `gbrainPath('audit')`. The directory may not exist yet;
+ * Resolve the audit directory: honors `VOLTMIND_AUDIT_DIR` env override,
+ * falls back to `voltmindPath('audit')`. The directory may not exist yet;
  * callers `mkdirSync({recursive:true})` before writing.
  */
 export function resolveAuditDir(): string {
-  const override = process.env.GBRAIN_AUDIT_DIR;
+  const override = process.env.VOLTMIND_AUDIT_DIR;
   if (override && override.length > 0) return override;
-  return gbrainPath('audit');
+  return voltmindPath('audit');
 }

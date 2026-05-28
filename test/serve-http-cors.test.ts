@@ -6,7 +6,7 @@
  * /register, /revoke) used bare `cors()` which defaults to
  * Access-Control-Allow-Origin: * — any web origin could complete a token
  * exchange from a logged-in operator's browser. The fix gates every OAuth
- * surface behind GBRAIN_HTTP_CORS_ORIGIN with default-deny.
+ * surface behind VOLTMIND_HTTP_CORS_ORIGIN with default-deny.
  *
  * Two pure functions, no Express integration needed for the unit shape.
  * The end-to-end Express-router behavior (cors middleware + browser
@@ -19,25 +19,25 @@ import { withEnv } from './helpers/with-env.ts';
 
 describe('parseCorsAllowlistOAuth', () => {
   test('unset → null (default-deny posture)', async () => {
-    await withEnv({ GBRAIN_HTTP_CORS_ORIGIN: undefined }, async () => {
+    await withEnv({ VOLTMIND_HTTP_CORS_ORIGIN: undefined }, async () => {
       expect(parseCorsAllowlistOAuth()).toBeNull();
     });
   });
 
   test('empty string → null', async () => {
-    await withEnv({ GBRAIN_HTTP_CORS_ORIGIN: '' }, async () => {
+    await withEnv({ VOLTMIND_HTTP_CORS_ORIGIN: '' }, async () => {
       expect(parseCorsAllowlistOAuth()).toBeNull();
     });
   });
 
   test('whitespace-only → null (no usable origins)', async () => {
-    await withEnv({ GBRAIN_HTTP_CORS_ORIGIN: '  ,   ,' }, async () => {
+    await withEnv({ VOLTMIND_HTTP_CORS_ORIGIN: '  ,   ,' }, async () => {
       expect(parseCorsAllowlistOAuth()).toBeNull();
     });
   });
 
   test('single origin → Set of one', async () => {
-    await withEnv({ GBRAIN_HTTP_CORS_ORIGIN: 'https://claude.ai' }, async () => {
+    await withEnv({ VOLTMIND_HTTP_CORS_ORIGIN: 'https://claude.ai' }, async () => {
       const set = parseCorsAllowlistOAuth();
       expect(set).not.toBeNull();
       expect(set!.size).toBe(1);
@@ -46,7 +46,7 @@ describe('parseCorsAllowlistOAuth', () => {
   });
 
   test('comma-separated origins → Set of N', async () => {
-    await withEnv({ GBRAIN_HTTP_CORS_ORIGIN: 'https://claude.ai,https://chatgpt.com,https://my.app' }, async () => {
+    await withEnv({ VOLTMIND_HTTP_CORS_ORIGIN: 'https://claude.ai,https://chatgpt.com,https://my.app' }, async () => {
       const set = parseCorsAllowlistOAuth();
       expect(set!.size).toBe(3);
       expect(set!.has('https://claude.ai')).toBe(true);
@@ -56,7 +56,7 @@ describe('parseCorsAllowlistOAuth', () => {
   });
 
   test('whitespace around values is trimmed', async () => {
-    await withEnv({ GBRAIN_HTTP_CORS_ORIGIN: ' https://a.app , https://b.app ' }, async () => {
+    await withEnv({ VOLTMIND_HTTP_CORS_ORIGIN: ' https://a.app , https://b.app ' }, async () => {
       const set = parseCorsAllowlistOAuth();
       expect(set!.has('https://a.app')).toBe(true);
       expect(set!.has('https://b.app')).toBe(true);
@@ -64,7 +64,7 @@ describe('parseCorsAllowlistOAuth', () => {
   });
 
   test('case-sensitive match (Origin headers are case-sensitive per RFC 6454)', async () => {
-    await withEnv({ GBRAIN_HTTP_CORS_ORIGIN: 'https://Claude.AI' }, async () => {
+    await withEnv({ VOLTMIND_HTTP_CORS_ORIGIN: 'https://Claude.AI' }, async () => {
       const set = parseCorsAllowlistOAuth();
       expect(set!.has('https://Claude.AI')).toBe(true);
       expect(set!.has('https://claude.ai')).toBe(false);

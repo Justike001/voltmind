@@ -1,7 +1,7 @@
 /**
- * v0.37.7.0 #1167 — `gbrain import --source-id <id>` routes to a brain source.
+ * v0.37.7.0 #1167 — `voltmind import --source-id <id>` routes to a brain source.
  *
- * Pre-fix, `gbrain import --source dept-x ./pages` silently fell back to
+ * Pre-fix, `voltmind import --source dept-x ./pages` silently fell back to
  * `default` because the CLI parser didn't consume `--source` at all
  * (PR #707's design intent explicitly excluded it). Users had no signal
  * their pages were being written to the wrong place.
@@ -46,7 +46,7 @@ describe('import --source-id (#1167)', () => {
     await engine.executeRaw(
       `INSERT INTO sources (id, name) VALUES ('dept-x', 'dept-x') ON CONFLICT DO NOTHING`,
     );
-    scratchDir = mkdtempSync(join(tmpdir(), 'gbrain-import-src-'));
+    scratchDir = mkdtempSync(join(tmpdir(), 'voltmind-import-src-'));
     mkdirSync(join(scratchDir, 'wiki'), { recursive: true });
     writeFileSync(
       join(scratchDir, 'wiki', 'alpha.md'),
@@ -91,7 +91,7 @@ describe('import --source-id (#1167)', () => {
     } catch (e) {
       threw = true;
     }
-    // Should NOT throw "Usage: gbrain import <dir>..." because scratchDir
+    // Should NOT throw "Usage: voltmind import <dir>..." because scratchDir
     // is still recognized as the positional dir.
     expect(threw).toBe(false);
     const rows = await engine.executeRaw<{ source_id: string }>(

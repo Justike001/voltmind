@@ -25,7 +25,7 @@ const NUM_RUNS = 500;
 let baseTmpRoot: string;
 
 beforeAll(() => {
-  baseTmpRoot = mkdtempSync(join(tmpdir(), 'gbrain-fuzz-fs-'));
+  baseTmpRoot = mkdtempSync(join(tmpdir(), 'voltmind-fuzz-fs-'));
 });
 
 afterAll(() => {
@@ -97,7 +97,7 @@ describe('validateUploadPath fuzz (fs-backed)', () => {
   // Probe via the OS tmpdir directly — baseTmpRoot isn't available until
   // beforeAll runs, and this expression evaluates at module load time.
   const symlinksAvailable = (() => {
-    const probeDir = mkdtempSync(join(tmpdir(), 'gbrain-symlink-probe-'));
+    const probeDir = mkdtempSync(join(tmpdir(), 'voltmind-symlink-probe-'));
     try {
       symlinkSync(tmpdir(), join(probeDir, 'probe-link'));
       return true;

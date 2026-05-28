@@ -20,7 +20,7 @@ function runCli(args: string[], env: Record<string, string> = {}): { stdout: str
   };
 }
 
-describe('gbrain frontmatter CLI (B4)', () => {
+describe('voltmind frontmatter CLI (B4)', () => {
   let tmp: string;
 
   beforeEach(() => {
@@ -78,14 +78,14 @@ describe('gbrain frontmatter CLI (B4)', () => {
 
   test('validate --fix writes centralized backup and rewrites in place', () => {
     const f = join(tmp, 'broken.md');
-    const gbrainHome = join(tmp, 'home');
+    const voltmindHome = join(tmp, 'home');
     const original = `${fence}\ntype: concept\ntitle: "P "I" L"\n${fence}\n\nbody`;
     writeFileSync(f, original);
-    const { stdout, code } = runCli(['validate', f, '--fix'], { GBRAIN_HOME: gbrainHome });
+    const { stdout, code } = runCli(['validate', f, '--fix'], { VOLTMIND_HOME: voltmindHome });
     expect(code).toBe(0);
     expect(existsSync(f + '.bak')).toBe(false);
     expect(stdout).toContain('centralized backups');
-    const backupDir = join(gbrainHome, '.gbrain', 'backups', 'frontmatter');
+    const backupDir = join(voltmindHome, '.voltmind', 'backups', 'frontmatter');
     const backup = spawnSync('find', [backupDir, '-type', 'f', '-name', 'broken.md.bak'], { encoding: 'utf8' });
     const backupPath = backup.stdout.trim().split('\n').filter(Boolean)[0];
     expect(backupPath).toBeTruthy();
@@ -96,12 +96,12 @@ describe('gbrain frontmatter CLI (B4)', () => {
   test('validate --fix succeeds on a non-git path (no dirty-tree guard)', () => {
     // tmp is not a git repo; --fix must still work.
     const f = join(tmp, 'broken.md');
-    const gbrainHome = join(tmp, 'home');
+    const voltmindHome = join(tmp, 'home');
     writeFileSync(f, `${fence}\ntype: concept\ntitle: "A "B" C"\n${fence}\n\nbody`);
-    const { code } = runCli(['validate', f, '--fix'], { GBRAIN_HOME: gbrainHome });
+    const { code } = runCli(['validate', f, '--fix'], { VOLTMIND_HOME: voltmindHome });
     expect(code).toBe(0);
     expect(existsSync(f + '.bak')).toBe(false);
-    expect(existsSync(join(gbrainHome, '.gbrain', 'backups', 'frontmatter'))).toBe(true);
+    expect(existsSync(join(voltmindHome, '.voltmind', 'backups', 'frontmatter'))).toBe(true);
   });
 
   test('validate scans a directory recursively, skips non-.md files', () => {
@@ -117,23 +117,23 @@ describe('gbrain frontmatter CLI (B4)', () => {
   });
 
   test('generate --fix skips catch-all note writes unless explicitly included', () => {
-    const gbrainHome = join(tmp, 'home');
+    const voltmindHome = join(tmp, 'home');
     writeFileSync(join(tmp, 'random.md'), '# Random\n\nbody');
     writeFileSync(join(tmp, 'notes.md'), '# Also Random\n\nbody');
 
-    const skipped = runCli(['generate', tmp, '--fix', '--json'], { GBRAIN_HOME: gbrainHome });
+    const skipped = runCli(['generate', tmp, '--fix', '--json'], { VOLTMIND_HOME: voltmindHome });
     expect(skipped.code).toBe(0);
     const skippedEnv = JSON.parse(skipped.stdout);
     expect(skippedEnv.generated).toBe(0);
     expect(skippedEnv.skippedCatchAll).toBe(2);
     expect(readFileSync(join(tmp, 'random.md'), 'utf8')).toBe('# Random\n\nbody');
 
-    const included = runCli(['generate', tmp, '--fix', '--json', '--include-catch-all'], { GBRAIN_HOME: gbrainHome });
+    const included = runCli(['generate', tmp, '--fix', '--json', '--include-catch-all'], { VOLTMIND_HOME: voltmindHome });
     expect(included.code).toBe(0);
     const includedEnv = JSON.parse(included.stdout);
     expect(includedEnv.generated).toBe(2);
     expect(readFileSync(join(tmp, 'random.md'), 'utf8')).toContain('type: note');
-    expect(existsSync(join(gbrainHome, '.gbrain', 'backups', 'frontmatter'))).toBe(true);
+    expect(existsSync(join(voltmindHome, '.voltmind', 'backups', 'frontmatter'))).toBe(true);
     expect(existsSync(join(tmp, 'random.md.bak'))).toBe(false);
   });
 

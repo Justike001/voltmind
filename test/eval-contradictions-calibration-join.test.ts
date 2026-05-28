@@ -46,7 +46,7 @@ function buildFinding(slugA: string, slugB: string): ContradictionFinding {
     axis: 'evidence',
     confidence: 0.8,
     resolution_kind: 'manual_review',
-    resolution_command: 'gbrain takes resolve N --quality incorrect',
+    resolution_command: 'voltmind takes resolve N --quality incorrect',
   };
 }
 

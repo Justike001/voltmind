@@ -5,7 +5,7 @@
  * layers: (a) `test/brain-writer-partial-scan.test.ts` exercises the
  * scanBrainSources + deadline contract that doctor depends on, and
  * (b) `tests/heavy/frontmatter_scan_wallclock.sh` (manual / nightly)
- * subprocesses real `gbrain doctor` against a synthesized 60K-file brain.
+ * subprocesses real `voltmind doctor` against a synthesized 60K-file brain.
  *
  * The unit layer here can't drive `runDoctor` directly because it calls
  * `process.exit(hasFail ? 1 : 0)` unconditionally, which terminates the
@@ -24,8 +24,8 @@ const DOCTOR_SOURCE = readFileSync(
 );
 
 describe('doctor frontmatter_integrity — structural rendering (source-grep)', () => {
-  test('source contains GBRAIN_DOCTOR_FM_TIMEOUT_MS handling', () => {
-    expect(DOCTOR_SOURCE).toContain('GBRAIN_DOCTOR_FM_TIMEOUT_MS');
+  test('source contains VOLTMIND_DOCTOR_FM_TIMEOUT_MS handling', () => {
+    expect(DOCTOR_SOURCE).toContain('VOLTMIND_DOCTOR_FM_TIMEOUT_MS');
   });
 
   test('source uses both deadline and AbortSignal.timeout (deadline is load-bearing per codex C1)', () => {
@@ -44,7 +44,7 @@ describe('doctor frontmatter_integrity — structural rendering (source-grep)', 
 
   test('source renders NOT SCANNED per skipped source with remediation hint', () => {
     expect(DOCTOR_SOURCE).toContain('NOT SCANNED');
-    expect(DOCTOR_SOURCE).toContain('gbrain frontmatter validate');
+    expect(DOCTOR_SOURCE).toContain('voltmind frontmatter validate');
   });
 
   test('source has been simplified to remove the unreachable AbortError catch branch (codex D4)', () => {
@@ -76,9 +76,9 @@ describe('doctor frontmatter_integrity — load-bearing render strings', () => {
     expect(DOCTOR_SOURCE).toContain('src.db_page_count');
   });
 
-  test('source uses fallback hint pointing at GBRAIN_DOCTOR_FM_TIMEOUT_MS on partial', () => {
+  test('source uses fallback hint pointing at VOLTMIND_DOCTOR_FM_TIMEOUT_MS on partial', () => {
     // The fix hint when partial: raise the timeout OR run validate directly.
-    const partialHintMatch = DOCTOR_SOURCE.includes('Raise GBRAIN_DOCTOR_FM_TIMEOUT_MS');
+    const partialHintMatch = DOCTOR_SOURCE.includes('Raise VOLTMIND_DOCTOR_FM_TIMEOUT_MS');
     expect(partialHintMatch).toBe(true);
   });
 });

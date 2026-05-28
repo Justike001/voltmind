@@ -19,7 +19,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { operations } from '../src/core/operations.ts';
 import type { OperationContext } from '../src/core/operations.ts';
-import type { GBrainConfig } from '../src/core/config.ts';
+import type { VoltMindConfig } from '../src/core/config.ts';
 import type { PageInput } from '../src/core/types.ts';
 
 let engine: PGLiteEngine;
@@ -78,7 +78,7 @@ beforeEach(async () => {
   await (engine as any).db.exec('DELETE FROM eval_capture_failures');
 });
 
-function makeConfig(overrides: Partial<GBrainConfig['eval']> = {}): GBrainConfig {
+function makeConfig(overrides: Partial<VoltMindConfig['eval']> = {}): VoltMindConfig {
   return {
     engine: 'pglite',
     eval: { capture: true, scrub_pii: true, ...overrides },

@@ -28,7 +28,7 @@ import { discoverTranscripts } from '../src/core/cycle/transcript-discovery.ts';
 let tmpDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-md-discovery-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-md-discovery-'));
 });
 
 afterEach(() => {

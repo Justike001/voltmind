@@ -1,4 +1,4 @@
-# gbrain-creator — content-creator lens pack
+# voltmind-creator — content-creator lens pack
 #
 # v0.41 lens packs wave. Declares the atom + concept lifecycle that the
 # downstream your OpenClaw agent ran via its own crons pre-v0.41:
@@ -8,16 +8,16 @@
 #     The `extract_atoms` cycle phase produces these via a Haiku 3-check
 #     quality gate (truism reject, punchline test, entity-page test).
 #
-#   - `concept` page type (already in gbrain-base seed): the synthesize_concepts
+#   - `concept` page type (already in voltmind-base seed): the synthesize_concepts
 #     phase aggregates atoms by topic cluster, tiers T1-T4 by composite_score,
 #     and writes voice-gated T1 Canon narratives via Sonnet.
 #
 # Cron consolidation: this pack's phases run inside the standard
-# `gbrain dream` cycle. No separate OpenClaw-side cron required.
+# `voltmind dream` cycle. No separate OpenClaw-side cron required.
 #
 # Calibration: declares `concept_themes` domain using the `cluster_summary`
 # aggregator (descriptive rollup, not Brier — concepts don't have binary
-# outcomes to score against). When this pack is active OR the gbrain-everything
+# outcomes to score against). When this pack is active OR the voltmind-everything
 # meta-pack is active, calibration_profile produces a concept_themes scorecard
 # with tier counts and dominant topics.
 #
@@ -29,20 +29,20 @@
 # (filed in TODOS.md). For v0.41, the enum lives in code with a comment
 # pointing at the eventual manifest surface.
 
-api_version: gbrain-schema-pack-v1
-name: gbrain-creator
+api_version: voltmind-schema-pack-v1
+name: voltmind-creator
 version: 1.0.0
-description: "Content-creator lens. Atoms (single-source extractive nuggets) and concepts (aggregated themes T1-T4). Drives extract_atoms + synthesize_concepts cycle phases. When active, every gbrain dream tick walks recent transcripts/meetings/articles and produces tweetable atoms + tier-promoted concepts. Retires your OpenClaw's parallel atom-pipeline-coordinator cron."
-gbrain_min_version: 0.41.0
-extends: gbrain-base
+description: "Content-creator lens. Atoms (single-source extractive nuggets) and concepts (aggregated themes T1-T4). Drives extract_atoms + synthesize_concepts cycle phases. When active, every voltmind dream tick walks recent transcripts/meetings/articles and produces tweetable atoms + tier-promoted concepts. Retires your OpenClaw's parallel atom-pipeline-coordinator cron."
+voltmind_min_version: 0.41.0
+extends: voltmind-base
 borrow_from: []
 
-# Atom + concept inherit takes_kinds from gbrain-base (fact, take, bet, hunch).
+# Atom + concept inherit takes_kinds from voltmind-base (fact, take, bet, hunch).
 # Creator-pack-specific kinds (e.g. `extracted`) are deferred — atoms are not
 # claims, they're evidentiary extractions; concepts aggregate atoms not takes.
 # takes_kinds intentionally omitted (inherits from base).
 
-# Pack-specific page types. `concept` already exists in gbrain-base seed; we
+# Pack-specific page types. `concept` already exists in voltmind-base seed; we
 # don't re-declare it here (the registry merges parent + child page_types).
 # `atom` is net-new to base.
 page_types:
@@ -70,7 +70,7 @@ phases:
 
 # v0.41 T3: calibration domain declarations. Each entry binds a per-pack
 # scorecard bucket to one of the 4 v1 aggregator kinds. Domain names are
-# open strings (third-party packs add new domains without a gbrain release);
+# open strings (third-party packs add new domains without a voltmind release);
 # aggregator algorithms are the closed AggregatorKind enum (safe SQL stays
 # in code per T3 codex refinement of D6).
 calibration_domains:

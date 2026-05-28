@@ -2,8 +2,8 @@
  * BrainRegistry — connected gbrains (v0.19, PR 0).
  *
  * A registry of BrainEngine handles keyed by brainId. Supports:
- *   - 'host': the brain defined by ~/.gbrain/config.json (single-brain default).
- *   - <mount-id>: brains declared in ~/.gbrain/mounts.json.
+ *   - 'host': the brain defined by ~/.voltmind/config.json (single-brain default).
+ *   - <mount-id>: brains declared in ~/.voltmind/mounts.json.
  *
  * This is the dispatch-time lookup that makes `ctx.brainId` → `ctx.engine`
  * resolution routable per operation. Only direct-transport mounts are
@@ -28,7 +28,7 @@ import { homedir } from 'os';
 import type { BrainEngine } from './engine.ts';
 import type { EngineConfig } from './types.ts';
 import { GBrainError } from './types.ts';
-import { loadConfig, type GBrainConfig } from './config.ts';
+import { loadConfig, type VoltMindConfig } from './config.ts';
 
 /** Host brain id. Reserved — users cannot create a mount with this id. */
 export const HOST_BRAIN_ID = 'host';
@@ -39,18 +39,18 @@ const BRAIN_ID_RE = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 /**
  * Path to mounts.json. Lazy to avoid homedir() at module scope.
  *
- * v0.40.3.0: GBRAIN_MOUNTS_PATH override exists for tests (homedir() is
+ * v0.40.3.0: VOLTMIND_MOUNTS_PATH override exists for tests (homedir() is
  * cached at startup by libuv on some platforms, so withFakeHome's HOME
  * mutation isn't always picked up). Production callers don't set this.
  */
 function getMountsPath(): string {
-  const override = process.env.GBRAIN_MOUNTS_PATH;
+  const override = process.env.VOLTMIND_MOUNTS_PATH;
   if (override) return override;
-  return join(homedir(), '.gbrain', 'mounts.json');
+  return join(homedir(), '.voltmind', 'mounts.json');
 }
 
 /**
- * A single entry in ~/.gbrain/mounts.json.
+ * A single entry in ~/.voltmind/mounts.json.
  *
  * PR 0: only direct-transport mounts are supported. PR 2 will add
  * `transport: "mcp"` with `mcp_url` + OAuth credential references.
@@ -70,22 +70,22 @@ export interface MountEntry {
   database_path?: string;
   /** Default true. Disabled mounts are not loaded. */
   enabled?: boolean;
-  /** Managed by `gbrain mounts sync` (PR 1). */
+  /** Managed by `voltmind mounts sync` (PR 1). */
   expected_sha?: string;
-  /** Managed by `gbrain mounts sync` (PR 1). */
+  /** Managed by `voltmind mounts sync` (PR 1). */
   last_synced_at?: string;
   /**
    * v0.40.3.0: per-mount frontmatter-override trust gate (D15). Default
    * FALSE — mounts must explicitly opt into honoring frontmatter
    * `contextual_retrieval_mode` overrides via
-   * `gbrain mounts trust-frontmatter <id>`. The host source (id='default')
+   * `voltmind mounts trust-frontmatter <id>`. The host source (id='default')
    * is always trusted regardless of this field. Set/cleared via the
    * dedicated `trust-frontmatter` / `untrust-frontmatter` verbs (D4).
    */
   trust_frontmatter_overrides?: boolean;
 }
 
-/** Top-level shape of ~/.gbrain/mounts.json. */
+/** Top-level shape of ~/.voltmind/mounts.json. */
 export interface MountsFile {
   version: 1;
   mounts: MountEntry[];
@@ -97,8 +97,8 @@ export interface BrainHandle {
   id: string;
   /** Connected BrainEngine. Only valid for the lifetime of this registry. */
   engine: BrainEngine;
-  /** GBrainConfig used to create the engine. */
-  config: GBrainConfig;
+  /** VoltMindConfig used to create the engine. */
+  config: VoltMindConfig;
   /** Absolute local path to the mount's clone. `null` for the host brain. */
   path: string | null;
 }
@@ -110,7 +110,7 @@ export class DuplicateMountPathError extends GBrainError {
       `Duplicate mount path: "${path}"`,
       `Mount "${existingId}" already uses this path. Cannot register "${attemptedId}" at the same location.`,
       'Use a different local clone path, or remove the existing mount first: ' +
-        `gbrain mounts remove ${existingId}`,
+        `voltmind mounts remove ${existingId}`,
     );
   }
 }
@@ -122,7 +122,7 @@ export class UnknownBrainError extends GBrainError {
     super(
       `Unknown brain: "${id}"`,
       `No enabled mount with id "${id}" found. Available brain ids: ${list}`,
-      `Run 'gbrain mounts list' to see registered mounts. Add a new mount with 'gbrain mounts add ${id} --path <path> --db-url <url>'.`,
+      `Run 'voltmind mounts list' to see registered mounts. Add a new mount with 'voltmind mounts add ${id} --path <path> --db-url <url>'.`,
     );
   }
 }
@@ -178,7 +178,7 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
     throw new GBrainError(
       `Malformed mounts.json`,
       e instanceof Error ? e.message : String(e),
-      `Fix the JSON syntax at ${mountsPath} or remove it and re-add mounts via 'gbrain mounts add'`,
+      `Fix the JSON syntax at ${mountsPath} or remove it and re-add mounts via 'voltmind mounts add'`,
     );
   }
 
@@ -194,8 +194,8 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
   if (file.version !== 1) {
     throw new GBrainError(
       `Unsupported mounts.json version: ${file.version}`,
-      `This gbrain binary supports version 1`,
-      `Upgrade gbrain or regenerate mounts.json`,
+      `This voltmind binary supports version 1`,
+      `Upgrade voltmind or regenerate mounts.json`,
     );
   }
 
@@ -299,8 +299,8 @@ function mountToEngineConfig(mount: MountEntry): EngineConfig {
   };
 }
 
-/** Convert a MountEntry to a GBrainConfig (for OperationContext). */
-function mountToGBrainConfig(mount: MountEntry): GBrainConfig {
+/** Convert a MountEntry to a VoltMindConfig (for OperationContext). */
+function mountToVoltMindConfig(mount: MountEntry): VoltMindConfig {
   return {
     engine: mount.engine,
     database_url: mount.database_url,
@@ -357,7 +357,7 @@ export class BrainRegistry {
   }
 
   /**
-   * Return the host brain handle (from ~/.gbrain/config.json). Lazy-
+   * Return the host brain handle (from ~/.voltmind/config.json). Lazy-
    * initialized so callers that only touch mounts don't require host config.
    */
   async getDefaultBrain(): Promise<BrainHandle> {
@@ -398,8 +398,8 @@ export class BrainRegistry {
     if (!config) {
       throw new GBrainError(
         'No host brain configured',
-        '~/.gbrain/config.json is missing and GBRAIN_DATABASE_URL is unset',
-        "Run 'gbrain init' to configure the host brain",
+        '~/.voltmind/config.json is missing and VOLTMIND_DATABASE_URL is unset',
+        "Run 'voltmind init' to configure the host brain",
       );
     }
     const { createEngine } = await import('./engine-factory.ts');
@@ -428,7 +428,7 @@ export class BrainRegistry {
     return {
       id: mount.id,
       engine,
-      config: mountToGBrainConfig(mount),
+      config: mountToVoltMindConfig(mount),
       path: mount.path,
     };
   }
@@ -444,5 +444,5 @@ export const __testing = {
   BRAIN_ID_RE,
   getMountsPath,
   mountToEngineConfig,
-  mountToGBrainConfig,
+  mountToVoltMindConfig,
 };

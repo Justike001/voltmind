@@ -1,5 +1,5 @@
 /**
- * Tests for `gbrain extract --source fs` (the default, FS-walking path).
+ * Tests for `voltmind extract --source fs` (the default, FS-walking path).
  *
  * Companion to test/extract-db.test.ts. Specifically guards against the
  * v0.12.0 N+1 hang: extractLinksFromDir / extractTimelineFromDir used to
@@ -54,7 +54,7 @@ const companyPage = (title: string, body = ''): PageInput => ({
 
 beforeEach(async () => {
   await truncateAll();
-  brainDir = mkdtempSync(join(tmpdir(), 'gbrain-extract-fs-'));
+  brainDir = mkdtempSync(join(tmpdir(), 'voltmind-extract-fs-'));
 }, 15_000);
 
 function writeFile(rel: string, content: string) {
@@ -63,7 +63,7 @@ function writeFile(rel: string, content: string) {
   writeFileSync(full, content);
 }
 
-describe('gbrain extract links --source fs', () => {
+describe('voltmind extract links --source fs', () => {
   test('first run inserts links, second run reports 0 (idempotent + truthful counter)', async () => {
     // Set up brain in DB matching the file structure
     await engine.putPage('people/alice', personPage('Alice'));
@@ -131,7 +131,7 @@ describe('gbrain extract links --source fs', () => {
   });
 });
 
-describe('gbrain extract timeline --source fs', () => {
+describe('voltmind extract timeline --source fs', () => {
   test('first run inserts entries, second run reports 0 (idempotent + truthful counter)', async () => {
     await engine.putPage('people/alice', personPage('Alice'));
 
@@ -160,7 +160,7 @@ title: Alice
   });
 });
 
-describe('gbrain extract --dir default resolution', () => {
+describe('voltmind extract --dir default resolution', () => {
   // Pin the cwd-footgun fix: when --dir is not passed, extract resolves the
   // brain dir from the sources(local_path) row before falling back. The bare
   // `.` default would let a user running from a directory with a node_modules/
@@ -181,7 +181,7 @@ describe('gbrain extract --dir default resolution', () => {
 
     // Save + clobber cwd to a sibling tmpdir so the test fails loudly if the
     // resolver still walks `.` instead of the configured path.
-    const otherDir = mkdtempSync(join(tmpdir(), 'gbrain-extract-other-'));
+    const otherDir = mkdtempSync(join(tmpdir(), 'voltmind-extract-other-'));
     const savedCwd = process.cwd();
     try {
       process.chdir(otherDir);
@@ -231,7 +231,7 @@ describe('gbrain extract --dir default resolution', () => {
     writeFile('people/bob.md', '---\ntitle: Bob\n---\n');
 
     // Configured path points elsewhere; explicit --dir must override.
-    const decoyDir = mkdtempSync(join(tmpdir(), 'gbrain-extract-decoy-'));
+    const decoyDir = mkdtempSync(join(tmpdir(), 'voltmind-extract-decoy-'));
     await (engine as any).db.exec(
       `UPDATE sources SET local_path = '${decoyDir.replace(/'/g, "''")}' WHERE id = 'default'`,
     );

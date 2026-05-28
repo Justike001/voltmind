@@ -17,7 +17,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 
-delete process.env.GBRAIN_PGLITE_SNAPSHOT;
+delete process.env.VOLTMIND_PGLITE_SNAPSHOT;
 
 async function setupBrain(): Promise<PGLiteEngine> {
   const engine = new PGLiteEngine();

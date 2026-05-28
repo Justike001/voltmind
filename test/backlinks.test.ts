@@ -86,7 +86,7 @@ describe('findBacklinkGaps dedupe (v0.36.x #967 regression)', () => {
     const { join } = await import('path');
     const { findBacklinkGaps } = await import('../src/commands/backlinks.ts');
 
-    const root = mkdtempSync(join(tmpdir(), 'gbrain-backlinks-dedupe-'));
+    const root = mkdtempSync(join(tmpdir(), 'voltmind-backlinks-dedupe-'));
     try {
       mkdirSync(join(root, 'people'));
       mkdirSync(join(root, 'meetings'));
@@ -94,7 +94,7 @@ describe('findBacklinkGaps dedupe (v0.36.x #967 regression)', () => {
       // Source page mentions alice three times, no Timeline yet on alice
       writeFileSync(
         join(root, 'meetings/standup.md'),
-        '# Standup\n\nWe discussed [Alice](people/alice).\nLater [Alice](people/alice) chimed in.\nFinally [[people/alice]] left.\n',
+        '# Standup\n\nWe discussed [Alice](../people/alice.md).\nLater [Alice](../people/alice.md) chimed in.\nFinally [[people/alice]] left.\n',
       );
       const gaps = findBacklinkGaps(root);
       const alicePairs = gaps.filter(g => g.targetPage === 'people/alice.md' && g.sourcePage === 'meetings/standup.md');

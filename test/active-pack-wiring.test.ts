@@ -2,7 +2,7 @@
 //
 // Asserts that the `activePack` parameter threaded through parseMarkdown
 // actually CHANGES type inference at runtime, while preserving byte-for-byte
-// parity with the gbrain-base hardcoded behavior when no pack is passed.
+// parity with the voltmind-base hardcoded behavior when no pack is passed.
 //
 // Pinned by codex finding #1 (engine inert at runtime is the central v0.38
 // gap). Without this test, T1.5's API additions could be silently
@@ -12,14 +12,14 @@ import { describe, test, expect } from 'bun:test';
 import { parseMarkdown } from '../src/core/markdown.ts';
 
 describe('v0.39 T1.5 — parseMarkdown activePack threading', () => {
-  test('no activePack passed → falls back to legacy inferType (gbrain-base parity)', () => {
+  test('no activePack passed → falls back to legacy inferType (voltmind-base parity)', () => {
     const result = parseMarkdown('# Alice', 'people/alice.md');
     expect(result.type).toBe('person');
   });
 
   test('activePack with custom type → uses pack inference (NOT legacy)', () => {
     // Synthetic pack that maps `Projects/` → `project-x` (a type that does NOT
-    // exist in gbrain-base — proves the pack drives, not the hardcoded table).
+    // exist in voltmind-base — proves the pack drives, not the hardcoded table).
     const result = parseMarkdown('# my project', 'Projects/foo.md', {
       activePack: {
         page_types: [
@@ -30,7 +30,7 @@ describe('v0.39 T1.5 — parseMarkdown activePack threading', () => {
     expect(result.type).toBe('project-x');
   });
 
-  test('activePack empty → falls back to gbrain-base hardcoded', () => {
+  test('activePack empty → falls back to voltmind-base hardcoded', () => {
     const result = parseMarkdown('# alice', 'people/alice.md', {
       activePack: { page_types: [] },
     });

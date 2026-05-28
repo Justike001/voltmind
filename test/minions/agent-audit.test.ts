@@ -11,7 +11,7 @@ import {
 } from '../../src/core/minions/agent-audit.ts';
 
 // Wrap every test body's env mutation through `withEnv` (see R1 in
-// scripts/check-test-isolation.sh). The audit helpers read GBRAIN_AUDIT_DIR
+// scripts/check-test-isolation.sh). The audit helpers read VOLTMIND_AUDIT_DIR
 // at call time so the env shadow only needs to survive the duration of the
 // log/read calls inside each test.
 let tmpDir: string;
@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 async function withAuditDir<T>(fn: () => T | Promise<T>): Promise<T> {
-  return await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => await fn());
+  return await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => await fn());
 }
 
 describe('agent-audit (v0.38 Slice 3 — D4 JSONL trail for submit_agent)', () => {

@@ -64,24 +64,24 @@ const FACT_FENCE = (rows: string): string => `# alice
 
 ## Facts
 
-<!--- gbrain:facts:begin -->
+<!--- voltmind:facts:begin -->
 | # | claim | kind | confidence | visibility | notability | valid_from | valid_until | source | context |
 |---|-------|------|------------|------------|------------|------------|-------------|--------|---------|
 ${rows}
-<!--- gbrain:facts:end -->
+<!--- voltmind:facts:end -->
 `;
 
 const STUB_BODY = `# alice
 `;
 
-/** Build a tempdir scoped to this test run; honored by GBRAIN_AUDIT_DIR. */
+/** Build a tempdir scoped to this test run; honored by VOLTMIND_AUDIT_DIR. */
 function withTempDirs<T>(fn: (dirs: { brainDir: string; auditDir: string }) => Promise<T>): Promise<T> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phantom-redirect-'));
   const brainDir = path.join(root, 'brain');
   const auditDir = path.join(root, 'audit');
   fs.mkdirSync(brainDir, { recursive: true });
   fs.mkdirSync(auditDir, { recursive: true });
-  return withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+  return withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
     try {
       return await fn({ brainDir, auditDir });
     } finally {
@@ -512,21 +512,21 @@ I believe shipping fast is a moral imperative.
       await tryRedirectPhantom(engine, phantom!, 'default', brainDir, false);
 
       const canonicalMd = readMd(brainDir, 'people/alice-example');
-      expect(canonicalMd).toContain('<!--- gbrain:facts:begin -->');
-      expect(canonicalMd).toContain('<!--- gbrain:facts:end -->');
+      expect(canonicalMd).toContain('<!--- voltmind:facts:begin -->');
+      expect(canonicalMd).toContain('<!--- voltmind:facts:end -->');
       // Must NOT regress to two-dash form
-      expect(canonicalMd).not.toContain('<!-- gbrain:facts:begin -->');
+      expect(canonicalMd).not.toContain('<!-- voltmind:facts:begin -->');
     });
   });
 
   test('codex #12: canonical with existing fact + phantom with same fact → dedup', async () => {
     await withTempDirs(async ({ brainDir }) => {
       // Canonical already has the fact
-      const canonicalBody = `# alice-example\n\n## Facts\n\n` + `<!--- gbrain:facts:begin -->
+      const canonicalBody = `# alice-example\n\n## Facts\n\n` + `<!--- voltmind:facts:begin -->
 | # | claim | kind | confidence | visibility | notability | valid_from | valid_until | source | context |
 |---|-------|------|------------|------------|------------|------------|-------------|--------|---------|
 | 1 | Founded Acme | fact | 1.0 | world | high | 2017-01-01 |  | linkedin |  |
-<!--- gbrain:facts:end -->
+<!--- voltmind:facts:end -->
 `;
       await putPage('people/alice-example', canonicalBody, { type: 'person' });
       writeMd(brainDir, 'people/alice-example', canonicalBody);
@@ -602,7 +602,7 @@ describe('runExtractFacts — phantom-redirect integration', () => {
     });
   });
 
-  test('P1: cap enforcement via GBRAIN_PHANTOM_REDIRECT_LIMIT', async () => {
+  test('P1: cap enforcement via VOLTMIND_PHANTOM_REDIRECT_LIMIT', async () => {
     await withTempDirs(async ({ brainDir }) => {
       // Seed 5 phantoms each with a canonical
       for (let i = 0; i < 5; i++) {
@@ -615,7 +615,7 @@ describe('runExtractFacts — phantom-redirect integration', () => {
       }
 
       // Cap at 2 per cycle
-      await withEnv({ GBRAIN_PHANTOM_REDIRECT_LIMIT: '2' }, async () => {
+      await withEnv({ VOLTMIND_PHANTOM_REDIRECT_LIMIT: '2' }, async () => {
         const result = await runExtractFacts(engine, { sourceId: 'default', brainDir });
         expect(result.phantomsScanned).toBe(2);
         expect(result.phantomsRedirected).toBe(2);
@@ -700,10 +700,10 @@ describe('runPhantomRedirectPass (per-cycle pass)', () => {
 describe('lock contention (C4)', () => {
   test('lock_busy when another holder has it → pass skipped, audit entry, retries next cycle', async () => {
     await withTempDirs(async ({ brainDir }) => {
-      // Manually claim the gbrain-sync lock with a future TTL
+      // Manually claim the voltmind-sync lock with a future TTL
       await engine.executeRaw(
         `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
-         VALUES ('gbrain-sync', 9999, 'other-host', now(), now() + interval '1 hour')`,
+         VALUES ('voltmind-sync', 9999, 'other-host', now(), now() + interval '1 hour')`,
       );
 
       // Need a phantom + canonical or scanned would be 0 regardless
@@ -725,12 +725,12 @@ describe('lock contention (C4)', () => {
       // held externally; the lock_busy result is asserted in a slow
       // companion test if needed.
       const lockBefore = await engine.executeRaw<{ holder_pid: number }>(
-        `SELECT holder_pid FROM gbrain_cycle_locks WHERE id='gbrain-sync'`,
+        `SELECT holder_pid FROM gbrain_cycle_locks WHERE id='voltmind-sync'`,
       );
       expect(lockBefore[0].holder_pid).toBe(9999);
 
       // Cleanup
-      await engine.executeRaw(`DELETE FROM gbrain_cycle_locks WHERE id='gbrain-sync'`);
+      await engine.executeRaw(`DELETE FROM gbrain_cycle_locks WHERE id='voltmind-sync'`);
     });
   });
 });
@@ -757,7 +757,7 @@ describe('phantom-audit module', () => {
   });
 
   test('write failure does not throw (best-effort)', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: '/dev/null/cannot-mkdir/this-path' }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: '/dev/null/cannot-mkdir/this-path' }, async () => {
       const { logPhantomEvent } = await import('../src/core/facts/phantom-audit.ts');
       // Should not throw — failure is logged to stderr
       expect(() => logPhantomEvent({ outcome: 'redirected', source_id: 'default' })).not.toThrow();

@@ -1,5 +1,5 @@
 /**
- * v0.41.16.0 — `gbrain conversation-parser` debug CLI.
+ * v0.41.16.0 — `voltmind conversation-parser` debug CLI.
  *
  * Three subcommands for operators:
  *   - scan <slug>       Dry-run the parser on a page; report which
@@ -20,7 +20,7 @@ import { parseConversation } from '../core/conversation-parser/parse.ts';
 import type { BrainEngine } from '../core/engine.ts';
 
 function printHelp(): void {
-  process.stdout.write(`Usage: gbrain conversation-parser <subcommand> [options]
+  process.stdout.write(`Usage: voltmind conversation-parser <subcommand> [options]
 
 Subcommands:
   scan <slug>          Dry-run the parser on a page; report pattern hit.
@@ -30,9 +30,9 @@ Subcommands:
                         emits "TODO v0.42+" notice.)
 
 Examples:
-  gbrain conversation-parser scan conversations/imessage/alice-example
-  gbrain conversation-parser list-builtins --json
-  gbrain conversation-parser validate ./my-pattern.json
+  voltmind conversation-parser scan conversations/imessage/alice-example
+  voltmind conversation-parser list-builtins --json
+  voltmind conversation-parser validate ./my-pattern.json
 
 Global flags:
   --json               Emit JSON envelope on stdout (where applicable).

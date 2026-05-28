@@ -37,7 +37,7 @@ if (skip) {
 }
 
 function makeGitRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'gbrain-e2e-cycle-'));
+  const dir = mkdtempSync(join(tmpdir(), 'voltmind-e2e-cycle-'));
   execSync('git init', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.email test@test.co', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.name test', { cwd: dir, stdio: 'pipe' });
@@ -163,7 +163,7 @@ describeE2E('E2E: runCycle against real Postgres', () => {
     // Seed a fresh-TTL lock held by a different (fake) PID.
     await conn.unsafe(
       `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
-       VALUES ('gbrain-cycle', 99999, 'other-host', NOW(), NOW() + INTERVAL '1 hour')`,
+       VALUES ('voltmind-cycle', 99999, 'other-host', NOW(), NOW() + INTERVAL '1 hour')`,
     );
 
     try {
@@ -177,7 +177,7 @@ describeE2E('E2E: runCycle against real Postgres', () => {
       expect(report.phases.length).toBe(0);
     } finally {
       // Clean up the seeded lock.
-      await conn.unsafe(`DELETE FROM gbrain_cycle_locks WHERE id = 'gbrain-cycle'`);
+      await conn.unsafe(`DELETE FROM gbrain_cycle_locks WHERE id = 'voltmind-cycle'`);
     }
   });
 
@@ -187,7 +187,7 @@ describeE2E('E2E: runCycle against real Postgres', () => {
     // Seed a stale lock (TTL in the past).
     await conn.unsafe(
       `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
-       VALUES ('gbrain-cycle', 99999, 'crashed-host', NOW() - INTERVAL '2 hours', NOW() - INTERVAL '1 hour')`,
+       VALUES ('voltmind-cycle', 99999, 'crashed-host', NOW() - INTERVAL '2 hours', NOW() - INTERVAL '1 hour')`,
     );
 
     const report = await runCycle(getEngine(), {
@@ -210,7 +210,7 @@ describeE2E('E2E: runCycle against real Postgres', () => {
     // selection should succeed anyway (orphans never acquires the lock).
     await conn.unsafe(
       `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
-       VALUES ('gbrain-cycle', 99999, 'other-host', NOW(), NOW() + INTERVAL '1 hour')`,
+       VALUES ('voltmind-cycle', 99999, 'other-host', NOW(), NOW() + INTERVAL '1 hour')`,
     );
 
     try {
@@ -224,7 +224,7 @@ describeE2E('E2E: runCycle against real Postgres', () => {
       const orphansPhase = report.phases.find(p => p.phase === 'orphans');
       expect(orphansPhase).toBeDefined();
     } finally {
-      await conn.unsafe(`DELETE FROM gbrain_cycle_locks WHERE id = 'gbrain-cycle'`);
+      await conn.unsafe(`DELETE FROM gbrain_cycle_locks WHERE id = 'voltmind-cycle'`);
     }
   });
 });

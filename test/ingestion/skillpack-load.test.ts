@@ -21,7 +21,7 @@ import type { IngestionSource } from '../../src/core/ingestion/types.ts';
 let tmpRoot: string;
 
 beforeEach(() => {
-  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-skillpack-load-'));
+  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-skillpack-load-'));
 });
 
 afterEach(() => {
@@ -44,18 +44,18 @@ function makePluginDir(opts: {
   const manifest: Record<string, unknown> = {
     name: opts.name ?? 'test-plugin',
     version: '1.0.0',
-    plugin_version: opts.pluginVersion ?? 'gbrain-plugin-v1',
+    plugin_version: opts.pluginVersion ?? 'voltmind-plugin-v1',
   };
   if (opts.sources && opts.sources.length > 0) {
     manifest.ingestion_sources = opts.sources.map((s) => ({
       kind: s.kind,
       module: s.module ?? './source.js',
-      api_version: s.api_version ?? 'gbrain-ingestion-source-v1',
+      api_version: s.api_version ?? 'voltmind-ingestion-source-v1',
       default_config: s.default_config,
       permissions: s.permissions,
     }));
   }
-  fs.writeFileSync(path.join(dir, 'gbrain.plugin.json'), JSON.stringify(manifest));
+  fs.writeFileSync(path.join(dir, 'voltmind.plugin.json'), JSON.stringify(manifest));
   if (opts.sources && opts.sources.length > 0) {
     fs.writeFileSync(path.join(dir, 'source.js'), opts.moduleBody ?? '// noop');
   }
@@ -72,7 +72,7 @@ function makeFactoryFn(): (config: Record<string, unknown>) => IngestionSource {
 }
 
 describe('loadSkillpackSources — discovery', () => {
-  test('empty GBRAIN_PLUGIN_PATH returns empty result', async () => {
+  test('empty VOLTMIND_PLUGIN_PATH returns empty result', async () => {
     const result = await loadSkillpackSources({ envPath: '' });
     expect(result.sources).toHaveLength(0);
     expect(result.warnings).toHaveLength(0);
@@ -90,7 +90,7 @@ describe('loadSkillpackSources — discovery', () => {
   });
 
   test('rejectIfNotAbsolute helper rejects remote URLs (defense-in-depth)', () => {
-    // GBRAIN_PLUGIN_PATH is colon-separated paths ($PATH style), so URL
+    // VOLTMIND_PLUGIN_PATH is colon-separated paths ($PATH style), so URL
     // values get split into bogus segments before this branch fires. The
     // branch exists as defense-in-depth for any future code path that
     // hands a raw URL string to the validator (e.g. a future --plugin-dir
@@ -107,7 +107,7 @@ describe('loadSkillpackSources — discovery', () => {
     expect(result.warnings.some((w) => w.includes('does not exist'))).toBe(true);
   });
 
-  test('directory with no gbrain.plugin.json is silently skipped (not a warning)', async () => {
+  test('directory with no voltmind.plugin.json is silently skipped (not a warning)', async () => {
     const dir = fs.mkdtempSync(path.join(tmpRoot, 'no-manifest-'));
     const result = await loadSkillpackSources({ envPath: dir });
     expect(result.sources).toHaveLength(0);
@@ -125,13 +125,13 @@ describe('loadSkillpackSources — discovery', () => {
 describe('loadSkillpackSources — manifest validation', () => {
   test('rejects invalid manifest JSON', async () => {
     const dir = fs.mkdtempSync(path.join(tmpRoot, 'bad-json-'));
-    fs.writeFileSync(path.join(dir, 'gbrain.plugin.json'), '{ not valid');
+    fs.writeFileSync(path.join(dir, 'voltmind.plugin.json'), '{ not valid');
     const result = await loadSkillpackSources({ envPath: dir });
     expect(result.warnings.some((w) => w.includes('invalid manifest JSON'))).toBe(true);
   });
 
   test('rejects unsupported plugin_version', async () => {
-    const dir = makePluginDir({ pluginVersion: 'gbrain-plugin-v99' });
+    const dir = makePluginDir({ pluginVersion: 'voltmind-plugin-v99' });
     const result = await loadSkillpackSources({ envPath: dir });
     expect(result.warnings.some((w) => w.includes('unsupported plugin_version'))).toBe(true);
   });
@@ -139,10 +139,10 @@ describe('loadSkillpackSources — manifest validation', () => {
   test('rejects missing name field', async () => {
     const dir = fs.mkdtempSync(path.join(tmpRoot, 'no-name-'));
     fs.writeFileSync(
-      path.join(dir, 'gbrain.plugin.json'),
+      path.join(dir, 'voltmind.plugin.json'),
       JSON.stringify({
-        plugin_version: 'gbrain-plugin-v1',
-        ingestion_sources: [{ kind: 'x', module: './source.js', api_version: 'gbrain-ingestion-source-v1' }],
+        plugin_version: 'voltmind-plugin-v1',
+        ingestion_sources: [{ kind: 'x', module: './source.js', api_version: 'voltmind-ingestion-source-v1' }],
       }),
     );
     const result = await loadSkillpackSources({ envPath: dir });
@@ -154,11 +154,11 @@ describe('loadSkillpackSources — source declaration validation', () => {
   test('rejects missing kind field', async () => {
     const dir = fs.mkdtempSync(path.join(tmpRoot, 'no-kind-'));
     fs.writeFileSync(
-      path.join(dir, 'gbrain.plugin.json'),
+      path.join(dir, 'voltmind.plugin.json'),
       JSON.stringify({
         name: 'p',
-        plugin_version: 'gbrain-plugin-v1',
-        ingestion_sources: [{ module: './source.js', api_version: 'gbrain-ingestion-source-v1' }],
+        plugin_version: 'voltmind-plugin-v1',
+        ingestion_sources: [{ module: './source.js', api_version: 'voltmind-ingestion-source-v1' }],
       }),
     );
     const result = await loadSkillpackSources({ envPath: dir });
@@ -169,7 +169,7 @@ describe('loadSkillpackSources — source declaration validation', () => {
     const err = __testing.validateDeclaration({
       kind: 'x',
       module: './source.js',
-      api_version: 'gbrain-ingestion-source-v1',
+      api_version: 'voltmind-ingestion-source-v1',
       default_config: [1, 2, 3],
     });
     expect(err).toContain('default_config must be a plain object');
@@ -179,7 +179,7 @@ describe('loadSkillpackSources — source declaration validation', () => {
     const err = __testing.validateDeclaration({
       kind: 'x',
       module: './source.js',
-      api_version: 'gbrain-ingestion-source-v1',
+      api_version: 'voltmind-ingestion-source-v1',
       permissions: [1, 2, 3],
     });
     expect(err).toContain('permissions must be an array of strings');
@@ -199,7 +199,7 @@ describe('loadSkillpackSources — api_version compatibility', () => {
 
   test('api_version mismatch fails loudly with upgrade hint', async () => {
     const dir = makePluginDir({
-      sources: [{ kind: 'stub', api_version: 'gbrain-ingestion-source-v99' }],
+      sources: [{ kind: 'stub', api_version: 'voltmind-ingestion-source-v99' }],
     });
     const result = await loadSkillpackSources({
       envPath: dir,
@@ -285,9 +285,9 @@ describe('loadSkillpackSources — collision policy', () => {
 });
 
 describe('loadSkillpackSources — env var path', () => {
-  test('reads GBRAIN_PLUGIN_PATH from process.env when envPath is not passed', async () => {
+  test('reads VOLTMIND_PLUGIN_PATH from process.env when envPath is not passed', async () => {
     const dir = makePluginDir({ sources: [{ kind: 'env-stub' }] });
-    await withEnv({ GBRAIN_PLUGIN_PATH: dir }, async () => {
+    await withEnv({ VOLTMIND_PLUGIN_PATH: dir }, async () => {
       const result = await loadSkillpackSources({
         _import: async () => ({ default: makeFactoryFn() }),
       });

@@ -16,7 +16,7 @@ let engine: PGLiteEngine;
 let tmpDir: string;
 
 beforeAll(async () => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-replay-test-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-replay-test-'));
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();

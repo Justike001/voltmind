@@ -82,7 +82,7 @@ describe('hasScope — multi-grant', () => {
     expect(hasScope(['read', 'sources_admin'], 'sources_admin')).toBe(true);
     expect(hasScope(['read', 'sources_admin'], 'write')).toBe(false);
   });
-  test('write + sources_admin combo (gstack /setup-gbrain Path 4 token)', () => {
+  test('write + sources_admin combo (gstack /setup-voltmind Path 4 token)', () => {
     expect(hasScope(['write', 'sources_admin'], 'read')).toBe(true);
     expect(hasScope(['write', 'sources_admin'], 'write')).toBe(true);
     expect(hasScope(['write', 'sources_admin'], 'sources_admin')).toBe(true);

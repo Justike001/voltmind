@@ -41,7 +41,7 @@ afterAll(async () => {
 });
 
 function makeTmpRoot(label: string): string {
-  const dir = join(tmpdir(), `gbrain-drift-test-${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const dir = join(tmpdir(), `voltmind-drift-test-${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(dir, { recursive: true });
   TMP_ROOTS.push(dir);
   return dir;

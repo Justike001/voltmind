@@ -17,7 +17,7 @@ import {
 let tmp: string;
 
 beforeAll(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-eval-runall-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-eval-runall-'));
 });
 
 afterAll(() => {
@@ -149,7 +149,7 @@ describe('evaluateCostGuard', () => {
 
 describe('persistRunRecord audit trail', () => {
   beforeEach(() => {
-    rmSync(join(tmp, '.gbrain-evals'), { recursive: true, force: true });
+    rmSync(join(tmp, '.voltmind-evals'), { recursive: true, force: true });
     rmSync(join(tmp, 'eval-results.jsonl'), { force: true });
   });
 

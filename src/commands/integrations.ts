@@ -1,8 +1,8 @@
 /**
- * gbrain integrations — standalone CLI command for recipe discovery and health.
+ * voltmind integrations — standalone CLI command for recipe discovery and health.
  *
  * NOT an operation (no database connection needed).
- * Reads embedded recipe files and heartbeat JSONL from ~/.gbrain/integrations/.
+ * Reads embedded recipe files and heartbeat JSONL from ~/.voltmind/integrations/.
  *
  * ARCHITECTURE:
  *   recipes/*.md (embedded at build time)
@@ -15,7 +15,7 @@
  *     ├── test    → validate recipe file
  *     └── (bare)  → dashboard view
  *
- *   ~/.gbrain/integrations/<id>/heartbeat.jsonl
+ *   ~/.voltmind/integrations/<id>/heartbeat.jsonl
  *     └── append-only, pruned to 30 days on read
  */
 
@@ -23,7 +23,7 @@ import matter from 'gray-matter';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
 import { join, basename } from 'path';
 import { homedir } from 'os';
-import { gbrainPath } from '../core/config.ts';
+import { voltmindPath } from '../core/config.ts';
 import { execSync } from 'child_process';
 
 // --- Types ---
@@ -36,9 +36,9 @@ interface RecipeSecret {
 
 /**
  * Install mode discriminator. New recipes default to 'local-managed' (the
- * legacy path that writes to ~/.gbrain/skills/). 'copy-into-host-repo'
+ * legacy path that writes to ~/.voltmind/skills/). 'copy-into-host-repo'
  * recipes write their bundle into the operator's host agent repo via the
- * `gbrain integrations install` subcommand.
+ * `voltmind integrations install` subcommand.
  */
 type InstallKind = 'local-managed' | 'copy-into-host-repo';
 
@@ -259,7 +259,7 @@ export async function executeHealthCheck(
 
     case 'command': {
       // Fix 2: Gate command execution on embedded trust. Non-embedded recipes
-      // (from $GBRAIN_RECIPES_DIR or ./recipes) must NOT be able to spawn arbitrary binaries.
+      // (from $VOLTMIND_RECIPES_DIR or ./recipes) must NOT be able to spawn arbitrary binaries.
       if (!isEmbedded) {
         return { ...base, status: 'blocked', output: `Blocked: command health_checks are restricted to embedded recipes. (${check.argv[0]})` };
       }
@@ -333,11 +333,11 @@ export function parseRecipe(content: string, filename: string): ParsedRecipe | n
 // --- Embedded Recipes ---
 
 // Recipes are loaded from multiple tiers with an explicit trust boundary:
-//   TRUSTED (embedded=true):  package-bundled recipes shipped with gbrain
+//   TRUSTED (embedded=true):  package-bundled recipes shipped with voltmind
 //     - source install: ../../recipes relative to this file
-//     - global install: ~/.bun/install/global/node_modules/gbrain/recipes
+//     - global install: ~/.bun/install/global/node_modules/voltmind/recipes
 //   UNTRUSTED (embedded=false): user-provided recipes discovered at runtime
-//     - $GBRAIN_RECIPES_DIR
+//     - $VOLTMIND_RECIPES_DIR
 //     - ./recipes in process cwd
 // The trust flag gates command/http health_checks and deprecated string health_checks.
 // An attacker who drops a malicious recipe in ./recipes/ MUST NOT get embedded=true.
@@ -345,10 +345,10 @@ export function getRecipeDirs(): Array<{ dir: string; trusted: boolean }> {
   const dirs: Array<{ dir: string; trusted: boolean }> = [];
   const sourceDir = join(import.meta.dir, '../../recipes');
   if (existsSync(sourceDir)) dirs.push({ dir: sourceDir, trusted: true });
-  const globalDir = join(homedir(), '.bun', 'install', 'global', 'node_modules', 'gbrain', 'recipes');
+  const globalDir = join(homedir(), '.bun', 'install', 'global', 'node_modules', 'voltmind', 'recipes');
   if (existsSync(globalDir)) dirs.push({ dir: globalDir, trusted: true });
-  if (process.env.GBRAIN_RECIPES_DIR && existsSync(process.env.GBRAIN_RECIPES_DIR)) {
-    dirs.push({ dir: process.env.GBRAIN_RECIPES_DIR, trusted: false });
+  if (process.env.VOLTMIND_RECIPES_DIR && existsSync(process.env.VOLTMIND_RECIPES_DIR)) {
+    dirs.push({ dir: process.env.VOLTMIND_RECIPES_DIR, trusted: false });
   }
   const cwdDir = join(process.cwd(), 'recipes');
   if (existsSync(cwdDir)) dirs.push({ dir: cwdDir, trusted: false });
@@ -412,7 +412,7 @@ function findRecipe(id: string): ParsedRecipe | null {
 // --- Heartbeat ---
 
 function heartbeatDir(id: string): string {
-  return gbrainPath('integrations', id);
+  return voltmindPath('integrations', id);
 }
 
 function heartbeatPath(id: string): string {
@@ -584,14 +584,14 @@ function cmdList(args: string[]): void {
     console.log(`\n  This week: ${weekEvents.length} events logged.`);
   }
 
-  console.log("\n  Run 'gbrain integrations show <id>' for setup details.");
+  console.log("\n  Run 'voltmind integrations show <id>' for setup details.");
   console.log('');
 }
 
 function cmdShow(args: string[]): void {
   const id = args.find(a => !a.startsWith('-'));
   if (!id) {
-    console.error('Usage: gbrain integrations show <recipe-id>');
+    console.error('Usage: voltmind integrations show <recipe-id>');
     return;
   }
 
@@ -626,7 +626,7 @@ function cmdStatus(args: string[]): void {
   const jsonMode = args.includes('--json');
   const id = args.find(a => !a.startsWith('-'));
   if (!id) {
-    console.error('Usage: gbrain integrations status <recipe-id>');
+    console.error('Usage: voltmind integrations status <recipe-id>');
     return;
   }
 
@@ -676,7 +676,7 @@ function cmdStatus(args: string[]): void {
     if (ageMs > 24 * 60 * 60 * 1000) {
       console.log(`  WARNING: no events in ${Math.floor(ageMs / (24 * 60 * 60 * 1000))} days`);
       console.log('  Check: is ngrok running? Is the voice server alive?');
-      console.log('  Run: gbrain integrations doctor');
+      console.log('  Run: voltmind integrations doctor');
     }
   } else {
     console.log('\nNo heartbeat data yet.');
@@ -782,7 +782,7 @@ function cmdStats(args: string[]): void {
 function cmdTest(args: string[]): void {
   const filePath = args.find(a => !a.startsWith('-'));
   if (!filePath) {
-    console.error('Usage: gbrain integrations test <recipe-file.md>');
+    console.error('Usage: voltmind integrations test <recipe-file.md>');
     return;
   }
 
@@ -848,34 +848,34 @@ function cmdTest(args: string[]): void {
 }
 
 function printHelp(): void {
-  console.log(`gbrain integrations — manage integration recipes
+  console.log(`voltmind integrations — manage integration recipes
 
 USAGE
-  gbrain integrations                  Show integration dashboard
-  gbrain integrations list [--json]    List available integrations
-  gbrain integrations show <id>        Show recipe details
-  gbrain integrations status <id>      Check secrets + health
-  gbrain integrations doctor [--json]  Run health checks
-  gbrain integrations stats [--json]   Show signal statistics
-  gbrain integrations test <file>      Validate a recipe file
+  voltmind integrations                  Show integration dashboard
+  voltmind integrations list [--json]    List available integrations
+  voltmind integrations show <id>        Show recipe details
+  voltmind integrations status <id>      Check secrets + health
+  voltmind integrations doctor [--json]  Run health checks
+  voltmind integrations stats [--json]   Show signal statistics
+  voltmind integrations test <file>      Validate a recipe file
 `);
 }
 
 // --- Main Entry ---
 
 // =============================================================================
-// `gbrain integrations install <recipe-id>` — copy-into-host-repo path.
+// `voltmind integrations install <recipe-id>` — copy-into-host-repo path.
 //
 // Reads the recipe's `install/manifest.json` (sibling to `recipes/<id>.md`),
 // validates the target host repo, copies each manifest entry to the target,
 // computes SHA-256 hashes during the copy, writes
-// <target>/services/voice-agent/.gbrain-source.json so future --refresh calls
+// <target>/services/voice-agent/.voltmind-source.json so future --refresh calls
 // can do three-way classification (unchanged-identical / unchanged-stale /
 // locally-modified).
 //
 // Target validation (path-traversal + privacy hardening):
 //   - Must be an existing directory.
-//   - Must NOT be gbrain itself OR a parent of gbrain.
+//   - Must NOT be voltmind itself OR a parent of voltmind.
 //   - Must contain a `.git` directory (refuses missing-git-root).
 //   - Must NOT contain existing files at any target path (unless --overwrite).
 //   - All manifest target paths must be relative; rejects `..` and absolute.
@@ -919,9 +919,9 @@ interface InstalledFileRecord {
   mode: string;
 }
 
-interface GbrainSourceJson {
+interface VoltMindSourceJson {
   recipe: string;
-  gbrain_version: string;
+  voltmind_version: string;
   install_kind: InstallKind;
   copied_at: string;
   files: InstalledFileRecord[];
@@ -950,7 +950,7 @@ function validateManifestTarget(target: string): string | null {
  * Validate the host target repo.
  *   - Exists + is a directory
  *   - Has a `.git` (refuses missing-git-root)
- *   - Not gbrain itself; not a parent of gbrain
+ *   - Not voltmind itself; not a parent of voltmind
  *   - Refuses if any manifest target already exists (unless --overwrite)
  */
 function validateTargetRepo(
@@ -973,15 +973,15 @@ function validateTargetRepo(
   }
   if (!stat.isDirectory()) return `target is not a directory: ${resolvedTarget}`;
 
-  // Refuse if target is gbrain itself or contains gbrain.
-  let gbrainRoot: string | null = null;
+  // Refuse if target is voltmind itself or contains voltmind.
+  let voltmindRoot: string | null = null;
   try {
-    gbrainRoot = realpathSync(pathResolve(__dirname, '..', '..'));
+    voltmindRoot = realpathSync(pathResolve(__dirname, '..', '..'));
   } catch {
     // ignore — non-fatal
   }
-  if (gbrainRoot && (resolvedTarget === gbrainRoot || gbrainRoot.startsWith(resolvedTarget + '/'))) {
-    return `refusing to install into gbrain itself (or a parent dir): ${resolvedTarget}`;
+  if (voltmindRoot && (resolvedTarget === voltmindRoot || voltmindRoot.startsWith(resolvedTarget + '/'))) {
+    return `refusing to install into voltmind itself (or a parent dir): ${resolvedTarget}`;
   }
 
   // Must have a .git
@@ -1077,7 +1077,7 @@ function classifyForRefresh(
     try {
       currentSrcSha = sha256OfBuffer(readFileSync(srcPath));
     } catch {
-      // src missing? Skip — this would mean a manifest pointing at a missing file in gbrain.
+      // src missing? Skip — this would mean a manifest pointing at a missing file in voltmind.
       continue;
     }
 
@@ -1126,7 +1126,7 @@ function classifyForRefresh(
  */
 function appendRefreshLog(targetVoiceAgentDir: string, event: object) {
   try {
-    const logPath = pathResolve(targetVoiceAgentDir, '.gbrain-source.refresh.log');
+    const logPath = pathResolve(targetVoiceAgentDir, '.voltmind-source.refresh.log');
     fsAppendFileSync(logPath, JSON.stringify({ ts: new Date().toISOString(), ...event }) + '\n');
   } catch {
     /* non-fatal */
@@ -1134,7 +1134,7 @@ function appendRefreshLog(targetVoiceAgentDir: string, event: object) {
 }
 
 /**
- * Refresh mode: read `.gbrain-source.json`, classify, apply decisions.
+ * Refresh mode: read `.voltmind-source.json`, classify, apply decisions.
  */
 async function refreshRecipeIntoHostRepo(
   recipeId: string,
@@ -1163,21 +1163,21 @@ async function refreshRecipeIntoHostRepo(
   const sourceFilePath = pathResolve(
     resolvedTarget,
     manifest.target_root_relative_to_host_repo,
-    '.gbrain-source.json',
+    '.voltmind-source.json',
   );
   if (!existsSync(sourceFilePath)) {
-    throw new Error(`.gbrain-source.json not found at ${sourceFilePath} — this target was never installed via copy-into-host-repo; run without --refresh first`);
+    throw new Error(`.voltmind-source.json not found at ${sourceFilePath} — this target was never installed via copy-into-host-repo; run without --refresh first`);
   }
 
-  let recorded: GbrainSourceJson;
+  let recorded: VoltMindSourceJson;
   try {
     recorded = JSON.parse(readFileSync(sourceFilePath, 'utf8'));
   } catch (err) {
-    throw new Error(`failed to parse .gbrain-source.json: ${(err as Error).message}`);
+    throw new Error(`failed to parse .voltmind-source.json: ${(err as Error).message}`);
   }
 
   if (recorded.recipe !== recipeId) {
-    throw new Error(`.gbrain-source.json recipe="${recorded.recipe}" does not match requested recipe="${recipeId}"`);
+    throw new Error(`.voltmind-source.json recipe="${recorded.recipe}" does not match requested recipe="${recipeId}"`);
   }
 
   const allManifestEntries: ManifestFileEntry[] = [...(manifest.files || []), ...(manifest.skills || [])];
@@ -1270,7 +1270,7 @@ async function refreshRecipeIntoHostRepo(
         break;
       }
       case 'source-deleted': {
-        // gbrain reference removed this file; offer cleanup with --auto take-theirs.
+        // voltmind reference removed this file; offer cleanup with --auto take-theirs.
         const decision = opts.autoMode === 'take-theirs' ? 'cleanup' : 'leave-orphan';
         if (decision === 'cleanup') {
           try {
@@ -1304,17 +1304,17 @@ async function refreshRecipeIntoHostRepo(
     }
   }
 
-  // Re-write .gbrain-source.json with the updated SHAs.
-  const gbrainVersion = (() => {
+  // Re-write .voltmind-source.json with the updated SHAs.
+  const voltmindVersion = (() => {
     try {
       const pkgPath = pathResolve(__dirname, '..', '..', 'package.json');
       return JSON.parse(readFileSync(pkgPath, 'utf8')).version || 'unknown';
     } catch { return 'unknown'; }
   })();
 
-  const updatedRecord: GbrainSourceJson = {
+  const updatedRecord: VoltMindSourceJson = {
     recipe: recipeId,
-    gbrain_version: gbrainVersion,
+    voltmind_version: voltmindVersion,
     install_kind: 'copy-into-host-repo',
     copied_at: new Date().toISOString(),
     files: updatedFiles,
@@ -1400,18 +1400,18 @@ export async function installRecipeIntoHostRepo(
     });
   }
 
-  // Write the .gbrain-source.json manifest into the target repo.
+  // Write the .voltmind-source.json manifest into the target repo.
   // Per D11-A: NO upstream_repo field, NO imported_from field.
-  const gbrainVersion = (() => {
+  const voltmindVersion = (() => {
     try {
       const pkgPath = pathResolve(__dirname, '..', '..', 'package.json');
       return JSON.parse(readFileSync(pkgPath, 'utf8')).version || 'unknown';
     } catch { return 'unknown'; }
   })();
 
-  const gbrainSource: GbrainSourceJson = {
+  const voltmindSource: VoltMindSourceJson = {
     recipe: recipeId,
-    gbrain_version: gbrainVersion,
+    voltmind_version: voltmindVersion,
     install_kind: 'copy-into-host-repo',
     copied_at: new Date().toISOString(),
     files: installedRecords,
@@ -1420,10 +1420,10 @@ export async function installRecipeIntoHostRepo(
   const sourceFilePath = join(
     resolvedTarget,
     manifest.target_root_relative_to_host_repo,
-    '.gbrain-source.json',
+    '.voltmind-source.json',
   );
   mkdirSync(pathDirname(sourceFilePath), { recursive: true });
-  writeFileSync(sourceFilePath, JSON.stringify(gbrainSource, null, 2) + '\n');
+  writeFileSync(sourceFilePath, JSON.stringify(voltmindSource, null, 2) + '\n');
 
   // Append resolver rows (if any) to the host's RESOLVER.md or AGENTS.md.
   if (manifest.resolver_rows_to_append && manifest.resolver_rows_to_append.length > 0) {
@@ -1438,9 +1438,9 @@ export async function installRecipeIntoHostRepo(
       } catch { /* not present */ }
     }
     if (resolverPath) {
-      const rowsBlock = `\n\n<!-- gbrain:agent-voice:resolver-rows -->\n` +
+      const rowsBlock = `\n\n<!-- voltmind:agent-voice:resolver-rows -->\n` +
         manifest.resolver_rows_to_append.map((r) => `- ${r}`).join('\n') +
-        '\n<!-- /gbrain:agent-voice:resolver-rows -->\n';
+        '\n<!-- /voltmind:agent-voice:resolver-rows -->\n';
       fsAppendFileSync(resolverPath, rowsBlock);
     } else {
       console.warn(
@@ -1477,8 +1477,8 @@ async function cmdInstall(args: string[]): Promise<void> {
       opts.autoMode = mode;
     } else if (arg === '--help' || arg === '-h') {
       console.log('Usage:');
-      console.log('  gbrain integrations install <recipe-id> --target <host-repo-path> [--overwrite] [--dry-run]');
-      console.log('  gbrain integrations install <recipe-id> --target <host-repo-path> --refresh [--auto keep-mine|take-theirs] [--dry-run]');
+      console.log('  voltmind integrations install <recipe-id> --target <host-repo-path> [--overwrite] [--dry-run]');
+      console.log('  voltmind integrations install <recipe-id> --target <host-repo-path> --refresh [--auto keep-mine|take-theirs] [--dry-run]');
       return;
     } else if (!recipeId && !arg.startsWith('-')) {
       recipeId = arg;
@@ -1486,7 +1486,7 @@ async function cmdInstall(args: string[]): Promise<void> {
   }
 
   if (!recipeId) {
-    console.error('Usage: gbrain integrations install <recipe-id> --target <host-repo-path>');
+    console.error('Usage: voltmind integrations install <recipe-id> --target <host-repo-path>');
     process.exit(2);
   }
   if (!opts.target) {

@@ -4,7 +4,7 @@
 // Per A26 lint opt-out.
 //
 // v0.41.18.0 (A6 + A25 + A17, T11). Capture before/after stats per onboard
-// remediation step so `gbrain onboard --history` can show "you reduced
+// remediation step so `voltmind onboard --history` can show "you reduced
 // orphans 47% (88% → 41%)".
 //
 // Best-effort per A17: a stat-query throw must NOT block the extraction

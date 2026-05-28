@@ -76,7 +76,7 @@ async function simulateEngineBatchRetry<T>(
 
 describe('stress: 100 batches × 30% blip rate with BULK_RETRY_OPTS', () => {
   test('eventual success on all batches when blip count <= maxRetries', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       // Deterministic seeded "blip" generator: a fixed sequence so failures
       // happen at predictable batch positions. 30% blip rate, but the
       // number of CONSECUTIVE blips on any one batch never exceeds 2 (which
@@ -122,7 +122,7 @@ describe('stress: 100 batches × 30% blip rate with BULK_RETRY_OPTS', () => {
   }, 30_000);
 
   test('exhausted retries recorded when blip count > maxRetries', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       // Force batch 7 to fail more times than maxRetries allows.
       const failOn = 7;
       const failureCount = BULK_RETRY_OPTS.maxRetries + 1; // exceeds budget
@@ -157,7 +157,7 @@ describe('stress: 100 batches × 30% blip rate with BULK_RETRY_OPTS', () => {
   }, 30_000);
 
   test('non-retryable error propagates immediately, no exhausted audit', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       let calls = 0;
       try {
         await simulateEngineBatchRetry('addLinksBatch', 10, async () => {

@@ -94,7 +94,7 @@ BANNED_PATH_PATTERNS=(
   'src/core/engine-factory.ts'
 )
 
-TMP_BUNDLE_DIR=$(mktemp -d -t gbrain-fuzz-purity-XXXXXX)
+TMP_BUNDLE_DIR=$(mktemp -d -t voltmind-fuzz-purity-XXXXXX)
 trap 'rm -rf "$TMP_BUNDLE_DIR"' EXIT
 
 violations=0

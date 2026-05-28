@@ -32,16 +32,16 @@ async function runCli(args: string[]): Promise<{
   stderr: string;
   exit: number;
 }> {
-  // v0.34.1 (#876): set GBRAIN_HOME to a fresh tempdir so the test isn't
-  // sensitive to the developer's local ~/.gbrain/config.json. Pre-fix this
+  // v0.34.1 (#876): set VOLTMIND_HOME to a fresh tempdir so the test isn't
+  // sensitive to the developer's local ~/.voltmind/config.json. Pre-fix this
   // test would silently inherit the user's database_url and try to connect
   // to a real Postgres + run migrations, which both extends runtime past
   // the default test timeout and produces different exit semantics
-  // depending on the local DB state. With GBRAIN_HOME pointing at an
+  // depending on the local DB state. With VOLTMIND_HOME pointing at an
   // empty dir, the CLI hits "No brain configured" and exits 1 immediately
   // — which is what this test was originally written to cover.
   const tmpHome = await import('os').then(os =>
-    import('fs').then(fs => fs.mkdtempSync(`${os.tmpdir()}/gbrain-test-`)),
+    import('fs').then(fs => fs.mkdtempSync(`${os.tmpdir()}/voltmind-test-`)),
   );
   try {
     const proc = Bun.spawn(
@@ -50,7 +50,7 @@ async function runCli(args: string[]): Promise<{
         cwd: REPO_ROOT,
         stdout: 'pipe',
         stderr: 'pipe',
-        env: { ...process.env, DATABASE_URL: '', GBRAIN_HOME: tmpHome },
+        env: { ...process.env, DATABASE_URL: '', VOLTMIND_HOME: tmpHome },
       },
     );
     const stdout = await new Response(proc.stdout).text();
@@ -63,7 +63,7 @@ async function runCli(args: string[]): Promise<{
   }
 }
 
-describe('gbrain book-mirror — CLI registration', () => {
+describe('voltmind book-mirror — CLI registration', () => {
   // v0.34.1 (#876): migrations v60-v65 added oauth_clients.source_id +
   // federated_read FK plumbing. The cold-spawned subprocess's initSchema
   // chain now takes ~1s longer end-to-end; bump these tests' timeout to
@@ -85,7 +85,7 @@ describe('gbrain book-mirror — CLI registration', () => {
   }, 30000);
 });
 
-describe('gbrain book-mirror — source file invariants', () => {
+describe('voltmind book-mirror — source file invariants', () => {
   const source = readFileSync(
     join(REPO_ROOT, 'src/commands/book-mirror.ts'),
     'utf-8',

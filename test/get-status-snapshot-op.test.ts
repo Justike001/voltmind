@@ -4,11 +4,11 @@
  * Pins the v0.41.19.0 wave's per-op decisions:
  *   - scope: 'admin' (codex MAJOR-9 / D10 — prevents read-scoped clients
  *     from seeing brain-host operational state).
- *   - localOnly: false (remote thin-client `gbrain status` callers need
+ *   - localOnly: false (remote thin-client `voltmind status` callers need
  *     it via HTTP MCP — that's the whole point).
  *   - payload returns ONLY {schema_version: 1, sync, cycle}. Locks /
  *     Workers / Queue / Autopilot are deliberately omitted from the
- *     remote shape; the local CLI's `gbrain status` renders them as
+ *     remote shape; the local CLI's `voltmind status` renders them as
  *     "N/A on remote brain" instead.
  *
  * Hermetic — stubs the engine. The cycle / sync helpers degrade

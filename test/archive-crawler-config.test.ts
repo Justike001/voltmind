@@ -2,10 +2,10 @@
  * Tests for src/core/archive-crawler-config.ts (D12 + codex HIGH-4 fix).
  *
  * The canonical safety contract: archive-crawler refuses to run unless
- * `archive-crawler.scan_paths:` is explicitly set in gbrain.yml.
+ * `archive-crawler.scan_paths:` is explicitly set in voltmind.yml.
  * These tests pin every gate in that contract:
- *   - missing gbrain.yml -> missing_section
- *   - gbrain.yml without the section -> missing_section
+ *   - missing voltmind.yml -> missing_section
+ *   - voltmind.yml without the section -> missing_section
  *   - empty scan_paths -> empty_scan_paths
  *   - relative path -> invalid_path
  *   - path traversal (..) -> invalid_path
@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 function writeYaml(content: string): string {
-  const path = join(workdir, 'gbrain.yml');
+  const path = join(workdir, 'voltmind.yml');
   writeFileSync(path, content);
   return path;
 }
@@ -57,7 +57,7 @@ describe('loadArchiveCrawlerConfig — D12 missing_section', () => {
     }
   });
 
-  it('throws missing_section when gbrain.yml does not exist', () => {
+  it('throws missing_section when voltmind.yml does not exist', () => {
     expect(() => loadArchiveCrawlerConfig(workdir)).toThrow(ArchiveCrawlerConfigError);
     try {
       loadArchiveCrawlerConfig(workdir);
@@ -66,7 +66,7 @@ describe('loadArchiveCrawlerConfig — D12 missing_section', () => {
     }
   });
 
-  it('throws missing_section when gbrain.yml exists but has no archive-crawler section', () => {
+  it('throws missing_section when voltmind.yml exists but has no archive-crawler section', () => {
     writeYaml('storage:\n  db_tracked:\n    - originals/\n');
     expect(() => loadArchiveCrawlerConfig(workdir)).toThrow(ArchiveCrawlerConfigError);
     try {

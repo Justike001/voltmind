@@ -3,7 +3,7 @@
 //
 // Tier 3 fast-restore: boot a fresh PGLite, run the full initSchema (forward
 // bootstrap + PGLITE_SCHEMA_SQL + every migration), dump the post-init state
-// to a tar fixture. Test files that read GBRAIN_PGLITE_SNAPSHOT can skip the
+// to a tar fixture. Test files that read VOLTMIND_PGLITE_SNAPSHOT can skip the
 // 1-3 seconds of cold init and load the post-schema state directly.
 //
 // Output: test/fixtures/pglite-snapshot.tar (binary, gitignored)
@@ -41,7 +41,7 @@ async function main() {
   const engine = new PGLiteEngine();
 
   // Bypass the env-aware short-circuit: we WANT a real init here.
-  delete process.env.GBRAIN_PGLITE_SNAPSHOT;
+  delete process.env.VOLTMIND_PGLITE_SNAPSHOT;
 
   await engine.connect({});
   console.log(`[build-pglite-snapshot] running initSchema (forward bootstrap + ${MIGRATIONS.length} migrations)...`);

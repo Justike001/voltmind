@@ -216,7 +216,7 @@ describe('formatAbReport', () => {
       decisive_trials: 0,
     }, 30);
     expect(out).toContain('No data yet');
-    expect(out).toContain('gbrain think --ab');
+    expect(out).toContain('voltmind think --ab');
   });
 
   test('decisive-trials breakdown', () => {

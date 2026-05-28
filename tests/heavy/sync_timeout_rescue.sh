@@ -56,7 +56,7 @@ WAVES="${WAVES:-3}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-5}"
 STRICT="${STRICT:-1}"
 
-LOG_DIR="${GBRAIN_HOME:-$HOME/.gbrain}/audit"
+LOG_DIR="${VOLTMIND_HOME:-$HOME/.voltmind}/audit"
 mkdir -p "$LOG_DIR"
 TS=$(date -u +%Y%m%d-%H%M%SZ)
 WORKLOAD_OUT="$LOG_DIR/heavy-sync_timeout_rescue-$TS.json"

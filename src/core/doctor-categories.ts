@@ -16,7 +16,7 @@
  *             lock scope, reranker/provider reachability. The "is the
  *             machinery actually running?" question.
  *   - meta  : schema version, migrations, upgrade trail, eval capture, slug
- *             fallback audit, schema-pack drift. The "is gbrain itself
+ *             fallback audit, schema-pack drift. The "is voltmind itself
  *             coherent?" question.
  *
  * Why this matters: the doctor's legacy `health_score` ( 100 − 20×fails −
@@ -144,7 +144,7 @@ export const OPS_CHECK_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * gbrain-itself coherence signals. Schema migrations, version drift, audit
+ * voltmind-itself coherence signals. Schema migrations, version drift, audit
  * housekeeping. Default category for unknown names (with stderr warn).
  */
 export const META_CHECK_NAMES: ReadonlySet<string> = new Set([
@@ -193,7 +193,7 @@ export function categorizeCheck(name: string): CheckCategory {
  * Skill-category check group. Used by buildChecks's scope-branch gates to
  * SKIP the (expensive, filesystem-walking) skill check group when the caller
  * asked for scope=brain. This is the load-bearing escape hatch that makes
- * `gbrain doctor --scope=brain` sub-second on a brain with thousands of
+ * `voltmind doctor --scope=brain` sub-second on a brain with thousands of
  * skills (per D9 in the plan).
  *
  * Use this set as the source of truth for "do these checks belong to the

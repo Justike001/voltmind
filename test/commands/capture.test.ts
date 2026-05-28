@@ -1,5 +1,5 @@
 /**
- * gbrain capture CLI verb tests.
+ * voltmind capture CLI verb tests.
  *
  * Pure helper coverage (parseArgs, defaultSlug, buildContent) + an
  * integration smoke that the local-install path lands a page when the
@@ -33,7 +33,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
-  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-capture-'));
+  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-capture-'));
   brainDir = path.join(tmpRoot, 'brain');
   fs.mkdirSync(brainDir, { recursive: true });
   await engine.setConfig('sync.repo_path', brainDir);
@@ -233,6 +233,6 @@ describe('capture — help', () => {
     } finally {
       console.log = origLog;
     }
-    expect(logCaptured.join('\n')).toContain('Usage: gbrain capture');
+    expect(logCaptured.join('\n')).toContain('Usage: voltmind capture');
   });
 });

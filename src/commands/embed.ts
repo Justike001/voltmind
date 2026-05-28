@@ -35,7 +35,7 @@ export interface EmbedOpts {
    * Optional progress callback. Called after each page. CLI wrappers
    * supply a reporter.tick()-backed implementation; Minion handlers
    * supply a job.updateProgress()-backed one so per-job progress lives
-   * in the DB where `gbrain jobs get` can read it.
+   * in the DB where `voltmind jobs get` can read it.
    */
   onProgress?: (done: number, total: number, embedded: number) => void;
   /**
@@ -56,7 +56,7 @@ export interface EmbedOpts {
   priority?: 'recent';
   /**
    * v0.41.18.0 (A13): catch-up mode removes the wall-clock cap and loops
-   * until countStaleChunks() returns 0. Used by `gbrain embed --stale
+   * until countStaleChunks() returns 0. Used by `voltmind embed --stale
    * --catch-up` and by the embed-catch-up Minion handler that the onboard
    * remediation submits on big stale backlogs.
    */
@@ -260,7 +260,7 @@ export async function runEmbed(engine: BrainEngine, args: string[]): Promise<Emb
   } else {
     const slug = args.find(a => !a.startsWith('--'));
     if (!slug) {
-      serr('Usage: gbrain embed [<slug>|--all|--stale|--slugs s1 s2 ...] [--dry-run] [--batch-size N] [--priority recent] [--catch-up]');
+      serr('Usage: voltmind embed [<slug>|--all|--stale|--slugs s1 s2 ...] [--dry-run] [--batch-size N] [--priority recent] [--catch-up]');
       process.exit(1);
     }
     opts = { slug, dryRun, sourceId, batchSize, priority, catchUp };
@@ -410,7 +410,7 @@ async function embedAll(
   // chunks that already have embeddings.
   // ─────────────────────────────────────────────────────────────
   if (staleOnly) {
-    // D7: thread sourceId so `gbrain embed --stale --source X` actually scopes.
+    // D7: thread sourceId so `voltmind embed --stale --source X` actually scopes.
     // v0.41.18.0 (A13): thread batchSize/priority/catchUp into the stale path.
     return await embedAllStale(engine, sourceId, dryRun, result, onProgress, staleOpts);
   }
@@ -418,7 +418,7 @@ async function embedAll(
   // v0.31.12: when sourceId is set, scope listPages to that source.
   // v0.41 (D8 + Codex r2 #11): apply embed-skip filter via the shared
   // helper so the `--all` path honors `frontmatter.embed_skip` the same
-  // way the `--stale` path does. Without this filter, `gbrain embed --all`
+  // way the `--stale` path does. Without this filter, `voltmind embed --all`
   // (common after model swaps) re-embeds every soft-blocked page,
   // defeating the soft-block. Filtering JS-side here mirrors the SQL-side
   // filter that listStaleChunks/countStaleChunks apply on --stale.
@@ -437,8 +437,8 @@ async function embedAll(
   // Default 20: keeps us well under OpenAI's embedding RPM limit
   // (3000+/min for tier 1 = 50+/sec, 20 parallel is safely below) and
   // avoids overwhelming postgres connection pools. Users can tune via
-  // GBRAIN_EMBED_CONCURRENCY env var based on their tier/infra.
-  const CONCURRENCY = parseInt(process.env.GBRAIN_EMBED_CONCURRENCY || '20', 10);
+  // VOLTMIND_EMBED_CONCURRENCY env var based on their tier/infra.
+  const CONCURRENCY = parseInt(process.env.VOLTMIND_EMBED_CONCURRENCY || '20', 10);
 
   async function embedOnePage(page: typeof pages[number]) {
     // v0.31.12: thread source_id from the page row so getChunks/upsertChunks
@@ -573,7 +573,7 @@ async function embedAllStale(
   // (page_id, chunk_index). Each query finishes in <1s.
   // v0.41.18.0 (A13): --batch-size N CLI flag overrides hardcoded 2000 default.
   const PAGE_SIZE = staleOpts?.batchSize ?? 2000;
-  const CONCURRENCY = parseInt(process.env.GBRAIN_EMBED_CONCURRENCY || '20', 10);
+  const CONCURRENCY = parseInt(process.env.VOLTMIND_EMBED_CONCURRENCY || '20', 10);
 
   // D3 + D3a + D8: wall-clock budget. 30 min default; env override.
   // v0.41.18.0 (A13): --catch-up removes the wall-clock cap entirely so the
@@ -582,7 +582,7 @@ async function embedAllStale(
   // still wraps for SIGINT propagation; just the timer never fires.
   const BUDGET_MS = staleOpts?.catchUp
     ? Number.MAX_SAFE_INTEGER
-    : parseInt(process.env.GBRAIN_EMBED_TIME_BUDGET_MS || `${30 * 60 * 1000}`, 10);
+    : parseInt(process.env.VOLTMIND_EMBED_TIME_BUDGET_MS || `${30 * 60 * 1000}`, 10);
   const budgetController = new AbortController();
   const budgetTimer = setTimeout(() => budgetController.abort(), BUDGET_MS);
   const budgetSignal = budgetController.signal;

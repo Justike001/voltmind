@@ -2,7 +2,7 @@
  * v0.34 W3 — MCP exposure of code-intel ops.
  *
  * Pre-v0.34 code-callers / code-callees / code-def / code-refs lived in
- * CLI_ONLY at cli.ts:30. Agents calling gbrain via MCP couldn't reach
+ * CLI_ONLY at cli.ts:30. Agents calling voltmind via MCP couldn't reach
  * them and fell through to text search.
  *
  * This E2E pins:
@@ -27,7 +27,7 @@ import {
   CODE_REFS_DESCRIPTION,
 } from '../../src/core/operations-descriptions.ts';
 import { resetPgliteState } from '../helpers/reset-pglite.ts';
-import type { GBrainConfig } from '../../src/core/config.ts';
+import type { VoltMindConfig } from '../../src/core/config.ts';
 import type { Logger } from '../../src/core/operations.ts';
 
 let engine: PGLiteEngine;
@@ -268,7 +268,7 @@ function makeCtx(engine: PGLiteEngine, sourceId: string): any {
   };
   return {
     engine,
-    config: {} as GBrainConfig,
+    config: {} as VoltMindConfig,
     logger,
     dryRun: false,
     remote: false,

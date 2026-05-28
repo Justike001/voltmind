@@ -1,6 +1,6 @@
 /**
  * subagent-audit tests. Exercises filename rotation, best-effort writes, and
- * the readback path used by `gbrain agent logs`. No real engine; purely
+ * the readback path used by `voltmind agent logs`. No real engine; purely
  * filesystem.
  */
 
@@ -16,16 +16,16 @@ import {
 } from '../src/core/minions/handlers/subagent-audit.ts';
 
 let tmpDir: string;
-const savedAuditDir = process.env.GBRAIN_AUDIT_DIR;
+const savedAuditDir = process.env.VOLTMIND_AUDIT_DIR;
 
 beforeAll(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'subagent-audit-test-'));
-  process.env.GBRAIN_AUDIT_DIR = tmpDir;
+  process.env.VOLTMIND_AUDIT_DIR = tmpDir;
 });
 
 afterAll(() => {
-  if (savedAuditDir === undefined) delete process.env.GBRAIN_AUDIT_DIR;
-  else process.env.GBRAIN_AUDIT_DIR = savedAuditDir;
+  if (savedAuditDir === undefined) delete process.env.VOLTMIND_AUDIT_DIR;
+  else process.env.VOLTMIND_AUDIT_DIR = savedAuditDir;
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -103,7 +103,7 @@ describe('logSubagentHeartbeat', () => {
 
   test('best-effort: write failure does not throw', () => {
     const bogus = '/dev/null/not-a-dir';
-    process.env.GBRAIN_AUDIT_DIR = bogus;
+    process.env.VOLTMIND_AUDIT_DIR = bogus;
     try {
       expect(() => logSubagentHeartbeat({
         job_id: 1,
@@ -111,7 +111,7 @@ describe('logSubagentHeartbeat', () => {
         turn_idx: 0,
       })).not.toThrow();
     } finally {
-      process.env.GBRAIN_AUDIT_DIR = tmpDir;
+      process.env.VOLTMIND_AUDIT_DIR = tmpDir;
     }
   });
 });

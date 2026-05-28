@@ -18,7 +18,7 @@ import {
 let lockDir: string;
 
 beforeEach(() => {
-  lockDir = mkdtempSync(join(tmpdir(), 'gbrain-pack-lock-test-'));
+  lockDir = mkdtempSync(join(tmpdir(), 'voltmind-pack-lock-test-'));
 });
 
 afterEach(() => {

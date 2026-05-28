@@ -54,36 +54,36 @@ describe('detectEnvOverride (pure)', () => {
 
   test('triggered:false when env matches target exactly', () => {
     const w = detectEnvOverride('zeroentropyai:zembed-1', 1280, {
-      GBRAIN_EMBEDDING_MODEL: 'zeroentropyai:zembed-1',
-      GBRAIN_EMBEDDING_DIMENSIONS: '1280',
+      VOLTMIND_EMBEDDING_MODEL: 'zeroentropyai:zembed-1',
+      VOLTMIND_EMBEDDING_DIMENSIONS: '1280',
     });
     expect(w.triggered).toBe(false);
   });
 
-  test('triggered:true on GBRAIN_EMBEDDING_MODEL mismatch (1 var)', () => {
+  test('triggered:true on VOLTMIND_EMBEDDING_MODEL mismatch (1 var)', () => {
     const w = detectEnvOverride('zeroentropyai:zembed-1', 1280, {
-      GBRAIN_EMBEDDING_MODEL: 'openai:text-embedding-3-large',
+      VOLTMIND_EMBEDDING_MODEL: 'openai:text-embedding-3-large',
     });
     expect(w.triggered).toBe(true);
     expect(w.vars).toHaveLength(1);
-    expect(w.vars[0].name).toBe('GBRAIN_EMBEDDING_MODEL');
+    expect(w.vars[0].name).toBe('VOLTMIND_EMBEDDING_MODEL');
     expect(w.vars[0].current).toBe('openai:text-embedding-3-large');
     expect(w.vars[0].target).toBe('zeroentropyai:zembed-1');
   });
 
-  test('GBRAIN_EMBEDDING_DIMENSIONS string-vs-number comparison works', () => {
+  test('VOLTMIND_EMBEDDING_DIMENSIONS string-vs-number comparison works', () => {
     const w = detectEnvOverride('zeroentropyai:zembed-1', 1280, {
-      GBRAIN_EMBEDDING_DIMENSIONS: '1536',
+      VOLTMIND_EMBEDDING_DIMENSIONS: '1536',
     });
     expect(w.triggered).toBe(true);
-    expect(w.vars[0].name).toBe('GBRAIN_EMBEDDING_DIMENSIONS');
+    expect(w.vars[0].name).toBe('VOLTMIND_EMBEDDING_DIMENSIONS');
     expect(w.vars[0].current).toBe('1536');
     expect(w.vars[0].target).toBe('1280');
   });
 
   test('NaN dim treated as mismatch (defensive)', () => {
     const w = detectEnvOverride('zeroentropyai:zembed-1', 1280, {
-      GBRAIN_EMBEDDING_DIMENSIONS: 'not-a-number',
+      VOLTMIND_EMBEDDING_DIMENSIONS: 'not-a-number',
     });
     expect(w.triggered).toBe(true);
     expect(w.vars[0].current).toBe('not-a-number');
@@ -91,8 +91,8 @@ describe('detectEnvOverride (pure)', () => {
 
   test('both vars set + both mismatched → 2 entries', () => {
     const w = detectEnvOverride('zeroentropyai:zembed-1', 1280, {
-      GBRAIN_EMBEDDING_MODEL: 'openai:text-embedding-3-large',
-      GBRAIN_EMBEDDING_DIMENSIONS: '1536',
+      VOLTMIND_EMBEDDING_MODEL: 'openai:text-embedding-3-large',
+      VOLTMIND_EMBEDDING_DIMENSIONS: '1536',
     });
     expect(w.triggered).toBe(true);
     expect(w.vars).toHaveLength(2);
@@ -100,8 +100,8 @@ describe('detectEnvOverride (pure)', () => {
 
   test('empty-string env values treated as unset (no false-trigger)', () => {
     const w = detectEnvOverride('zeroentropyai:zembed-1', 1280, {
-      GBRAIN_EMBEDDING_MODEL: '',
-      GBRAIN_EMBEDDING_DIMENSIONS: '   ',
+      VOLTMIND_EMBEDDING_MODEL: '',
+      VOLTMIND_EMBEDDING_DIMENSIONS: '   ',
     });
     expect(w.triggered).toBe(false);
   });
@@ -113,7 +113,7 @@ describe('formatEnvOverrideWarning', () => {
   test('produces ASCII-only box (no Unicode box-drawing per repo D10)', () => {
     const out = formatEnvOverrideWarning({
       triggered: true,
-      vars: [{ name: 'GBRAIN_EMBEDDING_MODEL', current: 'openai:x', target: 'zeroentropyai:zembed-1' }],
+      vars: [{ name: 'VOLTMIND_EMBEDDING_MODEL', current: 'openai:x', target: 'zeroentropyai:zembed-1' }],
     });
     // Should NOT contain any Unicode box-drawing characters
     expect(out).not.toMatch(/[╔╗╚╝═║╠╣╦╩╬]/);
@@ -125,8 +125,8 @@ describe('formatEnvOverrideWarning', () => {
     const out = formatEnvOverrideWarning({
       triggered: true,
       vars: [
-        { name: 'GBRAIN_EMBEDDING_MODEL', current: 'openai:text-embedding-3-large', target: 'zeroentropyai:zembed-1' },
-        { name: 'GBRAIN_EMBEDDING_DIMENSIONS', current: '1536', target: '1280' },
+        { name: 'VOLTMIND_EMBEDDING_MODEL', current: 'openai:text-embedding-3-large', target: 'zeroentropyai:zembed-1' },
+        { name: 'VOLTMIND_EMBEDDING_DIMENSIONS', current: '1536', target: '1280' },
       ],
     });
     for (const line of out.split('\n')) {
@@ -138,23 +138,23 @@ describe('formatEnvOverrideWarning', () => {
     const out = formatEnvOverrideWarning({
       triggered: true,
       vars: [
-        { name: 'GBRAIN_EMBEDDING_MODEL', current: 'a', target: 'b' },
-        { name: 'GBRAIN_EMBEDDING_DIMENSIONS', current: 'c', target: 'd' },
+        { name: 'VOLTMIND_EMBEDDING_MODEL', current: 'a', target: 'b' },
+        { name: 'VOLTMIND_EMBEDDING_DIMENSIONS', current: 'c', target: 'd' },
       ],
     });
-    expect(out).toContain('GBRAIN_EMBEDDING_MODEL');
-    expect(out).toContain('GBRAIN_EMBEDDING_DIMENSIONS');
+    expect(out).toContain('VOLTMIND_EMBEDDING_MODEL');
+    expect(out).toContain('VOLTMIND_EMBEDDING_DIMENSIONS');
   });
 
   test('includes paste-ready `unset` command listing every var', () => {
     const out = formatEnvOverrideWarning({
       triggered: true,
       vars: [
-        { name: 'GBRAIN_EMBEDDING_MODEL', current: 'a', target: 'b' },
-        { name: 'GBRAIN_EMBEDDING_DIMENSIONS', current: 'c', target: 'd' },
+        { name: 'VOLTMIND_EMBEDDING_MODEL', current: 'a', target: 'b' },
+        { name: 'VOLTMIND_EMBEDDING_DIMENSIONS', current: 'c', target: 'd' },
       ],
     });
-    expect(out).toContain('unset GBRAIN_EMBEDDING_MODEL GBRAIN_EMBEDDING_DIMENSIONS');
+    expect(out).toContain('unset VOLTMIND_EMBEDDING_MODEL VOLTMIND_EMBEDDING_DIMENSIONS');
   });
 });
 
@@ -162,7 +162,7 @@ describe('formatEnvOverrideWarning', () => {
 
 describe('applyRetrievalUpgrade env-gate (D9 #7)', () => {
   test('refused on env-triggered apply; ZERO setConfig calls fired', async () => {
-    await withEnv({ GBRAIN_EMBEDDING_MODEL: 'openai:text-embedding-3-large' }, async () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MODEL: 'openai:text-embedding-3-large' }, async () => {
       // Spy on engine.setConfig
       const setConfigSpy: string[] = [];
       const realSetConfig = engine.setConfig.bind(engine);
@@ -195,7 +195,7 @@ describe('applyRetrievalUpgrade env-gate (D9 #7)', () => {
         if (result.status === 'refused') {
           expect(result.reason).toBe('env_override');
           expect(result.warning.triggered).toBe(true);
-          expect(result.warning.vars[0].name).toBe('GBRAIN_EMBEDDING_MODEL');
+          expect(result.warning.vars[0].name).toBe('VOLTMIND_EMBEDDING_MODEL');
         }
         // THE LOAD-BEARING ASSERTION: no setConfig calls fired during the
         // refused apply. Pre-fix, KEY_PREVIOUS_SNAPSHOT and KEY_REQUESTED
@@ -215,7 +215,7 @@ describe('applyRetrievalUpgrade env-gate (D9 #7)', () => {
   });
 
   test('--ignore-env-override proceeds with apply when env triggered', async () => {
-    await withEnv({ GBRAIN_EMBEDDING_MODEL: 'openai:text-embedding-3-large' }, async () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MODEL: 'openai:text-embedding-3-large' }, async () => {
       await engine.setConfig('embedding_model', 'openai:text-embedding-3-large');
       for (let i = 0; i < 101; i++) {
         await engine.putPage(`note/x-${i}`, {
@@ -236,7 +236,7 @@ describe('applyRetrievalUpgrade env-gate (D9 #7)', () => {
   test('env not triggered → proceeds silently (no env vars set)', async () => {
     // No env vars at all
     await withEnv(
-      { GBRAIN_EMBEDDING_MODEL: undefined, GBRAIN_EMBEDDING_DIMENSIONS: undefined },
+      { VOLTMIND_EMBEDDING_MODEL: undefined, VOLTMIND_EMBEDDING_DIMENSIONS: undefined },
       async () => {
         await engine.setConfig('embedding_model', 'openai:text-embedding-3-large');
         for (let i = 0; i < 101; i++) {
@@ -255,7 +255,7 @@ describe('applyRetrievalUpgrade env-gate (D9 #7)', () => {
   });
 
   test('result tagged union shape pinned (TypeScript discriminator + runtime)', async () => {
-    await withEnv({ GBRAIN_EMBEDDING_MODEL: 'openai:other-model' }, async () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MODEL: 'openai:other-model' }, async () => {
       await engine.setConfig('embedding_model', 'openai:text-embedding-3-large');
       for (let i = 0; i < 101; i++) {
         await engine.putPage(`note/z-${i}`, {
@@ -287,7 +287,7 @@ describe('resumeRetrievalUpgrade env-gate (D9 #6)', () => {
     await engine.setConfig(KEY_REQUESTED, 'true');
     await engine.setConfig('embedding_model', 'openai:text-embedding-3-large');
 
-    await withEnv({ GBRAIN_EMBEDDING_MODEL: 'openai:still-old-model' }, async () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MODEL: 'openai:still-old-model' }, async () => {
       const setConfigSpy: string[] = [];
       const realSetConfig = engine.setConfig.bind(engine);
       (engine as unknown as { setConfig: typeof engine.setConfig }).setConfig =
@@ -317,7 +317,7 @@ describe('resumeRetrievalUpgrade env-gate (D9 #6)', () => {
     await engine.setConfig(KEY_REQUESTED, 'true');
     await engine.setConfig('embedding_model', 'openai:text-embedding-3-large');
 
-    await withEnv({ GBRAIN_EMBEDDING_MODEL: 'openai:still-old' }, async () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MODEL: 'openai:still-old' }, async () => {
       const result = await resumeRetrievalUpgrade(engine, { ignoreEnvOverride: true });
       expect(result.status).toBe('applied');
       const appliedFlag = await engine.getConfig(KEY_APPLIED);

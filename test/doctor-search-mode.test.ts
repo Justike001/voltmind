@@ -30,7 +30,7 @@ describe('checkSearchMode [CDX-20]', () => {
     expect(c.name).toBe('search_mode');
     expect(c.status).toBe('ok'); // never warn, never dock score
     expect(c.message).toMatch(/unset/i);
-    expect(c.message).toContain('gbrain search modes');
+    expect(c.message).toContain('voltmind search modes');
   });
 
   test('mode set, no overrides → ok with "canonical" message', async () => {
@@ -50,7 +50,7 @@ describe('checkSearchMode [CDX-20]', () => {
     expect(c.message).toContain('conservative');
     expect(c.message).toContain('search.cache.enabled');
     expect(c.message).toContain('search.tokenBudget');
-    expect(c.message).toContain('gbrain search modes --reset');
+    expect(c.message).toContain('voltmind search modes --reset');
   });
 
   test('upgrade-notice state key is excluded from override count', async () => {

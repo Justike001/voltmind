@@ -70,7 +70,7 @@ describe('v0.12.0 — Knowledge Graph auto-wire migration', () => {
     expect(content).toContain('feature_pitch:');
     expect(content).toContain('Knowledge Graph');
     // Phase reference for the host agent that wants the manual recovery path.
-    expect(content).toContain('gbrain extract links --source db');
-    expect(content).toContain('gbrain extract timeline --source db');
+    expect(content).toContain('voltmind extract links --source db');
+    expect(content).toContain('voltmind extract timeline --source db');
   });
 });

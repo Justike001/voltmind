@@ -248,7 +248,7 @@ describe('runPhaseGradeTakes — phase integration', () => {
     expect(details.auto_applied).toBe(1);
     expect(resolves).toHaveLength(1);
     expect(resolves[0]!.resolution.quality).toBe('incorrect');
-    expect(resolves[0]!.resolution.resolvedBy).toBe('gbrain:grade_takes');
+    expect(resolves[0]!.resolution.resolvedBy).toBe('voltmind:grade_takes');
   });
 
   test('auto-resolve ON but confidence below threshold → cached only, NOT applied', async () => {

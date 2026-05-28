@@ -218,14 +218,14 @@ describe('isEvalCaptureEnabled / isEvalScrubEnabled (CONTRIBUTOR_MODE-gated)', (
   // v0.25.0 flipped the default: was on for everyone, now off unless either
   // the env var or an explicit config flag is set. Tests scope env mutation
   // so they don't leak across describe blocks.
-  const origMode = process.env.GBRAIN_CONTRIBUTOR_MODE;
+  const origMode = process.env.VOLTMIND_CONTRIBUTOR_MODE;
   const restore = () => {
-    if (origMode === undefined) delete process.env.GBRAIN_CONTRIBUTOR_MODE;
-    else process.env.GBRAIN_CONTRIBUTOR_MODE = origMode;
+    if (origMode === undefined) delete process.env.VOLTMIND_CONTRIBUTOR_MODE;
+    else process.env.VOLTMIND_CONTRIBUTOR_MODE = origMode;
   };
 
   test('defaults to OFF when config is missing AND CONTRIBUTOR_MODE unset', () => {
-    delete process.env.GBRAIN_CONTRIBUTOR_MODE;
+    delete process.env.VOLTMIND_CONTRIBUTOR_MODE;
     try {
       expect(isEvalCaptureEnabled(null)).toBe(false);
       expect(isEvalCaptureEnabled(undefined)).toBe(false);
@@ -233,7 +233,7 @@ describe('isEvalCaptureEnabled / isEvalScrubEnabled (CONTRIBUTOR_MODE-gated)', (
   });
 
   test('CONTRIBUTOR_MODE=1 turns capture on without any config', () => {
-    process.env.GBRAIN_CONTRIBUTOR_MODE = '1';
+    process.env.VOLTMIND_CONTRIBUTOR_MODE = '1';
     try {
       expect(isEvalCaptureEnabled(null)).toBe(true);
       expect(isEvalCaptureEnabled(undefined)).toBe(true);
@@ -241,22 +241,22 @@ describe('isEvalCaptureEnabled / isEvalScrubEnabled (CONTRIBUTOR_MODE-gated)', (
   });
 
   test('CONTRIBUTOR_MODE=anything-else does NOT turn capture on (strict equality)', () => {
-    process.env.GBRAIN_CONTRIBUTOR_MODE = 'true';
+    process.env.VOLTMIND_CONTRIBUTOR_MODE = 'true';
     try {
       expect(isEvalCaptureEnabled(null)).toBe(false);
     } finally { restore(); }
-    process.env.GBRAIN_CONTRIBUTOR_MODE = 'yes';
+    process.env.VOLTMIND_CONTRIBUTOR_MODE = 'yes';
     try {
       expect(isEvalCaptureEnabled(null)).toBe(false);
     } finally { restore(); }
-    process.env.GBRAIN_CONTRIBUTOR_MODE = '';
+    process.env.VOLTMIND_CONTRIBUTOR_MODE = '';
     try {
       expect(isEvalCaptureEnabled(null)).toBe(false);
     } finally { restore(); }
   });
 
   test('explicit config eval.capture=true wins over absent CONTRIBUTOR_MODE', () => {
-    delete process.env.GBRAIN_CONTRIBUTOR_MODE;
+    delete process.env.VOLTMIND_CONTRIBUTOR_MODE;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const enabled: any = { engine: 'pglite', eval: { capture: true } };
@@ -265,7 +265,7 @@ describe('isEvalCaptureEnabled / isEvalScrubEnabled (CONTRIBUTOR_MODE-gated)', (
   });
 
   test('explicit config eval.capture=false wins over CONTRIBUTOR_MODE=1', () => {
-    process.env.GBRAIN_CONTRIBUTOR_MODE = '1';
+    process.env.VOLTMIND_CONTRIBUTOR_MODE = '1';
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const disabled: any = { engine: 'pglite', eval: { capture: false } };
@@ -274,13 +274,13 @@ describe('isEvalCaptureEnabled / isEvalScrubEnabled (CONTRIBUTOR_MODE-gated)', (
   });
 
   test('config eval present but capture key undefined falls through to env check', () => {
-    delete process.env.GBRAIN_CONTRIBUTOR_MODE;
+    delete process.env.VOLTMIND_CONTRIBUTOR_MODE;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const partial: any = { engine: 'pglite', eval: { scrub_pii: false } };
       expect(isEvalCaptureEnabled(partial)).toBe(false);
     } finally { restore(); }
-    process.env.GBRAIN_CONTRIBUTOR_MODE = '1';
+    process.env.VOLTMIND_CONTRIBUTOR_MODE = '1';
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const partial: any = { engine: 'pglite', eval: { scrub_pii: false } };
@@ -300,7 +300,7 @@ describe('isEvalCaptureEnabled / isEvalScrubEnabled (CONTRIBUTOR_MODE-gated)', (
   });
 
   test('isEvalScrubEnabled is independent of CONTRIBUTOR_MODE', () => {
-    process.env.GBRAIN_CONTRIBUTOR_MODE = '1';
+    process.env.VOLTMIND_CONTRIBUTOR_MODE = '1';
     try {
       expect(isEvalScrubEnabled(null)).toBe(true);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

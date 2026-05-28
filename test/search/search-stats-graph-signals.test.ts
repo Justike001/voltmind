@@ -1,5 +1,5 @@
 /**
- * v0.40.4.0 — `gbrain search stats` graph_signals section.
+ * v0.40.4.0 — `voltmind search stats` graph_signals section.
  *
  * Pins:
  *   - readGraphSignalsStats reads search.graph_signals config first
@@ -9,7 +9,7 @@
  *   - failures_count reflects JSONL audit events in window.
  *   - failures_by_reason buckets by first word of error_summary.
  *
- * Hermetic via PGLite + withEnv for GBRAIN_AUDIT_DIR.
+ * Hermetic via PGLite + withEnv for VOLTMIND_AUDIT_DIR.
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
@@ -20,14 +20,14 @@ import * as path from 'node:path';
 import { withEnv } from '../helpers/with-env.ts';
 
 // Internal helpers — pull via dynamic import in the tests so the
-// withEnv-wrapped GBRAIN_AUDIT_DIR is honored by the audit writer's
+// withEnv-wrapped VOLTMIND_AUDIT_DIR is honored by the audit writer's
 // lazy `resolveAuditDir()` calls.
 
 let engine: PGLiteEngine;
 const tmpDirs: string[] = [];
 
 function mkTmp(): string {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-graph-stats-test-'));
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-graph-stats-test-'));
   tmpDirs.push(d);
   return d;
 }
@@ -55,7 +55,7 @@ describe('search-stats graph_signals section — config resolution', () => {
   test('search.graph_signals=true → enabled true, source config', async () => {
     await engine.setConfig('search.graph_signals', 'true');
     const dir = mkTmp();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const mod = await import(`../../src/commands/search.ts?stats-test=${Date.now()}`);
       // private function isn't exported — drive it via the public stats
       // surface and parse JSON output.
@@ -79,7 +79,7 @@ describe('search-stats graph_signals section — config resolution', () => {
   test('config absent + mode=conservative → enabled false, source mode_default', async () => {
     await engine.setConfig('search.mode', 'conservative');
     const dir = mkTmp();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const cmd = await import('../../src/commands/search.ts');
       const captured: string[] = [];
       const origLog = console.log;
@@ -97,7 +97,7 @@ describe('search-stats graph_signals section — config resolution', () => {
 
   test('config absent + no mode (default balanced) → enabled true, source mode_default', async () => {
     const dir = mkTmp();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const cmd = await import('../../src/commands/search.ts');
       const captured: string[] = [];
       const origLog = console.log;
@@ -117,7 +117,7 @@ describe('search-stats graph_signals section — config resolution', () => {
 describe('search-stats graph_signals section — failure rollup', () => {
   test('JSONL audit failures surfaced in failures_count + failures_by_reason', async () => {
     const dir = mkTmp();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       // Seed audit events using the audit-writer primitive directly so
       // we get realistic file shape.
       const { createAuditWriter } = await import('../../src/core/audit/audit-writer.ts');
@@ -144,7 +144,7 @@ describe('search-stats graph_signals section — failure rollup', () => {
 
   test('no failures → failures_count 0, empty failures_by_reason', async () => {
     const dir = mkTmp();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const cmd = await import('../../src/commands/search.ts');
       const captured: string[] = [];
       const origLog = console.log;
@@ -164,7 +164,7 @@ describe('search-stats graph_signals section — failure rollup', () => {
 describe('search-stats graph_signals section — human output', () => {
   test('human output includes "Graph signals:" header + enabled line', async () => {
     const dir = mkTmp();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const cmd = await import('../../src/commands/search.ts');
       const captured: string[] = [];
       const origLog = console.log;

@@ -21,7 +21,7 @@ import { operationsByName } from '../src/core/operations.ts';
  *   - dry_run path
  *   - Happy-path submission writes audit row + queue row
  *
- * Audit-trail writes go to a tmpdir via GBRAIN_AUDIT_DIR (withEnv-wrapped).
+ * Audit-trail writes go to a tmpdir via VOLTMIND_AUDIT_DIR (withEnv-wrapped).
  */
 
 const submit_agent = operationsByName['submit_agent'];
@@ -104,7 +104,7 @@ function makeCtx(opts: { clientId?: string; remote?: boolean; dryRun?: boolean }
 }
 
 async function callSubmitAgent(ctx: any, params: Record<string, unknown>): Promise<any> {
-  return await withEnv({ GBRAIN_AUDIT_DIR: tmpAuditDir }, async () => {
+  return await withEnv({ VOLTMIND_AUDIT_DIR: tmpAuditDir }, async () => {
     return await submit_agent.handler(ctx, params);
   });
 }
@@ -122,10 +122,10 @@ describe('submit_agent op (v0.38 Slice 3 — remote-callable agent dispatch with
   });
 
   describe('local CLI bypass (ctx.remote === false)', () => {
-    it('throws invalid_request — local CLI must use gbrain agent run', async () => {
+    it('throws invalid_request — local CLI must use voltmind agent run', async () => {
       const ctx = makeCtx({ remote: false });
       await expect(callSubmitAgent(ctx, { prompt: 'hi' })).rejects.toThrow(
-        /local CLI.*gbrain agent run/i,
+        /local CLI.*voltmind agent run/i,
       );
     });
   });

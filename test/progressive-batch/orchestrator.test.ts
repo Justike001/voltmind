@@ -8,7 +8,7 @@
  * Hermetic: no PGLite, no Postgres, no real LLM. Every BudgetTracker
  * is constructed inline; the AsyncLocalStorage scope is set via
  * `withBudgetTracker` from gateway.ts. Audit JSONL writes go to
- * `GBRAIN_AUDIT_DIR=<tempdir>` to isolate from the user's real audit
+ * `VOLTMIND_AUDIT_DIR=<tempdir>` to isolate from the user's real audit
  * dir. We use `withEnv` from test/helpers/with-env.ts per CLAUDE.md
  * R1 (test-isolation lint).
  */
@@ -117,13 +117,13 @@ function collectReports(): {
   };
 }
 
-// Use a per-test tempdir for audit writes via GBRAIN_AUDIT_DIR.
+// Use a per-test tempdir for audit writes via VOLTMIND_AUDIT_DIR.
 function makeAuditEnv(): Record<string, string> {
   return {
-    GBRAIN_AUDIT_DIR: mkdtempSync(join(tmpdir(), 'pb-audit-')),
-    GBRAIN_PROGRESSIVE_BATCH_AUTO: '1',
-    GBRAIN_PROGRESSIVE_BATCH_DISABLED: undefined as unknown as string,
-    GBRAIN_PROGRESSIVE_BATCH_STAGES: undefined as unknown as string,
+    VOLTMIND_AUDIT_DIR: mkdtempSync(join(tmpdir(), 'pb-audit-')),
+    VOLTMIND_PROGRESSIVE_BATCH_AUTO: '1',
+    VOLTMIND_PROGRESSIVE_BATCH_DISABLED: undefined as unknown as string,
+    VOLTMIND_PROGRESSIVE_BATCH_STAGES: undefined as unknown as string,
   };
 }
 
@@ -152,21 +152,21 @@ describe('parseEnvStages', () => {
 
 describe('resolveStages', () => {
   test('env override wins', async () => {
-    await withEnv({ GBRAIN_PROGRESSIVE_BATCH_STAGES: '5,50,500' }, async () => {
+    await withEnv({ VOLTMIND_PROGRESSIVE_BATCH_STAGES: '5,50,500' }, async () => {
       expect(resolveStages({ label: 't', stages: [10, 100, 500] })).toEqual([
         5, 50, 500,
       ]);
     });
   });
   test('policy when env unset', async () => {
-    await withEnv({ GBRAIN_PROGRESSIVE_BATCH_STAGES: undefined as unknown as string }, async () => {
+    await withEnv({ VOLTMIND_PROGRESSIVE_BATCH_STAGES: undefined as unknown as string }, async () => {
       expect(resolveStages({ label: 't', stages: [7, 70, 700] })).toEqual([
         7, 70, 700,
       ]);
     });
   });
   test('default when both unset', async () => {
-    await withEnv({ GBRAIN_PROGRESSIVE_BATCH_STAGES: undefined as unknown as string }, async () => {
+    await withEnv({ VOLTMIND_PROGRESSIVE_BATCH_STAGES: undefined as unknown as string }, async () => {
       expect(resolveStages({ label: 't' })).toEqual([10, 100, 500]);
     });
   });
@@ -450,11 +450,11 @@ describe('runProgressiveBatch — error rate + cost cap gates', () => {
 });
 
 describe('runProgressiveBatch — D21 honest behavior preservation', () => {
-  test('GBRAIN_PROGRESSIVE_BATCH_DISABLED=1 skips ramp; goes to full', async () => {
+  test('VOLTMIND_PROGRESSIVE_BATCH_DISABLED=1 skips ramp; goes to full', async () => {
     await withEnv(
       {
         ...makeAuditEnv(),
-        GBRAIN_PROGRESSIVE_BATCH_DISABLED: '1',
+        VOLTMIND_PROGRESSIVE_BATCH_DISABLED: '1',
       },
       async () => {
         const { onStageReport, reports } = collectReports();

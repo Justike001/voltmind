@@ -154,11 +154,11 @@ describe('ingest_capture handler — validation + routing', () => {
     const ev = makeEvent({
       content: 'with provenance',
       source_kind: 'inbox-folder',
-      source_uri: '/Users/test/.gbrain/inbox/note.md',
+      source_uri: '/Users/test/.voltmind/inbox/note.md',
     });
     const result = await handler(makeJob({ event: ev }));
     expect(result.source_kind).toBe('inbox-folder');
-    expect(result.source_uri).toBe('/Users/test/.gbrain/inbox/note.md');
+    expect(result.source_uri).toBe('/Users/test/.voltmind/inbox/note.md');
   });
 });
 

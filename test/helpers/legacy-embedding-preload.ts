@@ -34,7 +34,7 @@ function applyLegacy() {
   });
 }
 
-if (process.env.GBRAIN_DEBUG_PRELOAD === '1') {
+if (process.env.VOLTMIND_DEBUG_PRELOAD === '1') {
   console.error('[legacy-embedding-preload] applying OpenAI/1536');
 }
 

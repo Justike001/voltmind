@@ -139,7 +139,7 @@ export async function extractNerLinks(
     if (batch.length === 0) return;
     if (!dryRun) {
       try {
-        created += await engine.addLinksBatch(batch); // gbrain-allow-direct-insert: extract-ner — typed NER link write
+        created += await engine.addLinksBatch(batch); // voltmind-allow-direct-insert: extract-ner — typed NER link write
       } catch {
         // batch error: drop; the per-page progress continues
       }

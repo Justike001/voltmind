@@ -1,6 +1,6 @@
-# gbrain-everything — meta-pack stacking all three lenses
+# voltmind-everything — meta-pack stacking all three lenses
 #
-# v0.41 lens packs wave. Codex outside-voice T4 resolution: gbrain's
+# v0.41 lens packs wave. Codex outside-voice T4 resolution: voltmind's
 # 7-tier active-pack resolver is single-valued, but the user's actual
 # workflow needs creator + investor + engineer simultaneously (Garry
 # switches between YC investor work, content creation, and gstack
@@ -15,8 +15,8 @@
 #      borrow_from. registry walks the chain, unions page_types +
 #      link_types + phases + calibration_domains. ZERO new architecture.
 #
-# This pack is path B. Activate via `gbrain config set schema_pack
-# gbrain-everything` and the brain runs all three lens-pack phases
+# This pack is path B. Activate via `voltmind config set schema_pack
+# voltmind-everything` and the brain runs all three lens-pack phases
 # (extract_atoms + synthesize_concepts from creator; gstack-learnings
 # bridge from engineer) AND surfaces all 7 calibration domains
 # (_overall + concept_themes + deal_success + founder_evaluation +
@@ -24,35 +24,35 @@
 #
 # Extension chain (registry resolves via extends.parent.parent.parent):
 #
-#     gbrain-everything ──extends──▶ gbrain-investor ──extends──▶ gbrain-base
+#     voltmind-everything ──extends──▶ voltmind-investor ──extends──▶ voltmind-base
 #                       │ borrow                     │
-#                       ├─ gbrain-creator
-#                       └─ gbrain-engineer
+#                       ├─ voltmind-creator
+#                       └─ voltmind-engineer
 #
 # Single-active-pack constraint preserved: this IS the active pack.
 # Registry walks its dependencies through extends + borrow_from to
 # materialize the merged view. Tested by the everything-manifest test.
 
-api_version: gbrain-schema-pack-v1
-name: gbrain-everything
+api_version: voltmind-schema-pack-v1
+name: voltmind-everything
 version: 1.0.0
-description: "Meta-pack stacking creator + investor + engineer lenses on one brain. Use this when you do investor work AND content creation AND engineering in the same brain (YC president pattern, founder pattern). Single active-pack activation via `gbrain config set schema_pack gbrain-everything` — registry walks extends + borrow_from chain to union all three lenses' page_types, phases, and calibration_domains."
-gbrain_min_version: 0.41.0
+description: "Meta-pack stacking creator + investor + engineer lenses on one brain. Use this when you do investor work AND content creation AND engineering in the same brain (YC president pattern, founder pattern). Single active-pack activation via `voltmind config set schema_pack voltmind-everything` — registry walks extends + borrow_from chain to union all three lenses' page_types, phases, and calibration_domains."
+voltmind_min_version: 0.41.0
 
-# Extends gbrain-investor (which itself extends gbrain-base) and borrows
-# from gbrain-creator + gbrain-engineer. The registry's extends chain
+# Extends voltmind-investor (which itself extends voltmind-base) and borrows
+# from voltmind-creator + voltmind-engineer. The registry's extends chain
 # walker (cap depth 8) unions every level's contributions.
-extends: gbrain-investor
+extends: voltmind-investor
 
 # Borrow types + link_types from the other two lens packs. This is the
 # composition mechanism that makes "three lenses" real without a
 # multi-active-pack architecture.
 borrow_from:
-  - pack: gbrain-creator
+  - pack: voltmind-creator
     types:
       - atom
       # concept already in base
-  - pack: gbrain-engineer
+  - pack: voltmind-engineer
     types:
       - learning
       # code + project already in base
@@ -78,16 +78,16 @@ phases:
 #
 # Aggregator algorithms are the closed enum; domain names match the
 # per-pack declarations so the JSONB scorecard keys are stable across
-# active-pack switches (a user moving from gbrain-investor to
-# gbrain-everything keeps their deal_success scorecard intact).
+# active-pack switches (a user moving from voltmind-investor to
+# voltmind-everything keeps their deal_success scorecard intact).
 calibration_domains:
-  # From gbrain-creator:
+  # From voltmind-creator:
   - name: concept_themes
     aggregator: cluster_summary
     page_types:
       - concept
 
-  # From gbrain-investor:
+  # From voltmind-investor:
   - name: deal_success
     aggregator: scalar_brier
     page_types:
@@ -101,7 +101,7 @@ calibration_domains:
     page_types:
       - thesis
 
-  # From gbrain-engineer:
+  # From voltmind-engineer:
   - name: architecture_calls
     aggregator: scalar_brier
     page_types:

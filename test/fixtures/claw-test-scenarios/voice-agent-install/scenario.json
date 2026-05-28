@@ -23,7 +23,7 @@
     "services/voice-agent/code/server.mjs",
     "services/voice-agent/code/lib/personas/mars.mjs",
     "services/voice-agent/code/lib/personas/venus.mjs",
-    "services/voice-agent/.gbrain-source.json",
+    "services/voice-agent/.voltmind-source.json",
     "services/voice-agent/package.json",
     "skills/voice-persona-mars/SKILL.md",
     "skills/voice-persona-venus/SKILL.md",
@@ -36,8 +36,8 @@
   ],
   "post_install_assertions": [
     "no_pii_leak_in_copied_tree",
-    "gbrain_source_json_has_sha256_per_file",
-    "gbrain_source_json_no_upstream_repo_field"
+    "voltmind_source_json_has_sha256_per_file",
+    "voltmind_source_json_no_upstream_repo_field"
   ],
   "max_runtime_minutes": 8
 }

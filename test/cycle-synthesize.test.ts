@@ -29,7 +29,7 @@ function makeTranscript(name: string, body: string): string {
 }
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-synth-test-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-synth-test-'));
 });
 
 describe('compileExcludePatterns', () => {
@@ -141,7 +141,7 @@ describe('discoverTranscripts', () => {
 
   test('multiple sources (corpus + meeting transcripts) merged', () => {
     makeTranscript('2026-04-25-session.txt', 'a'.repeat(3000));
-    const meetDir = mkdtempSync(join(tmpdir(), 'gbrain-meet-'));
+    const meetDir = mkdtempSync(join(tmpdir(), 'voltmind-meet-'));
     writeFileSync(join(meetDir, '2026-04-25-meeting.txt'), 'b'.repeat(3000));
     const out = discoverTranscripts({
       corpusDir: tmpDir,

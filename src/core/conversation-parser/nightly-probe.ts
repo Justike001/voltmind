@@ -12,7 +12,7 @@
  * for the doctor check to read.
  *
  * Opt-IN via:
- *   gbrain config set autopilot.conversation_parser_probe.enabled true
+ *   voltmind config set autopilot.conversation_parser_probe.enabled true
  *
  * Cost: ~$0.05/night with default fixtures × Haiku polish. Bounded
  * by the active BudgetTracker the autopilot loop creates per-tick.

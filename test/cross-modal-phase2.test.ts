@@ -22,7 +22,7 @@ import { __setDnsLookupForTests } from '../src/core/ssrf-validate.ts';
 let tmpRoot: string;
 
 beforeEach(() => {
-  tmpRoot = mkdtempSync(join(tmpdir(), 'gbrain-img-loader-'));
+  tmpRoot = mkdtempSync(join(tmpdir(), 'voltmind-img-loader-'));
 });
 
 afterEach(() => {

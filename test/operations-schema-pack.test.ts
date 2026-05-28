@@ -37,8 +37,8 @@ beforeEach(async () => {
   await resetPgliteState(engine);
   _resetPackCacheForTests();
   _resetPackLocatorForTests();
-  tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-ops-schema-test-'));
-  auditDir = mkdtempSync(join(tmpdir(), 'gbrain-ops-schema-audit-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-ops-schema-test-'));
+  auditDir = mkdtempSync(join(tmpdir(), 'voltmind-ops-schema-audit-'));
 });
 
 afterEach(() => {
@@ -60,14 +60,14 @@ function ctxOf(opts: { remote?: boolean; clientId?: string; sourceId?: string } 
 }
 
 function seedPack(packName: string): string {
-  const dir = join(tmpDir, '.gbrain', 'schema-packs', packName);
+  const dir = join(tmpDir, '.voltmind', 'schema-packs', packName);
   mkdirSync(dir, { recursive: true });
   const path = join(dir, 'pack.yaml');
-  writeFileSync(path, `api_version: gbrain-schema-pack-v1
+  writeFileSync(path, `api_version: voltmind-schema-pack-v1
 name: ${packName}
 version: 1.0.0
 description: ""
-gbrain_min_version: 0.38.0
+voltmind_min_version: 0.38.0
 extends: null
 borrow_from: []
 page_types:
@@ -129,10 +129,10 @@ describe('operation declarations', () => {
 // ── get_active_schema_pack ──────────────────────────────────────────────
 
 describe('get_active_schema_pack', () => {
-  it('returns identity packet for the bundled gbrain-base pack', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_SCHEMA_PACK: undefined }, async () => {
+  it('returns identity packet for the bundled voltmind-base pack', async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       const result = await operationsByName.get_active_schema_pack!.handler(ctxOf(), {}) as Record<string, unknown>;
-      expect(result.pack_name).toBe('gbrain-base');
+      expect(result.pack_name).toBe('voltmind-base');
       expect(result.page_types_count).toBeGreaterThan(0);
       expect(typeof result.sha8).toBe('string');
       expect(typeof result.source_tier).toBe('string');
@@ -145,10 +145,10 @@ describe('get_active_schema_pack', () => {
 
 describe('list_schema_packs', () => {
   it('returns bundled + installed', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir }, async () => {
       seedPack('mine');
       const result = await operationsByName.list_schema_packs!.handler(ctxOf(), {}) as { bundled: string[]; installed: string[] };
-      expect(result.bundled).toContain('gbrain-base');
+      expect(result.bundled).toContain('voltmind-base');
       expect(result.installed).toContain('mine');
     });
   });
@@ -158,7 +158,7 @@ describe('list_schema_packs', () => {
 
 describe('schema_stats', () => {
   it('returns coverage + per-source breakdown', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       await engine.executeRaw(
         `INSERT INTO pages (slug, source_id, source_path, type, title, compiled_truth, timeline, content_hash)
          VALUES ('a', 'default', 'people/alice.md', 'person', 'a', '', '', '')`,
@@ -174,7 +174,7 @@ describe('schema_stats', () => {
 
 describe('schema_lint', () => {
   it('lints the active pack and returns ok=true for clean pack', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       const result = await operationsByName.schema_lint!.handler(ctxOf(), {}) as Record<string, unknown>;
       expect(result.ok).toBe(true);
       expect(Array.isArray(result.errors)).toBe(true);
@@ -183,7 +183,7 @@ describe('schema_lint', () => {
   });
 
   it('returns pack_not_found for unknown pack', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir }, async () => {
       const result = await operationsByName.schema_lint!.handler(ctxOf(), { pack: 'nonexistent' }) as Record<string, unknown>;
       expect(result.error).toBe('pack_not_found');
     });
@@ -194,7 +194,7 @@ describe('schema_lint', () => {
 
 describe('schema_graph', () => {
   it('returns nodes + edges from link_types', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       const result = await operationsByName.schema_graph!.handler(ctxOf(), {}) as Record<string, unknown>;
       expect(Array.isArray(result.nodes)).toBe(true);
       expect(Array.isArray(result.edges)).toBe(true);
@@ -206,14 +206,14 @@ describe('schema_graph', () => {
 
 describe('schema_explain_type', () => {
   it('returns settings for a known type', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       const result = await operationsByName.schema_explain_type!.handler(ctxOf(), { type: 'person' }) as Record<string, unknown>;
       expect((result.type as { name?: string }).name).toBe('person');
     });
   });
 
   it('returns type_not_found for unknown type', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       const result = await operationsByName.schema_explain_type!.handler(ctxOf(), { type: 'ghost' }) as Record<string, unknown>;
       expect(result.error).toBe('type_not_found');
     });
@@ -249,7 +249,7 @@ describe('schema_review_orphans', () => {
 
 describe('schema_apply_mutations', () => {
   it('applies a single add_type mutation', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       seedPack('mine');
       const result = await operationsByName.schema_apply_mutations!.handler(ctxOf(), {
         pack: 'mine',
@@ -263,7 +263,7 @@ describe('schema_apply_mutations', () => {
   });
 
   it('applies multiple mutations atomically (one batch_id across all)', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       seedPack('mine');
       const result = await operationsByName.schema_apply_mutations!.handler(ctxOf(), {
         pack: 'mine',
@@ -281,7 +281,7 @@ describe('schema_apply_mutations', () => {
   });
 
   it('returns partial_results on mid-batch failure with a single batch_id', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       seedPack('mine');
       const result = await operationsByName.schema_apply_mutations!.handler(ctxOf(), {
         pack: 'mine',
@@ -297,7 +297,7 @@ describe('schema_apply_mutations', () => {
   });
 
   it('rejects unknown op with INVALID_RESULT', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       seedPack('mine');
       const result = await operationsByName.schema_apply_mutations!.handler(ctxOf(), {
         pack: 'mine',
@@ -308,7 +308,7 @@ describe('schema_apply_mutations', () => {
   });
 
   it('rejects empty mutations array', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       seedPack('mine');
       const result = await operationsByName.schema_apply_mutations!.handler(ctxOf(), {
         pack: 'mine',
@@ -319,7 +319,7 @@ describe('schema_apply_mutations', () => {
   });
 
   it('captures MCP client_id in audit log actor field (D2 + D20)', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       seedPack('mine');
       await operationsByName.schema_apply_mutations!.handler(
         ctxOf({ clientId: 'remoteAgentClient12345678' }),

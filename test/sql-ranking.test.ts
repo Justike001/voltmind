@@ -244,7 +244,7 @@ describe('resolveHardExcludes', () => {
     expect(r).toContain('archive/');
   });
 
-  test('env GBRAIN_SEARCH_EXCLUDE adds to the union', () => {
+  test('env VOLTMIND_SEARCH_EXCLUDE adds to the union', () => {
     const r = resolveHardExcludes(undefined, undefined, 'envdir/');
     expect(r).toContain('envdir/');
   });

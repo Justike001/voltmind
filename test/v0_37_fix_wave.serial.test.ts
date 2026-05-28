@@ -118,19 +118,19 @@ describe('v0.37 Lane B — init paths', () => {
   let origHome: string | undefined;
 
   beforeEach(() => {
-    tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-v37-test-'));
-    origHome = process.env.GBRAIN_HOME;
-    process.env.GBRAIN_HOME = tmpHome;
+    tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-v37-test-'));
+    origHome = process.env.VOLTMIND_HOME;
+    process.env.VOLTMIND_HOME = tmpHome;
   });
 
   afterAll(() => {
-    if (origHome === undefined) delete process.env.GBRAIN_HOME;
-    else process.env.GBRAIN_HOME = origHome;
+    if (origHome === undefined) delete process.env.VOLTMIND_HOME;
+    else process.env.VOLTMIND_HOME = origHome;
   });
 
   test('B.4 / T-3: loadConfigFileOnly ignores env overrides', async () => {
-    const cfgPath = join(tmpHome, '.gbrain', 'config.json');
-    require('fs').mkdirSync(join(tmpHome, '.gbrain'), { recursive: true });
+    const cfgPath = join(tmpHome, '.voltmind', 'config.json');
+    require('fs').mkdirSync(join(tmpHome, '.voltmind'), { recursive: true });
     writeFileSync(cfgPath, JSON.stringify({
       engine: 'pglite',
       database_path: '/file/plane/path',
@@ -138,8 +138,8 @@ describe('v0.37 Lane B — init paths', () => {
       embedding_dimensions: 1536,
     }));
 
-    process.env.GBRAIN_EMBEDDING_MODEL = 'voyage:voyage-3-large';
-    process.env.GBRAIN_EMBEDDING_DIMENSIONS = '2048';
+    process.env.VOLTMIND_EMBEDDING_MODEL = 'voyage:voyage-3-large';
+    process.env.VOLTMIND_EMBEDDING_DIMENSIONS = '2048';
     process.env.OPENAI_API_KEY = 'sk-from-env';
 
     // Force re-import to pick up env state (the module-level resolver in
@@ -159,14 +159,14 @@ describe('v0.37 Lane B — init paths', () => {
     expect(merged?.embedding_dimensions).toBe(2048);
     expect(merged?.openai_api_key).toBe('sk-from-env');
 
-    delete process.env.GBRAIN_EMBEDDING_MODEL;
-    delete process.env.GBRAIN_EMBEDDING_DIMENSIONS;
+    delete process.env.VOLTMIND_EMBEDDING_MODEL;
+    delete process.env.VOLTMIND_EMBEDDING_DIMENSIONS;
     delete process.env.OPENAI_API_KEY;
   });
 
   test('B.4 / CDX-5: loadConfigFileOnly does NOT infer engine from DATABASE_URL', async () => {
-    const cfgPath = join(tmpHome, '.gbrain', 'config.json');
-    require('fs').mkdirSync(join(tmpHome, '.gbrain'), { recursive: true });
+    const cfgPath = join(tmpHome, '.voltmind', 'config.json');
+    require('fs').mkdirSync(join(tmpHome, '.voltmind'), { recursive: true });
     writeFileSync(cfgPath, JSON.stringify({
       engine: 'pglite',
       database_path: '/pglite/path',
@@ -240,7 +240,7 @@ describe('v0.37 Lane C.3 — ZE key reaches buildGatewayConfig', () => {
     }
   });
 
-  test('GBrainConfig type includes zeroentropy_api_key field (TS compile guard)', async () => {
+  test('VoltMindConfig type includes zeroentropy_api_key field (TS compile guard)', async () => {
     const { type } = await import('../src/core/config.ts').then(m => ({ type: undefined }));
     // The type-level assertion happens at compile time. If this file
     // compiles, the field exists. Body of the test is a runtime no-op.
@@ -279,8 +279,8 @@ describe('v0.37 Lane D.4 — sync --help dispatch', () => {
   });
 });
 
-// Deferred-TODO ship: gbrain reinit-pglite
-describe('v0.37 deferred TODO shipped — gbrain reinit-pglite', () => {
+// Deferred-TODO ship: voltmind reinit-pglite
+describe('v0.37 deferred TODO shipped — voltmind reinit-pglite', () => {
   test('reinit-pglite is registered in CLI_ONLY + CLI_ONLY_SELF_HELP', () => {
     const src = readFileSync(join(__dirname, '..', 'src', 'cli.ts'), 'utf-8');
     const onlyMatch = src.match(/const CLI_ONLY = new Set\(\[([\s\S]*?)\]\)/);
@@ -297,7 +297,7 @@ describe('v0.37 deferred TODO shipped — gbrain reinit-pglite', () => {
     expect(typeof mod.runReinitPglite).toBe('function');
   });
 
-  test('embeddingMismatchMessage PGLite branch recommends `gbrain reinit-pglite`', async () => {
+  test('embeddingMismatchMessage PGLite branch recommends `voltmind reinit-pglite`', async () => {
     const { embeddingMismatchMessage } = await import('../src/core/embedding-dim-check.ts');
     const msg = embeddingMismatchMessage({
       currentDims: 1536,
@@ -308,7 +308,7 @@ describe('v0.37 deferred TODO shipped — gbrain reinit-pglite', () => {
       databasePath: '/tmp/test.pglite',
     });
     // The one-command path appears before the by-hand recipe.
-    expect(msg).toContain('gbrain reinit-pglite --embedding-model zeroentropyai:zembed-1 --embedding-dimensions 1280');
+    expect(msg).toContain('voltmind reinit-pglite --embedding-model zeroentropyai:zembed-1 --embedding-dimensions 1280');
     // The by-hand path is still present as fallback.
     expect(msg).toContain('mv /tmp/test.pglite /tmp/test.pglite.bak');
     // The recommended-section header precedes the by-hand section.

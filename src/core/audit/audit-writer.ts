@@ -22,8 +22,8 @@
  *      case: 2027-01-01 is ISO week 53 of year 2026 → filename
  *      `<prefix>-2026-W53.jsonl`.
  *
- *   3. Audit dir resolution. Honors `GBRAIN_AUDIT_DIR` env override
- *      ahead of the default `~/.gbrain/audit/`. Trim whitespace; an
+ *   3. Audit dir resolution. Honors `VOLTMIND_AUDIT_DIR` env override
+ *      ahead of the default `~/.voltmind/audit/`. Trim whitespace; an
  *      env value of `"   "` is treated as unset.
  *
  *   4. Best-effort writes. Append failures go to stderr but never
@@ -48,20 +48,20 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { gbrainPath } from '../config.ts';
+import { voltmindPath } from '../config.ts';
 
 /**
- * Resolve the audit dir. Honors `GBRAIN_AUDIT_DIR` for container /
+ * Resolve the audit dir. Honors `VOLTMIND_AUDIT_DIR` for container /
  * sandbox deploys where `$HOME` is read-only. Defaults to
- * `~/.gbrain/audit/`.
+ * `~/.voltmind/audit/`.
  *
  * Shared across every audit module. The previous home (shell-audit.ts)
  * re-exports this so existing imports continue to work.
  */
 export function resolveAuditDir(): string {
-  const override = process.env.GBRAIN_AUDIT_DIR;
+  const override = process.env.VOLTMIND_AUDIT_DIR;
   if (override && override.trim().length > 0) return override;
-  return gbrainPath('audit');
+  return voltmindPath('audit');
 }
 
 /**
@@ -102,7 +102,7 @@ export interface AuditWriterOpts {
   /**
    * Label used in the stderr warning when a write fails. Defaults to
    * `featureName`. Existing modules use slightly different labels
-   * (`'shell-audit'` vs `'gbrain'` vs `'supervisor-audit'`) so the
+   * (`'shell-audit'` vs `'voltmind'` vs `'supervisor-audit'`) so the
    * label is overridable per refactor without changing operator-
    * visible behavior.
    */
@@ -153,7 +153,7 @@ export interface AuditWriter<T extends { ts: string }> {
    * the algorithm.
    */
   computeFilename(now?: Date): string;
-  /** Resolve the audit directory (honors GBRAIN_AUDIT_DIR override). */
+  /** Resolve the audit directory (honors VOLTMIND_AUDIT_DIR override). */
   resolveDir(): string;
 }
 

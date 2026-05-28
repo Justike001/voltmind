@@ -5,14 +5,14 @@
 # links, timeline_entries) must go through the extract / reconcile /
 # migration layer, never directly from arbitrary code paths. Direct
 # calls would bypass the markdown source-of-truth contract — the next
-# `gbrain rebuild` (v0.32.3) would lose the data because the fence
+# `voltmind rebuild` (v0.32.3) would lose the data because the fence
 # wasn't updated.
 #
 # This script grep-bans the direct-write surface across src/ and
 # scripts/ (NOT test/ — tests legitimately seed fixtures via direct
 # inserts, per Codex R2-#8). A function-scoped allow-list lets the
 # legitimate extract / reconcile / migration call sites pass: add
-# `// gbrain-allow-direct-insert: <reason>` on the SAME LINE as the
+# `// voltmind-allow-direct-insert: <reason>` on the SAME LINE as the
 # banned call. The grep parses the trailing comment.
 #
 # Usage: scripts/check-system-of-record.sh
@@ -21,15 +21,15 @@
 set -euo pipefail
 
 # Resolution order for the scan root:
-#   1. $GBRAIN_SCAN_ROOT explicit override — tests pass this so they
+#   1. $VOLTMIND_SCAN_ROOT explicit override — tests pass this so they
 #      don't depend on `git rev-parse` walking up to an unrelated parent
 #      .git/ on filesystems where `git init` silently fails under
 #      shard-concurrency load (v0.40.10 flake-hardening fix).
 #   2. `git rev-parse --show-toplevel` — production callers from inside
-#      the gbrain repo.
+#      the voltmind repo.
 #   3. $PWD — last-resort fallback for callers without git.
-if [ -n "${GBRAIN_SCAN_ROOT:-}" ]; then
-  ROOT="$GBRAIN_SCAN_ROOT"
+if [ -n "${VOLTMIND_SCAN_ROOT:-}" ]; then
+  ROOT="$VOLTMIND_SCAN_ROOT"
 else
   ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 fi
@@ -67,7 +67,7 @@ SCOPE_DIRS=("src" "scripts")
 
 # Collect violations. A violation is a line that:
 #   1. Matches one of the banned patterns
-#   2. Does NOT contain the `gbrain-allow-direct-insert:` comment
+#   2. Does NOT contain the `voltmind-allow-direct-insert:` comment
 #   3. Is NOT a pure-comment line (JSDoc, line-comment, backtick mention)
 # Comment-line exclusions stop the grep from false-positiving on
 # docstrings/comments that mention the method names. The runtime
@@ -78,7 +78,7 @@ violations=$(
     grep -rEn --include='*.ts' --include='*.tsx' --include='*.js' --include='*.sh' \
       "$COMBINED" "$dir" 2>/dev/null || true
   done \
-    | grep -vE 'gbrain-allow-direct-insert:' \
+    | grep -vE 'voltmind-allow-direct-insert:' \
     | grep -vE ':[[:space:]]*\*[[:space:]]+' \
     | grep -vE ':[[:space:]]*//' \
     | grep -vE '`[^`]*\\.\w+\(' \
@@ -91,7 +91,7 @@ if [ -n "$violations" ]; then
   echo "       Every call to engine.insertFact / insertFacts / addLink /"
   echo "       addLinksBatch / addTimelineEntry / upsertTake / expireFact must"
   echo "       either route through the extract / cycle / migration path OR"
-  echo "       carry an explicit \`// gbrain-allow-direct-insert: <reason>\`"
+  echo "       carry an explicit \`// voltmind-allow-direct-insert: <reason>\`"
   echo "       comment on the SAME LINE. See docs/architecture/system-of-record.md."
   echo
   echo "Violations:"

@@ -15,7 +15,7 @@ import { resolvePrepare } from '../src/core/db.ts';
 
 describe('resolvePrepare', () => {
   afterEach(() => {
-    delete process.env.GBRAIN_PREPARE;
+    delete process.env.VOLTMIND_PREPARE;
   });
 
   test('returns false for Supabase pooler port 6543', () => {
@@ -42,20 +42,20 @@ describe('resolvePrepare', () => {
     ).toBe(true);
   });
 
-  test('GBRAIN_PREPARE=false overrides everything', () => {
-    process.env.GBRAIN_PREPARE = 'false';
+  test('VOLTMIND_PREPARE=false overrides everything', () => {
+    process.env.VOLTMIND_PREPARE = 'false';
     expect(
       resolvePrepare('postgresql://user:pass@host:5432/db?prepare=true'),
     ).toBe(false);
   });
 
-  test('GBRAIN_PREPARE=true overrides auto-detect on 6543', () => {
-    process.env.GBRAIN_PREPARE = 'true';
+  test('VOLTMIND_PREPARE=true overrides auto-detect on 6543', () => {
+    process.env.VOLTMIND_PREPARE = 'true';
     expect(resolvePrepare('postgresql://user:pass@host:6543/db')).toBe(true);
   });
 
-  test('GBRAIN_PREPARE=0 is falsy', () => {
-    process.env.GBRAIN_PREPARE = '0';
+  test('VOLTMIND_PREPARE=0 is falsy', () => {
+    process.env.VOLTMIND_PREPARE = '0';
     expect(resolvePrepare('postgresql://user:pass@host:6543/db')).toBe(false);
   });
 

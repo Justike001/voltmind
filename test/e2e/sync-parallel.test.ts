@@ -8,7 +8,7 @@
  *        the v0.22.13 CHANGELOG can quote a real number instead of "~4×".
  *
  * Gated on DATABASE_URL. Run via:
- *   docker run -d --name gbrain-test-pg -e POSTGRES_USER=postgres \
+ *   docker run -d --name voltmind-test-pg -e POSTGRES_USER=postgres \
  *     -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=gbrain_test \
  *     -p 5435:5432 pgvector/pgvector:pg16
  *   DATABASE_URL=postgresql://postgres:postgres@localhost:5435/gbrain_test \
@@ -71,7 +71,7 @@ describeE2E('E2E sync-parallel: T2 happy path + leak probe', () => {
   });
 
   test('60-file Postgres sync at concurrency=4 imports all + no connection leak', async () => {
-    repoPath = mkdtempSync(join(tmpdir(), 'gbrain-e2e-par-'));
+    repoPath = mkdtempSync(join(tmpdir(), 'voltmind-e2e-par-'));
     seedRepo(repoPath, 60);
 
     const before = await activeConnections();
@@ -122,8 +122,8 @@ describeE2E('E2E sync-parallel: P4 benchmark serial vs concurrency=4', () => {
 
   test('120-file benchmark: report serial and parallel wall-clock', async () => {
     // Two separate repos so neither sync's chunks bleed into the other.
-    repoSerial = mkdtempSync(join(tmpdir(), 'gbrain-bench-serial-'));
-    repoParallel = mkdtempSync(join(tmpdir(), 'gbrain-bench-parallel-'));
+    repoSerial = mkdtempSync(join(tmpdir(), 'voltmind-bench-serial-'));
+    repoParallel = mkdtempSync(join(tmpdir(), 'voltmind-bench-parallel-'));
     seedRepo(repoSerial, 120);
     seedRepo(repoParallel, 120);
 
@@ -186,7 +186,7 @@ describeE2E('E2E sync-parallel: T18 --timeout returns partial; last_commit uncha
     // because parallelEligible excludes PGLite from the worker fan-out
     // and the bookmark-write semantic uses real Postgres timestamp + index
     // behavior.
-    repoPath = mkdtempSync(join(tmpdir(), 'gbrain-e2e-timeout-'));
+    repoPath = mkdtempSync(join(tmpdir(), 'voltmind-e2e-timeout-'));
     seedRepo(repoPath, 200);
 
     const { performSync } = await import('../../src/commands/sync.ts');
@@ -230,7 +230,7 @@ describeE2E('E2E sync-parallel: T18 --timeout returns partial; last_commit uncha
   test('signal aborted after a few imports leaves last_commit unchanged and reports partial files_imported', async () => {
     // Rebuild a fresh repo for this test; the prior describe path uses
     // its own repoPath variable.
-    const repo2 = mkdtempSync(join(tmpdir(), 'gbrain-e2e-timeout-partial-'));
+    const repo2 = mkdtempSync(join(tmpdir(), 'voltmind-e2e-timeout-partial-'));
     try {
       seedRepo(repo2, 50);
       const { performSync } = await import('../../src/commands/sync.ts');

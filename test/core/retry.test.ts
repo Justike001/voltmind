@@ -361,9 +361,9 @@ describe('resolveBulkRetryOpts env-override (D3 cherry-pick, codex M-10/M-12)', 
 
   test('all 3 vars set: overrides apply', () => {
     const out = resolveBulkRetryOpts({
-      GBRAIN_BULK_MAX_RETRIES: '5',
-      GBRAIN_BULK_RETRY_BASE_MS: '2000',
-      GBRAIN_BULK_RETRY_MAX_MS: '15000',
+      VOLTMIND_BULK_MAX_RETRIES: '5',
+      VOLTMIND_BULK_RETRY_BASE_MS: '2000',
+      VOLTMIND_BULK_RETRY_MAX_MS: '15000',
     });
     expect(out.maxRetries).toBe(5);
     expect(out.delayMs).toBe(2000);
@@ -371,39 +371,39 @@ describe('resolveBulkRetryOpts env-override (D3 cherry-pick, codex M-10/M-12)', 
     expect(out.jitter).toBe('decorrelated'); // not env-overridable
   });
 
-  test('GBRAIN_BULK_MAX_RETRIES=0: accepted (debug-mode disable)', () => {
-    const out = resolveBulkRetryOpts({ GBRAIN_BULK_MAX_RETRIES: '0' });
+  test('VOLTMIND_BULK_MAX_RETRIES=0: accepted (debug-mode disable)', () => {
+    const out = resolveBulkRetryOpts({ VOLTMIND_BULK_MAX_RETRIES: '0' });
     expect(out.maxRetries).toBe(0);
   });
 
-  test('GBRAIN_BULK_MAX_RETRIES=negative: throws with paste-ready hint', () => {
-    expect(() => resolveBulkRetryOpts({ GBRAIN_BULK_MAX_RETRIES: '-1' }))
-      .toThrow(/GBRAIN_BULK_MAX_RETRIES.*>= 0.*Fix: export/);
+  test('VOLTMIND_BULK_MAX_RETRIES=negative: throws with paste-ready hint', () => {
+    expect(() => resolveBulkRetryOpts({ VOLTMIND_BULK_MAX_RETRIES: '-1' }))
+      .toThrow(/VOLTMIND_BULK_MAX_RETRIES.*>= 0.*Fix: export/);
   });
 
-  test('GBRAIN_BULK_MAX_RETRIES=non-int: throws', () => {
-    expect(() => resolveBulkRetryOpts({ GBRAIN_BULK_MAX_RETRIES: '3.5' }))
-      .toThrow(/GBRAIN_BULK_MAX_RETRIES/);
-    expect(() => resolveBulkRetryOpts({ GBRAIN_BULK_MAX_RETRIES: 'foo' }))
-      .toThrow(/GBRAIN_BULK_MAX_RETRIES/);
+  test('VOLTMIND_BULK_MAX_RETRIES=non-int: throws', () => {
+    expect(() => resolveBulkRetryOpts({ VOLTMIND_BULK_MAX_RETRIES: '3.5' }))
+      .toThrow(/VOLTMIND_BULK_MAX_RETRIES/);
+    expect(() => resolveBulkRetryOpts({ VOLTMIND_BULK_MAX_RETRIES: 'foo' }))
+      .toThrow(/VOLTMIND_BULK_MAX_RETRIES/);
   });
 
-  test('GBRAIN_BULK_RETRY_BASE_MS=0 or negative: throws (delays must be > 0)', () => {
-    expect(() => resolveBulkRetryOpts({ GBRAIN_BULK_RETRY_BASE_MS: '0' }))
+  test('VOLTMIND_BULK_RETRY_BASE_MS=0 or negative: throws (delays must be > 0)', () => {
+    expect(() => resolveBulkRetryOpts({ VOLTMIND_BULK_RETRY_BASE_MS: '0' }))
       .toThrow(/> 0/);
-    expect(() => resolveBulkRetryOpts({ GBRAIN_BULK_RETRY_BASE_MS: '-100' }))
+    expect(() => resolveBulkRetryOpts({ VOLTMIND_BULK_RETRY_BASE_MS: '-100' }))
       .toThrow(/> 0/);
   });
 
-  test('GBRAIN_BULK_RETRY_MAX_MS < base: throws', () => {
+  test('VOLTMIND_BULK_RETRY_MAX_MS < base: throws', () => {
     expect(() => resolveBulkRetryOpts({
-      GBRAIN_BULK_RETRY_BASE_MS: '5000',
-      GBRAIN_BULK_RETRY_MAX_MS: '3000',
-    })).toThrow(/>= GBRAIN_BULK_RETRY_BASE_MS=5000/);
+      VOLTMIND_BULK_RETRY_BASE_MS: '5000',
+      VOLTMIND_BULK_RETRY_MAX_MS: '3000',
+    })).toThrow(/>= VOLTMIND_BULK_RETRY_BASE_MS=5000/);
   });
 
   test('empty string env values treated as unset', () => {
-    const out = resolveBulkRetryOpts({ GBRAIN_BULK_MAX_RETRIES: '' });
+    const out = resolveBulkRetryOpts({ VOLTMIND_BULK_MAX_RETRIES: '' });
     expect(out.maxRetries).toBe(BULK_RETRY_OPTS.maxRetries);
   });
 });

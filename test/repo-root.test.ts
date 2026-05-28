@@ -29,7 +29,7 @@ describe('findRepoRoot', () => {
     mkdirSync(join(dir, 'skills'), { recursive: true });
     writeFileSync(join(dir, 'skills', 'RESOLVER.md'), '# RESOLVER\n');
     mkdirSync(join(dir, 'src'), { recursive: true });
-    writeFileSync(join(dir, 'src', 'cli.ts'), '// gbrain marker\n');
+    writeFileSync(join(dir, 'src', 'cli.ts'), '// voltmind marker\n');
   }
 
   function seedSkillsDir(dir: string): void {
@@ -94,7 +94,7 @@ describe('findRepoRoot', () => {
   });
 
   it('D-CX-4: $OPENCLAW_WORKSPACE wins over repo-root walk when explicitly set', () => {
-    // Prior priority (shadow bug): walking up from cwd found gbrain's
+    // Prior priority (shadow bug): walking up from cwd found voltmind's
     // repo root first and silently ignored the env var. Post-D-CX-4:
     // explicit env wins. Unset env → repo-root walk still wins
     // (tested below).
@@ -154,7 +154,7 @@ describe('findRepoRoot', () => {
   });
 
   it('W1: both RESOLVER.md and AGENTS.md present — RESOLVER.md wins', () => {
-    // Policy: when both exist at the same location, gbrain-native wins.
+    // Policy: when both exist at the same location, voltmind-native wins.
     const workspace = scratch();
     const skillsDir = join(workspace, 'skills');
     mkdirSync(skillsDir, { recursive: true });
@@ -174,28 +174,28 @@ describe('findRepoRoot', () => {
   });
 
   // -----------------------------------------------------------------------
-  // v0.31.7 #128 adaptation: tier-0 GBRAIN_SKILLS_DIR + read-only
+  // v0.31.7 #128 adaptation: tier-0 VOLTMIND_SKILLS_DIR + read-only
   // install-path fallback. Locked in eng-review D3 + D5.
   // -----------------------------------------------------------------------
 
-  it('v0.31.7 D3-1: tier-0 $GBRAIN_SKILLS_DIR valid path returns env_explicit source', () => {
+  it('v0.31.7 D3-1: tier-0 $VOLTMIND_SKILLS_DIR valid path returns env_explicit source', () => {
     const cwd = scratch();
     const explicit = scratch();
     seedSkillsDir(explicit);
-    const found = autoDetectSkillsDir(cwd, { GBRAIN_SKILLS_DIR: explicit });
+    const found = autoDetectSkillsDir(cwd, { VOLTMIND_SKILLS_DIR: explicit });
     expect(found.dir).toBe(explicit);
     expect(found.source).toBe('env_explicit');
   });
 
   it('v0.31.7 D3-2: tier-0 invalid path falls through to lower tiers', () => {
-    // GBRAIN_SKILLS_DIR points to a directory with no resolver file. Must
+    // VOLTMIND_SKILLS_DIR points to a directory with no resolver file. Must
     // not crash; must continue to the next tier (OPENCLAW_WORKSPACE here).
     const cwd = scratch();
     const invalid = scratch(); // no RESOLVER.md / AGENTS.md inside
     const workspace = scratch();
     seedSkillsDir(join(workspace, 'skills'));
     const found = autoDetectSkillsDir(cwd, {
-      GBRAIN_SKILLS_DIR: invalid,
+      VOLTMIND_SKILLS_DIR: invalid,
       OPENCLAW_WORKSPACE: workspace,
     });
     expect(found.dir).toBe(join(workspace, 'skills'));
@@ -210,7 +210,7 @@ describe('findRepoRoot', () => {
     const workspace = scratch();
     seedSkillsDir(join(workspace, 'skills'));
     const found = autoDetectSkillsDir(cwd, {
-      GBRAIN_SKILLS_DIR: explicit,
+      VOLTMIND_SKILLS_DIR: explicit,
       OPENCLAW_WORKSPACE: workspace,
     });
     expect(found.dir).toBe(explicit);
@@ -220,12 +220,12 @@ describe('findRepoRoot', () => {
   it('v0.31.7 D3-4: autoDetectSkillsDirReadOnly install-path walk finds bundled skills', () => {
     // When primary detection returns null (no env, no openclaw, no repo
     // root walk-up, no ./skills), the read-only variant walks up from
-    // import.meta.url (the gbrain module's install path) and finds the
+    // import.meta.url (the voltmind module's install path) and finds the
     // bundled skills/. This test runs from a tempdir cwd with no env vars
     // set; the only path that can succeed is the install-path fallback.
     const cwd = scratch();
     const found = autoDetectSkillsDirReadOnly(cwd, {});
-    // We're inside the gbrain repo when running the test, so the install
+    // We're inside the voltmind repo when running the test, so the install
     // path resolves to the repo's skills dir.
     expect(found.dir).not.toBeNull();
     expect(found.source).toBe('install_path');
@@ -247,27 +247,27 @@ describe('findRepoRoot', () => {
     expect(readOnly.source).toBe('openclaw_workspace_env');
   });
 
-  it('v0.31.7 D3-6: AUTO_DETECT_HINT documents tier-0 GBRAIN_SKILLS_DIR', () => {
+  it('v0.31.7 D3-6: AUTO_DETECT_HINT documents tier-0 VOLTMIND_SKILLS_DIR', () => {
     // Hint string is what users see when auto-detect fails — must list the
     // tier-0 explicit override so they know to set it.
-    expect(AUTO_DETECT_HINT).toContain('$GBRAIN_SKILLS_DIR');
+    expect(AUTO_DETECT_HINT).toContain('$VOLTMIND_SKILLS_DIR');
     expect(AUTO_DETECT_HINT).toContain('explicit operator override');
   });
 
   it('v0.31.7 D3-7: AUTO_DETECT_HINT_READ_ONLY adds install-path tier', () => {
     // Read-only hint must mention the install-path fallback so doctor's
-    // user can understand what gbrain found and where.
+    // user can understand what voltmind found and where.
     expect(AUTO_DETECT_HINT_READ_ONLY).toContain('install path');
     expect(AUTO_DETECT_HINT_READ_ONLY).toContain('read-only');
     // And must include everything from the base hint.
-    expect(AUTO_DETECT_HINT_READ_ONLY).toContain('$GBRAIN_SKILLS_DIR');
+    expect(AUTO_DETECT_HINT_READ_ONLY).toContain('$VOLTMIND_SKILLS_DIR');
     expect(AUTO_DETECT_HINT_READ_ONLY).toContain('$OPENCLAW_WORKSPACE');
   });
 
   // ─── v0.33 cwd_walk_up tier (D3) ──────────────────────────────
   // Non-OpenClaw hosts (any agent repo with a bare skills/ dir) own
   // their skills/ directly. The new tier resolves these without
-  // requiring a resolver file or gbrain-shape `src/cli.ts`.
+  // requiring a resolver file or voltmind-shape `src/cli.ts`.
 
   it('v0.33 cwd_walk_up: cwd has skills/ but no resolver, no src/cli.ts (bare-skills-dir shape)', () => {
     const agentRepo = scratch();
@@ -316,7 +316,7 @@ describe('findRepoRoot', () => {
     // autoDetectSkillsDir is used by write-path callers (skillpack install,
     // skillify scaffold, post-install-advisory). If a future edit adds the
     // install-path fallback to the SHARED function, those write-path
-    // callers running from `~` would silently retarget the bundled gbrain
+    // callers running from `~` would silently retarget the bundled voltmind
     // repo's skills/ instead of the user's actual workspace — a quiet
     // data-flow regression. This test asserts the shared function returns
     // null (not an install_path source) when no env or repo-root signal
@@ -324,7 +324,7 @@ describe('findRepoRoot', () => {
     const cwd = scratch(); // empty tempdir; no resolver anywhere up
     const found = autoDetectSkillsDir(cwd, {});
     // Either null (no skills dir found) or repo_root if test runs inside
-    // the gbrain repo. In either case, NEVER 'install_path' on the shared
+    // the voltmind repo. In either case, NEVER 'install_path' on the shared
     // function — that variant is reserved for autoDetectSkillsDirReadOnly.
     expect(found.source).not.toBe('install_path');
   });

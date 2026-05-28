@@ -135,7 +135,7 @@ describe('loadStorageConfig — real-disk loader', () => {
   let warnings: string[];
 
   beforeEach(() => {
-    tmp = mkdtempSync(join(tmpdir(), 'gbrain-storage-test-'));
+    tmp = mkdtempSync(join(tmpdir(), 'voltmind-storage-test-'));
     __resetMissingStorageWarning();
     warnings = [];
     originalWarn = console.warn;
@@ -159,7 +159,7 @@ describe('loadStorageConfig — real-disk loader', () => {
     }
   });
 
-  test('returns null when gbrain.yml does not exist', () => {
+  test('returns null when voltmind.yml does not exist', () => {
     try {
       expect(loadStorageConfig(tmp)).toBeNull();
       expect(warnings).toEqual([]);
@@ -168,7 +168,7 @@ describe('loadStorageConfig — real-disk loader', () => {
     }
   });
 
-  test('loads canonical gbrain.yml — the test that would have caught the original gray-matter P0', () => {
+  test('loads canonical voltmind.yml — the test that would have caught the original gray-matter P0', () => {
     try {
       const yaml = `# Brain storage tiering config
 storage:
@@ -180,7 +180,7 @@ storage:
     - media/x/
     - media/articles/
 `;
-      writeFileSync(join(tmp, 'gbrain.yml'), yaml);
+      writeFileSync(join(tmp, 'voltmind.yml'), yaml);
       const config = loadStorageConfig(tmp);
       expect(config).not.toBeNull();
       expect(config!.db_tracked).toEqual(['people/', 'companies/', 'deals/']);
@@ -202,7 +202,7 @@ storage:
   db_only:
     - media/x/    # bulk tweets
 `;
-      writeFileSync(join(tmp, 'gbrain.yml'), yaml);
+      writeFileSync(join(tmp, 'voltmind.yml'), yaml);
       const config = loadStorageConfig(tmp);
       expect(config!.db_tracked).toEqual(['people/', 'companies/']);
       expect(config!.db_only).toEqual(['media/x/']);
@@ -219,7 +219,7 @@ storage:
     - 'companies/'
   db_only: []
 `;
-      writeFileSync(join(tmp, 'gbrain.yml'), yaml);
+      writeFileSync(join(tmp, 'voltmind.yml'), yaml);
       const config = loadStorageConfig(tmp);
       expect(config!.db_tracked).toEqual(['people/', 'companies/']);
     } finally {
@@ -235,7 +235,7 @@ storage:
   supabase_only:
     - media/x/
 `;
-      writeFileSync(join(tmp, 'gbrain.yml'), yaml);
+      writeFileSync(join(tmp, 'voltmind.yml'), yaml);
       const config = loadStorageConfig(tmp);
       expect(config!.db_tracked).toEqual(['people/']);
       expect(config!.db_only).toEqual(['media/x/']);
@@ -263,7 +263,7 @@ storage:
   supabase_only:
     - old-media/
 `;
-      writeFileSync(join(tmp, 'gbrain.yml'), yaml);
+      writeFileSync(join(tmp, 'voltmind.yml'), yaml);
       const config = loadStorageConfig(tmp);
       expect(config!.db_tracked).toEqual(['new-people/']);
       expect(config!.db_only).toEqual(['new-media/']);
@@ -274,9 +274,9 @@ storage:
     }
   });
 
-  test('warns once when gbrain.yml exists but storage section is missing', () => {
+  test('warns once when voltmind.yml exists but storage section is missing', () => {
     try {
-      writeFileSync(join(tmp, 'gbrain.yml'), 'something_else: foo\n');
+      writeFileSync(join(tmp, 'voltmind.yml'), 'something_else: foo\n');
       const config = loadStorageConfig(tmp);
       expect(config).toBeNull();
       expect(warnings.length).toBe(1);
@@ -296,7 +296,7 @@ storage:
   db_tracked: []
   db_only: []
 `;
-      writeFileSync(join(tmp, 'gbrain.yml'), yaml);
+      writeFileSync(join(tmp, 'voltmind.yml'), yaml);
       const config = loadStorageConfig(tmp);
       // Empty config is returned (not null) but warning fires.
       expect(config).not.toBeNull();
@@ -309,9 +309,9 @@ storage:
     }
   });
 
-  test('throws on unreadable gbrain.yml (permission denied) — does not silently disable feature', () => {
+  test('throws on unreadable voltmind.yml (permission denied) — does not silently disable feature', () => {
     try {
-      const yamlPath = join(tmp, 'gbrain.yml');
+      const yamlPath = join(tmp, 'voltmind.yml');
       writeFileSync(yamlPath, 'storage:\n  db_tracked:\n    - x/\n');
       // Simulate unreadable: chmod 000. May not work on all CI; skip if not supported.
       const fs = require('fs');

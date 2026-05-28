@@ -4,7 +4,7 @@
  * Issue #2: function was defined but never invoked. Now wired into runSync
  * after a successful sync (skips on dry_run / blocked_by_failures / failure).
  *
- * Tests cover: happy path, idempotency, GBRAIN_NO_GITIGNORE escape hatch,
+ * Tests cover: happy path, idempotency, VOLTMIND_NO_GITIGNORE escape hatch,
  * submodule detection, write-error graceful degradation, and the "no
  * config — no-op" path.
  */
@@ -22,21 +22,21 @@ let originalWarn: typeof console.warn;
 let originalEnv: string | undefined;
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-mgi-test-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-mgi-test-'));
   __resetMissingStorageWarning();
   warnings = [];
   originalWarn = console.warn;
   console.warn = (...args: unknown[]) => {
     warnings.push(args.map(String).join(' '));
   };
-  originalEnv = process.env.GBRAIN_NO_GITIGNORE;
-  delete process.env.GBRAIN_NO_GITIGNORE;
+  originalEnv = process.env.VOLTMIND_NO_GITIGNORE;
+  delete process.env.VOLTMIND_NO_GITIGNORE;
 });
 
 afterEach(() => {
   console.warn = originalWarn;
-  if (originalEnv === undefined) delete process.env.GBRAIN_NO_GITIGNORE;
-  else process.env.GBRAIN_NO_GITIGNORE = originalEnv;
+  if (originalEnv === undefined) delete process.env.VOLTMIND_NO_GITIGNORE;
+  else process.env.VOLTMIND_NO_GITIGNORE = originalEnv;
   // Restore permissions for cleanup.
   try {
     chmodSync(tmp, 0o755);
@@ -48,7 +48,7 @@ afterEach(() => {
 
 function writeStorageConfig(): void {
   writeFileSync(
-    join(tmp, 'gbrain.yml'),
+    join(tmp, 'voltmind.yml'),
     `storage:
   db_tracked:
     - people/
@@ -60,7 +60,7 @@ function writeStorageConfig(): void {
 }
 
 describe('manageGitignore', () => {
-  test('no-op when gbrain.yml is absent', () => {
+  test('no-op when voltmind.yml is absent', () => {
     manageGitignore(tmp);
     expect(existsSync(join(tmp, '.gitignore'))).toBe(false);
     expect(warnings).toEqual([]);
@@ -68,7 +68,7 @@ describe('manageGitignore', () => {
 
   test('no-op when storage config has empty db_only', () => {
     writeFileSync(
-      join(tmp, 'gbrain.yml'),
+      join(tmp, 'voltmind.yml'),
       `storage:
   db_tracked:
     - people/
@@ -83,7 +83,7 @@ describe('manageGitignore', () => {
     writeStorageConfig();
     manageGitignore(tmp);
     const content = readFileSync(join(tmp, '.gitignore'), 'utf-8');
-    expect(content).toContain('# Auto-managed by gbrain');
+    expect(content).toContain('# Auto-managed by voltmind');
     expect(content).toContain('media/x/');
     expect(content).toContain('media/articles/');
   });
@@ -110,9 +110,9 @@ describe('manageGitignore', () => {
     expect(content).toContain('media/x/');
   });
 
-  test('GBRAIN_NO_GITIGNORE=1 skips entirely', () => {
+  test('VOLTMIND_NO_GITIGNORE=1 skips entirely', () => {
     writeStorageConfig();
-    process.env.GBRAIN_NO_GITIGNORE = '1';
+    process.env.VOLTMIND_NO_GITIGNORE = '1';
     manageGitignore(tmp);
     expect(existsSync(join(tmp, '.gitignore'))).toBe(false);
   });

@@ -13,8 +13,8 @@
  *   - Clean completion clears the checkpoint.
  *
  * Test isolation:
- *   - `GBRAIN_HOME` env override via `withEnv` so we NEVER touch the real
- *     `~/.gbrain/import-checkpoint.json`. Pre-v0.33.2 this file did exactly
+ *   - `VOLTMIND_HOME` env override via `withEnv` so we NEVER touch the real
+ *     `~/.voltmind/import-checkpoint.json`. Pre-v0.33.2 this file did exactly
  *     that — see codex finding P2 in the plan.
  *   - PGLite via the canonical block (`beforeAll` + `resetPgliteState` +
  *     `afterAll`) per CLAUDE.md test-isolation rules R3 + R4.
@@ -29,9 +29,9 @@ import { withEnv } from './helpers/with-env.ts';
 import { runImport } from '../src/commands/import.ts';
 
 let engine: PGLiteEngine;
-let workspace: string;        // GBRAIN_HOME target — `${workspace}/.gbrain/` holds the checkpoint file
-let gbrainHomeDir: string;    // Resolves to `${workspace}/.gbrain` — the actual checkpoint dir
-let cpPath: string;           // The checkpoint file path inside gbrainHomeDir
+let workspace: string;        // VOLTMIND_HOME target — `${workspace}/.voltmind/` holds the checkpoint file
+let voltmindHomeDir: string;    // Resolves to `${workspace}/.voltmind` — the actual checkpoint dir
+let cpPath: string;           // The checkpoint file path inside voltmindHomeDir
 let brainDir: string;         // The brain content dir — fixture markdown lives here
 
 beforeAll(async () => {
@@ -46,13 +46,13 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
-  workspace = mkdtempSync(join(tmpdir(), 'gbrain-import-resume-home-'));
-  // GBRAIN_HOME is the parent dir; configDir() appends '.gbrain' itself.
-  // The checkpoint lives at `${workspace}/.gbrain/import-checkpoint.json`.
-  gbrainHomeDir = join(workspace, '.gbrain');
-  mkdirSync(gbrainHomeDir, { recursive: true });
-  cpPath = join(gbrainHomeDir, 'import-checkpoint.json');
-  brainDir = mkdtempSync(join(tmpdir(), 'gbrain-import-resume-brain-'));
+  workspace = mkdtempSync(join(tmpdir(), 'voltmind-import-resume-home-'));
+  // VOLTMIND_HOME is the parent dir; configDir() appends '.voltmind' itself.
+  // The checkpoint lives at `${workspace}/.voltmind/import-checkpoint.json`.
+  voltmindHomeDir = join(workspace, '.voltmind');
+  mkdirSync(voltmindHomeDir, { recursive: true });
+  cpPath = join(voltmindHomeDir, 'import-checkpoint.json');
+  brainDir = mkdtempSync(join(tmpdir(), 'voltmind-import-resume-brain-'));
 });
 
 afterEach(() => {
@@ -79,7 +79,7 @@ function validMarkdown(slug: string, title = slug) {
 
 describe('runImport checkpoint resume — v0.33.2 path-based', () => {
   test('old positional checkpoint gets discarded with stderr log', async () => {
-    await withEnv({ GBRAIN_HOME: workspace }, async () => {
+    await withEnv({ VOLTMIND_HOME: workspace }, async () => {
       // Plant a pre-v0.33.2 positional checkpoint.
       writeFileSync(cpPath, JSON.stringify({
         dir: brainDir,
@@ -111,7 +111,7 @@ describe('runImport checkpoint resume — v0.33.2 path-based', () => {
   }, 30_000);
 
   test('v0.33.2 checkpoint with completedPaths skips already-done files', async () => {
-    await withEnv({ GBRAIN_HOME: workspace }, async () => {
+    await withEnv({ VOLTMIND_HOME: workspace }, async () => {
       writeBrainFile('a.md', validMarkdown('a'));
       writeBrainFile('b.md', validMarkdown('b'));
       writeBrainFile('c.md', validMarkdown('c'));
@@ -131,7 +131,7 @@ describe('runImport checkpoint resume — v0.33.2 path-based', () => {
   }, 30_000);
 
   test('clean completion clears the checkpoint file', async () => {
-    await withEnv({ GBRAIN_HOME: workspace }, async () => {
+    await withEnv({ VOLTMIND_HOME: workspace }, async () => {
       writeBrainFile('only.md', validMarkdown('only'));
 
       // No prior checkpoint.
@@ -148,7 +148,7 @@ describe('runImport checkpoint resume — v0.33.2 path-based', () => {
   }, 30_000);
 
   test('failed file does NOT enter completedPaths — next run retries it', async () => {
-    await withEnv({ GBRAIN_HOME: workspace }, async () => {
+    await withEnv({ VOLTMIND_HOME: workspace }, async () => {
       // Two healthy files plus one with a path-vs-frontmatter slug mismatch.
       // import-file.ts rejects path-derived 'people/bob' vs declared slug
       // 'wrong-slug' with a SLUG_MISMATCH failure (test/e2e/sync.test.ts uses
@@ -187,7 +187,7 @@ describe('runImport checkpoint resume — v0.33.2 path-based', () => {
   }, 60_000);
 
   test('checkpoint with mismatched dir is discarded silently (no migration log)', async () => {
-    await withEnv({ GBRAIN_HOME: workspace }, async () => {
+    await withEnv({ VOLTMIND_HOME: workspace }, async () => {
       writeBrainFile('one.md', validMarkdown('one'));
 
       // v0.33.2-shaped checkpoint pointing at a different brain dir.

@@ -3,8 +3,8 @@
  *
  * Wraps the shared `createAuditWriter` primitive (v0.40.4.0) for the
  * progressive-batch trail. ISO-week-rotated at
- * `~/.gbrain/audit/progressive-batch-YYYY-Www.jsonl`. Honors
- * `GBRAIN_AUDIT_DIR` via the shared resolver.
+ * `~/.voltmind/audit/progressive-batch-YYYY-Www.jsonl`. Honors
+ * `VOLTMIND_AUDIT_DIR` via the shared resolver.
  *
  * Records one event per stage transition (including the final
  * verdict's stage). The doctor check `progressive_batch_audit_health`

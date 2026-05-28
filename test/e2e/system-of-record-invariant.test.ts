@@ -29,7 +29,7 @@
  *     from the response body (Codex R2-#5).
  *   - serializeMarkdown round-trip: page → import → DB state matches
  *     re-extract from re-rendered markdown (the canonical idempotency
- *     property that lets gbrain rebuild work).
+ *     property that lets voltmind rebuild work).
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
@@ -100,20 +100,20 @@ Met at [acme](companies/acme). They founded the company in 2017.
 
 ## Takes
 
-<!--- gbrain:takes:begin -->
+<!--- voltmind:takes:begin -->
 | # | claim | kind | who | weight | since | source |
 |---|-------|------|-----|--------|-------|--------|
 | 1 | Strong technical founder | take | brain | 0.85 | 2026-01-01 | observed |
-<!--- gbrain:takes:end -->
+<!--- voltmind:takes:end -->
 
 ## Facts
 
-<!--- gbrain:facts:begin -->
+<!--- voltmind:facts:begin -->
 | # | claim | kind | confidence | visibility | notability | valid_from | valid_until | source | context |
 |---|-------|------|------------|------------|------------|------------|-------------|--------|---------|
 | 1 | Founded Acme in 2017 | fact | 1.0 | world | high | 2017-01-15 |  | linkedin | Public bio |
 | 2 | PRIVATE_DETAIL_PROOF | preference | 0.85 | private | medium | 2026-04-29 |  | OH 2026-04-29 |  |
-<!--- gbrain:facts:end -->
+<!--- voltmind:facts:end -->
 
 <!-- timeline -->
 ## Timeline

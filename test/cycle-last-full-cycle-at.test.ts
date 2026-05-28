@@ -34,7 +34,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
-  brainDir = mkdtempSync(join(tmpdir(), 'gbrain-cycle-lfca-'));
+  brainDir = mkdtempSync(join(tmpdir(), 'voltmind-cycle-lfca-'));
 });
 
 async function seedSource(id: string): Promise<void> {
@@ -105,7 +105,7 @@ describe('runCycle last_full_cycle_at exit hook', () => {
     await seedSource('gamma');
     // Inject a live lock row directly so the cycle returns 'skipped'.
     // This simulates "another cycle is already running for gamma."
-    const lockId = 'gbrain-cycle:gamma';
+    const lockId = 'voltmind-cycle:gamma';
     const pid = process.pid;
     await engine.executeRaw(
       `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)

@@ -1,7 +1,7 @@
 /**
  * End-to-end test for the third-party skillpack scaffold flow.
  *
- * Spawns the actual `gbrain` CLI as a subprocess (not via in-process
+ * Spawns the actual `voltmind` CLI as a subprocess (not via in-process
  * imports), drives `init` -> `doctor` -> `pack` -> `scaffold` against a
  * local-path source. Covers the canonical publisher + consumer loop
  * without needing network or a real git remote.
@@ -59,7 +59,7 @@ afterAll(() => {
 
 describe('e2e: full publisher loop', () => {
   test.skipIf(SKIP_NO_GNU)('init -> doctor (10/10) -> pack -> tarball exists', () => {
-    const env = { GBRAIN_HOME: join(tmp, 'gbrain-home-1') };
+    const env = { VOLTMIND_HOME: join(tmp, 'voltmind-home-1') };
     const packDir = join(tmp, 'e2e-pack-1');
 
     // 1. init
@@ -86,7 +86,7 @@ describe('e2e: full publisher loop', () => {
 
 describe('e2e: full consumer loop (third-party scaffold from local path)', () => {
   test('init pack A -> scaffold pack A into workspace B -> files land', () => {
-    const env = { GBRAIN_HOME: join(tmp, 'gbrain-home-2') };
+    const env = { VOLTMIND_HOME: join(tmp, 'voltmind-home-2') };
     const packDir = join(tmp, 'pack-2');
     const workspace = join(tmp, 'ws-2');
 
@@ -102,7 +102,7 @@ describe('e2e: full consumer loop (third-party scaffold from local path)', () =>
     expect(r.pack.name).toBe('consumer-pack');
     expect(existsSync(join(workspace, 'skills/consumer-pack/SKILL.md'))).toBe(true);
     // state.json should record the install.
-    const statePath = join(env.GBRAIN_HOME, '.gbrain', 'skillpack-state.json');
+    const statePath = join(env.VOLTMIND_HOME, '.voltmind', 'skillpack-state.json');
     expect(existsSync(statePath)).toBe(true);
     const state = JSON.parse(readFileSync(statePath, 'utf-8'));
     expect(state.packs).toHaveLength(1);
@@ -110,7 +110,7 @@ describe('e2e: full consumer loop (third-party scaffold from local path)', () =>
   });
 
   test('second scaffold of same pack into same workspace refuses to overwrite', () => {
-    const env = { GBRAIN_HOME: join(tmp, 'gbrain-home-3') };
+    const env = { VOLTMIND_HOME: join(tmp, 'voltmind-home-3') };
     const packDir = join(tmp, 'pack-3');
     const workspace = join(tmp, 'ws-3');
     runCli(['skillpack', 'init', 'twicepack', '--target', packDir], env);
@@ -128,7 +128,7 @@ describe('e2e: full consumer loop (third-party scaffold from local path)', () =>
 
 describe('e2e: doctor --fix loop', () => {
   test('full init -> delete required artifacts -> doctor surfaces gaps -> --fix --yes restores them', () => {
-    const env = { GBRAIN_HOME: join(tmp, 'gbrain-home-4') };
+    const env = { VOLTMIND_HOME: join(tmp, 'voltmind-home-4') };
     const packDir = join(tmp, 'pack-fix');
     runCli(['skillpack', 'init', 'fix-target', '--target', packDir], env);
     // Knock out auto-fixable artifacts.
@@ -151,7 +151,7 @@ describe('e2e: doctor --fix loop', () => {
   });
 
   test('--minimal init scores 7/10 (3 missing badges that need manifest patches)', () => {
-    const env = { GBRAIN_HOME: join(tmp, 'gbrain-home-4b') };
+    const env = { VOLTMIND_HOME: join(tmp, 'voltmind-home-4b') };
     const packDir = join(tmp, 'pack-min');
     runCli(['skillpack', 'init', 'min-target', '--target', packDir, '--minimal'], env);
     const r = runCli(['skillpack', 'doctor', packDir, '--quick', '--json'], env);
@@ -162,18 +162,18 @@ describe('e2e: doctor --fix loop', () => {
 });
 
 describe('e2e: search + info against a localhost fixture registry', () => {
-  // Bun.serve + subprocess `gbrain` CLI has timing flakiness (subprocess
+  // Bun.serve + subprocess `voltmind` CLI has timing flakiness (subprocess
   // startup + fetch round-trip frequently overruns bun:test's default
   // 5s per-test budget). Unit-level coverage of the registry-client
   // network path lives in test/skillpack-registry-client.test.ts via the
   // fetchImpl injection seam, which is deterministic and fast.
   test.skip('search returns the local fixture; info shows full details', async () => {
-    const env = { GBRAIN_HOME: join(tmp, 'gbrain-home-5') };
+    const env = { VOLTMIND_HOME: join(tmp, 'voltmind-home-5') };
     const fixtureDir = join(tmp, 'fixture-registry');
     mkdirSync(fixtureDir, { recursive: true });
 
     const catalog = {
-      schema_version: 'gbrain-registry-v1',
+      schema_version: 'voltmind-registry-v1',
       updated_at: '2026-05-18T20:00:00Z',
       skillpacks: [
         {
@@ -188,7 +188,7 @@ describe('e2e: search + info against a localhost fixture registry', () => {
             pinned_commit: 'a'.repeat(40),
           },
           tarball_sha256: 'b'.repeat(64),
-          gbrain_min_version: '0.36.0',
+          voltmind_min_version: '0.36.0',
           default_tier: 'community',
           tags: ['fixture'],
           validated_at: '2026-05-18T20:00:00Z',
@@ -202,7 +202,7 @@ describe('e2e: search + info against a localhost fixture registry', () => {
     writeFileSync(join(fixtureDir, 'registry.json'), JSON.stringify(catalog, null, 2));
     writeFileSync(
       join(fixtureDir, 'endorsements.json'),
-      JSON.stringify({ schema_version: 'gbrain-endorsements-v1', endorsements: {} }),
+      JSON.stringify({ schema_version: 'voltmind-endorsements-v1', endorsements: {} }),
     );
 
     // Bun.serve picks a free port for us (port: 0 => ephemeral).

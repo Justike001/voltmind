@@ -2,7 +2,7 @@
  * cli-pty-runner.ts — generic real-PTY runner for CLI E2E tests.
  *
  * Ported from gstack's claude-pty-runner.ts (D14/C-prime in the v0.25.1
- * plan). Generalized to drive any CLI binary (gbrain, openclaw, claude)
+ * plan). Generalized to drive any CLI binary (voltmind, openclaw, claude)
  * — the gstack-specific plan-mode orchestrators (runPlanSkillObservation,
  * runPlanSkillCounting, invokeAndObserve, the per-skill Step-0 boundary
  * predicates) are dropped because they assume Claude Code's plan-mode
@@ -11,9 +11,9 @@
  * Architecture: pure Bun.spawn — no node-pty, no native modules. Bun
  * 1.3.10+ has built-in PTY support via the `terminal:` spawn option.
  *
- * What gbrain uses this for in v0.25.1:
+ * What voltmind uses this for in v0.25.1:
  *   - test/e2e/skill-smoke-openclaw.test.ts: drive an openclaw session
- *     interactively after `gbrain skillpack install book-mirror`,
+ *     interactively after `voltmind skillpack install book-mirror`,
  *     verifying real numbered-menu routing.
  *   - Future: any CLI command that grows interactive prompts (e.g.,
  *     book-mirror's cost-estimate "Continue? [y/N]") becomes testable
@@ -168,7 +168,7 @@ export function isTrustDialogVisible(visible: string): boolean {
 
 /**
  * Resolve a CLI binary on PATH, with common fallback locations. Used
- * to find `claude`, `openclaw`, `gbrain`, etc. without forcing tests
+ * to find `claude`, `openclaw`, `voltmind`, etc. without forcing tests
  * to hard-code paths.
  */
 export function resolveBinary(name: string, override?: string): string | null {

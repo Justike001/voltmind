@@ -3,24 +3,24 @@
 # migration never fired on upgrade.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/garrytan/gbrain/v0.11.1/scripts/fix-v0.11.0.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/garrytan/voltmind/v0.11.1/scripts/fix-v0.11.0.sh | bash
 #
 # What it does:
-#   1. gbrain init --migrate-only — applies schema v7 without touching config.
-#   2. gbrain jobs smoke — fails loudly if Minions isn't healthy.
+#   1. voltmind init --migrate-only — applies schema v7 without touching config.
+#   2. voltmind jobs smoke — fails loudly if Minions isn't healthy.
 #   3. Prompts for minion_mode (or defaults to pain_triggered on non-TTY).
-#   4. Atomically writes ~/.gbrain/preferences.json (0o600).
-#   5. Appends ~/.gbrain/migrations/completed.jsonl with status:"partial" and
+#   4. Atomically writes ~/.voltmind/preferences.json (0o600).
+#   5. Appends ~/.voltmind/migrations/completed.jsonl with status:"partial" and
 #      apply_migrations_pending: true — the v0.11.1 `apply-migrations` runner
 #      will pick up where we left off (host rewrites, autopilot install).
 #   6. Detects host AGENTS.md / cron/jobs.json and PRINTS the rewrite guidance
 #      as text. Never auto-edits host files from a curl-piped script — too
 #      high blast-radius (user trust model is "I pasted this").
-#   7. Final line: tells the user to run `gbrain autopilot --install` as the
+#   7. Final line: tells the user to run `voltmind autopilot --install` as the
 #      one-stop finisher (autopilot forks the Minions worker as a child).
 #
 # Retires when v0.11.1 is out: the canonical fix becomes
-#   gbrain upgrade && gbrain apply-migrations
+#   voltmind upgrade && voltmind apply-migrations
 
 set -euo pipefail
 
@@ -35,28 +35,28 @@ ok()   { say "$GREEN" "$1"; }
 warn() { say "$YELLOW" "$1"; }
 die()  { say "$RED" "$1"; exit 1; }
 
-command -v gbrain >/dev/null 2>&1 || die "gbrain not found on \$PATH. Install it first (\`bun add -g gbrain\` or download a binary)."
+command -v voltmind >/dev/null 2>&1 || die "voltmind not found on \$PATH. Install it first (\`bun add -g voltmind\` or download a binary)."
 
-GBRAIN_DIR="${HOME}/.gbrain"
-PREFS_PATH="${GBRAIN_DIR}/preferences.json"
-COMPLETED_PATH="${GBRAIN_DIR}/migrations/completed.jsonl"
+VOLTMIND_DIR="${HOME}/.voltmind"
+PREFS_PATH="${VOLTMIND_DIR}/preferences.json"
+COMPLETED_PATH="${VOLTMIND_DIR}/migrations/completed.jsonl"
 
-mkdir -p "${GBRAIN_DIR}/migrations"
+mkdir -p "${VOLTMIND_DIR}/migrations"
 
 # ------------------------------------------------------------
 # Step 1: schema
 # ------------------------------------------------------------
-info "[1/8] Applying schema (gbrain init --migrate-only)..."
-if ! gbrain init --migrate-only; then
-  die "Schema migration failed. Check ~/.gbrain/config.json has a valid database_url (or database_path for PGLite), then re-run."
+info "[1/8] Applying schema (voltmind init --migrate-only)..."
+if ! voltmind init --migrate-only; then
+  die "Schema migration failed. Check ~/.voltmind/config.json has a valid database_url (or database_path for PGLite), then re-run."
 fi
 ok "      schema ok"
 
 # ------------------------------------------------------------
 # Step 2: smoke
 # ------------------------------------------------------------
-info "[2/8] Running Minions smoke test (gbrain jobs smoke)..."
-if ! gbrain jobs smoke; then
+info "[2/8] Running Minions smoke test (voltmind jobs smoke)..."
+if ! voltmind jobs smoke; then
   die "Smoke test failed. See the error above. Fix before continuing."
 fi
 ok "      smoke ok"
@@ -79,14 +79,14 @@ if [ -t 0 ] && [ -t 1 ]; then
     *) MODE="pain_triggered" ;;
   esac
 else
-  warn "      non-interactive shell → defaulting to pain_triggered (change later: \`gbrain config set minion_mode <mode>\`)"
+  warn "      non-interactive shell → defaulting to pain_triggered (change later: \`voltmind config set minion_mode <mode>\`)"
 fi
 ok "      mode=${MODE}"
 
 # ------------------------------------------------------------
 # Step 4: atomic write preferences.json (0o600)
 # ------------------------------------------------------------
-info "[4/8] Writing ~/.gbrain/preferences.json..."
+info "[4/8] Writing ~/.voltmind/preferences.json..."
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 TMP_PREFS=$(mktemp)
 cat > "${TMP_PREFS}" <<EOF
@@ -127,7 +127,7 @@ else
     warn "      AGENTS.md detected: ${F}"
     echo "        - Next steps (this script does NOT auto-edit):"
     echo "            1. Add a pointer to skills/conventions/subagent-routing.md"
-    echo "            2. The v0.11.1 binary's \`gbrain apply-migrations --yes\` will inject"
+    echo "            2. The v0.11.1 binary's \`voltmind apply-migrations --yes\` will inject"
     echo "               this automatically once v0.11.1 is installed."
   done
 fi
@@ -149,7 +149,7 @@ else
     echo "        - ${COUNT} agentTurn entries"
     echo "        - v0.11.1 apply-migrations will:"
     echo "            * auto-rewrite builtin handlers (sync/embed/lint/import/"
-    echo "              extract/backlinks/autopilot-cycle) to gbrain jobs submit"
+    echo "              extract/backlinks/autopilot-cycle) to voltmind jobs submit"
     echo "            * emit a pending-host-work.jsonl TODO for every non-builtin"
     echo "              handler; host agent walks those per skills/migrations/v0.11.0.md"
   done
@@ -160,12 +160,12 @@ fi
 # ------------------------------------------------------------
 info "[8/8] Done. Next step:"
 echo ""
-echo "      ${GREEN}gbrain autopilot --install${NC}"
+echo "      ${GREEN}voltmind autopilot --install${NC}"
 echo ""
 echo "      That ONE command does the rest: supervises autopilot, forks the"
 echo "      Minions worker, and installs the right entry for your host (launchd"
 echo "      on macOS, systemd on Linux, bootstrap hook on ephemeral containers)."
 echo ""
 echo "      Once v0.11.1 is out:"
-echo "        ${GREEN}gbrain upgrade && gbrain apply-migrations${NC}"
+echo "        ${GREEN}voltmind upgrade && voltmind apply-migrations${NC}"
 echo "      becomes the canonical fix. This script retires then."

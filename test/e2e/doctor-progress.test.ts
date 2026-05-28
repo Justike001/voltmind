@@ -22,7 +22,7 @@ const describeE2E = skip ? describe.skip : describe;
 
 const CLI = join(import.meta.dir, '..', '..', 'src', 'cli.ts');
 
-describeE2E('gbrain doctor --progress-json (E2E)', () => {
+describeE2E('voltmind doctor --progress-json (E2E)', () => {
   beforeAll(async () => {
     await setupDB();
     // Seed a handful of pages so the DB checks have something to scan.

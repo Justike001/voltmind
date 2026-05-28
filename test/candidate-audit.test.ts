@@ -1,7 +1,7 @@
 // v0.38 candidate-audit gap-fill (T1 from gap audit).
 //
 // Pins the privacy contract + file I/O behavior for the schema-candidate
-// audit trail used by `gbrain schema review-candidates` (v0.39).
+// audit trail used by `voltmind schema review-candidates` (v0.39).
 //
 // Why this matters: candidate-audit is the only on-disk surface for
 // lenient-mode put_page events. The privacy contract (sha8-by-default,
@@ -25,7 +25,7 @@ import {
 let auditDir: string;
 
 beforeEach(() => {
-  auditDir = mkdtempSync(join(tmpdir(), 'gbrain-candidate-audit-'));
+  auditDir = mkdtempSync(join(tmpdir(), 'voltmind-candidate-audit-'));
 });
 
 afterEach(() => {
@@ -34,20 +34,20 @@ afterEach(() => {
 
 describe('isAuditVerbose', () => {
   test('false when env unset', async () => {
-    await withEnv({ GBRAIN_SCHEMA_AUDIT_VERBOSE: undefined }, () => {
+    await withEnv({ VOLTMIND_SCHEMA_AUDIT_VERBOSE: undefined }, () => {
       expect(isAuditVerbose()).toBe(false);
     });
   });
   test('true when env=1', async () => {
-    await withEnv({ GBRAIN_SCHEMA_AUDIT_VERBOSE: '1' }, () => {
+    await withEnv({ VOLTMIND_SCHEMA_AUDIT_VERBOSE: '1' }, () => {
       expect(isAuditVerbose()).toBe(true);
     });
   });
   test('false for any other value', async () => {
-    await withEnv({ GBRAIN_SCHEMA_AUDIT_VERBOSE: 'true' }, () => {
+    await withEnv({ VOLTMIND_SCHEMA_AUDIT_VERBOSE: 'true' }, () => {
       expect(isAuditVerbose()).toBe(false);
     });
-    await withEnv({ GBRAIN_SCHEMA_AUDIT_VERBOSE: 'yes' }, () => {
+    await withEnv({ VOLTMIND_SCHEMA_AUDIT_VERBOSE: 'yes' }, () => {
       expect(isAuditVerbose()).toBe(false);
     });
   });
@@ -65,8 +65,8 @@ describe('computeIsoWeekName', () => {
 });
 
 describe('computeCandidateAuditPath', () => {
-  test('honors GBRAIN_AUDIT_DIR override', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, () => {
+  test('honors VOLTMIND_AUDIT_DIR override', async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, () => {
       const path = computeCandidateAuditPath(new Date('2026-03-15T12:00:00Z'));
       expect(path).toStartWith(auditDir);
       expect(path).toEndWith('schema-candidates-2026-W11.jsonl');
@@ -76,12 +76,12 @@ describe('computeCandidateAuditPath', () => {
 
 describe('logCandidate (redacted by default)', () => {
   test('writes sha8 hash, not raw type, when verbose is unset', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir, GBRAIN_SCHEMA_AUDIT_VERBOSE: undefined }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir, VOLTMIND_SCHEMA_AUDIT_VERBOSE: undefined }, async () => {
       await logCandidate({
         type: 'therapy-session',
         slug: 'personal/therapy/2025-03-15-session-12.md',
         frontmatterKeys: ['date', 'therapist', 'mood'],
-        packIdentity: 'gbrain-base@1.0.0+aaaaaaaa',
+        packIdentity: 'voltmind-base@1.0.0+aaaaaaaa',
       });
       const filePath = computeCandidateAuditPath();
       const content = readFileSync(filePath, 'utf-8').trim();
@@ -95,19 +95,19 @@ describe('logCandidate (redacted by default)', () => {
       expect(record.slug_prefix).not.toContain('therapy');
       // Keys sorted, values absent.
       expect(record.frontmatter_keys).toEqual(['date', 'mood', 'therapist']);
-      expect(record.pack_identity).toBe('gbrain-base@1.0.0+aaaaaaaa');
+      expect(record.pack_identity).toBe('voltmind-base@1.0.0+aaaaaaaa');
       expect(record.count).toBe(1);
       expect(record.ts).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
   });
 
-  test('writes raw type when GBRAIN_SCHEMA_AUDIT_VERBOSE=1', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir, GBRAIN_SCHEMA_AUDIT_VERBOSE: '1' }, async () => {
+  test('writes raw type when VOLTMIND_SCHEMA_AUDIT_VERBOSE=1', async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir, VOLTMIND_SCHEMA_AUDIT_VERBOSE: '1' }, async () => {
       await logCandidate({
         type: 'therapy-session',
         slug: 'personal/therapy/foo.md',
         frontmatterKeys: ['date'],
-        packIdentity: 'gbrain-base@1.0.0+bbbbbbbb',
+        packIdentity: 'voltmind-base@1.0.0+bbbbbbbb',
       });
       const record = JSON.parse(readFileSync(computeCandidateAuditPath(), 'utf-8').trim());
       expect(record.type_redacted).toBe(false);
@@ -116,7 +116,7 @@ describe('logCandidate (redacted by default)', () => {
   });
 
   test('honors custom count', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       await logCandidate({
         type: 'foo',
         slug: 'bar/baz.md',
@@ -130,7 +130,7 @@ describe('logCandidate (redacted by default)', () => {
   });
 
   test('appends multiple entries as JSONL', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       await logCandidate({ type: 'a', slug: 'x/1.md', frontmatterKeys: [], packIdentity: 'p' });
       await logCandidate({ type: 'b', slug: 'y/2.md', frontmatterKeys: [], packIdentity: 'p' });
       const lines = readFileSync(computeCandidateAuditPath(), 'utf-8').trim().split('\n');
@@ -141,18 +141,18 @@ describe('logCandidate (redacted by default)', () => {
   });
 
   test('best-effort: unwritable audit dir warns but does not throw', async () => {
-    // Point GBRAIN_AUDIT_DIR at a path that mkdirSync(recursive:true) can't create.
+    // Point VOLTMIND_AUDIT_DIR at a path that mkdirSync(recursive:true) can't create.
     // Using a non-existent file as a parent (file, not dir) triggers ENOTDIR.
     const blockerFile = join(auditDir, 'blocker');
     writeFileSync(blockerFile, 'this is a file, not a dir');
-    await withEnv({ GBRAIN_AUDIT_DIR: join(blockerFile, 'subdir') }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: join(blockerFile, 'subdir') }, async () => {
       // Should not throw.
       await logCandidate({ type: 'x', slug: 'y/z.md', frontmatterKeys: [], packIdentity: 'p' });
     });
   });
 
   test('slug with no slashes falls back to whole slug as prefix', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       await logCandidate({ type: 'x', slug: 'rootonly', frontmatterKeys: [], packIdentity: 'p' });
       const record = JSON.parse(readFileSync(computeCandidateAuditPath(), 'utf-8').trim());
       expect(record.slug_prefix).toBe('rootonly');
@@ -162,13 +162,13 @@ describe('logCandidate (redacted by default)', () => {
 
 describe('readRecentCandidates', () => {
   test('returns [] when audit dir does not exist', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: join(auditDir, 'nope') }, () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: join(auditDir, 'nope') }, () => {
       expect(readRecentCandidates(30)).toEqual([]);
     });
   });
 
   test('reads recently-written entries', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       await logCandidate({ type: 'a', slug: 'x/1.md', frontmatterKeys: [], packIdentity: 'p' });
       await logCandidate({ type: 'b', slug: 'y/2.md', frontmatterKeys: [], packIdentity: 'p' });
       const records = readRecentCandidates(30);
@@ -179,7 +179,7 @@ describe('readRecentCandidates', () => {
   });
 
   test('skips malformed lines silently', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       // Pre-create a valid entry, then append junk.
       await logCandidate({ type: 'a', slug: 'x/1.md', frontmatterKeys: [], packIdentity: 'p' });
       const path = computeCandidateAuditPath();
@@ -196,7 +196,7 @@ describe('readRecentCandidates', () => {
   });
 
   test('filters by daysBack cutoff', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       // Write a record by hand with an ancient ts, plus one fresh via the API.
       const ancientPath = join(auditDir, 'schema-candidates-2020-W01.jsonl');
       mkdirSync(auditDir, { recursive: true });
@@ -224,7 +224,7 @@ describe('readRecentCandidates', () => {
   });
 
   test('ignores files that do not match the audit prefix', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       mkdirSync(auditDir, { recursive: true });
       // Sibling audit file from a different surface — must be ignored.
       writeFileSync(

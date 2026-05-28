@@ -14,7 +14,7 @@
  *
  * Hermetic: no DB, no network, no real audit dir. We override `auditPath`
  * to a tmpdir-scoped JSONL so tests can read it back without touching
- * `~/.gbrain`. `withEnv` covers the GBRAIN_AUDIT_DIR escape hatch.
+ * `~/.voltmind`. `withEnv` covers the VOLTMIND_AUDIT_DIR escape hatch.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
@@ -34,7 +34,7 @@ let stderrCapture: string;
 let origStderrWrite: typeof process.stderr.write;
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-budget-test-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-budget-test-'));
   auditPath = join(tmp, 'budget.jsonl');
   _resetBudgetTrackerWarningsForTest();
   stderrCapture = '';

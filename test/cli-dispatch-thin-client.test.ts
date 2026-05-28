@@ -1,15 +1,15 @@
 /**
  * Tests for the top-level CLI dispatch guard introduced in multi-topology v1.
  *
- * When `~/.gbrain/config.json` has `remote_mcp` set, 9 commands are refused
+ * When `~/.voltmind/config.json` has `remote_mcp` set, 9 commands are refused
  * with a canonical error pointing at the remote host:
  *   sync, embed, extract, migrate, apply-migrations, repair-jsonb, orphans,
  *   integrity, serve.
  *
  * Doctor is NOT in the refused set — it routes to runRemoteDoctor instead.
  *
- * Strategy: seed `~/.gbrain/config.json` with remote_mcp set in a tempdir
- * `GBRAIN_HOME`, then spawn `gbrain <cmd>` and assert (a) exit code 1,
+ * Strategy: seed `~/.voltmind/config.json` with remote_mcp set in a tempdir
+ * `VOLTMIND_HOME`, then spawn `voltmind <cmd>` and assert (a) exit code 1,
  * (b) stderr contains the canonical error message, (c) the local engine
  * was never reached. Async Bun.spawn (NOT execFileSync) so the test event
  * loop stays responsive — see init-mcp-only.test.ts for the rationale.
@@ -31,10 +31,10 @@ const CLI = join(__dirname, '..', 'src', 'cli.ts');
 
 let tmp: string;
 
-function configPath(): string { return join(tmp, '.gbrain', 'config.json'); }
+function configPath(): string { return join(tmp, '.voltmind', 'config.json'); }
 
 function seedThinClientConfig(extra: Record<string, unknown> = {}) {
-  mkdirSync(join(tmp, '.gbrain'), { recursive: true });
+  mkdirSync(join(tmp, '.voltmind'), { recursive: true });
   writeFileSync(configPath(), JSON.stringify({
     engine: 'postgres',
     remote_mcp: {
@@ -48,7 +48,7 @@ function seedThinClientConfig(extra: Record<string, unknown> = {}) {
 }
 
 function seedLocalPGLiteConfig() {
-  mkdirSync(join(tmp, '.gbrain'), { recursive: true });
+  mkdirSync(join(tmp, '.voltmind'), { recursive: true });
   writeFileSync(configPath(), JSON.stringify({
     engine: 'pglite',
     database_path: join(tmp, 'brain.pglite'),
@@ -62,10 +62,10 @@ async function run(args: string[]): Promise<RunResult> {
   for (const [k, v] of Object.entries(process.env)) {
     if (v !== undefined) env[k] = v;
   }
-  env.GBRAIN_HOME = tmp;
+  env.VOLTMIND_HOME = tmp;
   delete env.DATABASE_URL;
-  delete env.GBRAIN_DATABASE_URL;
-  delete env.GBRAIN_REMOTE_CLIENT_SECRET;
+  delete env.VOLTMIND_DATABASE_URL;
+  delete env.VOLTMIND_REMOTE_CLIENT_SECRET;
   const proc = Bun.spawn({
     cmd: ['bun', 'run', CLI, ...args],
     env,
@@ -82,7 +82,7 @@ async function run(args: string[]): Promise<RunResult> {
 }
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-cli-dispatch-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-cli-dispatch-'));
 });
 
 afterEach(() => {
@@ -107,14 +107,14 @@ describe('thin-client dispatch guard refuses DB-bound commands', () => {
   ];
 
   for (const args of refusedCommands) {
-    test(`refuses \`gbrain ${args.join(' ')}\` with pinpoint hint`, async () => {
+    test(`refuses \`voltmind ${args.join(' ')}\` with pinpoint hint`, async () => {
       seedThinClientConfig();
       const r = await run(args);
       expect(r.exitCode).toBe(1);
       // v0.31.1 (Issue #734): refusal carries an actionable hint via
       // THIN_CLIENT_REFUSE_HINTS instead of a generic "run on the remote
-      // host" message. Hint format: "`gbrain <cmd>` is not routable. <hint>"
-      expect(r.stderr).toContain(`gbrain ${args[0]}`);
+      // host" message. Hint format: "`voltmind <cmd>` is not routable. <hint>"
+      expect(r.stderr).toContain(`voltmind ${args[0]}`);
       expect(r.stderr).toContain('thin-client of https://brain-host.example/mcp');
       expect(r.stderr).toContain('not routable');
     });
@@ -125,15 +125,15 @@ describe('thin-client dispatch guard does NOT refuse safe commands', () => {
   // Commands that are still useful in thin-client mode (init, auth, version,
   // help) MUST NOT be refused. We assert the canonical thin-client error
   // does NOT appear.
-  test('`gbrain --version` works on thin-client install', async () => {
+  test('`voltmind --version` works on thin-client install', async () => {
     seedThinClientConfig();
     const r = await run(['--version']);
     expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain('gbrain');
+    expect(r.stdout).toContain('voltmind');
     expect(r.stderr).not.toContain('thin client');
   });
 
-  test('`gbrain --help` works on thin-client install', async () => {
+  test('`voltmind --help` works on thin-client install', async () => {
     seedThinClientConfig();
     const r = await run(['--help']);
     expect(r.exitCode).toBe(0);
@@ -142,7 +142,7 @@ describe('thin-client dispatch guard does NOT refuse safe commands', () => {
 });
 
 describe('thin-client doctor routes to runRemoteDoctor', () => {
-  test('`gbrain doctor` runs remote checks (not DB-bound checks) when remote_mcp is set', async () => {
+  test('`voltmind doctor` runs remote checks (not DB-bound checks) when remote_mcp is set', async () => {
     seedThinClientConfig();
     const r = await run(['doctor', '--json']);
     // Doctor will likely fail because brain-host.example isn't reachable —
@@ -157,7 +157,7 @@ describe('thin-client doctor routes to runRemoteDoctor', () => {
 
 describe('regression — local config still passes through normally', () => {
   test('local PGLite config does NOT trigger thin-client guard for `sync`', async () => {
-    // Seed a local PGLite config (no remote_mcp). `gbrain sync` shouldn't
+    // Seed a local PGLite config (no remote_mcp). `voltmind sync` shouldn't
     // refuse with the thin-client error. It may error for other reasons
     // (no brain repo configured, etc.) — what matters is the canonical
     // thin-client message MUST NOT appear.

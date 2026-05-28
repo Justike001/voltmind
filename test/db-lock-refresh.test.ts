@@ -7,11 +7,11 @@ import {
 
 describe('LockUnavailableError', () => {
   test('carries the lock id', () => {
-    const err = new LockUnavailableError('gbrain-migrate:postgres');
+    const err = new LockUnavailableError('voltmind-migrate:postgres');
     expect(err).toBeInstanceOf(Error);
     expect(err.name).toBe('LockUnavailableError');
-    expect(err.lockId).toBe('gbrain-migrate:postgres');
-    expect(err.message).toContain('gbrain-migrate:postgres');
+    expect(err.lockId).toBe('voltmind-migrate:postgres');
+    expect(err.message).toContain('voltmind-migrate:postgres');
   });
 });
 
@@ -21,8 +21,8 @@ describe('buildTenantLockId — D4 multi-tenant safety', () => {
       kind: 'postgres' as const,
       executeRaw: async () => [{ db: 'gbrain_main' }],
     } as unknown as Parameters<typeof buildTenantLockId>[0];
-    const id = await buildTenantLockId(fakeEngine, 'gbrain-migrate');
-    expect(id).toBe('gbrain-migrate:gbrain_main');
+    const id = await buildTenantLockId(fakeEngine, 'voltmind-migrate');
+    expect(id).toBe('voltmind-migrate:gbrain_main');
   });
 
   test('pglite engine: returns scope:pglite', async () => {
@@ -30,8 +30,8 @@ describe('buildTenantLockId — D4 multi-tenant safety', () => {
       kind: 'pglite' as const,
       executeRaw: async () => [],
     } as unknown as Parameters<typeof buildTenantLockId>[0];
-    const id = await buildTenantLockId(fakeEngine, 'gbrain-migrate');
-    expect(id).toBe('gbrain-migrate:pglite');
+    const id = await buildTenantLockId(fakeEngine, 'voltmind-migrate');
+    expect(id).toBe('voltmind-migrate:pglite');
   });
 
   test('failure path: returns scope:unknown rather than throwing', async () => {
@@ -39,8 +39,8 @@ describe('buildTenantLockId — D4 multi-tenant safety', () => {
       kind: 'postgres' as const,
       executeRaw: async () => { throw new Error('boom'); },
     } as unknown as Parameters<typeof buildTenantLockId>[0];
-    const id = await buildTenantLockId(fakeEngine, 'gbrain-migrate');
-    expect(id).toBe('gbrain-migrate:unknown');
+    const id = await buildTenantLockId(fakeEngine, 'voltmind-migrate');
+    expect(id).toBe('voltmind-migrate:unknown');
   });
 
   test('two scopes share dbname suffix', async () => {
@@ -48,10 +48,10 @@ describe('buildTenantLockId — D4 multi-tenant safety', () => {
       kind: 'postgres' as const,
       executeRaw: async () => [{ db: 'shared' }],
     } as unknown as Parameters<typeof buildTenantLockId>[0];
-    const a = await buildTenantLockId(fakeEngine, 'gbrain-migrate');
-    const b = await buildTenantLockId(fakeEngine, 'gbrain-hnsw');
-    expect(a).toBe('gbrain-migrate:shared');
-    expect(b).toBe('gbrain-hnsw:shared');
+    const a = await buildTenantLockId(fakeEngine, 'voltmind-migrate');
+    const b = await buildTenantLockId(fakeEngine, 'voltmind-hnsw');
+    expect(a).toBe('voltmind-migrate:shared');
+    expect(b).toBe('voltmind-hnsw:shared');
     expect(a).not.toBe(b);
   });
 });

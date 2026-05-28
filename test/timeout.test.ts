@@ -75,8 +75,8 @@ describe('withTimeout', () => {
   });
 
   test('OperationTimeoutError exposes label + ms fields for hint formatting', () => {
-    const e = new OperationTimeoutError('gbrain search', 30_000);
-    expect(e.label).toBe('gbrain search');
+    const e = new OperationTimeoutError('voltmind search', 30_000);
+    expect(e.label).toBe('voltmind search');
     expect(e.ms).toBe(30_000);
     expect(e.name).toBe('OperationTimeoutError');
   });

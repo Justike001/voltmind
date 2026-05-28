@@ -1,13 +1,13 @@
 // v0.38 T7a: pack-aware inferType parity + extension tests.
 //
-// Parity gate: `inferTypeFromPack(path, gbrain-base)` must produce
+// Parity gate: `inferTypeFromPack(path, voltmind-base)` must produce
 // IDENTICAL output to the legacy `inferType(path)` for every known
-// path prefix. If this drifts, gbrain-base.yaml is out of sync with
-// the GBRAIN_BASE_PATH_PREFIXES table in markdown.ts.
+// path prefix. If this drifts, voltmind-base.yaml is out of sync with
+// the VOLTMIND_BASE_PATH_PREFIXES table in markdown.ts.
 //
 // Extension test: a user pack adding `paper: { path_prefixes:
 // ['papers/'] }` must route `papers/foo.md` to 'paper' (the pack
-// declaration), bypassing the gbrain-base fallback.
+// declaration), bypassing the voltmind-base fallback.
 
 import { describe, expect, test } from 'bun:test';
 import { parseMarkdown } from '../src/core/markdown.ts';
@@ -16,9 +16,9 @@ import { loadPackFromFile } from '../src/core/schema-pack/loader.ts';
 import { parseSchemaPackManifest } from '../src/core/schema-pack/manifest-v1.ts';
 import { join } from 'node:path';
 
-const GBRAIN_BASE_PATH = join(import.meta.dir, '../src/core/schema-pack/base/gbrain-base.yaml');
+const VOLTMIND_BASE_PATH = join(import.meta.dir, '../src/core/schema-pack/base/voltmind-base.yaml');
 
-// Representative paths covering every gbrain-base path-prefix entry.
+// Representative paths covering every voltmind-base path-prefix entry.
 const PARITY_FIXTURES: ReadonlyArray<{ path: string; expected: string; reason: string }> = [
   { path: 'people/alice.md', expected: 'person', reason: 'people/ prefix' },
   { path: 'companies/acme.md', expected: 'company', reason: 'companies/ prefix' },
@@ -45,9 +45,9 @@ const PARITY_FIXTURES: ReadonlyArray<{ path: string; expected: string; reason: s
   { path: 'random/path.md', expected: 'concept', reason: 'no prefix match → concept default' },
 ];
 
-describe('inferTypeFromPack (T7a) — gbrain-base parity', () => {
+describe('inferTypeFromPack (T7a) — voltmind-base parity', () => {
   test('parity: every known path maps to the same type via pack as via legacy', () => {
-    const pack = loadPackFromFile(GBRAIN_BASE_PATH);
+    const pack = loadPackFromFile(VOLTMIND_BASE_PATH);
     for (const { path, expected, reason } of PARITY_FIXTURES) {
       const actual = inferTypeFromPack(path, pack);
       // For parity, the pack result MUST match the legacy hardcoded result.
@@ -63,10 +63,10 @@ describe('inferTypeFromPack (T7a) — gbrain-base parity', () => {
     }
   });
 
-  test('user pack extends gbrain-base with researcher type', () => {
+  test('user pack extends voltmind-base with researcher type', () => {
     // Synthetic pack declaring a new type with its own prefix.
     const pack = parseSchemaPackManifest({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'research-test',
       version: '0.1.0',
       extends: null,
@@ -82,11 +82,11 @@ describe('inferTypeFromPack (T7a) — gbrain-base parity', () => {
     expect(inferTypeFromPack('people/alice.md', pack)).toBe('concept');
   });
 
-  test('pack with empty page_types falls back to gbrain-base defaults', () => {
+  test('pack with empty page_types falls back to voltmind-base defaults', () => {
     // E.g. a pack mid-construction with no page_types declared — should
-    // not crash, should match gbrain-base behavior.
+    // not crash, should match voltmind-base behavior.
     const emptyPack = parseSchemaPackManifest({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'empty',
       version: '0.1.0',
       extends: null,
@@ -98,12 +98,12 @@ describe('inferTypeFromPack (T7a) — gbrain-base parity', () => {
   });
 
   test('undefined filePath returns concept default', () => {
-    const pack = loadPackFromFile(GBRAIN_BASE_PATH);
+    const pack = loadPackFromFile(VOLTMIND_BASE_PATH);
     expect(inferTypeFromPack(undefined, pack)).toBe('concept');
   });
 
   test('case-insensitive matching', () => {
-    const pack = loadPackFromFile(GBRAIN_BASE_PATH);
+    const pack = loadPackFromFile(VOLTMIND_BASE_PATH);
     expect(inferTypeFromPack('PEOPLE/Alice.md', pack)).toBe('person');
     expect(inferTypeFromPack('Companies/ACME.md', pack)).toBe('company');
   });

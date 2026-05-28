@@ -38,10 +38,10 @@ RAW_PATTERN='\b(\.config\b|config:[[:space:]]*src\.config)\b'
 # Tightened patterns: match serializers that pass a source-row's .config
 # field (source.config, src.config, row.config, s.config, or a property
 # access like `.config` on an object likely sourced from a `sources` row),
-# NOT every variable named "config" (which would catch global gbrain config).
+# NOT every variable named "config" (which would catch global voltmind config).
 #
 # The risk pattern is `JSON.stringify(<srcVar>.config)` where srcVar holds
-# a row from the sources table. Variables that hold the GLOBAL gbrain
+# a row from the sources table. Variables that hold the GLOBAL voltmind
 # config.json are also commonly named `config` — that's a different shape
 # and a different threat model (already protected at the file-mode 0o600
 # write site in src/core/config.ts).
@@ -67,7 +67,7 @@ else
 fi
 
 # Filter out files we trust (handle sources.config redaction themselves OR
-# handle the gbrain global config, which is a different object).
+# handle the voltmind global config, which is a different object).
 FILTERED=$(echo "$CANDIDATES" | \
   grep -v 'src/core/source-config-redact.ts' | \
   grep -v 'src/core/sources-load.ts' | \

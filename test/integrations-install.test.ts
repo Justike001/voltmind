@@ -1,13 +1,13 @@
 /**
  * test/integrations-install.test.ts — D6-C invariant.
  *
- * The `gbrain integrations install <recipe-id>` subcommand copies the
+ * The `voltmind integrations install <recipe-id>` subcommand copies the
  * recipe's bundle into the operator's host repo. This test pins:
  *   - happy-path copy + manifest write
- *   - SHA-256 computed per file matches gbrain-side source
- *   - .gbrain-source.json shape (no upstream_repo field per D11-A)
+ *   - SHA-256 computed per file matches voltmind-side source
+ *   - .voltmind-source.json shape (no upstream_repo field per D11-A)
  *   - path-traversal rejection (absolute, ..)
- *   - refusal to install into gbrain itself (or its parent)
+ *   - refusal to install into voltmind itself (or its parent)
  *   - refusal when target has no .git
  *   - resolver rows appended when AGENTS.md present
  */
@@ -25,7 +25,7 @@ let scratch: string;
 
 function makeScratchRepo(opts: { withGit?: boolean; withAgentsMd?: boolean } = {}): string {
   const { withGit = true, withAgentsMd = true } = opts;
-  const dir = mkdtempSync(join(tmpdir(), 'gbrain-install-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'voltmind-install-test-'));
   if (withGit) execSync('git init -q', { cwd: dir });
   if (withAgentsMd) writeFileSync(join(dir, 'AGENTS.md'), '# stub\n');
   return dir;
@@ -53,9 +53,9 @@ describe('installRecipeIntoHostRepo — happy path', () => {
     expect(existsSync(join(scratch, 'skills/voice-post-call/SKILL.md'))).toBe(true);
   });
 
-  it('writes .gbrain-source.json with the documented shape', async () => {
+  it('writes .voltmind-source.json with the documented shape', async () => {
     await installRecipeIntoHostRepo('agent-voice', { target: scratch });
-    const manifestPath = join(scratch, 'services/voice-agent/.gbrain-source.json');
+    const manifestPath = join(scratch, 'services/voice-agent/.voltmind-source.json');
     expect(existsSync(manifestPath)).toBe(true);
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     expect(manifest.recipe).toBe('agent-voice');
@@ -74,7 +74,7 @@ describe('installRecipeIntoHostRepo — happy path', () => {
   it('does NOT carry an upstream_repo field (D11-A privacy invariant)', async () => {
     await installRecipeIntoHostRepo('agent-voice', { target: scratch });
     const manifest = JSON.parse(
-      readFileSync(join(scratch, 'services/voice-agent/.gbrain-source.json'), 'utf8'),
+      readFileSync(join(scratch, 'services/voice-agent/.voltmind-source.json'), 'utf8'),
     );
     expect(manifest.upstream_repo).toBeUndefined();
     expect(manifest.imported_from).toBeUndefined();
@@ -84,7 +84,7 @@ describe('installRecipeIntoHostRepo — happy path', () => {
   it('appends resolver rows to AGENTS.md when present', async () => {
     await installRecipeIntoHostRepo('agent-voice', { target: scratch });
     const agentsMd = readFileSync(join(scratch, 'AGENTS.md'), 'utf8');
-    expect(agentsMd).toContain('gbrain:agent-voice:resolver-rows');
+    expect(agentsMd).toContain('voltmind:agent-voice:resolver-rows');
     expect(agentsMd).toContain('voice-persona-mars');
     expect(agentsMd).toContain('voice-persona-venus');
     expect(agentsMd).toContain('voice-post-call');
@@ -118,9 +118,9 @@ describe('installRecipeIntoHostRepo — refusals', () => {
     }
   });
 
-  it('refuses gbrain itself as target', async () => {
+  it('refuses voltmind itself as target', async () => {
     await expect(installRecipeIntoHostRepo('agent-voice', { target: REPO_ROOT })).rejects.toThrow(
-      /refusing to install into gbrain/i,
+      /refusing to install into voltmind/i,
     );
   });
 
@@ -150,7 +150,7 @@ describe('installRecipeIntoHostRepo — dry-run', () => {
     const result = await installRecipeIntoHostRepo('agent-voice', { target: scratch, dryRun: true });
     expect(result.written).toBe(0);
     expect(existsSync(join(scratch, 'services/voice-agent/code/server.mjs'))).toBe(false);
-    expect(existsSync(join(scratch, 'services/voice-agent/.gbrain-source.json'))).toBe(false);
+    expect(existsSync(join(scratch, 'services/voice-agent/.voltmind-source.json'))).toBe(false);
   });
 });
 
@@ -196,10 +196,10 @@ describe('refreshRecipeIntoHostRepo — D3-A refresh mode', () => {
     // Local edit should still be present.
     expect(readFileSync(modPath, 'utf8')).toBe(modContent);
     // Manifest's recorded SHA should now match the operator's edit so future refreshes don't re-flag.
-    const manifest = JSON.parse(readFileSync(join(scratch, 'services/voice-agent/.gbrain-source.json'), 'utf8'));
+    const manifest = JSON.parse(readFileSync(join(scratch, 'services/voice-agent/.voltmind-source.json'), 'utf8'));
     const entry = manifest.files.find((f: { target: string; sha256: string }) => f.target === 'services/voice-agent/code/server.mjs');
     expect(entry).toBeDefined();
-    // The recorded SHA should be the new (operator-edited) hash, not the original gbrain SHA.
+    // The recorded SHA should be the new (operator-edited) hash, not the original voltmind SHA.
   });
 
   it('--auto take-theirs overwrites locally-modified files', async () => {
@@ -210,14 +210,14 @@ describe('refreshRecipeIntoHostRepo — D3-A refresh mode', () => {
 
     const result = await refreshRecipeIntoHostRepo('agent-voice', { target: scratch, autoMode: 'take-theirs' });
     expect(result.applied).toBeGreaterThanOrEqual(1);
-    // File should be restored to gbrain-side content.
+    // File should be restored to voltmind-side content.
     expect(readFileSync(modPath, 'utf8')).toBe(beforeContent);
   });
 
-  it('writes a transaction journal at .gbrain-source.refresh.log', async () => {
+  it('writes a transaction journal at .voltmind-source.refresh.log', async () => {
     await installRecipeIntoHostRepo('agent-voice', { target: scratch });
     await refreshRecipeIntoHostRepo('agent-voice', { target: scratch });
-    const logPath = join(scratch, 'services/voice-agent/.gbrain-source.refresh.log');
+    const logPath = join(scratch, 'services/voice-agent/.voltmind-source.refresh.log');
     expect(existsSync(logPath)).toBe(true);
     const lines = readFileSync(logPath, 'utf8').trim().split('\n');
     expect(lines.length).toBeGreaterThan(0);

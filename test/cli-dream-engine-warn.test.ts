@@ -1,5 +1,5 @@
 /**
- * v0.41.13 (#1422) — `gbrain dream` surfaces engine-connect failures on stderr.
+ * v0.41.13 (#1422) — `voltmind dream` surfaces engine-connect failures on stderr.
  *
  * Pre-fix bug (foxhoundinc): dream wrapped `connectEngine()` in `try {} catch {}`
  * that silently swallowed the failure. The cycle then ran with `engine: null`,
@@ -40,21 +40,21 @@ function runDream(args: string[], extraEnv: Record<string, string> = {}): {
 
 describe('#1422 — dream surfaces connectEngine failures', () => {
   test('connect failure prints WARNING line on stderr (does not swallow silently)', () => {
-    const tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-dream-warn-'));
-    const tmpBrain = mkdtempSync(join(tmpdir(), 'gbrain-dream-brain-'));
+    const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-dream-warn-'));
+    const tmpBrain = mkdtempSync(join(tmpdir(), 'voltmind-dream-brain-'));
     try {
-      // Point GBRAIN_HOME at an empty tempdir so loadConfig sees no config,
+      // Point VOLTMIND_HOME at an empty tempdir so loadConfig sees no config,
       // then force a bad Postgres URL via env so connectEngine throws on
       // the attempt to reach a non-existent server. Port 9 is the discard
       // protocol — guaranteed not to accept Postgres traffic.
-      // GBRAIN_HOME=/tmp/x yields configDir() === '/tmp/x/.gbrain' (config.ts:687-690).
-      mkdirSync(join(tmpHome, '.gbrain'), { recursive: true });
-      writeFileSync(join(tmpHome, '.gbrain', 'config.json'), JSON.stringify({
+      // VOLTMIND_HOME=/tmp/x yields configDir() === '/tmp/x/.voltmind' (config.ts:687-690).
+      mkdirSync(join(tmpHome, '.voltmind'), { recursive: true });
+      writeFileSync(join(tmpHome, '.voltmind', 'config.json'), JSON.stringify({
         engine: 'postgres',
         database_url: 'postgresql://nobody:nobody@127.0.0.1:9/nodb',
       }));
       const { stderr, status } = runDream(['--dir', tmpBrain, '--phase', 'lint'], {
-        GBRAIN_HOME: tmpHome,
+        VOLTMIND_HOME: tmpHome,
       });
       // Filesystem-only phases still run; exit code reflects cycle outcome,
       // not connect failure. The KEY contract: the WARNING text appears.
@@ -71,20 +71,20 @@ describe('#1422 — dream surfaces connectEngine failures', () => {
   });
 
   test('successful connect emits NO WARNING line', () => {
-    const tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-dream-ok-'));
-    const tmpBrain = mkdtempSync(join(tmpdir(), 'gbrain-dream-brain-'));
+    const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-dream-ok-'));
+    const tmpBrain = mkdtempSync(join(tmpdir(), 'voltmind-dream-brain-'));
     try {
       // PGLite at a fresh tempdir always connects cleanly. No DATABASE_URL.
-      // GBRAIN_HOME=/tmp/x yields configDir() === '/tmp/x/.gbrain' (config.ts:687-690).
-      mkdirSync(join(tmpHome, '.gbrain'), { recursive: true });
-      writeFileSync(join(tmpHome, '.gbrain', 'config.json'), JSON.stringify({
+      // VOLTMIND_HOME=/tmp/x yields configDir() === '/tmp/x/.voltmind' (config.ts:687-690).
+      mkdirSync(join(tmpHome, '.voltmind'), { recursive: true });
+      writeFileSync(join(tmpHome, '.voltmind', 'config.json'), JSON.stringify({
         engine: 'pglite',
       }));
       const { stderr, status } = runDream(['--dir', tmpBrain, '--phase', 'lint'], {
-        GBRAIN_HOME: tmpHome,
+        VOLTMIND_HOME: tmpHome,
         // Strip any inherited Postgres URL so PGLite is unambiguously the engine.
         DATABASE_URL: '',
-        GBRAIN_DATABASE_URL: '',
+        VOLTMIND_DATABASE_URL: '',
       });
       expect(stderr).not.toContain('[dream] WARNING: could not connect to DB');
       expect(status).toBeGreaterThanOrEqual(0);

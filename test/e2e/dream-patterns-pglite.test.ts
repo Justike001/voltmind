@@ -36,7 +36,7 @@ async function setupRig(): Promise<TestRig> {
   await engine.initSchema();
   return {
     engine,
-    brainDir: '/tmp/gbrain-patterns-test',
+    brainDir: '/tmp/voltmind-patterns-test',
     cleanup: async () => {
       try { await engine.disconnect(); } catch { /* */ }
     },

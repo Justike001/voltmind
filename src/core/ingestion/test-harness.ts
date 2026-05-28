@@ -1,14 +1,14 @@
 /**
  * IngestionTestHarness — Publisher-facing test utility for IngestionSource authors.
  *
- * Exported as a public subpath (gbrain/ingestion/test-harness) and pinned by
+ * Exported as a public subpath (voltmind/ingestion/test-harness) and pinned by
  * test/public-exports.test.ts so it stays a versioned API for skillpack
  * publishers. Treat as the equivalent of @testing-library for browser apps:
  * downstream code depends on this surface, breaking it requires a major bump.
  *
  * Typical usage:
  *
- *   import { IngestionTestHarness, expectEvent } from 'gbrain/ingestion/test-harness';
+ *   import { IngestionTestHarness, expectEvent } from 'voltmind/ingestion/test-harness';
  *   import { GranolaSource } from './source';
  *
  *   test('emits one event per transcript', async () => {
@@ -23,7 +23,7 @@
  *   });
  *
  * The harness deliberately does NOT spin up a PGLite brain — that's what
- * `gbrain ingest test --watch` is for (CLI-side ephemeral brain for the
+ * `voltmind ingest test --watch` is for (CLI-side ephemeral brain for the
  * full daemon-roundtrip iteration loop). The harness is for fast unit
  * tests against the source contract in isolation.
  */

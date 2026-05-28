@@ -1,5 +1,5 @@
 /**
- * Structural tests for `gbrain dream` argv parsing (v0.21).
+ * Structural tests for `voltmind dream` argv parsing (v0.21).
  *
  * Verifies the help text + parser source contains the new flags
  * (--input, --date, --from, --to) and that conflict detection is wired.

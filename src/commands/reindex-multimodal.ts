@@ -1,12 +1,12 @@
 /**
- * v0.36 Phase 3 — `gbrain reindex --multimodal` sweep.
+ * v0.36 Phase 3 — `voltmind reindex --multimodal` sweep.
  *
  * Walks `content_chunks` where `embedding_multimodal IS NULL`, batches
  * through `embedMultimodalSafe` (partial-failure-aware from Commit 0), and
  * persists the new vectors.
  *
  * Wired patterns:
- *   - D7: acquires `gbrain-reindex-multimodal` writer lock via
+ *   - D7: acquires `voltmind-reindex-multimodal` writer lock via
  *     `tryAcquireDbLock` so a concurrent autopilot embed phase can't
  *     double-spend Voyage budget on the same chunks.
  *   - D20 phase 2: builds the HNSW partial index AFTER bulk load completes
@@ -19,7 +19,7 @@
  *     post-upgrade-reembed primitive shape.
  *
  * Not extracted as shared reindex-core in this commit (D10): the existing
- * `gbrain reindex --markdown` walks markdown pages and re-imports via
+ * `voltmind reindex --markdown` walks markdown pages and re-imports via
  * importFromFile; this walks content_chunks and re-embeds via the gateway.
  * The patterns rhyme but the cores diverge enough that extraction would
  * balloon the diff. D10 is filed as a follow-up TODO.
@@ -32,14 +32,14 @@ import { sqlQueryForEngine } from '../core/sql-query.ts';
 import { embedMultimodalSafe } from '../core/ai/gateway.ts';
 import { createProgress } from '../core/progress.ts';
 import { getCliOptions, cliOptsToProgressOptions } from '../core/cli-options.ts';
-import { gbrainPath } from '../core/config.ts';
+import { voltmindPath } from '../core/config.ts';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 // v0.41.15.0 (T9, D9): per-chunk UPDATE workers within each batch.
 import { runSlidingPool } from '../core/worker-pool.ts';
 import { resolveWorkersWithClamp } from '../core/sync-concurrency.ts';
 
-const LOCK_ID = 'gbrain-reindex-multimodal';
+const LOCK_ID = 'voltmind-reindex-multimodal';
 const BATCH_SIZE = 32; // Voyage cap
 const CHECKPOINT_FILE = 'reindex-multimodal-checkpoint.json';
 
@@ -72,7 +72,7 @@ export interface ReindexMultimodalResult {
 }
 
 /**
- * Entry point for `gbrain reindex --multimodal`.
+ * Entry point for `voltmind reindex --multimodal`.
  */
 export async function runReindexMultimodal(
   engine: BrainEngine,
@@ -99,7 +99,7 @@ export async function runReindexMultimodal(
         progress.finish();
         throw new Error(
           `Refusing to reindex: ${pre.error}\n` +
-          `Fix with \`gbrain config set embedding_multimodal_model <provider>:<model>\`.`,
+          `Fix with \`voltmind config set embedding_multimodal_model <provider>:<model>\`.`,
         );
       }
     }
@@ -170,10 +170,10 @@ export async function runReindexMultimodal(
     };
   }
 
-  // GBRAIN_NO_REEMBED bypass (CI / cron / opt-out).
-  if (process.env.GBRAIN_NO_REEMBED === '1') {
+  // VOLTMIND_NO_REEMBED bypass (CI / cron / opt-out).
+  if (process.env.VOLTMIND_NO_REEMBED === '1') {
     process.stderr.write(
-      `[reindex-multimodal] skipping: GBRAIN_NO_REEMBED=1. ` +
+      `[reindex-multimodal] skipping: VOLTMIND_NO_REEMBED=1. ` +
       `Pending: ${pendingBefore} chunks (~$${costUsdEstimate.toFixed(2)}).\n`,
     );
     progress.finish();
@@ -206,7 +206,7 @@ export async function runReindexMultimodal(
   if (!lockHandle) {
     progress.finish();
     throw new Error(
-      `LOCK_HELD: another gbrain-reindex-multimodal process is already running. ` +
+      `LOCK_HELD: another voltmind-reindex-multimodal process is already running. ` +
       `If the prior run crashed, the lock auto-releases after its TTL (6h).`,
     );
   }
@@ -214,7 +214,7 @@ export async function runReindexMultimodal(
   let reembedded = 0;
   let failed = 0;
   // Resume from checkpoint if one exists.
-  const checkpointPath = gbrainPath(CHECKPOINT_FILE);
+  const checkpointPath = voltmindPath(CHECKPOINT_FILE);
   const completedIds = loadCheckpoint(checkpointPath);
 
   try {
@@ -313,14 +313,14 @@ export async function runReindexMultimodal(
       if (process.stdout.isTTY) {
         process.stderr.write(
           `\n[reindex-multimodal] Coverage now 100%. ` +
-          `Run \`gbrain config set search.unified_multimodal true\` to route all queries ` +
+          `Run \`voltmind config set search.unified_multimodal true\` to route all queries ` +
           `through the unified column.\n`,
         );
         unifiedFlagPrompted = true;
       } else {
         process.stderr.write(
           `[reindex-multimodal] Coverage now 100%. ` +
-          `gbrain config set search.unified_multimodal true\n`,
+          `voltmind config set search.unified_multimodal true\n`,
         );
         unifiedFlagPrompted = true;
       }

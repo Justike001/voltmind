@@ -16,7 +16,7 @@ function mktmp(prefix = 'brain-resolver-'): string {
 
 beforeEach(() => {
   // Clear relevant env so tests don't leak.
-  delete process.env.GBRAIN_BRAIN_ID;
+  delete process.env.VOLTMIND_BRAIN_ID;
 });
 
 afterEach(() => {
@@ -32,9 +32,9 @@ function noMounts(): MountEntry[] { return []; }
 
 describe('resolveBrainId — priority order', () => {
   test('explicit flag beats everything else', () => {
-    process.env.GBRAIN_BRAIN_ID = 'from-env';
+    process.env.VOLTMIND_BRAIN_ID = 'from-env';
     const dir = mktmp();
-    writeFileSync(join(dir, '.gbrain-mount'), 'from-dotfile\n');
+    writeFileSync(join(dir, '.voltmind-mount'), 'from-dotfile\n');
     const mounts: MountEntry[] = [
       { id: 'from-path', path: dir, engine: 'pglite', database_path: `${dir}/.pg`, enabled: true },
     ];
@@ -42,9 +42,9 @@ describe('resolveBrainId — priority order', () => {
   });
 
   test('env var beats dotfile + path', () => {
-    process.env.GBRAIN_BRAIN_ID = 'from-env';
+    process.env.VOLTMIND_BRAIN_ID = 'from-env';
     const dir = mktmp();
-    writeFileSync(join(dir, '.gbrain-mount'), 'from-dotfile\n');
+    writeFileSync(join(dir, '.voltmind-mount'), 'from-dotfile\n');
     const mounts: MountEntry[] = [
       { id: 'from-path', path: dir, engine: 'pglite', database_path: `${dir}/.pg`, enabled: true },
     ];
@@ -53,7 +53,7 @@ describe('resolveBrainId — priority order', () => {
 
   test('dotfile beats path-prefix', () => {
     const dir = mktmp();
-    writeFileSync(join(dir, '.gbrain-mount'), 'from-dotfile\n');
+    writeFileSync(join(dir, '.voltmind-mount'), 'from-dotfile\n');
     const mounts: MountEntry[] = [
       { id: 'from-path', path: dir, engine: 'pglite', database_path: `${dir}/.pg`, enabled: true },
     ];
@@ -77,11 +77,11 @@ describe('resolveBrainId — priority order', () => {
 });
 
 describe('resolveBrainId — dotfile behavior', () => {
-  test('walks up to find .gbrain-mount in ancestor', () => {
+  test('walks up to find .voltmind-mount in ancestor', () => {
     const parent = mktmp();
     const nested = join(parent, 'deep/nested/dir');
     mkdirSync(nested, { recursive: true });
-    writeFileSync(join(parent, '.gbrain-mount'), 'luther\n');
+    writeFileSync(join(parent, '.voltmind-mount'), 'luther\n');
     expect(resolveBrainId(null, nested, noMounts)).toBe('luther');
   });
 
@@ -90,14 +90,14 @@ describe('resolveBrainId — dotfile behavior', () => {
     const parent = join(grandparent, 'mid');
     const child = join(parent, 'deep');
     mkdirSync(child, { recursive: true });
-    writeFileSync(join(parent, '.gbrain-mount'), '!!!invalid!!!\n');
-    writeFileSync(join(grandparent, '.gbrain-mount'), 'valid-id\n');
+    writeFileSync(join(parent, '.voltmind-mount'), '!!!invalid!!!\n');
+    writeFileSync(join(grandparent, '.voltmind-mount'), 'valid-id\n');
     expect(resolveBrainId(null, child, noMounts)).toBe('valid-id');
   });
 
   test('accepts "host" in dotfile (explicit opt-out of mount routing)', () => {
     const dir = mktmp();
-    writeFileSync(join(dir, '.gbrain-mount'), `${HOST_BRAIN_ID}\n`);
+    writeFileSync(join(dir, '.voltmind-mount'), `${HOST_BRAIN_ID}\n`);
     // Even with a mount whose path contains cwd, dotfile wins and picks host.
     const mounts: MountEntry[] = [
       { id: 'would-match', path: dir, engine: 'pglite', database_path: `${dir}/.pg`, enabled: true },
@@ -107,7 +107,7 @@ describe('resolveBrainId — dotfile behavior', () => {
 
   test('trims whitespace + only uses first line', () => {
     const dir = mktmp();
-    writeFileSync(join(dir, '.gbrain-mount'), '  yc-media  \n# comment line\n');
+    writeFileSync(join(dir, '.voltmind-mount'), '  yc-media  \n# comment line\n');
     expect(resolveBrainId(null, dir, noMounts)).toBe('yc-media');
   });
 });
@@ -173,8 +173,8 @@ describe('resolveBrainId — validation', () => {
     expect(() => resolveBrainId('-leading', '/tmp', noMounts)).toThrow();
   });
 
-  test('invalid GBRAIN_BRAIN_ID value throws', () => {
-    process.env.GBRAIN_BRAIN_ID = 'UPPER';
+  test('invalid VOLTMIND_BRAIN_ID value throws', () => {
+    process.env.VOLTMIND_BRAIN_ID = 'UPPER';
     expect(() => resolveBrainId(null, '/tmp', noMounts)).toThrow();
   });
 

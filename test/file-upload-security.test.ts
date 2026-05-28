@@ -17,9 +17,9 @@ describe('validateUploadPath', () => {
   let outside: string;
 
   beforeAll(() => {
-    sandbox = mkdtempSync(join(tmpdir(), 'gbrain-upload-'));
+    sandbox = mkdtempSync(join(tmpdir(), 'voltmind-upload-'));
     root = realpathSync(sandbox);
-    outside = mkdtempSync(join(tmpdir(), 'gbrain-outside-'));
+    outside = mkdtempSync(join(tmpdir(), 'voltmind-outside-'));
   });
 
   afterAll(() => {

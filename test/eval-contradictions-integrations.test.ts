@@ -93,7 +93,7 @@ function mkReport(opts: Partial<ProbeReport> & {
           axis: f.axis,
           confidence: 0.85,
           resolution_kind: 'dream_synthesize',
-          resolution_command: `gbrain dream --phase synthesize --slug ${f.slugA}`,
+          resolution_command: `voltmind dream --phase synthesize --slug ${f.slugA}`,
         })),
       },
     ] : [],
@@ -216,7 +216,7 @@ describe('M1 doctor contradictions check (data-shape contract)', () => {
     expect(high.length).toBe(1);
     expect(high[0].axis).toBe('CFO role');
     // Resolution command shape (M7 chain): paste-ready CLI string
-    expect(high[0].resolution_command).toContain('gbrain');
+    expect(high[0].resolution_command).toContain('voltmind');
   });
 });
 

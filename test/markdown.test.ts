@@ -90,7 +90,7 @@ Content
 
   // v0.20: BrainBench / native inbox-chat-calendar Page types. These 5 directory
   // heuristics exercise PageType 'email | slack | calendar-event | note | meeting'
-  // which were added for amara-life-v1 ingest but are useful for any gbrain user
+  // which were added for amara-life-v1 ingest but are useful for any voltmind user
   // ingesting an inbox dump, Slack export, iCal, meeting transcript, or daily notes.
   test.each([
     ['emails/em-0001.md', 'email'],

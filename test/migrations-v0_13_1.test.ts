@@ -48,7 +48,7 @@ describe('migrations registry', () => {
 // ---------------------------------------------------------------------------
 //
 // The orchestrator reads config via loadConfig() which reads from
-// ~/.gbrain/config.json. We can't easily stand that up in a test, so the
+// ~/.voltmind/config.json. We can't easily stand that up in a test, so the
 // test below validates the pieces we CAN test without the config flow:
 // registry integration + shape of the migration module. Full end-to-end
 // with a real engine + config is in test/e2e/migration-flow.test.ts.

@@ -1,6 +1,6 @@
 /**
  * Tests for src/core/minions/spawn-helpers.ts — pure helpers that build the
- * (cmd, args) tuple for spawning the gbrain worker, optionally wrapped in
+ * (cmd, args) tuple for spawning the voltmind worker, optionally wrapped in
  * tini for zombie reaping.
  *
  * `buildSpawnInvocation` is a pure function — directly testable without any
@@ -13,26 +13,26 @@ import { buildSpawnInvocation, detectTini } from '../src/core/minions/spawn-help
 
 describe('buildSpawnInvocation', () => {
   test('without tini: returns cliPath + raw args', () => {
-    const result = buildSpawnInvocation('', '/bin/gbrain', ['jobs', 'work']);
-    expect(result).toEqual({ cmd: '/bin/gbrain', args: ['jobs', 'work'] });
+    const result = buildSpawnInvocation('', '/bin/voltmind', ['jobs', 'work']);
+    expect(result).toEqual({ cmd: '/bin/voltmind', args: ['jobs', 'work'] });
   });
 
   test('with tini: wraps cliPath with tini and "--" separator', () => {
-    const result = buildSpawnInvocation('/usr/bin/tini', '/bin/gbrain', ['jobs', 'work']);
+    const result = buildSpawnInvocation('/usr/bin/tini', '/bin/voltmind', ['jobs', 'work']);
     expect(result).toEqual({
       cmd: '/usr/bin/tini',
-      args: ['--', '/bin/gbrain', 'jobs', 'work'],
+      args: ['--', '/bin/voltmind', 'jobs', 'work'],
     });
   });
 
   test('empty args list is preserved on both branches', () => {
-    expect(buildSpawnInvocation('', '/bin/gbrain', [])).toEqual({
-      cmd: '/bin/gbrain',
+    expect(buildSpawnInvocation('', '/bin/voltmind', [])).toEqual({
+      cmd: '/bin/voltmind',
       args: [],
     });
-    expect(buildSpawnInvocation('/usr/bin/tini', '/bin/gbrain', [])).toEqual({
+    expect(buildSpawnInvocation('/usr/bin/tini', '/bin/voltmind', [])).toEqual({
       cmd: '/usr/bin/tini',
-      args: ['--', '/bin/gbrain'],
+      args: ['--', '/bin/voltmind'],
     });
   });
 });

@@ -47,7 +47,7 @@ function buildEvent(overrides: Partial<IncorrectResolutionEvent> = {}): Incorrec
 describe('buildLearningEntry', () => {
   test('emits canonical entry shape', () => {
     const entry = buildLearningEntry(buildEvent());
-    expect(entry.skill).toBe('gbrain-calibration');
+    expect(entry.skill).toBe('voltmind-calibration');
     expect(entry.type).toBe('observation');
     expect(entry.source).toBe('observed');
     expect(entry.key).toContain(GSTACK_LEARNING_NAMESPACE);
@@ -144,7 +144,7 @@ describe('writeIncorrectResolution', () => {
     });
     expect(result.written).toBe(true);
     expect(received).toBeDefined();
-    expect(received!.skill).toBe('gbrain-calibration');
+    expect(received!.skill).toBe('voltmind-calibration');
     expect(received!.key).toContain('take-42');
   });
 

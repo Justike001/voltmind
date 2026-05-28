@@ -1,7 +1,7 @@
 // v0.38 active-pack loader smoke tests (T-AP boundary helper).
 //
 // Covers: 7-tier resolution chain with config-driven inputs, tier-1
-// trust gate (remote=true rejects per-call opt), gbrain-base loads from
+// trust gate (remote=true rejects per-call opt), voltmind-base loads from
 // bundled path, custom pack via test-injected locator.
 
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
@@ -16,7 +16,7 @@ import { withEnv } from './helpers/with-env.ts';
 
 describe('loadActivePack boundary helper', () => {
   beforeAll(() => {
-    // Tests use the real bundled gbrain-base for tier-7 default; per-test
+    // Tests use the real bundled voltmind-base for tier-7 default; per-test
     // overrides via __setPackLocatorForTests when injecting synthetic packs.
   });
   afterAll(() => {
@@ -24,10 +24,10 @@ describe('loadActivePack boundary helper', () => {
     _resetPackCacheForTests();
   });
 
-  test('default resolution loads gbrain-base from bundled path', async () => {
+  test('default resolution loads voltmind-base from bundled path', async () => {
     _resetPackCacheForTests();
     const pack = await loadActivePack({ cfg: null, remote: false });
-    expect(pack.manifest.name).toBe('gbrain-base');
+    expect(pack.manifest.name).toBe('voltmind-base');
     expect(pack.manifest.extends).toBeNull();
     expect(pack.manifest.page_types.length).toBeGreaterThan(0);
   });
@@ -53,8 +53,8 @@ describe('loadActivePack boundary helper', () => {
     expect(result.source).toBe('home-config');
   });
 
-  test('tier-2 env var GBRAIN_SCHEMA_PACK wins over tier-6 home config', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: 'env-pack' }, async () => {
+  test('tier-2 env var VOLTMIND_SCHEMA_PACK wins over tier-6 home config', async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: 'env-pack' }, async () => {
       const result = resolveActivePackNameOnly({
         cfg: { engine: 'pglite', schema_pack: 'home-pack' } as never,
         remote: false,
@@ -76,9 +76,9 @@ describe('loadActivePack boundary helper', () => {
     expect(result.source).toBe('per-source-db');
   });
 
-  test('tier-7 default falls back to gbrain-base when nothing set', () => {
+  test('tier-7 default falls back to voltmind-base when nothing set', () => {
     const result = resolveActivePackNameOnly({ cfg: null, remote: false });
-    expect(result.pack_name).toBe('gbrain-base');
+    expect(result.pack_name).toBe('voltmind-base');
     expect(result.source).toBe('default');
   });
 
@@ -103,9 +103,9 @@ describe('loadActivePack boundary helper', () => {
     const { mkdtempSync, writeFileSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
-    const dir = mkdtempSync(join(tmpdir(), 'gbrain-test-pack-'));
+    const dir = mkdtempSync(join(tmpdir(), 'voltmind-test-pack-'));
     const yamlPath = join(dir, 'pack.yaml');
-    writeFileSync(yamlPath, `api_version: gbrain-schema-pack-v1
+    writeFileSync(yamlPath, `api_version: voltmind-schema-pack-v1
 name: injected-pack
 version: 0.1.0
 description: test

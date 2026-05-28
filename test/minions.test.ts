@@ -1796,22 +1796,22 @@ describe('resolveWorkerConcurrency (v0.19.1 H3): clamp + validation', () => {
     expect(resolveWorkerConcurrency(['--concurrency', '4'], {} as NodeJS.ProcessEnv)).toBe(4);
   });
   test('flag-unset env=8 → 8', () => {
-    expect(resolveWorkerConcurrency([], { GBRAIN_WORKER_CONCURRENCY: '8' } as NodeJS.ProcessEnv)).toBe(8);
+    expect(resolveWorkerConcurrency([], { VOLTMIND_WORKER_CONCURRENCY: '8' } as NodeJS.ProcessEnv)).toBe(8);
   });
   test('flag=2 env=8 → 2 (flag wins)', () => {
-    expect(resolveWorkerConcurrency(['--concurrency', '2'], { GBRAIN_WORKER_CONCURRENCY: '8' } as NodeJS.ProcessEnv)).toBe(2);
+    expect(resolveWorkerConcurrency(['--concurrency', '2'], { VOLTMIND_WORKER_CONCURRENCY: '8' } as NodeJS.ProcessEnv)).toBe(2);
   });
   test('both unset → 1', () => {
     expect(resolveWorkerConcurrency([], {} as NodeJS.ProcessEnv)).toBe(1);
   });
   test('garbage env "foo" → clamped to 1 (H3)', () => {
-    expect(resolveWorkerConcurrency([], { GBRAIN_WORKER_CONCURRENCY: 'foo' } as NodeJS.ProcessEnv)).toBe(1);
+    expect(resolveWorkerConcurrency([], { VOLTMIND_WORKER_CONCURRENCY: 'foo' } as NodeJS.ProcessEnv)).toBe(1);
   });
   test('env=0 → clamped to 1 (H3 — prevents silent wedge)', () => {
-    expect(resolveWorkerConcurrency([], { GBRAIN_WORKER_CONCURRENCY: '0' } as NodeJS.ProcessEnv)).toBe(1);
+    expect(resolveWorkerConcurrency([], { VOLTMIND_WORKER_CONCURRENCY: '0' } as NodeJS.ProcessEnv)).toBe(1);
   });
   test('env=-5 → clamped to 1 (H3)', () => {
-    expect(resolveWorkerConcurrency([], { GBRAIN_WORKER_CONCURRENCY: '-5' } as NodeJS.ProcessEnv)).toBe(1);
+    expect(resolveWorkerConcurrency([], { VOLTMIND_WORKER_CONCURRENCY: '-5' } as NodeJS.ProcessEnv)).toBe(1);
   });
 });
 
@@ -1846,9 +1846,9 @@ describe('backpressure-audit (v0.19.1 Q1): JSONL on coalesce', () => {
     const path = await import('node:path');
     const os = await import('node:os');
 
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-audit-'));
-    const prev = process.env.GBRAIN_AUDIT_DIR;
-    process.env.GBRAIN_AUDIT_DIR = tmp;
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-audit-'));
+    const prev = process.env.VOLTMIND_AUDIT_DIR;
+    process.env.VOLTMIND_AUDIT_DIR = tmp;
     try {
       expect(resolveAuditDir()).toBe(tmp);
       logBackpressureCoalesce({
@@ -1866,8 +1866,8 @@ describe('backpressure-audit (v0.19.1 Q1): JSONL on coalesce', () => {
       expect(line.returned_job_id).toBe(42);
       expect(typeof line.ts).toBe('string');
     } finally {
-      if (prev === undefined) delete process.env.GBRAIN_AUDIT_DIR;
-      else process.env.GBRAIN_AUDIT_DIR = prev;
+      if (prev === undefined) delete process.env.VOLTMIND_AUDIT_DIR;
+      else process.env.VOLTMIND_AUDIT_DIR = prev;
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
@@ -2310,10 +2310,10 @@ describe('checkAborted (v0.20.5 cycle signal)', () => {
 // --- v0.22.14: Self-health-check for bare workers ---
 
 describe('MinionWorker: self-health-check', () => {
-  test('health check is active when GBRAIN_SUPERVISED is not set', async () => {
+  test('health check is active when VOLTMIND_SUPERVISED is not set', async () => {
     // Save and clear the env var
-    const saved = process.env.GBRAIN_SUPERVISED;
-    delete process.env.GBRAIN_SUPERVISED;
+    const saved = process.env.VOLTMIND_SUPERVISED;
+    delete process.env.VOLTMIND_SUPERVISED;
 
     try {
       const worker = new MinionWorker(engine, {
@@ -2338,14 +2338,14 @@ describe('MinionWorker: self-health-check', () => {
       const completed = await queue.getJobs({ status: 'completed' });
       expect(completed.length).toBeGreaterThanOrEqual(1);
     } finally {
-      if (saved !== undefined) process.env.GBRAIN_SUPERVISED = saved;
-      else delete process.env.GBRAIN_SUPERVISED;
+      if (saved !== undefined) process.env.VOLTMIND_SUPERVISED = saved;
+      else delete process.env.VOLTMIND_SUPERVISED;
     }
   }, 10_000);
 
-  test('health check is skipped when GBRAIN_SUPERVISED=1', async () => {
-    const saved = process.env.GBRAIN_SUPERVISED;
-    process.env.GBRAIN_SUPERVISED = '1';
+  test('health check is skipped when VOLTMIND_SUPERVISED=1', async () => {
+    const saved = process.env.VOLTMIND_SUPERVISED;
+    process.env.VOLTMIND_SUPERVISED = '1';
 
     try {
       const worker = new MinionWorker(engine, {
@@ -2369,13 +2369,13 @@ describe('MinionWorker: self-health-check', () => {
       const completed = await queue.getJobs({ status: 'completed' });
       expect(completed.length).toBeGreaterThanOrEqual(1);
     } finally {
-      if (saved !== undefined) process.env.GBRAIN_SUPERVISED = saved;
-      else delete process.env.GBRAIN_SUPERVISED;
+      if (saved !== undefined) process.env.VOLTMIND_SUPERVISED = saved;
+      else delete process.env.VOLTMIND_SUPERVISED;
     }
   }, 10_000);
 
   test('healthCheckInterval=0 disables health check', async () => {
-    delete process.env.GBRAIN_SUPERVISED;
+    delete process.env.VOLTMIND_SUPERVISED;
 
     const worker = new MinionWorker(engine, {
       queue: 'default',
@@ -2442,7 +2442,7 @@ function makeProbeEngine(overrides: ProbeOverrides) {
 
 describe('MinionWorker: self-health-check behavior (v0.22.14)', () => {
   test('emits unhealthy{db_dead} after dbFailExitAfter consecutive DB probe failures', async () => {
-    delete process.env.GBRAIN_SUPERVISED;
+    delete process.env.VOLTMIND_SUPERVISED;
 
     let probeCount = 0;
     const probeEngine = makeProbeEngine({
@@ -2479,7 +2479,7 @@ describe('MinionWorker: self-health-check behavior (v0.22.14)', () => {
   }, 10_000);
 
   test('DB recovery resets the failure counter (no exit after intermittent failures)', async () => {
-    delete process.env.GBRAIN_SUPERVISED;
+    delete process.env.VOLTMIND_SUPERVISED;
 
     let probeCount = 0;
     // Pattern: fail, fail, succeed (resets), fail, fail, then permanently succeed.
@@ -2520,7 +2520,7 @@ describe('MinionWorker: self-health-check behavior (v0.22.14)', () => {
   }, 10_000);
 
   test('emits unhealthy{stalled} after stallExitAfterMs of continuous idle with waiting jobs', async () => {
-    delete process.env.GBRAIN_SUPERVISED;
+    delete process.env.VOLTMIND_SUPERVISED;
 
     const probeEngine = makeProbeEngine({
       selectOne: async () => [{ ok: 1 }],
@@ -2565,7 +2565,7 @@ describe('MinionWorker: self-health-check behavior (v0.22.14)', () => {
   }, 10_000);
 
   test('inFlight > 0 blocks stall detection (long-running legitimate job)', async () => {
-    delete process.env.GBRAIN_SUPERVISED;
+    delete process.env.VOLTMIND_SUPERVISED;
 
     const probeEngine = makeProbeEngine({
       selectOne: async () => [{ ok: 1 }],
@@ -2614,7 +2614,7 @@ describe('MinionWorker: self-health-check behavior (v0.22.14)', () => {
   }, 10_000);
 
   test('regression (D1): waiting jobs of unregistered handler names do NOT trigger stall exit', async () => {
-    delete process.env.GBRAIN_SUPERVISED;
+    delete process.env.VOLTMIND_SUPERVISED;
 
     // The count(*) query is filtered by registered handler names. If handlers=['noop']
     // and the queue has 5 'widget-fn' jobs, the SQL `name = ANY($2)` filter returns 0.

@@ -22,7 +22,7 @@ describe('summarizeTransition (5-cell matrix + invalid fallthrough)', () => {
     const s = summarizeTransition('balanced', 'tokenmax');
     expect(s.kind).toBe('tokenmax_opt_in');
     expect(s.reindex_required).toBe(true);
-    expect(s.reindex_command).toBe('gbrain reindex --markdown');
+    expect(s.reindex_command).toBe('voltmind reindex --markdown');
     expect(s.cost_estimate_per_query_cents).toBeGreaterThan(0);
     expect(s.callout_lines.some((l) => l.includes('tokenmax'))).toBe(true);
   });
@@ -95,7 +95,7 @@ describe('probeWorkerAvailable (DI for active/stale/never_seen)', () => {
   test('never_seen when minion_jobs has no recent activity', async () => {
     const result = await probeWorkerAvailable(engine);
     expect(result.status).toBe('never_seen');
-    expect(result.paste_ready_start_command).toBe('gbrain jobs work');
+    expect(result.paste_ready_start_command).toBe('voltmind jobs work');
     expect(result.last_heartbeat_iso).toBeUndefined();
   });
 

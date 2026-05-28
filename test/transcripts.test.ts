@@ -26,7 +26,7 @@ function setMtime(path: string, mtimeMs: number) {
 }
 
 beforeAll(() => {
-  tmpRoot = mkdtempSync(join(tmpdir(), 'gbrain-transcripts-test-'));
+  tmpRoot = mkdtempSync(join(tmpdir(), 'voltmind-transcripts-test-'));
   corpusDir = join(tmpRoot, 'sessions');
   mkdirSync(corpusDir, { recursive: true });
 });

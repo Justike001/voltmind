@@ -32,12 +32,12 @@ import { withEnv } from './helpers/with-env.ts';
 // Tier 3: every PGLite spinup path needs the snapshot env unset (test
 // infrastructure detail; matches bootstrap.test.ts pattern).
 let engine: PGLiteEngine;
-const FAKE_GIT_DIR = join(tmpdir(), `gbrain-sources-ops-test-${process.pid}`);
-const GBRAIN_HOME = join(FAKE_GIT_DIR, 'gbrain-home');
-// gbrainPath() appends `.gbrain` to GBRAIN_HOME, so the actual clone root the
-// production code resolves to is $GBRAIN_HOME/.gbrain/clones/. Tests that
-// hand-craft path fixtures must use this, NOT $GBRAIN_HOME/clones/.
-const CLONE_ROOT = join(GBRAIN_HOME, '.gbrain', 'clones');
+const FAKE_GIT_DIR = join(tmpdir(), `voltmind-sources-ops-test-${process.pid}`);
+const VOLTMIND_HOME = join(FAKE_GIT_DIR, 'voltmind-home');
+// voltmindPath() appends `.voltmind` to VOLTMIND_HOME, so the actual clone root the
+// production code resolves to is $VOLTMIND_HOME/.voltmind/clones/. Tests that
+// hand-craft path fixtures must use this, NOT $VOLTMIND_HOME/clones/.
+const CLONE_ROOT = join(VOLTMIND_HOME, '.voltmind', 'clones');
 
 // ---------------------------------------------------------------------------
 // Fake-git harness — controllable success/failure so addSource's clone
@@ -112,18 +112,18 @@ beforeEach(async () => {
   await engine.executeRaw(
     `INSERT INTO sources (id, name, local_path, config) VALUES ('default', 'default', NULL, '{}'::jsonb) ON CONFLICT (id) DO NOTHING`,
   );
-  // Reset GBRAIN_HOME fixtures between tests
-  rmSync(GBRAIN_HOME, { recursive: true, force: true });
-  mkdirSync(GBRAIN_HOME, { recursive: true });
+  // Reset VOLTMIND_HOME fixtures between tests
+  rmSync(VOLTMIND_HOME, { recursive: true, force: true });
+  mkdirSync(VOLTMIND_HOME, { recursive: true });
   setMode('ok');
 });
 
-// Run every test with GBRAIN_HOME pointing at our fixture dir AND fake git
+// Run every test with VOLTMIND_HOME pointing at our fixture dir AND fake git
 // in PATH. Passed via withEnv so other test files in the shard don't see
 // it leak.
 async function withEnv2<T>(fn: () => Promise<T>): Promise<T> {
   return withEnv(
-    { GBRAIN_HOME, PATH: fakePath() },
+    { VOLTMIND_HOME, PATH: fakePath() },
     fn,
   );
 }
@@ -297,7 +297,7 @@ describe('listSources', () => {
 // ---------------------------------------------------------------------------
 
 describe('removeSource — clone-cleanup', () => {
-  test('removes clone IFF managed (local_path under $GBRAIN_HOME/clones/ + remote_url set)', async () => {
+  test('removes clone IFF managed (local_path under $VOLTMIND_HOME/clones/ + remote_url set)', async () => {
     await withEnv2(async () => {
       const row = await addSource(engine, {
         id: 'cleanup-yes',
@@ -316,7 +316,7 @@ describe('removeSource — clone-cleanup', () => {
 
   test('does NOT remove clone for user-supplied --path (no remote_url)', async () => {
     await withEnv2(async () => {
-      const userPath = join(GBRAIN_HOME, 'user-managed-fixture');
+      const userPath = join(VOLTMIND_HOME, 'user-managed-fixture');
       mkdirSync(userPath, { recursive: true });
       writeFileSync(join(userPath, 'file'), 'hi');
       await addSource(engine, { id: 'cleanup-no', localPath: userPath });
@@ -337,7 +337,7 @@ describe('removeSource — clone-cleanup', () => {
       // the link and rejects because the target isn't under the clones/
       // confine. removeSource skips cleanup and just deletes the DB row.
       // Sentinel stays intact.
-      const target = join(GBRAIN_HOME, 'sensitive-fixture');
+      const target = join(VOLTMIND_HOME, 'sensitive-fixture');
       mkdirSync(target, { recursive: true });
       writeFileSync(join(target, 'sentinel'), 'do-not-touch');
       const linkPath = join(CLONE_ROOT, 'evil');
@@ -441,7 +441,7 @@ describe('getSourceStatus', () => {
 
   test('clone_state = "not-applicable" for path-only source (no remote)', async () => {
     await withEnv2(async () => {
-      const userPath = join(GBRAIN_HOME, 'na-fixture');
+      const userPath = join(VOLTMIND_HOME, 'na-fixture');
       mkdirSync(userPath, { recursive: true });
       // path-only source still gets validateRepoState — but with no expected
       // URL, it just probes existence + .git. Path exists with no .git → 'no-git'.
@@ -513,8 +513,8 @@ describe('recloneIfMissing — T4 restore + autopurge recovery', () => {
 // ---------------------------------------------------------------------------
 
 describe('isPathContained', () => {
-  // Use a sandbox dir, not GBRAIN_HOME (which has the .gbrain quirk).
-  const SANDBOX = join(tmpdir(), `gbrain-isPathContained-${process.pid}`);
+  // Use a sandbox dir, not VOLTMIND_HOME (which has the .voltmind quirk).
+  const SANDBOX = join(tmpdir(), `voltmind-isPathContained-${process.pid}`);
   beforeEach(() => {
     rmSync(SANDBOX, { recursive: true, force: true });
     mkdirSync(SANDBOX, { recursive: true });

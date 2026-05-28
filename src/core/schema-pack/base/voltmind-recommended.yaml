@@ -1,39 +1,39 @@
-# gbrain-recommended — the recommended starter pack.
+# voltmind-recommended — the recommended starter pack.
 #
-# v0.39 T8 — converts the prose taxonomy in docs/GBRAIN_RECOMMENDED_SCHEMA.md
+# v0.39 T8 — converts the prose taxonomy in docs/VOLTMIND_RECOMMENDED_SCHEMA.md
 # into a real, activatable schema pack. Users who like the documented
 # "operational brain" pattern can:
 #
-#   gbrain schema use gbrain-recommended
+#   voltmind schema use voltmind-recommended
 #
 # and get the documented behavior in one command instead of inferring it
 # from a 1013-line essay.
 #
-# This pack extends gbrain-base (which reproduces pre-v0.38 hardcoded
+# This pack extends voltmind-base (which reproduces pre-v0.38 hardcoded
 # behavior) and adds the additional types the recommended-schema doc
 # describes: deals, meetings, concepts, projects, sources, daily,
 # personal, civic, originals, places, trips.
 #
-# Note: `conversation` was promoted into gbrain-base in v0.41.11 and is
-# no longer duplicated here — it now arrives via `extends: gbrain-base`.
+# Note: `conversation` was promoted into voltmind-base in v0.41.11 and is
+# no longer duplicated here — it now arrives via `extends: voltmind-base`.
 #
-# Inherits everything else from gbrain-base via `extends:`. Pin the
-# base version so a future gbrain-base change doesn't silently shift
+# Inherits everything else from voltmind-base via `extends:`. Pin the
+# base version so a future voltmind-base change doesn't silently shift
 # this pack's behavior.
 
-api_version: gbrain-schema-pack-v1
-name: gbrain-recommended
+api_version: voltmind-schema-pack-v1
+name: voltmind-recommended
 version: 1.0.0
-gbrain_min_version: 0.39.0
-extends: gbrain-base
+voltmind_min_version: 0.39.0
+extends: voltmind-base
 description: |
   The recommended starter pack for an operational personal brain.
-  Based on docs/GBRAIN_RECOMMENDED_SCHEMA.md — Karpathy's LLM wiki
+  Based on docs/VOLTMIND_RECOMMENDED_SCHEMA.md — Karpathy's LLM wiki
   pattern extended into a full operational knowledge base. Use this
   when you want the documented behavior immediately instead of
   authoring your own pack from scratch.
 
-# Pack-specific page_types (extend gbrain-base's seed types).
+# Pack-specific page_types (extend voltmind-base's seed types).
 # Each maps a path prefix to a primitive + opt-in flags. Most types
 # inherit from `entity` (person-like surface) except where noted.
 page_types:
@@ -133,7 +133,7 @@ page_types:
     extractable: true
     expert_routing: false
 
-# Inherit link_types from gbrain-base — no pack-specific verbs needed.
+# Inherit link_types from voltmind-base — no pack-specific verbs needed.
 link_types: []
 
 # Same takes kinds as base.

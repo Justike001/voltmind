@@ -8,7 +8,7 @@
  * Design constraints (eng review D2, D3, D4, D20, D21):
  *
  *   - D2: extracted as a first-class primitive after rule-of-three
- *     satisfied across 12+ ad-hoc batch sites in gbrain.
+ *     satisfied across 12+ ad-hoc batch sites in voltmind.
  *
  *   - D3: budget gate is fail-CLOSED. Primitive reads
  *     `getCurrentBudgetTracker()` from `src/core/ai/gateway.ts` ahead
@@ -239,7 +239,7 @@ export interface Policy {
   interactiveAbortMs?: number;
   /**
    * Stage item counts. Default: [10, 100, 500] with `full` implicit.
-   * Override via `GBRAIN_PROGRESSIVE_BATCH_STAGES=10,100,500` env or
+   * Override via `VOLTMIND_PROGRESSIVE_BATCH_STAGES=10,100,500` env or
    * per-call. Empty array = skip ramp, go straight to `full`.
    */
   stages?: number[];

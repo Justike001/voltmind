@@ -1,7 +1,7 @@
 /**
  * Pricing table contract — Voyage + ZeroEntropy coverage gate.
  *
- * The post-upgrade reembed cost prompt in `gbrain upgrade` falls back to
+ * The post-upgrade reembed cost prompt in `voltmind upgrade` falls back to
  * "estimate unavailable" on unknown providers, which is fine for safety
  * but bad UX if the provider IS in the recipe registry. These tests pin
  * the providers that v0.35.x officially supports as first-class.

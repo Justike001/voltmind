@@ -37,7 +37,7 @@ beforeAll(() => {
   // Build a tiny repo-shaped tempdir with the wrapper scripts copied in
   // and 4 fixture test files (3 pass, 1 fail). The wrapper's `find test`
   // expression will pick them up via cwd.
-  TMPROOT = mkdtempSync(join(tmpdir(), 'gbrain-parallel-test-'));
+  TMPROOT = mkdtempSync(join(tmpdir(), 'voltmind-parallel-test-'));
   mkdirSync(join(TMPROOT, 'scripts'), { recursive: true });
   mkdirSync(join(TMPROOT, 'test'), { recursive: true });
 

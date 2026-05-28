@@ -1,7 +1,7 @@
 // v0.41.18.0 — batch-retry audit JSONL primitive.
 //
-// Hermetic: uses GBRAIN_AUDIT_DIR env override via the withEnv helper so
-// the test never touches the user's ~/.gbrain/audit/. Each test gets a fresh
+// Hermetic: uses VOLTMIND_AUDIT_DIR env override via the withEnv helper so
+// the test never touches the user's ~/.voltmind/audit/. Each test gets a fresh
 // tempdir via beforeEach so file-system state never leaks across cases.
 
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
@@ -31,7 +31,7 @@ afterEach(() => {
 
 describe('logBatchRetry — success-path emission', () => {
   test('writes JSONL row with outcome=success', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       logBatchRetry('extract.links_inc', 100, 1, 1000, new Error('Connection terminated'));
       const result = readRecentBatchRetryEvents(24);
       expect(result.events).toHaveLength(1);
@@ -45,7 +45,7 @@ describe('logBatchRetry — success-path emission', () => {
   });
 
   test('captures SQLSTATE code when present on error', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       const err = Object.assign(new Error('connection failure'), { code: '08006' });
       logBatchRetry('extract.timeline_fs', 50, 2, 3000, err);
       const result = readRecentBatchRetryEvents(24);
@@ -54,7 +54,7 @@ describe('logBatchRetry — success-path emission', () => {
   });
 
   test('truncates long error messages to 200 chars', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       const longMsg = 'A'.repeat(500);
       logBatchRetry('addLinksBatch', 100, 1, 1000, new Error(longMsg));
       const result = readRecentBatchRetryEvents(24);
@@ -63,7 +63,7 @@ describe('logBatchRetry — success-path emission', () => {
   });
 
   test('replaces newlines in error message (grep-friendly)', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       logBatchRetry('addLinksBatch', 100, 1, 1000, new Error('line1\nline2\tline3'));
       const result = readRecentBatchRetryEvents(24);
       expect(result.events[0].error_message_summary).toBe('line1 line2 line3');
@@ -73,7 +73,7 @@ describe('logBatchRetry — success-path emission', () => {
 
 describe('logBatchExhausted — exhausted-retry emission', () => {
   test('writes outcome=exhausted with total attempt count', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       logBatchExhausted('mcp.put_page.autolink', 25, 4, new Error('Connection terminated'));
       const result = readRecentBatchRetryEvents(24);
       expect(result.events).toHaveLength(1);
@@ -86,7 +86,7 @@ describe('logBatchExhausted — exhausted-retry emission', () => {
 
 describe('readRecentBatchRetryEvents — windowing + corruption tolerance', () => {
   test('filters by hours-back cutoff', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       // Write 3 events: one 25h ago (out of 24h window), one now, one 1h ago.
       const now = Date.now();
       const dir = tmpDir;
@@ -116,7 +116,7 @@ describe('readRecentBatchRetryEvents — windowing + corruption tolerance', () =
   });
 
   test('counts corrupted JSONL lines without crashing', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       // Write a valid event first to ensure the file exists.
       logBatchRetry('addLinksBatch', 1, 1, 100, new Error('valid'));
       const now = new Date();
@@ -134,7 +134,7 @@ describe('readRecentBatchRetryEvents — windowing + corruption tolerance', () =
   });
 
   test('files_unreadable counts permission errors but ignores ENOENT', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       // No files written; the only "missing" file is ENOENT which is expected.
       const result = readRecentBatchRetryEvents(24);
       expect(result.events).toHaveLength(0);
@@ -146,7 +146,7 @@ describe('readRecentBatchRetryEvents — windowing + corruption tolerance', () =
 
 describe('pruneOldBatchRetryAuditFiles — codex H-8 actual pruning', () => {
   test('deletes files older than daysToKeep', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       // Create an old file (mtime 31 days ago).
       const oldFile = path.join(tmpDir, `${BATCH_RETRY_FEATURE_NAME}-2024-W01.jsonl`);
       fs.writeFileSync(oldFile, '{"ts":"2024-01-01T00:00:00Z"}\n');
@@ -166,7 +166,7 @@ describe('pruneOldBatchRetryAuditFiles — codex H-8 actual pruning', () => {
   });
 
   test('ignores files that do not match the batch-retry-*.jsonl shape', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       // Other audit module's files should not be touched.
       const otherFile = path.join(tmpDir, 'shell-jobs-2024-W01.jsonl');
       fs.writeFileSync(otherFile, '{}\n');
@@ -189,7 +189,7 @@ describe('pruneOldBatchRetryAuditFiles — codex H-8 actual pruning', () => {
 
 describe('privacy posture (codex review + CLAUDE.md privacy rule)', () => {
   test('audit row never contains slugs, page ids, or content', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       logBatchRetry(
         'extract.links_inc',
         100,

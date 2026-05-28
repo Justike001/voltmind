@@ -106,14 +106,14 @@ describe('recipe: openrouter', () => {
     expect(() => defaultResolveAuth(r, {}, 'embedding')).toThrow(AIConfigError);
   });
 
-  test('9. resolveDefaultHeaders with no env returns gbrain defaults', () => {
+  test('9. resolveDefaultHeaders with no env returns voltmind defaults', () => {
     const r = getRecipe('openrouter')!;
     expect(r.resolveDefaultHeaders).toBeDefined();
     const h = r.resolveDefaultHeaders!({});
-    expect(h['HTTP-Referer']).toBe('https://gbrain.ai');
-    expect(h['X-OpenRouter-Title']).toBe('gbrain');
+    expect(h['HTTP-Referer']).toBe('https://voltmind.ai');
+    expect(h['X-OpenRouter-Title']).toBe('voltmind');
     // Back-compat alias documented as still-supported.
-    expect(h['X-Title']).toBe('gbrain');
+    expect(h['X-Title']).toBe('voltmind');
   });
 
   test('10. resolveDefaultHeaders honors OPENROUTER_REFERER + OPENROUTER_TITLE (fork override path)', () => {

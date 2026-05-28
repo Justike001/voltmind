@@ -47,8 +47,8 @@ let engine: PGLiteEngine;
 
 beforeEach(async () => {
   tmpHome = mkdtempSync(join(tmpdir(), 'v030_1-int-'));
-  originalHome = process.env.GBRAIN_HOME;
-  process.env.GBRAIN_HOME = tmpHome;
+  originalHome = process.env.VOLTMIND_HOME;
+  process.env.VOLTMIND_HOME = tmpHome;
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
@@ -56,8 +56,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await engine.disconnect();
-  if (originalHome === undefined) delete process.env.GBRAIN_HOME;
-  else process.env.GBRAIN_HOME = originalHome;
+  if (originalHome === undefined) delete process.env.VOLTMIND_HOME;
+  else process.env.VOLTMIND_HOME = originalHome;
   if (existsSync(tmpHome)) rmSync(tmpHome, { recursive: true, force: true });
 });
 

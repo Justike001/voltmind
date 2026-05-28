@@ -155,7 +155,7 @@ describe('writeBrainPage', () => {
   });
 
   test('writes a centralized .bak before mutating an existing file', () => {
-    // v0.36.x #902: backups land under ~/.gbrain/backups/frontmatter/... not
+    // v0.36.x #902: backups land under ~/.voltmind/backups/frontmatter/... not
     // next to the source file (pre-fix littered the brain tree with .bak
     // files that broke gitignore expectations). The returned backupPath is
     // the contract — the test asserts both the path shape and that the
@@ -164,7 +164,7 @@ describe('writeBrainPage', () => {
     mkdirSync(join(tmp, 'people'), { recursive: true });
     const original = `${fence}\ntype: person\ntitle: Old\n${fence}\n\nold`;
     writeFileSync(file, original);
-    const backupRoot = mkdtempSync(join(tmpdir(), 'gbrain-test-backups-'));
+    const backupRoot = mkdtempSync(join(tmpdir(), 'voltmind-test-backups-'));
     try {
       const { backupPath } = writeBrainPage(
         file,

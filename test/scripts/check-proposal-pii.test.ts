@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 const SCRIPT_PATH = join(import.meta.dir, '..', '..', 'scripts', 'check-proposal-pii.sh');
 
 function runLintIn(content: string | null): { exitCode: number; stderr: string } {
-  const dir = mkdtempSync(join(tmpdir(), 'gbrain-pii-lint-'));
+  const dir = mkdtempSync(join(tmpdir(), 'voltmind-pii-lint-'));
   try {
     // Initialize as git repo so `git rev-parse --show-toplevel` resolves.
     spawnSync('git', ['init', '-q'], { cwd: dir });
@@ -137,7 +137,7 @@ B: permanent separation per the couples session
   });
 
   test('--help exits 1 with usage text', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'gbrain-pii-lint-help-'));
+    const dir = mkdtempSync(join(tmpdir(), 'voltmind-pii-lint-help-'));
     try {
       spawnSync('git', ['init', '-q'], { cwd: dir });
       const r = spawnSync('bash', [SCRIPT_PATH, '--help'], { cwd: dir, encoding: 'utf8' });

@@ -1,6 +1,6 @@
 # tests/heavy/
 
-Heavy ops-shape tests. Shell scripts that exercise gbrain end-to-end against
+Heavy ops-shape tests. Shell scripts that exercise voltmind end-to-end against
 real infrastructure (Postgres, large fixtures, concurrent processes). Cost
 minutes per run; NOT in default `bun test`.
 
@@ -55,7 +55,7 @@ matrix — that gate stays fast.
 
 ## Failure output convention
 
-Each script writes a per-run log to `~/.gbrain/audit/heavy-<script>-<ts>.log`
+Each script writes a per-run log to `~/.voltmind/audit/heavy-<script>-<ts>.log`
 containing subprocess stdout/stderr, environment state, and any captured
 metrics. The CI workflow uploads these as artifacts on failure for triage
 without re-running locally.
@@ -67,7 +67,7 @@ without re-running locally.
 - Explicit array argv for execs (no `eval`, no unquoted globs)
 - Print a one-line `[<script>] <action>` log per major step
 - Exit non-zero on any failure path; print enough context to diagnose
-- Honor `$GBRAIN_HOME` / `$TMP_ROOT` env overrides where relevant
+- Honor `$VOLTMIND_HOME` / `$TMP_ROOT` env overrides where relevant
 
 See `scripts/check-jsonb-pattern.sh` and `scripts/run-slow-tests.sh` for the
 in-tree style reference.

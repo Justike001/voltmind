@@ -7,13 +7,13 @@
  * Bun (like Node) only auto-reaps when at least one listener is registered.
  *
  * This test is the load-bearing real-binary verification: spawn the
- * compiled-or-interpreted gbrain CLI as `jobs work --concurrency 1` against
+ * compiled-or-interpreted voltmind CLI as `jobs work --concurrency 1` against
  * a real Postgres, submit a shell job from the CLI side (`remote: false`,
  * no v0.26.9 RCE-gate), capture the PID of the worker's shell child from
  * the job result, then `ps -o stat= -p $PID` after ~300ms to verify the
  * worker reaped it (no Z state).
  *
- * Why not gbrain serve --http: that path doesn't start a worker, and
+ * Why not voltmind serve --http: that path doesn't start a worker, and
  * `submit_job` over MCP carries `remote: true` which rejects shell at the
  * v0.26.9 gate (operations.ts:1391). The CLI submit + jobs work path is
  * the only architecture that exercises the SIGCHLD handler in a real boot.
@@ -42,13 +42,13 @@ import { hasDatabase, setupDB, teardownDB } from './helpers.ts';
 // The test passes in isolation against a clean DB but flakes against the
 // shared test container across version-bump waves. Filed as TODO
 // v0.42+: rework the test to use a dedicated DB or one shared engine.
-// Skip-gate honored when GBRAIN_E2E_SKIP_ZOMBIE_REAPING=1 (opt-in for CI).
+// Skip-gate honored when VOLTMIND_E2E_SKIP_ZOMBIE_REAPING=1 (opt-in for CI).
 const skipReason: string | null = !hasDatabase()
   ? 'DATABASE_URL not set'
   : process.platform === 'win32'
     ? 'POSIX-only (tini/SIGCHLD)'
-    : process.env.GBRAIN_E2E_SKIP_ZOMBIE_REAPING === '1'
-      ? 'opt-out via GBRAIN_E2E_SKIP_ZOMBIE_REAPING=1 (v0.41 migration-bump fragility)'
+    : process.env.VOLTMIND_E2E_SKIP_ZOMBIE_REAPING === '1'
+      ? 'opt-out via VOLTMIND_E2E_SKIP_ZOMBIE_REAPING=1 (v0.41 migration-bump fragility)'
       : null;
 
 const describeE2E = skipReason ? describe.skip : describe;
@@ -71,10 +71,10 @@ describeE2E('SIGCHLD handler reaps shell-job children (real binary)', () => {
 
     // Start the worker via the same `bun run src/cli.ts` path the OAuth E2E
     // uses. This boots through cli.ts so the SIGCHLD handler is installed,
-    // then runs the jobs work daemon. GBRAIN_ALLOW_SHELL_JOBS=1 is required
+    // then runs the jobs work daemon. VOLTMIND_ALLOW_SHELL_JOBS=1 is required
     // for the shell handler to register.
     // Forward DATABASE_URL explicitly so the subprocess can't fall through to
-    // any config-file-derived default (PGLite at $HOME/.gbrain/...) under
+    // any config-file-derived default (PGLite at $HOME/.voltmind/...) under
     // run-e2e.sh's tmpdir HOME isolation, where the config file is absent.
     workerProc = spawn(
       'bun',
@@ -83,7 +83,7 @@ describeE2E('SIGCHLD handler reaps shell-job children (real binary)', () => {
         cwd: process.cwd(),
         env: {
           ...process.env,
-          GBRAIN_ALLOW_SHELL_JOBS: '1',
+          VOLTMIND_ALLOW_SHELL_JOBS: '1',
           DATABASE_URL: process.env.DATABASE_URL ?? '',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -154,11 +154,11 @@ describeE2E('SIGCHLD handler reaps shell-job children (real binary)', () => {
         {
           cwd: process.cwd(),
           encoding: 'utf8',
-          // GBRAIN_ALLOW_SHELL_JOBS=1 also gates the CLI submit path, not
+          // VOLTMIND_ALLOW_SHELL_JOBS=1 also gates the CLI submit path, not
           // just the worker that executes the job.
           env: {
             ...process.env,
-            GBRAIN_ALLOW_SHELL_JOBS: '1',
+            VOLTMIND_ALLOW_SHELL_JOBS: '1',
             DATABASE_URL: process.env.DATABASE_URL ?? '',
           },
         },

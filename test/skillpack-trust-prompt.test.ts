@@ -27,7 +27,7 @@ function makeInput(
       author: 'Garry Tan',
       license: 'MIT',
       homepage: 'https://github.com/garrytan/skillpack-hackathon-evaluation',
-      gbrain_min_version: '0.36.0',
+      voltmind_min_version: '0.36.0',
       skills: ['skills/judge-submission'],
     },
     resolved: {

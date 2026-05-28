@@ -72,9 +72,9 @@ const SYNTHETIC_EMBED_RECIPE: Recipe = {
     },
   },
   default_headers: {
-    'HTTP-Referer': 'https://gbrain.ai',
-    'X-OpenRouter-Title': 'gbrain',
-    'X-Title': 'gbrain',
+    'HTTP-Referer': 'https://voltmind.ai',
+    'X-OpenRouter-Title': 'voltmind',
+    'X-Title': 'voltmind',
   },
   resolveOpenAICompatConfig() {
     return {
@@ -132,9 +132,9 @@ const SYNTHETIC_CHAT_RECIPE: Recipe = {
     },
   },
   default_headers: {
-    'HTTP-Referer': 'https://gbrain.ai',
-    'X-OpenRouter-Title': 'gbrain',
-    'X-Title': 'gbrain',
+    'HTTP-Referer': 'https://voltmind.ai',
+    'X-OpenRouter-Title': 'voltmind',
+    'X-Title': 'voltmind',
   },
   resolveOpenAICompatConfig() {
     return {
@@ -161,9 +161,9 @@ const SYNTHETIC_RERANK_RECIPE: Recipe = {
     },
   },
   default_headers: {
-    'HTTP-Referer': 'https://gbrain.ai',
-    'X-OpenRouter-Title': 'gbrain',
-    'X-Title': 'gbrain',
+    'HTTP-Referer': 'https://voltmind.ai',
+    'X-OpenRouter-Title': 'voltmind',
+    'X-Title': 'voltmind',
   },
 };
 
@@ -199,9 +199,9 @@ describe('transport-level header sweep (v0.37.2.0)', () => {
 
     const h = lastEmbedRequest!.headers;
     expect(h['authorization'], 'Authorization Bearer must be present').toBe('Bearer sk-embed-fake');
-    expect(h['http-referer'], 'HTTP-Referer must reach the wire').toBe('https://gbrain.ai');
-    expect(h['x-openrouter-title'], 'X-OpenRouter-Title must reach the wire').toBe('gbrain');
-    expect(h['x-title'], 'X-Title (back-compat) must reach the wire').toBe('gbrain');
+    expect(h['http-referer'], 'HTTP-Referer must reach the wire').toBe('https://voltmind.ai');
+    expect(h['x-openrouter-title'], 'X-OpenRouter-Title must reach the wire').toBe('voltmind');
+    expect(h['x-title'], 'X-Title (back-compat) must reach the wire').toBe('voltmind');
   });
 
   test('2. chat — SDK applies Authorization + default_headers on every request', async () => {
@@ -220,9 +220,9 @@ describe('transport-level header sweep (v0.37.2.0)', () => {
 
     const h = lastChatRequest!.headers;
     expect(h['authorization']).toBe('Bearer sk-chat-fake');
-    expect(h['http-referer']).toBe('https://gbrain.ai');
-    expect(h['x-openrouter-title']).toBe('gbrain');
-    expect(h['x-title']).toBe('gbrain');
+    expect(h['http-referer']).toBe('https://voltmind.ai');
+    expect(h['x-openrouter-title']).toBe('voltmind');
+    expect(h['x-title']).toBe('voltmind');
   });
 
   test('3. rerank — manual HTTP path applies Authorization + default_headers', async () => {
@@ -257,9 +257,9 @@ describe('transport-level header sweep (v0.37.2.0)', () => {
 
     const h = capturedHeaders!;
     expect(h['authorization'], 'rerank: Authorization Bearer must be present').toBe('Bearer sk-rerank-fake');
-    expect(h['http-referer'], 'rerank: HTTP-Referer must reach the wire').toBe('https://gbrain.ai');
-    expect(h['x-openrouter-title']).toBe('gbrain');
-    expect(h['x-title']).toBe('gbrain');
+    expect(h['http-referer'], 'rerank: HTTP-Referer must reach the wire').toBe('https://voltmind.ai');
+    expect(h['x-openrouter-title']).toBe('voltmind');
+    expect(h['x-title']).toBe('voltmind');
     expect(h['content-type']).toBe('application/json');
   });
 });

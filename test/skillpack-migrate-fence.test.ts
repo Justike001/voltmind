@@ -40,7 +40,7 @@ function scratchWorkspace(): string {
 }
 
 function scratchGbrain(): string {
-  const root = mkdtempSync(join(tmpdir(), 'sp-mf-gbrain-'));
+  const root = mkdtempSync(join(tmpdir(), 'sp-mf-voltmind-'));
   created.push(root);
   mkdirSync(join(root, 'src'), { recursive: true });
   writeFileSync(join(root, 'src', 'cli.ts'), '// stub');
@@ -58,7 +58,7 @@ function scratchGbrain(): string {
     join(root, 'openclaw.plugin.json'),
     JSON.stringify(
       {
-        name: 'gbrain-test',
+        name: 'voltmind-test',
         version: '0.33.0-test',
         skills: ['skills/alpha', 'skills/beta'],
         shared_deps: [],
@@ -70,17 +70,17 @@ function scratchGbrain(): string {
   return root;
 }
 
-const FENCE_WITH_RECEIPT = `<!-- gbrain:skillpack:begin -->
+const FENCE_WITH_RECEIPT = `<!-- voltmind:skillpack:begin -->
 
-<!-- Installed by gbrain 0.32.0 — do not hand-edit between markers. -->
-<!-- gbrain:skillpack:manifest cumulative-slugs="alpha,beta" version="0.32.0" -->
+<!-- Installed by voltmind 0.32.0 — do not hand-edit between markers. -->
+<!-- voltmind:skillpack:manifest cumulative-slugs="alpha,beta" version="0.32.0" -->
 
 | Trigger | Skill |
 |---------|-------|
 | "alpha trigger" | \`skills/alpha/SKILL.md\` |
 | "beta trigger" | \`skills/beta/SKILL.md\` |
 
-<!-- gbrain:skillpack:end -->`;
+<!-- voltmind:skillpack:end -->`;
 
 const RESOLVER_WITH_FENCE = `# RESOLVER
 
@@ -105,7 +105,7 @@ describe('parseFence', () => {
   });
 
   it('detects malformed fence (begin without end)', () => {
-    const malformed = '# RESOLVER\n<!-- gbrain:skillpack:begin -->\nno end marker';
+    const malformed = '# RESOLVER\n<!-- voltmind:skillpack:begin -->\nno end marker';
     const parsed = parseFence(malformed);
     expect(parsed).not.toBeNull();
     expect(parsed!.block).toBe(''); // signals malformed to caller
@@ -113,9 +113,9 @@ describe('parseFence', () => {
 
   it('parses a pre-v0.19 fence with no receipt comment', () => {
     const oldFence = `# RESOLVER
-<!-- gbrain:skillpack:begin -->
+<!-- voltmind:skillpack:begin -->
 | "alpha trigger" | \`skills/alpha/SKILL.md\` |
-<!-- gbrain:skillpack:end -->
+<!-- voltmind:skillpack:end -->
 `;
     const parsed = parseFence(oldFence);
     expect(parsed!.receiptSlugs).toBeNull();
@@ -132,9 +132,9 @@ describe('resolveFenceSlugs', () => {
   });
 
   it('F-CDX-8: falls back to row parsing when receipt is missing', () => {
-    const fence = `<!-- gbrain:skillpack:begin -->
+    const fence = `<!-- voltmind:skillpack:begin -->
 | "trigger" | \`skills/legacy-skill/SKILL.md\` |
-<!-- gbrain:skillpack:end -->`;
+<!-- voltmind:skillpack:end -->`;
     const parsed = parseFence(fence)!;
     const { slugs, usedRowFallback } = resolveFenceSlugs(parsed);
     expect(slugs).toEqual(['legacy-skill']);
@@ -142,11 +142,11 @@ describe('resolveFenceSlugs', () => {
   });
 
   it('F-CDX-8: uses union when receipt and rows drift', () => {
-    const fence = `<!-- gbrain:skillpack:begin -->
-<!-- gbrain:skillpack:manifest cumulative-slugs="alpha,old-removed" version="0.20.0" -->
+    const fence = `<!-- voltmind:skillpack:begin -->
+<!-- voltmind:skillpack:manifest cumulative-slugs="alpha,old-removed" version="0.20.0" -->
 | "alpha" | \`skills/alpha/SKILL.md\` |
 | "beta-new" | \`skills/beta-new/SKILL.md\` |
-<!-- gbrain:skillpack:end -->`;
+<!-- voltmind:skillpack:end -->`;
     const parsed = parseFence(fence)!;
     const { slugs, usedRowFallback } = resolveFenceSlugs(parsed);
     expect(slugs).toEqual(['alpha', 'beta-new', 'old-removed']);
@@ -158,10 +158,10 @@ describe('stripFence', () => {
   it('removes begin/end markers and the receipt comment', () => {
     const parsed = parseFence(RESOLVER_WITH_FENCE)!;
     const out = stripFence(RESOLVER_WITH_FENCE, parsed);
-    expect(out).not.toContain('gbrain:skillpack:begin');
-    expect(out).not.toContain('gbrain:skillpack:end');
+    expect(out).not.toContain('voltmind:skillpack:begin');
+    expect(out).not.toContain('voltmind:skillpack:end');
     expect(out).not.toContain('cumulative-slugs');
-    expect(out).not.toContain('Installed by gbrain');
+    expect(out).not.toContain('Installed by voltmind');
   });
 
   it('preserves table rows verbatim', () => {
@@ -203,7 +203,7 @@ describe('runMigrateFence', () => {
     expect(result.fenceSlugs).toEqual(['alpha', 'beta']);
 
     const rewritten = readFileSync(result.resolverFile!, 'utf-8');
-    expect(rewritten).not.toContain('gbrain:skillpack:begin');
+    expect(rewritten).not.toContain('voltmind:skillpack:begin');
     expect(rewritten).toContain('| "alpha trigger" | `skills/alpha/SKILL.md` |');
   });
 
@@ -231,23 +231,23 @@ describe('runMigrateFence', () => {
     const ws = scratchWorkspace();
     writeFileSync(
       join(ws, 'skills', 'RESOLVER.md'),
-      '<!-- gbrain:skillpack:begin -->\nno end\n',
+      '<!-- voltmind:skillpack:begin -->\nno end\n',
     );
 
     const result = runMigrateFence({ targetWorkspace: ws });
     expect(result.status).toBe('fence_malformed');
   });
 
-  it('copies missing skill dirs additively when gbrainRoot is set', () => {
+  it('copies missing skill dirs additively when voltmindRoot is set', () => {
     const ws = scratchWorkspace();
-    const gbrainRoot = scratchGbrain();
+    const voltmindRoot = scratchGbrain();
     writeFileSync(join(ws, 'skills', 'RESOLVER.md'), RESOLVER_WITH_FENCE);
 
     // Pre-create alpha/ on host (already present); leave beta missing.
     mkdirSync(join(ws, 'skills', 'alpha'), { recursive: true });
     writeFileSync(join(ws, 'skills', 'alpha', 'SKILL.md'), '# pre-existing\n');
 
-    const result = runMigrateFence({ targetWorkspace: ws, gbrainRoot });
+    const result = runMigrateFence({ targetWorkspace: ws, voltmindRoot });
     expect(result.skillsAlreadyPresent).toContain('alpha');
     expect(result.skillsCopied).toContain('beta');
     expect(existsSync(join(ws, 'skills', 'beta', 'SKILL.md'))).toBe(true);
@@ -259,16 +259,16 @@ describe('runMigrateFence', () => {
 
   it('preserves user-added rows whose slug is not in the bundle (no copy attempt)', () => {
     const ws = scratchWorkspace();
-    const gbrainRoot = scratchGbrain();
-    const fenceWithUserRow = `<!-- gbrain:skillpack:begin -->
-<!-- gbrain:skillpack:manifest cumulative-slugs="alpha,user-extra" version="0.20.0" -->
+    const voltmindRoot = scratchGbrain();
+    const fenceWithUserRow = `<!-- voltmind:skillpack:begin -->
+<!-- voltmind:skillpack:manifest cumulative-slugs="alpha,user-extra" version="0.20.0" -->
 | "alpha trigger" | \`skills/alpha/SKILL.md\` |
 | "user-extra trigger" | \`skills/user-extra/SKILL.md\` |
-<!-- gbrain:skillpack:end -->
+<!-- voltmind:skillpack:end -->
 `;
     writeFileSync(join(ws, 'skills', 'RESOLVER.md'), fenceWithUserRow);
 
-    const result = runMigrateFence({ targetWorkspace: ws, gbrainRoot });
+    const result = runMigrateFence({ targetWorkspace: ws, voltmindRoot });
     expect(result.skillsCopied).toContain('alpha');
     expect(result.skillsCopied).not.toContain('user-extra'); // not in bundle
     // The row for user-extra survives in the rewritten resolver.

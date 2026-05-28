@@ -3,8 +3,8 @@ import { writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-const TMP_TXT = join(tmpdir(), 'gbrain-test-audio.txt');
-const TMP_MP3 = join(tmpdir(), 'gbrain-test-audio.mp3');
+const TMP_TXT = join(tmpdir(), 'voltmind-test-audio.txt');
+const TMP_MP3 = join(tmpdir(), 'voltmind-test-audio.mp3');
 
 // Create minimal test files
 writeFileSync(TMP_TXT, 'not audio');

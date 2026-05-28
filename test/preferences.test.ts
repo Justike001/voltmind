@@ -14,26 +14,26 @@ import {
 } from '../src/core/preferences.ts';
 
 let origHome: string | undefined;
-let origGbrainHome: string | undefined;
+let origVoltmindHome: string | undefined;
 let tmp: string;
 
 beforeEach(() => {
   origHome = process.env.HOME;
-  origGbrainHome = process.env.GBRAIN_HOME;
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-prefs-test-'));
-  // preferences.ts's gbrainDir() returns `$HOME/.gbrain` when GBRAIN_HOME
-  // is unset. Test fixtures write to `$tmp/.gbrain/...`, so set HOME only
-  // and clear GBRAIN_HOME — setting GBRAIN_HOME would route prefs to $tmp
-  // directly (no .gbrain suffix), which doesn't match the fixture layout.
+  origVoltmindHome = process.env.VOLTMIND_HOME;
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-prefs-test-'));
+  // preferences.ts's voltmindDir() returns `$HOME/.voltmind` when VOLTMIND_HOME
+  // is unset. Test fixtures write to `$tmp/.voltmind/...`, so set HOME only
+  // and clear VOLTMIND_HOME — setting VOLTMIND_HOME would route prefs to $tmp
+  // directly (no .voltmind suffix), which doesn't match the fixture layout.
   process.env.HOME = tmp;
-  delete process.env.GBRAIN_HOME;
+  delete process.env.VOLTMIND_HOME;
 });
 
 afterEach(() => {
   if (origHome === undefined) delete process.env.HOME;
   else process.env.HOME = origHome;
-  if (origGbrainHome === undefined) delete process.env.GBRAIN_HOME;
-  else process.env.GBRAIN_HOME = origGbrainHome;
+  if (origVoltmindHome === undefined) delete process.env.VOLTMIND_HOME;
+  else process.env.VOLTMIND_HOME = origVoltmindHome;
   try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort */ }
 });
 
@@ -61,17 +61,17 @@ describe('loadPreferences', () => {
   });
 
   test('parses existing JSON file', () => {
-    mkdirSync(join(tmp, '.gbrain'), { recursive: true });
+    mkdirSync(join(tmp, '.voltmind'), { recursive: true });
     writeFileSync(
-      join(tmp, '.gbrain', 'preferences.json'),
+      join(tmp, '.voltmind', 'preferences.json'),
       JSON.stringify({ minion_mode: 'always', set_in_version: '0.11.0' }),
     );
     expect(loadPreferences()).toEqual({ minion_mode: 'always', set_in_version: '0.11.0' });
   });
 
   test('throws on malformed JSON so callers can surface it', () => {
-    mkdirSync(join(tmp, '.gbrain'), { recursive: true });
-    writeFileSync(join(tmp, '.gbrain', 'preferences.json'), '{not json');
+    mkdirSync(join(tmp, '.voltmind'), { recursive: true });
+    writeFileSync(join(tmp, '.voltmind', 'preferences.json'), '{not json');
     expect(() => loadPreferences()).toThrow();
   });
 });
@@ -101,11 +101,11 @@ describe('savePreferences', () => {
     expect(() => savePreferences({ minion_mode: 'bogus' as any })).toThrow();
   });
 
-  test('creates ~/.gbrain directory if missing', () => {
-    // Confirm .gbrain doesn't exist yet
-    expect(existsSync(join(tmp, '.gbrain'))).toBe(false);
+  test('creates ~/.voltmind directory if missing', () => {
+    // Confirm .voltmind doesn't exist yet
+    expect(existsSync(join(tmp, '.voltmind'))).toBe(false);
     savePreferences({ minion_mode: 'off' });
-    expect(existsSync(join(tmp, '.gbrain'))).toBe(true);
+    expect(existsSync(join(tmp, '.voltmind'))).toBe(true);
   });
 
   test('concurrent save + load: reader never sees a half-written file', () => {
@@ -122,11 +122,11 @@ describe('savePreferences', () => {
 
   test('cleans up temp directory used for atomic write', () => {
     savePreferences({ minion_mode: 'off' });
-    const gbrainDir = join(tmp, '.gbrain');
+    const voltmindDir = join(tmp, '.voltmind');
     // Walk children; nothing should remain except preferences.json (plus maybe subdirs
     // created by other code, but for this test the only thing we wrote is prefs).
     const { readdirSync } = require('fs');
-    const entries = readdirSync(gbrainDir);
+    const entries = readdirSync(voltmindDir);
     // Only preferences.json should remain; no .prefs-tmp-* directories left over.
     expect(entries.filter((e: string) => e.startsWith('.prefs-tmp-'))).toEqual([]);
     expect(entries).toContain('preferences.json');
@@ -193,7 +193,7 @@ describe('loadCompletedMigrations', () => {
   });
 
   test('tolerates malformed lines with a warning, continuing past them', () => {
-    const dir = join(tmp, '.gbrain', 'migrations');
+    const dir = join(tmp, '.voltmind', 'migrations');
     mkdirSync(dir, { recursive: true });
     // Write a file with a good line, a malformed line, and another good line.
     writeFileSync(

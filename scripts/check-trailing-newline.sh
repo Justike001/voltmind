@@ -16,7 +16,7 @@ files=$(
   git ls-files \
     'src/**/*.ts' 'src/**/*.js' 'src/**/*.json' 'src/**/*.sql' 'src/**/*.md' \
     'test/**/*.ts' 'test/**/*.js' 'test/**/*.json' 'test/**/*.md' \
-    'gbrain.yml' '*.md' \
+    'voltmind.yml' '*.md' \
   2>/dev/null | sort -u
 )
 

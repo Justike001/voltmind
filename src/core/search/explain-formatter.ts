@@ -1,5 +1,5 @@
 /**
- * v0.40.4.0 — `gbrain search --explain` per-stage attribution formatter.
+ * v0.40.4.0 — `voltmind search --explain` per-stage attribution formatter.
  *
  * Renders a SearchResult[] as a multi-line per-result breakdown of how
  * the final score was formed. Reads the boost_* / base_score / *_hits

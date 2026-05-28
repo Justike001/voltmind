@@ -1,7 +1,7 @@
 // src/core/remediation/context.ts
 // v0.41.18.0 (A1, codex finding #2). Extracted verbatim from
 // src/commands/doctor.ts:loadRecommendationContext so both the doctor
-// CLI shell AND the new gbrain onboard / MCP run_onboard surfaces
+// CLI shell AND the new voltmind onboard / MCP run_onboard surfaces
 // build the same context object.
 //
 // Pure read; no side effects.
@@ -30,7 +30,7 @@ export async function loadRecommendationContext(
   //
   // Also extended the API-key check to recognize the ZE key alongside
   // OpenAI (was OpenAI-only). After Lane C.3, zeroentropy_api_key lives
-  // in GBrainConfig + propagates to the gateway env dict.
+  // in VoltMindConfig + propagates to the gateway env dict.
   const repoPath = await engine.getConfig('sync.repo_path');
   let embeddingModel: string | undefined;
   let embeddingDimensions: number | undefined;

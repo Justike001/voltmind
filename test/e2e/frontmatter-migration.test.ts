@@ -4,12 +4,12 @@
  * Closes plan item B14. Runs the v0_22_4 orchestrator against a real PGLite
  * brain with two registered sources and synthetic malformed brain pages on
  * disk. Asserts:
- *   - audit phase writes ~/.gbrain/migrations/v0.22.4-audit.json with the
+ *   - audit phase writes ~/.voltmind/migrations/v0.22.4-audit.json with the
  *     expected per-source counts.
  *   - emit-todo phase appends one entry per source-with-issues to
- *     ~/.gbrain/migrations/pending-host-work.jsonl, each pointing at
+ *     ~/.voltmind/migrations/pending-host-work.jsonl, each pointing at
  *     skills/migrations/v0.22.4.md (dotted convention) with the exact
- *     gbrain frontmatter validate <source-path> --fix command.
+ *     voltmind frontmatter validate <source-path> --fix command.
  *   - The migration is audit-only — no fixture page is mutated during
  *     apply-migrations.
  *
@@ -48,7 +48,7 @@ beforeAll(async () => {
   mkdirSync(tmpHome, { recursive: true });
   mkdirSync(brainRootA, { recursive: true });
   mkdirSync(brainRootB, { recursive: true });
-  mkdirSync(join(tmpHome, '.gbrain', 'migrations'), { recursive: true });
+  mkdirSync(join(tmpHome, '.voltmind', 'migrations'), { recursive: true });
 
   // Seed fixture brain pages on disk. Source A has 2 broken pages
   // (NESTED_QUOTES + NULL_BYTES); source B has 1 broken page (NESTED_QUOTES)
@@ -86,7 +86,7 @@ beforeAll(async () => {
   );
   __setTestEngineOverride(engine);
 
-  // Redirect ~/.gbrain/migrations/ output. The orchestrator's gbrainDir()
+  // Redirect ~/.voltmind/migrations/ output. The orchestrator's voltmindDir()
   // helper reads process.env.HOME at call time, so the override takes
   // effect even though Bun's os.homedir() does not observe mid-process
   // mutations.
@@ -121,7 +121,7 @@ describe('E2E: v0.22.4 frontmatter-guard migration', () => {
   });
 
   test('audit JSON report exists and has per-source counts', () => {
-    const reportPath = join(tmpHome, '.gbrain', 'migrations', 'v0.22.4-audit.json');
+    const reportPath = join(tmpHome, '.voltmind', 'migrations', 'v0.22.4-audit.json');
     expect(existsSync(reportPath)).toBe(true);
     const report = JSON.parse(readFileSync(reportPath, 'utf8'));
 
@@ -149,7 +149,7 @@ describe('E2E: v0.22.4 frontmatter-guard migration', () => {
   });
 
   test('pending-host-work.jsonl carries one entry per source-with-issues', () => {
-    const jsonlPath = join(tmpHome, '.gbrain', 'migrations', 'pending-host-work.jsonl');
+    const jsonlPath = join(tmpHome, '.voltmind', 'migrations', 'pending-host-work.jsonl');
     expect(existsSync(jsonlPath)).toBe(true);
     const lines = readFileSync(jsonlPath, 'utf8').split('\n').filter(Boolean);
     expect(lines.length).toBe(2);
@@ -164,7 +164,7 @@ describe('E2E: v0.22.4 frontmatter-guard migration', () => {
       // migration doc at skills/migrations/v0.22.4.md, NOT the underscored
       // TS module path.
       expect(e.skill).toBe('skills/migrations/v0.22.4.md');
-      expect(e.command).toContain('gbrain frontmatter validate');
+      expect(e.command).toContain('voltmind frontmatter validate');
       expect(e.command).toContain('--fix');
       expect(e.command).toContain(e.source_path);
     }
@@ -184,7 +184,7 @@ describe('E2E: v0.22.4 frontmatter-guard migration', () => {
       dryRun: false,
       noAutopilotInstall: true,
     });
-    const jsonlPath = join(tmpHome, '.gbrain', 'migrations', 'pending-host-work.jsonl');
+    const jsonlPath = join(tmpHome, '.voltmind', 'migrations', 'pending-host-work.jsonl');
     const lines = readFileSync(jsonlPath, 'utf8').split('\n').filter(Boolean);
     expect(lines.length).toBe(2);
   });

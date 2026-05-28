@@ -3,7 +3,7 @@
  *
  * Pins the four decision branches of `maybePromptForCostBeforeProbe`:
  *   - --yes override skips
- *   - GBRAIN_NO_PROBE_PROMPT=1 env var skips
+ *   - VOLTMIND_NO_PROBE_PROMPT=1 env var skips
  *   - prompt_version unchanged from the last persisted run skips (no surprise)
  *   - non-TTY auto-proceeds with a stderr note (autopilot path)
  *   - TTY proceeds after the grace window
@@ -67,8 +67,8 @@ describe('maybePromptForCostBeforeProbe', () => {
     expect(capture.lines.length).toBe(0);
   });
 
-  test('GBRAIN_NO_PROBE_PROMPT=1 skips entirely', async () => {
-    await withEnv({ GBRAIN_NO_PROBE_PROMPT: '1' }, async () => {
+  test('VOLTMIND_NO_PROBE_PROMPT=1 skips entirely', async () => {
+    await withEnv({ VOLTMIND_NO_PROBE_PROMPT: '1' }, async () => {
       const { opts, capture } = mkBaseOpts();
       const r = await maybePromptForCostBeforeProbe(opts);
       expect(r.kind).toBe('proceed');
@@ -144,8 +144,8 @@ describe('maybePromptForCostBeforeProbe', () => {
     expect(out).toContain('PROMPT_VERSION changed (none →');
   });
 
-  test('GBRAIN_PROBE_PROMPT_GRACE_SECONDS env overrides the 10s default', async () => {
-    await withEnv({ GBRAIN_PROBE_PROMPT_GRACE_SECONDS: '0' }, async () => {
+  test('VOLTMIND_PROBE_PROMPT_GRACE_SECONDS env overrides the 10s default', async () => {
+    await withEnv({ VOLTMIND_PROBE_PROMPT_GRACE_SECONDS: '0' }, async () => {
       let waitedSeconds = -1;
       const report: ProbeReport = mkSeedReport('1');
       await writeRunRow(engine, report, 100);

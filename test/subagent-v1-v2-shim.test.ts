@@ -8,7 +8,7 @@ const { adaptContentBlocksToChatBlocks, loadPriorToolsV2 } = __testing as any;
 /**
  * v0.38 Slice 1 — D5 read-time content_blocks shim.
  *
- * The crash-replay reconciliation key in v0.38+ is a gbrain-owned UUID v7
+ * The crash-replay reconciliation key in v0.38+ is a voltmind-owned UUID v7
  * (ordinal + gbrain_tool_use_id columns added in migration v81). Pre-v0.38
  * rows used Anthropic's provider-supplied tool_use_id as the key and stored
  * Anthropic-shaped content blocks ({type:'tool_use', id, ...}). The shim is
@@ -78,7 +78,7 @@ describe('adaptContentBlocksToChatBlocks (D5 — v1 Anthropic → v2 ChatBlock s
   it('passes v2 tool-call block through (re-read of own writes)', () => {
     const blocks = [{
       type: 'tool-call',
-      toolCallId: 'gbrain-uuid-7',
+      toolCallId: 'voltmind-uuid-7',
       toolName: 'get_page',
       input: { slug: 'wiki/foo' },
     }];

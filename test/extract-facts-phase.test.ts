@@ -48,11 +48,11 @@ Body.
 
 ## Facts
 
-<!--- gbrain:facts:begin -->
+<!--- voltmind:facts:begin -->
 | # | claim | kind | confidence | visibility | notability | valid_from | valid_until | source | context |
 |---|-------|------|------------|------------|------------|------------|-------------|--------|---------|
 ${rows}
-<!--- gbrain:facts:end -->
+<!--- voltmind:facts:end -->
 `;
 
 describe('runExtractFacts — happy path', () => {

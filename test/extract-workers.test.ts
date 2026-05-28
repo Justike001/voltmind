@@ -1,5 +1,5 @@
 /**
- * Structural test for `gbrain extract --workers N` wiring (v0.41.15.0, T7).
+ * Structural test for `voltmind extract --workers N` wiring (v0.41.15.0, T7).
  *
  * Per codex #16/#17 the high-value assertion for a CPU-bound migration
  * is that the helper is wired in, not byte-equality. extract is CPU-
@@ -73,7 +73,7 @@ describe('extract.ts → workers wiring (T7)', () => {
     // Two legacy `for (const slug of slugs)` loops survive in
     // extractLinksForSlugs + extractTimelineForSlugs — the sync-integration
     // hooks. Those are out of T7 scope (called from sync.ts post-sync, not
-    // from the user-facing `gbrain extract` CLI). T7 covers extractForSlugs
+    // from the user-facing `voltmind extract` CLI). T7 covers extractForSlugs
     // + extractLinksFromDir + extractTimelineFromDir which carry --workers
     // from the CLI surface.
     const legacyCount = (EXTRACT_SRC.match(/for\s*\(\s*const\s+slug\s+of\s+slugs\)/g) ?? []).length;

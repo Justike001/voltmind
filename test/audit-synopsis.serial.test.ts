@@ -2,7 +2,7 @@
  * Tests for src/core/audit-synopsis.ts — failure-only synopsis audit
  * JSONL writer + summary aggregator.
  *
- * Uses GBRAIN_AUDIT_DIR to isolate writes into a temp dir per test.
+ * Uses VOLTMIND_AUDIT_DIR to isolate writes into a temp dir per test.
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
@@ -17,16 +17,16 @@ import {
 } from '../src/core/audit-synopsis.ts';
 
 let tmpDir: string;
-const originalEnv = process.env.GBRAIN_AUDIT_DIR;
+const originalEnv = process.env.VOLTMIND_AUDIT_DIR;
 
 beforeAll(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-synopsis-audit-test-'));
-  process.env.GBRAIN_AUDIT_DIR = tmpDir;
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-synopsis-audit-test-'));
+  process.env.VOLTMIND_AUDIT_DIR = tmpDir;
 });
 
 afterAll(() => {
-  if (originalEnv === undefined) delete process.env.GBRAIN_AUDIT_DIR;
-  else process.env.GBRAIN_AUDIT_DIR = originalEnv;
+  if (originalEnv === undefined) delete process.env.VOLTMIND_AUDIT_DIR;
+  else process.env.VOLTMIND_AUDIT_DIR = originalEnv;
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 

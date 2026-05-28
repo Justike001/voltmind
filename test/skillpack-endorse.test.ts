@@ -42,7 +42,7 @@ const VALID_REGISTRY = {
         pinned_commit: 'a'.repeat(40),
       },
       tarball_sha256: 'b'.repeat(64),
-      gbrain_min_version: '0.36.0',
+      voltmind_min_version: '0.36.0',
       default_tier: 'community' as const,
       tags: ['evaluation'],
       validated_at: '2026-05-18T20:00:00Z',

@@ -2,7 +2,7 @@
  * v0.40.2.0 — Unit tests for `formatTrajectoryBlock`.
  *
  * Hermetic, no DB, no API keys. Tests the pure formatter that both
- * `gbrain think` and the LongMemEval harness consume.
+ * `voltmind think` and the LongMemEval harness consume.
  */
 
 import { describe, test, expect } from 'bun:test';

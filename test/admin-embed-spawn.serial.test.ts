@@ -1,5 +1,5 @@
 /**
- * v0.36.1.x #1090: admin embed E2E — spawns `gbrain serve --http` from a
+ * v0.36.1.x #1090: admin embed E2E — spawns `voltmind serve --http` from a
  * fresh tmpdir (so `process.cwd()/admin/dist` doesn't exist), then issues
  * a real HTTP GET to /admin and asserts the React SPA shell HTML comes
  * back from the embedded manifest path — NOT a 404, NOT an Express
@@ -8,7 +8,7 @@
  * Pre-fix, the server resolved `adminDistPath = path.join(process.cwd(),
  * 'admin', 'dist')` and skipped /admin route mounting when that path did
  * not exist. Every globally-installed binary (`bun install -g
- * github:garrytan/gbrain`) hit 404 on /admin because the user never
+ * github:garrytan/voltmind`) hit 404 on /admin because the user never
  * cd's into the source repo. The fix:
  *   1. `scripts/build-admin-embedded.ts` walks admin/dist and emits
  *      `src/admin-embedded.ts` with `with { type: 'file' }` imports.
@@ -45,13 +45,13 @@ function pickPort(): number {
 }
 
 async function spawnServer(): Promise<ServeProc> {
-  const home = mkdtempSync(join(tmpdir(), 'gbrain-admin-embed-'));
-  mkdirSync(join(home, '.gbrain'), { recursive: true });
+  const home = mkdtempSync(join(tmpdir(), 'voltmind-admin-embed-'));
+  mkdirSync(join(home, '.voltmind'), { recursive: true });
   writeFileSync(
-    join(home, '.gbrain', 'config.json'),
+    join(home, '.voltmind', 'config.json'),
     JSON.stringify({
       engine: 'pglite',
-      database_path: join(home, '.gbrain', 'brain.pglite'),
+      database_path: join(home, '.voltmind', 'brain.pglite'),
       embedding_dimensions: 1536,
     }) + '\n',
   );
@@ -83,8 +83,8 @@ async function spawnServer(): Promise<ServeProc> {
       env: {
         ...process.env,
         HOME: home,
-        GBRAIN_HOME: home,
-        GBRAIN_ADMIN_BOOTSTRAP_TOKEN: bootstrapToken,
+        VOLTMIND_HOME: home,
+        VOLTMIND_ADMIN_BOOTSTRAP_TOKEN: bootstrapToken,
         // Don't let test-process inherit any auth keys it doesn't need.
         OPENAI_API_KEY: '',
         ANTHROPIC_API_KEY: '',
@@ -144,10 +144,10 @@ describe('admin embed E2E — /admin served from embedded manifest (v0.36.1.x #1
       });
       expect(res.status).toBe(200);
       const html = await res.text();
-      // The actual admin/dist/index.html declares <title>GBrain Admin</title>
+      // The actual admin/dist/index.html declares <title>VoltMind Admin</title>
       // and mounts the SPA on <div id="root">. Both must be present, otherwise
       // we're not serving the embedded asset.
-      expect(html).toContain('GBrain Admin');
+      expect(html).toContain('VoltMind Admin');
       expect(html).toContain('<div id="root">');
       // Content-Type is text/html, not application/octet-stream (which would
       // mean the mime lookup in ADMIN_ASSETS regressed).
@@ -165,7 +165,7 @@ describe('admin embed E2E — /admin served from embedded manifest (v0.36.1.x #1
       });
       expect(res.status).toBe(200);
       const html = await res.text();
-      expect(html).toContain('GBrain Admin');
+      expect(html).toContain('VoltMind Admin');
     } finally {
       await s.cleanup();
     }
@@ -181,7 +181,7 @@ describe('admin embed E2E — /admin served from embedded manifest (v0.36.1.x #1
       const html = await res.text();
       // SPA fallback: any unmatched /admin/* path serves index.html so
       // client-side routing takes over.
-      expect(html).toContain('GBrain Admin');
+      expect(html).toContain('VoltMind Admin');
       expect(html).toContain('<div id="root">');
     } finally {
       await s.cleanup();

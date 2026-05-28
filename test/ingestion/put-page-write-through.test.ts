@@ -46,7 +46,7 @@ beforeEach(async () => {
   // behavior, not embedding. Reset the gateway so isAvailable returns
   // false → noEmbed=true → no network call.
   resetGateway();
-  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-wt-'));
+  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-wt-'));
   brainDir = path.join(tmpRoot, 'brain');
   fs.mkdirSync(brainDir, { recursive: true });
   // Wire sync.repo_path so write-through can find the repo.

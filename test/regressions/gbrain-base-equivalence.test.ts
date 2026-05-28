@@ -1,6 +1,6 @@
-// v0.38 gbrain-base byte-for-byte equivalence gate (T5 + T25 CI-blocking).
+// v0.38 voltmind-base byte-for-byte equivalence gate (T5 + T25 CI-blocking).
 //
-// gbrain-base.yaml MUST reproduce pre-v0.38 hardcoded behavior exactly.
+// voltmind-base.yaml MUST reproduce pre-v0.38 hardcoded behavior exactly.
 // This test pins the contract: every ALL_PAGE_TYPES seed has a matching
 // page_type entry; every inferType path-prefix the markdown.ts hardcode
 // recognized still maps to the same type via the pack's path_prefixes;
@@ -8,9 +8,9 @@
 // closed enum (so existing brains see no behavior change at runtime
 // validation time).
 //
-// If this test fails, gbrain-base.yaml drifted from the source-of-truth
+// If this test fails, voltmind-base.yaml drifted from the source-of-truth
 // constants. Either the YAML needs to be updated to match a deliberate
-// constant change, or the constant change is unintentional and gbrain-base
+// constant change, or the constant change is unintentional and voltmind-base
 // is the canonical reference.
 
 import { describe, expect, test } from 'bun:test';
@@ -18,10 +18,10 @@ import { ALL_PAGE_TYPES } from '../../src/core/types.ts';
 import { loadPackFromFile } from '../../src/core/schema-pack/loader.ts';
 import { join } from 'node:path';
 
-const BASE_PATH = join(import.meta.dir, '../../src/core/schema-pack/base/gbrain-base.yaml');
+const BASE_PATH = join(import.meta.dir, '../../src/core/schema-pack/base/voltmind-base.yaml');
 
-describe('gbrain-base v0.38 parity gate', () => {
-  test('every ALL_PAGE_TYPES seed appears in gbrain-base page_types', () => {
+describe('voltmind-base v0.38 parity gate', () => {
+  test('every ALL_PAGE_TYPES seed appears in voltmind-base page_types', () => {
     const pack = loadPackFromFile(BASE_PATH);
     const yamlTypes = new Set(pack.page_types.map(pt => pt.name));
     for (const seed of ALL_PAGE_TYPES) {
@@ -36,7 +36,7 @@ describe('gbrain-base v0.38 parity gate', () => {
 
   test('person + company are the only expert_routing default types', () => {
     // Pre-v0.38 whoknows / find_experts hardcoded ['person', 'company'].
-    // gbrain-base must reproduce this default; user packs opt in others
+    // voltmind-base must reproduce this default; user packs opt in others
     // via `expert_routing: true`.
     const pack = loadPackFromFile(BASE_PATH);
     const experts = pack.page_types.filter(pt => pt.expert_routing).map(pt => pt.name).sort();
@@ -92,7 +92,7 @@ describe('gbrain-base v0.38 parity gate', () => {
   });
 
   test('alias graph is EMPTY by default (E8 codex F8)', () => {
-    // gbrain-base ships with NO alias edges so existing search behavior
+    // voltmind-base ships with NO alias edges so existing search behavior
     // is unchanged. Users opt into aliases via review-candidates or by
     // editing their own pack manifest.
     const pack = loadPackFromFile(BASE_PATH);
@@ -106,7 +106,7 @@ describe('gbrain-base v0.38 parity gate', () => {
     // validation logic against the in-process loader instead. If the
     // standalone script breaks, this test still catches the data drift.
     const pack = loadPackFromFile(BASE_PATH);
-    expect(pack.name).toBe('gbrain-base');
+    expect(pack.name).toBe('voltmind-base');
     expect(pack.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(pack.extends).toBeNull();
   });

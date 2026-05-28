@@ -108,13 +108,13 @@ describe('v0.41 T10: scalar_brier aggregator', () => {
       'deals/perfect',
       'deal',
       { weight: 1.0, resolved_outcome: true, rowNum: 1 },
-      { domain: 'deal_success', pack: 'gbrain-investor' },
+      { domain: 'deal_success', pack: 'voltmind-investor' },
     );
     await seedTakeWithAssignment(
       'deals/wrong',
       'deal',
       { weight: 1.0, resolved_outcome: false, rowNum: 1 },
-      { domain: 'deal_success', pack: 'gbrain-investor' },
+      { domain: 'deal_success', pack: 'voltmind-investor' },
     );
 
     const result = await aggregateDomainScorecards(engine, 'garry', [domain], 'default');
@@ -130,13 +130,13 @@ describe('v0.41 T10: scalar_brier aggregator', () => {
       'deals/mine',
       'deal',
       { weight: 0.9, resolved_outcome: true, holder: 'garry', rowNum: 1 },
-      { domain: 'deal_success', pack: 'gbrain-investor' },
+      { domain: 'deal_success', pack: 'voltmind-investor' },
     );
     await seedTakeWithAssignment(
       'deals/theirs',
       'deal',
       { weight: 0.1, resolved_outcome: true, holder: 'alice-example', rowNum: 1 },
-      { domain: 'deal_success', pack: 'gbrain-investor' },
+      { domain: 'deal_success', pack: 'voltmind-investor' },
     );
 
     const garryResult = await aggregateDomainScorecards(engine, 'garry', [domain], 'default');
@@ -150,13 +150,13 @@ describe('v0.41 T10: scalar_brier aggregator', () => {
       'deals/match',
       'deal',
       { weight: 0.8, resolved_outcome: true, rowNum: 1 },
-      { domain: 'deal_success', pack: 'gbrain-investor' },
+      { domain: 'deal_success', pack: 'voltmind-investor' },
     );
     await seedTakeWithAssignment(
       'people/no-match',
       'person',
       { weight: 0.8, resolved_outcome: true, rowNum: 1 },
-      { domain: 'deal_success', pack: 'gbrain-investor' },
+      { domain: 'deal_success', pack: 'voltmind-investor' },
     );
 
     const result = await aggregateDomainScorecards(engine, 'garry', [domain], 'default');
@@ -185,7 +185,7 @@ describe('v0.41 T10: scalar_brier aggregator', () => {
     );
     await engine.executeRaw(
       `INSERT INTO take_domain_assignments (take_id, domain, pack)
-       VALUES ($1, 'deal_success', 'gbrain-investor')`,
+       VALUES ($1, 'deal_success', 'voltmind-investor')`,
       [takeRow[0].id],
     );
 
@@ -207,14 +207,14 @@ describe('v0.41 T10: weighted_brier aggregator', () => {
       'theses/high-conv-miss',
       'thesis',
       { weight: 0.95, resolved_outcome: false, rowNum: 1 },
-      { domain: 'market_call', pack: 'gbrain-investor' },
+      { domain: 'market_call', pack: 'voltmind-investor' },
     );
     // Low-conviction hit: weight=0.55 (conviction = 0.1), outcome=true → sq_err=0.2025
     await seedTakeWithAssignment(
       'theses/low-conv-hit',
       'thesis',
       { weight: 0.55, resolved_outcome: true, rowNum: 1 },
-      { domain: 'market_call', pack: 'gbrain-investor' },
+      { domain: 'market_call', pack: 'voltmind-investor' },
     );
 
     const result = await aggregateDomainScorecards(engine, 'garry', [domain], 'default');
@@ -228,13 +228,13 @@ describe('v0.41 T10: weighted_brier aggregator', () => {
       'theses/a',
       'thesis',
       { weight: 0.9, resolved_outcome: true, rowNum: 1 },
-      { domain: 'market_call', pack: 'gbrain-investor' },
+      { domain: 'market_call', pack: 'voltmind-investor' },
     );
     await seedTakeWithAssignment(
       'theses/b',
       'thesis',
       { weight: 0.6, resolved_outcome: true, rowNum: 1 },
-      { domain: 'market_call', pack: 'gbrain-investor' },
+      { domain: 'market_call', pack: 'voltmind-investor' },
     );
     const result = await aggregateDomainScorecards(engine, 'garry', [domain], 'default');
     expect(result.market_call.accuracy).toBeCloseTo(1.0, 2);
@@ -330,13 +330,13 @@ describe('v0.41 T10: multi-domain aggregation', () => {
       'deals/d1',
       'deal',
       { weight: 0.9, resolved_outcome: true, rowNum: 1 },
-      { domain: 'deal_success', pack: 'gbrain-investor' },
+      { domain: 'deal_success', pack: 'voltmind-investor' },
     );
     await seedTakeWithAssignment(
       'people/p1',
       'person',
       { weight: 0.7, resolved_outcome: true, rowNum: 1 },
-      { domain: 'founder_evaluation', pack: 'gbrain-investor' },
+      { domain: 'founder_evaluation', pack: 'voltmind-investor' },
     );
 
     const domains: CalibrationDomain[] = [

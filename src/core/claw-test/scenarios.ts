@@ -5,7 +5,7 @@
  *    { kind: "fresh-install", expected_phases: ["import.files", ...], ... }
  *
  * The harness reads scenario.json to know which phases to assert from
- * gbrain's --progress-json events. Pure local fs; no DB, no network.
+ * voltmind's --progress-json events. Pure local fs; no DB, no network.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
@@ -35,10 +35,10 @@ export interface ScenarioConfig {
   seedRelative?: string;
 }
 
-/** Default fixtures root, override via $GBRAIN_CLAW_SCENARIOS_DIR for tests. */
+/** Default fixtures root, override via $VOLTMIND_CLAW_SCENARIOS_DIR for tests. */
 function defaultFixturesRoot(): string {
-  if (process.env.GBRAIN_CLAW_SCENARIOS_DIR) {
-    return resolve(process.env.GBRAIN_CLAW_SCENARIOS_DIR);
+  if (process.env.VOLTMIND_CLAW_SCENARIOS_DIR) {
+    return resolve(process.env.VOLTMIND_CLAW_SCENARIOS_DIR);
   }
   // src/core/claw-test/scenarios.ts → ../../../test/fixtures/claw-test-scenarios
   const here = dirname(fileURLToPath(import.meta.url));

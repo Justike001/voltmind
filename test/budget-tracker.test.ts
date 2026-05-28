@@ -96,7 +96,7 @@ describe('reserveBudget (CAS pattern)', () => {
     const child = await queue.add('subagent', {}, {}, { allowProtectedSubmit: true });
     await inheritBudgetOwner(engine, child.id, owner.id);
 
-    // Hard-delete the owner — simulates `gbrain jobs prune` race.
+    // Hard-delete the owner — simulates `voltmind jobs prune` race.
     // SET NULL FK fires on the child's budget_owner_job_id but the
     // immutable budget_root_owner_id persists.
     await engine.executeRaw('DELETE FROM minion_jobs WHERE id = $1', [owner.id]);

@@ -36,7 +36,7 @@ afterAll(async () => {
 beforeEach(async () => {
   // Clean minion_jobs + lock rows. Preserve config (schema version + flags).
   await engine.executeRaw('DELETE FROM minion_jobs');
-  await engine.executeRaw(`DELETE FROM gbrain_cycle_locks WHERE id LIKE 'gbrain-embed-backfill:%'`);
+  await engine.executeRaw(`DELETE FROM gbrain_cycle_locks WHERE id LIKE 'voltmind-embed-backfill:%'`);
 });
 
 /** Build a minimal MinionJobContext for testing. */
@@ -84,7 +84,7 @@ describe('embed-backfill handler — happy path', () => {
 describe('embed-backfill handler — D2 lock contract', () => {
   test('IRON-RULE: second call returns already_in_progress when lock is held', async () => {
     // Hold the per-source lock externally
-    const lock = await tryAcquireDbLock(engine, 'gbrain-embed-backfill:default', 60);
+    const lock = await tryAcquireDbLock(engine, 'voltmind-embed-backfill:default', 60);
     expect(lock).not.toBeNull();
 
     try {
@@ -105,7 +105,7 @@ describe('embed-backfill handler — D2 lock contract', () => {
     await engine.executeRaw(
       `INSERT INTO sources (id, name, config) VALUES ('other-src', 'other-src', '{"federated":true}') ON CONFLICT (id) DO NOTHING`,
     );
-    const lockA = await tryAcquireDbLock(engine, 'gbrain-embed-backfill:default', 60);
+    const lockA = await tryAcquireDbLock(engine, 'voltmind-embed-backfill:default', 60);
     expect(lockA).not.toBeNull();
     try {
       // 'other-src' should still succeed
@@ -122,7 +122,7 @@ describe('embed-backfill handler — D2 lock contract', () => {
     await handler(fakeJob({ sourceId: 'default' }));
 
     // After handler returns, the lock row should NOT block a fresh acquire.
-    const lock = await tryAcquireDbLock(engine, 'gbrain-embed-backfill:default', 60);
+    const lock = await tryAcquireDbLock(engine, 'voltmind-embed-backfill:default', 60);
     expect(lock).not.toBeNull();
     await lock?.release();
   });
@@ -136,7 +136,7 @@ describe('embed-backfill handler — D2 lock contract', () => {
     }
     // Lock was never acquired (throw happened in parseParams pre-lock),
     // so the row should be cleanly absent. Verify a fresh acquire works.
-    const lock = await tryAcquireDbLock(engine, 'gbrain-embed-backfill:default', 60);
+    const lock = await tryAcquireDbLock(engine, 'voltmind-embed-backfill:default', 60);
     expect(lock).not.toBeNull();
     await lock?.release();
   });

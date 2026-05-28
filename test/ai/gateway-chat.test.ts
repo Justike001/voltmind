@@ -90,7 +90,7 @@ describe('chat touchpoint — model resolver + aliases (Codex F-OV-5)', () => {
   });
 
   test('reverse alias rescues v0.31.6-shipped broken Sonnet 4.6 ID (regression)', () => {
-    // gbrain v0.31.6 shipped 'claude-sonnet-4-6-20250929' as a hardcoded
+    // voltmind v0.31.6 shipped 'claude-sonnet-4-6-20250929' as a hardcoded
     // default, which 404s on the Anthropic API (Sonnet 4.6 is dateless).
     // The reverse alias rewrites broken → canonical so any user with a
     // stale `models.dream.synthesize` / `facts.extraction_model` config

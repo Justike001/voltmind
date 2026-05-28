@@ -1,5 +1,5 @@
 /**
- * Tests for `gbrain extract-conversation-facts` — deterministic parsing,
+ * Tests for `voltmind extract-conversation-facts` — deterministic parsing,
  * segmenting, rendering, checkpoint encoding, and core wiring contracts.
  *
  * Hermetic via __setChatTransportForTests + __setEmbedTransportForTests

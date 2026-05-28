@@ -24,7 +24,7 @@ const VALID_MANIFEST: SkillpackManifest = {
   author: 'Garry Tan',
   license: 'MIT',
   homepage: 'https://github.com/garrytan/skillpack-hackathon-evaluation',
-  gbrain_min_version: '0.36.0',
+  voltmind_min_version: '0.36.0',
   skills: ['skills/judge-submission'],
 };
 
@@ -55,7 +55,7 @@ describe('validateSkillpackManifest — required fields', () => {
   });
 
   test('rejects unknown api_version', () => {
-    const bad = { ...VALID_MANIFEST, api_version: 'gbrain-skillpack-v99' as 'gbrain-skillpack-v1' };
+    const bad = { ...VALID_MANIFEST, api_version: 'voltmind-skillpack-v99' as 'voltmind-skillpack-v1' };
     try {
       validateSkillpackManifest(bad);
       throw new Error('should have thrown');
@@ -73,7 +73,7 @@ describe('validateSkillpackManifest — required fields', () => {
       'author',
       'license',
       'homepage',
-      'gbrain_min_version',
+      'voltmind_min_version',
       'skills',
     ] as const;
     for (const field of required) {
@@ -145,12 +145,12 @@ describe('validateSkillpackManifest — field shape rules', () => {
     }
   });
 
-  test('rejects gbrain_min_version that is not semver', () => {
+  test('rejects voltmind_min_version that is not semver', () => {
     try {
-      validateSkillpackManifest({ ...VALID_MANIFEST, gbrain_min_version: 'latest' });
+      validateSkillpackManifest({ ...VALID_MANIFEST, voltmind_min_version: 'latest' });
       throw new Error('should have thrown');
     } catch (err) {
-      expect((err as SkillpackManifestError).detail?.field).toBe('gbrain_min_version');
+      expect((err as SkillpackManifestError).detail?.field).toBe('voltmind_min_version');
     }
   });
 

@@ -96,7 +96,7 @@ describe('autopilot-cycle handler — partial failure does NOT throw', () => {
     const { execSync } = await import('child_process');
     const { tmpdir } = await import('os');
     const { join } = await import('path');
-    const dir = fs.mkdtempSync(join(tmpdir(), 'gbrain-autopilot-cycle-'));
+    const dir = fs.mkdtempSync(join(tmpdir(), 'voltmind-autopilot-cycle-'));
     try {
       execSync('git init', { cwd: dir, stdio: 'pipe' });
       execSync('git config user.email test@example.com', { cwd: dir, stdio: 'pipe' });
@@ -127,7 +127,7 @@ describe('autopilot-cycle handler — phase passthrough', () => {
     const { execSync } = await import('child_process');
     const { tmpdir } = await import('os');
     const { join } = await import('path');
-    const dir = fs.mkdtempSync(join(tmpdir(), 'gbrain-phase-pass-'));
+    const dir = fs.mkdtempSync(join(tmpdir(), 'voltmind-phase-pass-'));
     try {
       execSync('git init', { cwd: dir, stdio: 'pipe' });
       execSync('git config user.email test@example.com', { cwd: dir, stdio: 'pipe' });
@@ -163,7 +163,7 @@ describe('autopilot-cycle handler — phase passthrough', () => {
     const { execSync } = await import('child_process');
     const { tmpdir } = await import('os');
     const { join } = await import('path');
-    const dir = fs.mkdtempSync(join(tmpdir(), 'gbrain-phase-invalid-'));
+    const dir = fs.mkdtempSync(join(tmpdir(), 'voltmind-phase-invalid-'));
     try {
       execSync('git init', { cwd: dir, stdio: 'pipe' });
       execSync('git config user.email test@example.com', { cwd: dir, stdio: 'pipe' });

@@ -2,7 +2,7 @@
  * Tests for `ensureGitignore()` in `src/core/config.ts` (v0.35.8.0).
  *
  * Idempotent retroactive coverage: every config-writing path (saveConfig +
- * post-upgrade) lays down `~/.gbrain/.gitignore` containing the single line
+ * post-upgrade) lays down `~/.voltmind/.gitignore` containing the single line
  * `*`. The helper MUST NOT clobber a `.gitignore` whose content the user
  * has customized.
  */
@@ -17,7 +17,7 @@ import { ensureGitignore, configDir } from '../src/core/config.ts';
 let testHome: string;
 
 beforeEach(() => {
-  testHome = join(tmpdir(), `gbrain-eg-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  testHome = join(tmpdir(), `voltmind-eg-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(testHome, { recursive: true });
 });
 
@@ -26,8 +26,8 @@ afterEach(() => {
 });
 
 describe('ensureGitignore', () => {
-  test('creates ~/.gbrain/.gitignore with single * when missing', async () => {
-    await withEnv({ GBRAIN_HOME: testHome }, async () => {
+  test('creates ~/.voltmind/.gitignore with single * when missing', async () => {
+    await withEnv({ VOLTMIND_HOME: testHome }, async () => {
       ensureGitignore();
       const file = join(configDir(), '.gitignore');
       expect(existsSync(file)).toBe(true);
@@ -36,7 +36,7 @@ describe('ensureGitignore', () => {
   });
 
   test('no-op when .gitignore already exists with non-empty content (user customization preserved)', async () => {
-    await withEnv({ GBRAIN_HOME: testHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: testHome }, async () => {
       // Prime: user wrote their own .gitignore first.
       const dir = configDir();
       mkdirSync(dir, { recursive: true });
@@ -51,7 +51,7 @@ describe('ensureGitignore', () => {
   });
 
   test('writes default when .gitignore exists but is empty', async () => {
-    await withEnv({ GBRAIN_HOME: testHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: testHome }, async () => {
       const dir = configDir();
       mkdirSync(dir, { recursive: true });
       const file = join(dir, '.gitignore');
@@ -62,7 +62,7 @@ describe('ensureGitignore', () => {
   });
 
   test('idempotent: second call is a no-op', async () => {
-    await withEnv({ GBRAIN_HOME: testHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: testHome }, async () => {
       ensureGitignore();
       const file = join(configDir(), '.gitignore');
       const first = readFileSync(file, 'utf-8');
@@ -72,10 +72,10 @@ describe('ensureGitignore', () => {
     });
   });
 
-  test('honors GBRAIN_HOME: writes under $GBRAIN_HOME/.gbrain/, not $HOME', async () => {
-    await withEnv({ GBRAIN_HOME: testHome }, async () => {
+  test('honors VOLTMIND_HOME: writes under $VOLTMIND_HOME/.voltmind/, not $HOME', async () => {
+    await withEnv({ VOLTMIND_HOME: testHome }, async () => {
       ensureGitignore();
-      const expected = join(testHome, '.gbrain', '.gitignore');
+      const expected = join(testHome, '.voltmind', '.gitignore');
       expect(existsSync(expected)).toBe(true);
     });
   });
@@ -86,7 +86,7 @@ describe('ensureGitignore', () => {
     // normally without throwing. Tested indirectly by the idempotency case
     // above and by the surface-level "function returns void, never throws"
     // contract (no expect.toThrow on any call).
-    await withEnv({ GBRAIN_HOME: testHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: testHome }, async () => {
       expect(() => ensureGitignore()).not.toThrow();
     });
   });

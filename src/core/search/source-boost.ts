@@ -9,8 +9,8 @@
  * inside sql-ranking.ts). Defaults grounded in the composition of the
  * canonical brain at ~/git/brain/.
  *
- * Override via env: GBRAIN_SOURCE_BOOST="originals/:1.8,openclaw/chat/:0.3"
- * Hard-exclude via env: GBRAIN_SEARCH_EXCLUDE="test/,scratch/"
+ * Override via env: VOLTMIND_SOURCE_BOOST="originals/:1.8,openclaw/chat/:0.3"
+ * Hard-exclude via env: VOLTMIND_SEARCH_EXCLUDE="test/,scratch/"
  */
 
 export const DEFAULT_SOURCE_BOOSTS: Record<string, number> = {
@@ -51,7 +51,7 @@ export const DEFAULT_HARD_EXCLUDES: string[] = [
 ];
 
 /**
- * Parse GBRAIN_SOURCE_BOOST env var.
+ * Parse VOLTMIND_SOURCE_BOOST env var.
  * Format: comma-separated prefix:factor pairs.
  * Example: "originals/:1.8,openclaw/chat/:0.3"
  *
@@ -73,7 +73,7 @@ export function parseSourceBoostEnv(env: string | undefined): Record<string, num
 }
 
 /**
- * Parse GBRAIN_SEARCH_EXCLUDE env var.
+ * Parse VOLTMIND_SEARCH_EXCLUDE env var.
  * Format: comma-separated slug prefixes.
  * Example: "test/,scratch/,private/"
  *
@@ -89,7 +89,7 @@ export function parseHardExcludesEnv(env: string | undefined): string[] {
  * Env entries override defaults (shallow merge); env-only entries are added.
  */
 export function resolveBoostMap(
-  envValue: string | undefined = process.env.GBRAIN_SOURCE_BOOST,
+  envValue: string | undefined = process.env.VOLTMIND_SOURCE_BOOST,
 ): Record<string, number> {
   const override = parseSourceBoostEnv(envValue);
   return { ...DEFAULT_SOURCE_BOOSTS, ...override };
@@ -105,7 +105,7 @@ export function resolveBoostMap(
 export function resolveHardExcludes(
   excludeOpt?: string[],
   includeOpt?: string[],
-  envValue: string | undefined = process.env.GBRAIN_SEARCH_EXCLUDE,
+  envValue: string | undefined = process.env.VOLTMIND_SEARCH_EXCLUDE,
 ): string[] {
   const envExcludes = parseHardExcludesEnv(envValue);
   const union = new Set<string>([...DEFAULT_HARD_EXCLUDES, ...envExcludes, ...(excludeOpt ?? [])]);

@@ -110,8 +110,8 @@ ALLOW_LIST=(
   # fallbacks where /data/brain/ or /data/.openclaw/ appears legitimately.
   # New skills/, src/, and tests must NOT slip onto this list — extend the
   # banned check above instead.
-  'docs/GBRAIN_RECOMMENDED_SCHEMA.md'
-  'docs/GBRAIN_V0.md'
+  'docs/VOLTMIND_RECOMMENDED_SCHEMA.md'
+  'docs/VOLTMIND_V0.md'
   'docs/guides/minions-shell-jobs.md'
   'scripts/smoke-test.sh'
   'skills/migrations/v0.9.0.md'
@@ -150,8 +150,8 @@ ALLOW_LIST=(
   # meta-rule-enforcement exception as scripts/check-privacy.sh and
   # CHANGELOG.md — describing what the rule forbids requires naming it.
   'skills/functional-area-resolver/SKILL.md'
-  # v0.36.0.0: the gbrain skillpack harvest privacy linter's whole job
-  # is to catch the banned literal leaking into gbrain. The regex
+  # v0.36.0.0: the voltmind skillpack harvest privacy linter's whole job
+  # is to catch the banned literal leaking into voltmind. The regex
   # pattern in harvest-lint.ts is `\bWintermute\b` by necessity; the
   # tests verify that pattern fires by feeding it the banned string;
   # the harvest skill markdown describes the substitution policy

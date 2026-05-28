@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 function scratchGbrain(opts: { paired?: boolean } = {}): string {
-  const root = mkdtempSync(join(tmpdir(), 'sp-ref-gbrain-'));
+  const root = mkdtempSync(join(tmpdir(), 'sp-ref-voltmind-'));
   created.push(root);
   mkdirSync(join(root, 'src', 'commands'), { recursive: true });
   writeFileSync(join(root, 'src', 'cli.ts'), '// stub');
@@ -53,7 +53,7 @@ function scratchGbrain(opts: { paired?: boolean } = {}): string {
     join(root, 'openclaw.plugin.json'),
     JSON.stringify(
       {
-        name: 'gbrain-test',
+        name: 'voltmind-test',
         version: '0.33.0-test',
         skills: ['skills/demo', 'skills/other'],
         shared_deps: [],
@@ -73,10 +73,10 @@ function scratchWorkspace(): string {
 
 describe('runReference — file statuses', () => {
   it('missing: nothing scaffolded yet', () => {
-    const gbrainRoot = scratchGbrain();
+    const voltmindRoot = scratchGbrain();
     const ws = scratchWorkspace();
 
-    const result = runReference({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    const result = runReference({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
 
     expect(result.summary.missing).toBeGreaterThan(0);
     expect(result.summary.identical).toBe(0);
@@ -85,11 +85,11 @@ describe('runReference — file statuses', () => {
   });
 
   it('identical: scaffolded with no edits', () => {
-    const gbrainRoot = scratchGbrain();
+    const voltmindRoot = scratchGbrain();
     const ws = scratchWorkspace();
-    runScaffold({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    runScaffold({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
 
-    const result = runReference({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    const result = runReference({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
 
     expect(result.summary.identical).toBeGreaterThan(0);
     expect(result.summary.differs).toBe(0);
@@ -97,14 +97,14 @@ describe('runReference — file statuses', () => {
   });
 
   it('differs: user edits a scaffolded file → unified diff emitted', () => {
-    const gbrainRoot = scratchGbrain();
+    const voltmindRoot = scratchGbrain();
     const ws = scratchWorkspace();
-    runScaffold({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    runScaffold({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
 
     const skillMd = join(ws, 'skills', 'demo', 'SKILL.md');
     writeFileSync(skillMd, readFileSync(skillMd, 'utf-8') + '\n## My edits\n');
 
-    const result = runReference({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    const result = runReference({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
 
     expect(result.summary.differs).toBe(1);
     const differ = result.files.find(f => f.status === 'differs')!;
@@ -116,10 +116,10 @@ describe('runReference — file statuses', () => {
 
 describe('runReference — paired source files', () => {
   it('includes paired source files declared in frontmatter `sources:`', () => {
-    const gbrainRoot = scratchGbrain({ paired: true });
+    const voltmindRoot = scratchGbrain({ paired: true });
     const ws = scratchWorkspace();
 
-    const result = runReference({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    const result = runReference({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
 
     const pairedEntries = result.files.filter(f => f.pairedSource);
     expect(pairedEntries.length).toBe(1);
@@ -127,13 +127,13 @@ describe('runReference — paired source files', () => {
   });
 
   it('reports differs on a paired source after user edits', () => {
-    const gbrainRoot = scratchGbrain({ paired: true });
+    const voltmindRoot = scratchGbrain({ paired: true });
     const ws = scratchWorkspace();
-    runScaffold({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    runScaffold({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
 
     writeFileSync(join(ws, 'src', 'commands', 'demo.ts'), '// user replaced\n');
 
-    const result = runReference({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    const result = runReference({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
     const paired = result.files.find(f => f.pairedSource)!;
     expect(paired.status).toBe('differs');
     expect(paired.unifiedDiff).toContain('user replaced');
@@ -142,19 +142,19 @@ describe('runReference — paired source files', () => {
 
 describe('runReference — framing line (load-bearing)', () => {
   it('emits the agent-readable framing string for single-skill mode', () => {
-    const gbrainRoot = scratchGbrain();
+    const voltmindRoot = scratchGbrain();
     const ws = scratchWorkspace();
-    const result = runReference({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    const result = runReference({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
 
     expect(result.framing).toContain('as reference');
     expect(result.framing).toContain('do not blindly overwrite');
-    expect(result.framing).toContain(gbrainRoot);
+    expect(result.framing).toContain(voltmindRoot);
   });
 
   it('emits the framing string for --all mode (with sweep summary)', () => {
-    const gbrainRoot = scratchGbrain();
+    const voltmindRoot = scratchGbrain();
     const ws = scratchWorkspace();
-    const result = runReferenceAll({ gbrainRoot, targetWorkspace: ws });
+    const result = runReferenceAll({ voltmindRoot, targetWorkspace: ws });
 
     expect(result.framing).toContain('as reference');
     expect(result.skills.length).toBe(2); // demo + other
@@ -164,9 +164,9 @@ describe('runReference — framing line (load-bearing)', () => {
 
 describe('runReference --json envelope shape', () => {
   it('result is JSON-stringify-able and round-trips losslessly', () => {
-    const gbrainRoot = scratchGbrain();
+    const voltmindRoot = scratchGbrain();
     const ws = scratchWorkspace();
-    const result = runReference({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    const result = runReference({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
 
     const json = JSON.stringify(result);
     const round = JSON.parse(json);
@@ -178,16 +178,16 @@ describe('runReference --json envelope shape', () => {
 
 describe('runReference — binary files', () => {
   it('emits a binary-files-differ stub when content has NUL bytes', () => {
-    const gbrainRoot = scratchGbrain();
+    const voltmindRoot = scratchGbrain();
     const ws = scratchWorkspace();
 
-    // Plant a binary file in gbrain's bundle and a different one on host.
-    const binPath = join(gbrainRoot, 'skills', 'demo', 'icon.png');
+    // Plant a binary file in voltmind's bundle and a different one on host.
+    const binPath = join(voltmindRoot, 'skills', 'demo', 'icon.png');
     writeFileSync(binPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x00]));
-    runScaffold({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    runScaffold({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
     writeFileSync(join(ws, 'skills', 'demo', 'icon.png'), Buffer.from([0x89, 0x50, 0x00]));
 
-    const result = runReference({ gbrainRoot, targetWorkspace: ws, skillSlug: 'demo' });
+    const result = runReference({ voltmindRoot, targetWorkspace: ws, skillSlug: 'demo' });
     const bin = result.files.find(f => f.target.endsWith('icon.png'))!;
     expect(bin.status).toBe('differs');
     expect(bin.unifiedDiff).toContain('Binary');

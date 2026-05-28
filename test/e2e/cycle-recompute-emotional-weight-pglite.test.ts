@@ -25,7 +25,7 @@ beforeAll(async () => {
 
   // Brain dir for filesystem phases (lint/backlinks/sync). They'll skip
   // gracefully when there's nothing to read.
-  brainDir = mkdtempSync(join(tmpdir(), 'gbrain-cycle-test-'));
+  brainDir = mkdtempSync(join(tmpdir(), 'voltmind-cycle-test-'));
   mkdirSync(join(brainDir, 'wiki'), { recursive: true });
 
   // Seed two pages: one with a high-emotion tag, one without.

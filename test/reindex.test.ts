@@ -1,7 +1,7 @@
 /**
  * v0.32.7 CJK wave — reindex sweep tests.
  *
- * Drives `gbrain reindex --markdown` against an in-memory PGLite brain,
+ * Drives `voltmind reindex --markdown` against an in-memory PGLite brain,
  * verifies the chunker_version sweep updates rows below the current
  * MARKDOWN_CHUNKER_VERSION and is idempotent on re-run.
  */
@@ -37,7 +37,7 @@ async function seedLegacyPage(slug: string, body: string, sourcePath: string | n
   );
 }
 
-describe('gbrain reindex --markdown (v0.32.7)', () => {
+describe('voltmind reindex --markdown (v0.32.7)', () => {
   test('dry-run reports pending count and does not write', async () => {
     await seedLegacyPage('note-a', 'body a');
     await seedLegacyPage('note-b', 'body b');

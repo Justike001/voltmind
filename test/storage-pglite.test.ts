@@ -2,7 +2,7 @@
  * PGLite lifecycle test for storage tiering — D8 + D4 of v0.22.3.
  *
  * Per the plan: "the full PGLite lifecycle for D8's both-engines requirement.
- * gbrain.yml load → gbrain storage status → soft-warn message present →
+ * voltmind.yml load → voltmind storage status → soft-warn message present →
  * manageGitignore happy-path on a tmp dir. PGLite-specific path for the
  * slugPrefix filter."
  *
@@ -38,7 +38,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-pglite-test-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-pglite-test-'));
   __resetMissingStorageWarning();
   __resetPGLiteWarn();
   __resetPGLiteTierWarn();
@@ -65,7 +65,7 @@ function cleanup(): void {
 
 function writeGbrainYml(): void {
   writeFileSync(
-    join(tmp, 'gbrain.yml'),
+    join(tmp, 'voltmind.yml'),
     `storage:
   db_tracked:
     - people/
@@ -84,7 +84,7 @@ describe('Storage tiering on PGLite — full lifecycle (D8 + D4)', () => {
     }
   });
 
-  test('getStorageStatus loads gbrain.yml and reports tier counts', async () => {
+  test('getStorageStatus loads voltmind.yml and reports tier counts', async () => {
     try {
       writeGbrainYml();
       await engine.putPage('people/alice', { type: 'person', title: 'Alice', compiled_truth: '', timeline: '' });
@@ -144,7 +144,7 @@ describe('Storage tiering on PGLite — full lifecycle (D8 + D4)', () => {
     }
   });
 
-  test('end-to-end: gbrain.yml + putPage + storage status + .gitignore', async () => {
+  test('end-to-end: voltmind.yml + putPage + storage status + .gitignore', async () => {
     try {
       writeGbrainYml();
       await engine.putPage('people/alice', { type: 'person', title: 'Alice', compiled_truth: '', timeline: '' });
@@ -162,7 +162,7 @@ describe('Storage tiering on PGLite — full lifecycle (D8 + D4)', () => {
       // .gitignore management produces a managed block.
       manageGitignore(tmp, 'pglite');
       const gitignore = readFileSync(join(tmp, '.gitignore'), 'utf-8');
-      expect(gitignore).toContain('# Auto-managed by gbrain');
+      expect(gitignore).toContain('# Auto-managed by voltmind');
       expect(gitignore).toContain('media/x/');
     } finally {
       cleanup();

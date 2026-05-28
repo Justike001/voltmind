@@ -34,7 +34,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
-  tempDir = mkdtempSync(join(tmpdir(), 'gbrain-extract-test-'));
+  tempDir = mkdtempSync(join(tmpdir(), 'voltmind-extract-test-'));
   mkdirSync(join(tempDir, 'people'), { recursive: true });
   mkdirSync(join(tempDir, 'companies'), { recursive: true });
 });

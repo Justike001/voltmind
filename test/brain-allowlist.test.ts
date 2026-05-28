@@ -17,11 +17,11 @@ import {
   filterAllowedTools,
   __testing,
 } from '../src/core/minions/tools/brain-allowlist.ts';
-import type { GBrainConfig } from '../src/core/config.ts';
+import type { VoltMindConfig } from '../src/core/config.ts';
 import type { ToolCtx } from '../src/core/minions/types.ts';
 
 let engine: PGLiteEngine;
-const config: GBrainConfig = { engine: 'pglite' } as GBrainConfig;
+const config: VoltMindConfig = { engine: 'pglite' } as VoltMindConfig;
 
 beforeAll(async () => {
   engine = new PGLiteEngine();

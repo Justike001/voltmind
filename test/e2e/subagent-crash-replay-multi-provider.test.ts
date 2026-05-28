@@ -9,7 +9,7 @@
  *     1. Tool executions marked status='complete' (or 'failed') in the DB
  *        before the crash MUST NOT be re-executed.
  *     2. The reconciliation key MUST work across provider response shapes
- *        — the gbrain-owned stable key (ordinal + gbrain_tool_use_id from
+ *        — the voltmind-owned stable key (ordinal + gbrain_tool_use_id from
  *        migration v81) is the canonical key, not the provider tool_use_id.
  *     3. Legacy v1 rows (pre-v0.38, ordinal=NULL, gbrain_tool_use_id=NULL)
  *        get a synthesized stable key via the D5 read-time shim and replay

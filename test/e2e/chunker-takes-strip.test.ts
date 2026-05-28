@@ -99,7 +99,7 @@ d('chunker strip end-to-end via importFromContent', () => {
     // Confirm the contract globally — across all pages in the brain.
     const leaks = await engine.executeRaw<{ count: number }>(
       `SELECT count(*)::int AS count FROM content_chunks
-       WHERE chunk_text LIKE '%<!--- gbrain:takes:%'`,
+       WHERE chunk_text LIKE '%<!--- voltmind:takes:%'`,
     );
     expect(Number(leaks[0]?.count)).toBe(0);
   });

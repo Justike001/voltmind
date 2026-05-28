@@ -30,7 +30,7 @@ function makeCtx(opts: { remote?: boolean } = {}): OperationContext {
     config: { engine: 'postgres', database_url: process.env.DATABASE_URL! },
     logger: { info: () => {}, warn: () => {}, error: () => {} },
     dryRun: false,
-    // Default: trusted local invocation (matches `gbrain call` semantics).
+    // Default: trusted local invocation (matches `voltmind call` semantics).
     remote: opts.remote ?? false,
     sourceId: 'default',
   };
@@ -566,7 +566,7 @@ describeE2E('E2E: Files', () => {
 
   test('file_upload stores metadata + file_list shows it', async () => {
     // Create a temp file
-    const tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-e2e-'));
+    const tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-e2e-'));
     const tmpFile = join(tmpDir, 'test-doc.pdf');
     writeFileSync(tmpFile, 'fake pdf content');
 
@@ -584,7 +584,7 @@ describeE2E('E2E: Files', () => {
 
       // Verify file_url returns URI format
       const url = await callOp('file_url', { storage_path: result.storage_path }) as any;
-      expect(url.url).toContain('gbrain:files/');
+      expect(url.url).toContain('voltmind:files/');
     } finally {
       rmSync(tmpDir, { recursive: true });
     }
@@ -593,7 +593,7 @@ describeE2E('E2E: Files', () => {
   // Security-wave-3 regression: MCP/remote callers MUST be confined to cwd
   // (Issue #139). Local CLI callers are unrestricted — different trust model.
   test('file_upload rejects outside-cwd paths for remote (MCP) callers', async () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-e2e-ssrf-'));
+    const tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-e2e-ssrf-'));
     const tmpFile = join(tmpDir, 'stealable.txt');
     writeFileSync(tmpFile, 'sensitive');
 
@@ -719,7 +719,7 @@ describeE2E('E2E: Setup Journey', () => {
   const cliCwd = join(import.meta.dir, '../..');
   const cliEnv = () => ({ ...process.env, DATABASE_URL: process.env.DATABASE_URL! });
 
-  test('gbrain init --non-interactive connects and initializes', () => {
+  test('voltmind init --non-interactive connects and initializes', () => {
     // v0.37.10.0: pass --embedding-model explicitly. Tier-1 CI runs without
     // any embedding-provider env var, and the v0.37 fail-loud-no-key gate
     // (D3) would otherwise exit 1 here. The provider is offline-resolved
@@ -738,7 +738,7 @@ describeE2E('E2E: Setup Journey', () => {
     expect(stdout).toContain('Brain ready');
   }, 30_000);
 
-  test('gbrain import imports fixtures via CLI', () => {
+  test('voltmind import imports fixtures via CLI', () => {
     const result = Bun.spawnSync({
       cmd: ['bun', 'run', 'src/cli.ts', 'import', '--no-embed', FIXTURES_PATH],
       cwd: cliCwd,
@@ -750,7 +750,7 @@ describeE2E('E2E: Setup Journey', () => {
     expect(stdout).toContain('imported');
   }, 60_000);
 
-  test('gbrain search returns results via CLI', () => {
+  test('voltmind search returns results via CLI', () => {
     const result = Bun.spawnSync({
       cmd: ['bun', 'run', 'src/cli.ts', 'search', 'NovaMind'],
       cwd: cliCwd,
@@ -762,7 +762,7 @@ describeE2E('E2E: Setup Journey', () => {
     expect(stdout.length).toBeGreaterThan(0);
   }, 30_000);
 
-  test('gbrain stats shows page count via CLI', () => {
+  test('voltmind stats shows page count via CLI', () => {
     const result = Bun.spawnSync({
       cmd: ['bun', 'run', 'src/cli.ts', 'stats'],
       cwd: cliCwd,
@@ -772,7 +772,7 @@ describeE2E('E2E: Setup Journey', () => {
     expect(result.exitCode).toBe(0);
   }, 30_000);
 
-  test('gbrain health runs via CLI', () => {
+  test('voltmind health runs via CLI', () => {
     const result = Bun.spawnSync({
       cmd: ['bun', 'run', 'src/cli.ts', 'health'],
       cwd: cliCwd,
@@ -793,7 +793,7 @@ describeE2E('E2E: Init Edge Cases', () => {
   test('init --non-interactive without URL fails gracefully', () => {
     const env = { ...process.env };
     delete env.DATABASE_URL;
-    delete env.GBRAIN_DATABASE_URL;
+    delete env.VOLTMIND_DATABASE_URL;
     const result = Bun.spawnSync({
       cmd: ['bun', 'run', 'src/cli.ts', 'init', '--non-interactive'],
       cwd: join(import.meta.dir, '../..'),
@@ -947,7 +947,7 @@ describeE2E('E2E: RLS Verification', () => {
   afterAll(teardownDB);
 
   const cliCwd = join(import.meta.dir, '../..');
-  const cliEnv = () => ({ ...process.env, DATABASE_URL: process.env.DATABASE_URL!, GBRAIN_DATABASE_URL: process.env.DATABASE_URL! });
+  const cliEnv = () => ({ ...process.env, DATABASE_URL: process.env.DATABASE_URL!, VOLTMIND_DATABASE_URL: process.env.DATABASE_URL! });
 
   // Seed a unique suffix per run so concurrent test DBs / crashed prior
   // runs don't collide. All helper tables follow `gbrain_rls_regression_<suffix>`.
@@ -976,7 +976,7 @@ describeE2E('E2E: RLS Verification', () => {
     }
   });
 
-  test('gbrain doctor fails with exit 1 when a public table is missing RLS', async () => {
+  test('voltmind doctor fails with exit 1 when a public table is missing RLS', async () => {
     const conn = getConn();
     const tbl = `gbrain_rls_regression_${suffix}`;
     try {
@@ -1122,7 +1122,7 @@ describeE2E('E2E: RLS Verification', () => {
       priorVersion = (verRows[0] as any)?.value ?? null;
 
       // Simulate an operator who dropped the budget_* tables for any reason
-      // (cleanup, migration from an older gbrain, etc).
+      // (cleanup, migration from an older voltmind, etc).
       await conn.unsafe(`DROP TABLE IF EXISTS public.budget_ledger CASCADE`);
       await conn.unsafe(`DROP TABLE IF EXISTS public.budget_reservations CASCADE`);
 
@@ -1216,21 +1216,21 @@ describeE2E('E2E: RLS Verification', () => {
 // ─────────────────────────────────────────────────────────────────
 
 describeE2E('E2E: Doctor Command', () => {
-  // Scope GBRAIN_HOME to a hermetic tmpdir so `gbrain doctor` doesn't read
-  // the developer's local ~/.gbrain/migrations/completed.jsonl. Stale partial
+  // Scope VOLTMIND_HOME to a hermetic tmpdir so `voltmind doctor` doesn't read
+  // the developer's local ~/.voltmind/migrations/completed.jsonl. Stale partial
   // entries from in-flight workspaces (e.g. v0.31.x santiago) would make the
   // minions_migration check fail and exit 1, masking real DB-health failures.
-  let gbrainHome: string;
+  let voltmindHome: string;
 
   beforeAll(async () => {
     await setupDB();
     await importFixtures();
-    // Isolate GBRAIN_HOME to a per-block tempdir so the developer's
-    // ~/.gbrain/migrations/completed.jsonl ledger doesn't leak in. Without
+    // Isolate VOLTMIND_HOME to a per-block tempdir so the developer's
+    // ~/.voltmind/migrations/completed.jsonl ledger doesn't leak in. Without
     // this, doctor reads the dev machine state — partial v0.21/v0.22.4/v0.28.0
     // migration entries from in-flight workspaces — and surfaces them as the
     // 'minions_migration' [FAIL] check, exiting with code 1.
-    gbrainHome = mkdtempSync(join(tmpdir(), 'gbrain-doctor-e2e-'));
+    voltmindHome = mkdtempSync(join(tmpdir(), 'voltmind-doctor-e2e-'));
     // Cross-file isolation: prior E2E files can leave non-default `sources`
     // rows (e.g. 'delta' from autopilot/sources tests). Doctor's
     // sync_freshness + cycle_freshness checks then FAIL on those orphans,
@@ -1242,18 +1242,18 @@ describeE2E('E2E: Doctor Command', () => {
   }, 30_000);
   afterAll(async () => {
     await teardownDB();
-    if (gbrainHome) rmSync(gbrainHome, { recursive: true, force: true });
+    if (voltmindHome) rmSync(voltmindHome, { recursive: true, force: true });
   });
 
   const cliCwd = join(import.meta.dir, '../..');
   const cliEnv = () => ({
     ...process.env,
     DATABASE_URL: process.env.DATABASE_URL!,
-    GBRAIN_DATABASE_URL: process.env.DATABASE_URL!,
-    GBRAIN_HOME: gbrainHome,
+    VOLTMIND_DATABASE_URL: process.env.DATABASE_URL!,
+    VOLTMIND_HOME: voltmindHome,
   });
 
-  test('gbrain doctor exits 0 on healthy DB', () => {
+  test('voltmind doctor exits 0 on healthy DB', () => {
     // Init first so config exists for CLI. Pin --embedding-model explicitly
     // so the spawned doctor doesn't pick a different default (e.g. ZE-1280d
     // when ZEROENTROPY_API_KEY is in env) that mismatches the 1536d schema
@@ -1280,7 +1280,7 @@ describeE2E('E2E: Doctor Command', () => {
     expect(result.exitCode).toBe(0);
   }, 60_000);
 
-  test('gbrain doctor --json produces valid JSON', () => {
+  test('voltmind doctor --json produces valid JSON', () => {
     const result = Bun.spawnSync({
       cmd: ['bun', 'run', 'src/cli.ts', 'doctor', '--json'],
       cwd: cliCwd,
@@ -1308,7 +1308,7 @@ describeE2E('E2E: Parallel Import', () => {
   afterAll(teardownDB);
 
   const cliCwd = join(import.meta.dir, '../..');
-  const cliEnv = () => ({ ...process.env, DATABASE_URL: process.env.DATABASE_URL!, GBRAIN_DATABASE_URL: process.env.DATABASE_URL! });
+  const cliEnv = () => ({ ...process.env, DATABASE_URL: process.env.DATABASE_URL!, VOLTMIND_DATABASE_URL: process.env.DATABASE_URL! });
 
   function initCli() {
     Bun.spawnSync({

@@ -20,7 +20,7 @@ let engine: PGLiteEngine;
 let tmpHome: string;
 
 beforeAll(async () => {
-  tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-receipt-test-'));
+  tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-receipt-test-'));
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
@@ -99,8 +99,8 @@ describe('writeReceiptToDb — DB-authoritative path (codex review #6)', () => {
 });
 
 describe('writeReceiptArtifact — best-effort disk path (codex review #6)', () => {
-  test('writes file to ~/.gbrain/eval-receipts/<filename>', async () => {
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+  test('writes file to ~/.voltmind/eval-receipts/<filename>', async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const r = makeReceipt('artif001');
       const path = writeReceiptArtifact(r);
       expect(path).toBeDefined();
@@ -113,7 +113,7 @@ describe('writeReceiptArtifact — best-effort disk path (codex review #6)', () 
 
 describe('writeReceipt — combined (DB authoritative, disk best-effort)', () => {
   test('returns {db: true, disk_path}', async () => {
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const r = makeReceipt('combined1');
       const result = await writeReceipt(engine, r);
       expect(result.db).toBe(true);

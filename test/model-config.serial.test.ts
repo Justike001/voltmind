@@ -32,7 +32,7 @@ beforeEach(() => {
     stderrCapture += typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString();
     return true;
   }) as typeof process.stderr.write;
-  delete process.env.GBRAIN_MODEL;
+  delete process.env.VOLTMIND_MODEL;
   _resetDeprecationWarningsForTest();
 });
 
@@ -68,7 +68,7 @@ describe('resolveModel — 6-tier precedence', () => {
   test('CLI flag wins over everything', async () => {
     stub.set('models.dream.synthesize', 'sonnet');
     stub.set('models.default', 'opus');
-    process.env.GBRAIN_MODEL = 'haiku';
+    process.env.VOLTMIND_MODEL = 'haiku';
     const m = await resolveModel(stub as never, {
       cliFlag: 'gemini',
       configKey: 'models.dream.synthesize',
@@ -111,7 +111,7 @@ describe('resolveModel — 6-tier precedence', () => {
   });
 
   test('env var used when no config set', async () => {
-    process.env.GBRAIN_MODEL = 'haiku';
+    process.env.VOLTMIND_MODEL = 'haiku';
     const m = await resolveModel(stub as never, {
       configKey: 'models.dream.synthesize',
       fallback: 'sonnet',
@@ -159,7 +159,7 @@ describe('resolveModel — v0.31.12 tier system', () => {
 
   test('models.tier.<tier> beats env + fallback', async () => {
     stub.set('models.tier.reasoning', 'opus');
-    process.env.GBRAIN_MODEL = 'haiku';
+    process.env.VOLTMIND_MODEL = 'haiku';
     const m = await resolveModel(stub as never, {
       tier: 'reasoning',
       fallback: 'sonnet',

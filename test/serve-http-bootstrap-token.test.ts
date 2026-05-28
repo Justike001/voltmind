@@ -1,7 +1,7 @@
 /**
  * v0.36.1.x #1024: bootstrap token resolution rules.
  *
- * The env override (GBRAIN_ADMIN_BOOTSTRAP_TOKEN) is security-sensitive —
+ * The env override (VOLTMIND_ADMIN_BOOTSTRAP_TOKEN) is security-sensitive —
  * a weak token silently accepted would let any reader of the env scope
  * impersonate admin. Test the validation directly via the pure helper so
  * the rule can't drift without the suite catching it.

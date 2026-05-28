@@ -1,8 +1,8 @@
 /**
- * E2E flow tests for `gbrain skillpack` — the new v0.33 scaffold+
+ * E2E flow tests for `voltmind skillpack` — the new v0.33 scaffold+
  * reference+migrate+harvest contract.
  *
- * Real gbrain subprocess against tempdir workspaces. No DATABASE_URL
+ * Real voltmind subprocess against tempdir workspaces. No DATABASE_URL
  * needed — skillpack is filesystem-only.
  *
  * 9 user flows:
@@ -24,8 +24,8 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..');
-const GBRAIN_CMD = 'bun';
-const GBRAIN_ARGS = ['run', join(REPO_ROOT, 'src', 'cli.ts')];
+const VOLTMIND_CMD = 'bun';
+const VOLTMIND_ARGS = ['run', join(REPO_ROOT, 'src', 'cli.ts')];
 
 interface RunResult {
   stdout: string;
@@ -34,7 +34,7 @@ interface RunResult {
 }
 
 function runGbrain(args: string[], opts: { cwd?: string } = {}): RunResult {
-  const result = spawnSync(GBRAIN_CMD, [...GBRAIN_ARGS, ...args], {
+  const result = spawnSync(VOLTMIND_CMD, [...VOLTMIND_ARGS, ...args], {
     cwd: opts.cwd ?? REPO_ROOT,
     encoding: 'utf-8',
     env: { ...process.env, OPENCLAW_WORKSPACE: '' }, // ensure walk-up tier wins
@@ -94,19 +94,19 @@ describe('skillpack flow (E2E)', () => {
   });
 
   test('4. reference --apply-clean-hunks applies upstream change to local workspace', () => {
-    // Use a private bundle (scratch gbrain root) so we can mutate the
-    // bundle source without polluting the real gbrain repo.
-    const gbrainRoot = mkdtempSync(join(tmpdir(), 'sp-e2e-gb-'));
-    tempdirs.push(gbrainRoot);
-    mkdirSync(join(gbrainRoot, 'src'), { recursive: true });
-    writeFileSync(join(gbrainRoot, 'src', 'cli.ts'), '// stub');
-    mkdirSync(join(gbrainRoot, 'skills', 'apply-demo'), { recursive: true });
+    // Use a private bundle (scratch voltmind root) so we can mutate the
+    // bundle source without polluting the real voltmind repo.
+    const voltmindRoot = mkdtempSync(join(tmpdir(), 'sp-e2e-gb-'));
+    tempdirs.push(voltmindRoot);
+    mkdirSync(join(voltmindRoot, 'src'), { recursive: true });
+    writeFileSync(join(voltmindRoot, 'src', 'cli.ts'), '// stub');
+    mkdirSync(join(voltmindRoot, 'skills', 'apply-demo'), { recursive: true });
     const initial = Array.from({ length: 20 }, (_, i) => `Line ${i + 1}`).join('\n') + '\n';
-    writeFileSync(join(gbrainRoot, 'skills', 'apply-demo', 'SKILL.md'), initial);
+    writeFileSync(join(voltmindRoot, 'skills', 'apply-demo', 'SKILL.md'), initial);
     writeFileSync(
-      join(gbrainRoot, 'openclaw.plugin.json'),
+      join(voltmindRoot, 'openclaw.plugin.json'),
       JSON.stringify({
-        name: 'gbrain-test',
+        name: 'voltmind-test',
         version: '0.33.0-test',
         skills: ['skills/apply-demo'],
         shared_deps: [],
@@ -114,23 +114,23 @@ describe('skillpack flow (E2E)', () => {
     );
 
     const ws = scratchWorkspace();
-    // Run scaffold from gbrainRoot so it picks up our scratch bundle.
-    const r0 = spawnSync(GBRAIN_CMD, [...GBRAIN_ARGS, 'skillpack', 'scaffold', 'apply-demo', '--workspace', ws], {
-      cwd: gbrainRoot,
+    // Run scaffold from voltmindRoot so it picks up our scratch bundle.
+    const r0 = spawnSync(VOLTMIND_CMD, [...VOLTMIND_ARGS, 'skillpack', 'scaffold', 'apply-demo', '--workspace', ws], {
+      cwd: voltmindRoot,
       encoding: 'utf-8',
       env: { ...process.env, OPENCLAW_WORKSPACE: '' },
     });
     expect(r0.status).toBe(0);
 
-    // gbrain ships an upstream change.
+    // voltmind ships an upstream change.
     writeFileSync(
-      join(gbrainRoot, 'skills', 'apply-demo', 'SKILL.md'),
+      join(voltmindRoot, 'skills', 'apply-demo', 'SKILL.md'),
       initial.replace('Line 10\n', 'Line 10 UPSTREAM\n'),
     );
 
     // Apply clean hunks.
-    const r = spawnSync(GBRAIN_CMD, [...GBRAIN_ARGS, 'skillpack', 'reference', 'apply-demo', '--workspace', ws, '--apply-clean-hunks'], {
-      cwd: gbrainRoot,
+    const r = spawnSync(VOLTMIND_CMD, [...VOLTMIND_ARGS, 'skillpack', 'reference', 'apply-demo', '--workspace', ws, '--apply-clean-hunks'], {
+      cwd: voltmindRoot,
       encoding: 'utf-8',
       env: { ...process.env, OPENCLAW_WORKSPACE: '' },
     });
@@ -147,15 +147,15 @@ describe('skillpack flow (E2E)', () => {
       join(ws, 'skills', 'RESOLVER.md'),
       `# RESOLVER
 
-<!-- gbrain:skillpack:begin -->
+<!-- voltmind:skillpack:begin -->
 
-<!-- gbrain:skillpack:manifest cumulative-slugs="legacy-skill" version="0.32.0" -->
+<!-- voltmind:skillpack:manifest cumulative-slugs="legacy-skill" version="0.32.0" -->
 
 | Trigger | Skill |
 |---------|-------|
 | "legacy trigger" | \`skills/legacy-skill/SKILL.md\` |
 
-<!-- gbrain:skillpack:end -->
+<!-- voltmind:skillpack:end -->
 `,
     );
 
@@ -163,7 +163,7 @@ describe('skillpack flow (E2E)', () => {
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain('fence_stripped');
     const rewritten = readFileSync(join(ws, 'skills', 'RESOLVER.md'), 'utf-8');
-    expect(rewritten).not.toContain('gbrain:skillpack:begin');
+    expect(rewritten).not.toContain('voltmind:skillpack:begin');
     expect(rewritten).toContain('| "legacy trigger" | `skills/legacy-skill/SKILL.md` |');
   });
 
@@ -196,24 +196,24 @@ describe('skillpack flow (E2E)', () => {
       '---\nname: contaminated\ntriggers:\n  - "tt"\n---\n# from Wintermute\n',
     );
 
-    const gbrainRoot = mkdtempSync(join(tmpdir(), 'sp-e2e-gb-'));
-    tempdirs.push(gbrainRoot);
-    mkdirSync(join(gbrainRoot, 'src'), { recursive: true });
-    writeFileSync(join(gbrainRoot, 'src', 'cli.ts'), '// stub');
-    mkdirSync(join(gbrainRoot, 'skills'), { recursive: true });
+    const voltmindRoot = mkdtempSync(join(tmpdir(), 'sp-e2e-gb-'));
+    tempdirs.push(voltmindRoot);
+    mkdirSync(join(voltmindRoot, 'src'), { recursive: true });
+    writeFileSync(join(voltmindRoot, 'src', 'cli.ts'), '// stub');
+    mkdirSync(join(voltmindRoot, 'skills'), { recursive: true });
     writeFileSync(
-      join(gbrainRoot, 'openclaw.plugin.json'),
+      join(voltmindRoot, 'openclaw.plugin.json'),
       JSON.stringify({ name: 'gb', version: '0.33', skills: [], shared_deps: [] }, null, 2),
     );
 
     const r = spawnSync(
-      GBRAIN_CMD,
-      [...GBRAIN_ARGS, 'skillpack', 'harvest', 'contaminated', '--from', hostRoot],
-      { cwd: gbrainRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' } },
+      VOLTMIND_CMD,
+      [...VOLTMIND_ARGS, 'skillpack', 'harvest', 'contaminated', '--from', hostRoot],
+      { cwd: voltmindRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' } },
     );
     expect(r.status).toBe(1); // lint_failed
     expect((r.stdout ?? '') + (r.stderr ?? '')).toContain('Wintermute');
-    expect(existsSync(join(gbrainRoot, 'skills', 'contaminated'))).toBe(false); // rolled back
+    expect(existsSync(join(voltmindRoot, 'skills', 'contaminated'))).toBe(false); // rolled back
   });
 
   test('8. harvest --no-lint bypasses the privacy linter', () => {
@@ -225,20 +225,20 @@ describe('skillpack flow (E2E)', () => {
       '---\nname: bypass-test\ntriggers:\n  - "bt"\n---\n# from Wintermute\n',
     );
 
-    const gbrainRoot = mkdtempSync(join(tmpdir(), 'sp-e2e-gb-'));
-    tempdirs.push(gbrainRoot);
-    mkdirSync(join(gbrainRoot, 'src'), { recursive: true });
-    writeFileSync(join(gbrainRoot, 'src', 'cli.ts'), '// stub');
-    mkdirSync(join(gbrainRoot, 'skills'), { recursive: true });
+    const voltmindRoot = mkdtempSync(join(tmpdir(), 'sp-e2e-gb-'));
+    tempdirs.push(voltmindRoot);
+    mkdirSync(join(voltmindRoot, 'src'), { recursive: true });
+    writeFileSync(join(voltmindRoot, 'src', 'cli.ts'), '// stub');
+    mkdirSync(join(voltmindRoot, 'skills'), { recursive: true });
     writeFileSync(
-      join(gbrainRoot, 'openclaw.plugin.json'),
+      join(voltmindRoot, 'openclaw.plugin.json'),
       JSON.stringify({ name: 'gb', version: '0.33', skills: [], shared_deps: [] }, null, 2),
     );
 
     const r = spawnSync(
-      GBRAIN_CMD,
+      VOLTMIND_CMD,
       [
-        ...GBRAIN_ARGS,
+        ...VOLTMIND_ARGS,
         'skillpack',
         'harvest',
         'bypass-test',
@@ -246,10 +246,10 @@ describe('skillpack flow (E2E)', () => {
         hostRoot,
         '--no-lint',
       ],
-      { cwd: gbrainRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' } },
+      { cwd: voltmindRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' } },
     );
     expect(r.status).toBe(0);
-    expect(existsSync(join(gbrainRoot, 'skills', 'bypass-test', 'SKILL.md'))).toBe(true);
+    expect(existsSync(join(voltmindRoot, 'skills', 'bypass-test', 'SKILL.md'))).toBe(true);
   });
 
   test('9. install returns unknown-subcommand error (clean break, no alias)', () => {
@@ -312,15 +312,15 @@ describe('skillpack flow (E2E)', () => {
 
   test('14. --apply-clean-hunks prints two-way WARNING to STDERR, not stdout', () => {
     // Use a private bundle so we can mutate it without polluting the repo.
-    const gbrainRoot = mkdtempSync(join(tmpdir(), 'sp-e2e-gb-warn-'));
-    tempdirs.push(gbrainRoot);
-    mkdirSync(join(gbrainRoot, 'src'), { recursive: true });
-    writeFileSync(join(gbrainRoot, 'src', 'cli.ts'), '// stub');
-    mkdirSync(join(gbrainRoot, 'skills', 'warn-demo'), { recursive: true });
+    const voltmindRoot = mkdtempSync(join(tmpdir(), 'sp-e2e-gb-warn-'));
+    tempdirs.push(voltmindRoot);
+    mkdirSync(join(voltmindRoot, 'src'), { recursive: true });
+    writeFileSync(join(voltmindRoot, 'src', 'cli.ts'), '// stub');
+    mkdirSync(join(voltmindRoot, 'skills', 'warn-demo'), { recursive: true });
     const initial = Array.from({ length: 15 }, (_, i) => `L${i + 1}`).join('\n') + '\n';
-    writeFileSync(join(gbrainRoot, 'skills', 'warn-demo', 'SKILL.md'), initial);
+    writeFileSync(join(voltmindRoot, 'skills', 'warn-demo', 'SKILL.md'), initial);
     writeFileSync(
-      join(gbrainRoot, 'openclaw.plugin.json'),
+      join(voltmindRoot, 'openclaw.plugin.json'),
       JSON.stringify({
         name: 'gb', version: '0.36-test',
         skills: ['skills/warn-demo'], shared_deps: [],
@@ -328,38 +328,38 @@ describe('skillpack flow (E2E)', () => {
     );
 
     const ws = scratchWorkspace();
-    spawnSync(GBRAIN_CMD, [...GBRAIN_ARGS, 'skillpack', 'scaffold', 'warn-demo', '--workspace', ws], {
-      cwd: gbrainRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' },
+    spawnSync(VOLTMIND_CMD, [...VOLTMIND_ARGS, 'skillpack', 'scaffold', 'warn-demo', '--workspace', ws], {
+      cwd: voltmindRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' },
     });
     // Cause drift to make apply do something.
     writeFileSync(
-      join(gbrainRoot, 'skills', 'warn-demo', 'SKILL.md'),
+      join(voltmindRoot, 'skills', 'warn-demo', 'SKILL.md'),
       initial.replace('L8\n', 'L8 NEW\n'),
     );
 
     const r = spawnSync(
-      GBRAIN_CMD,
-      [...GBRAIN_ARGS, 'skillpack', 'reference', 'warn-demo', '--workspace', ws, '--apply-clean-hunks'],
-      { cwd: gbrainRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' } },
+      VOLTMIND_CMD,
+      [...VOLTMIND_ARGS, 'skillpack', 'reference', 'warn-demo', '--workspace', ws, '--apply-clean-hunks'],
+      { cwd: voltmindRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' } },
     );
     expect(r.status).toBe(0);
     // WARNING must be on stderr (survives stdout redirection).
     expect(r.stderr).toContain('WARNING');
     expect(r.stderr).toContain('two-way');
-    expect(r.stderr).toContain('aligned to gbrain');
+    expect(r.stderr).toContain('aligned to voltmind');
     // And must NOT be on stdout (where machine consumers parse).
     expect(r.stdout).not.toContain('WARNING:');
   });
 
   test('15. --apply-clean-hunks --json does NOT print the WARNING (machine mode)', () => {
-    const gbrainRoot = mkdtempSync(join(tmpdir(), 'sp-e2e-gb-json-'));
-    tempdirs.push(gbrainRoot);
-    mkdirSync(join(gbrainRoot, 'src'), { recursive: true });
-    writeFileSync(join(gbrainRoot, 'src', 'cli.ts'), '// stub');
-    mkdirSync(join(gbrainRoot, 'skills', 'json-demo'), { recursive: true });
-    writeFileSync(join(gbrainRoot, 'skills', 'json-demo', 'SKILL.md'), 'a\nb\nc\n');
+    const voltmindRoot = mkdtempSync(join(tmpdir(), 'sp-e2e-gb-json-'));
+    tempdirs.push(voltmindRoot);
+    mkdirSync(join(voltmindRoot, 'src'), { recursive: true });
+    writeFileSync(join(voltmindRoot, 'src', 'cli.ts'), '// stub');
+    mkdirSync(join(voltmindRoot, 'skills', 'json-demo'), { recursive: true });
+    writeFileSync(join(voltmindRoot, 'skills', 'json-demo', 'SKILL.md'), 'a\nb\nc\n');
     writeFileSync(
-      join(gbrainRoot, 'openclaw.plugin.json'),
+      join(voltmindRoot, 'openclaw.plugin.json'),
       JSON.stringify({
         name: 'gb', version: '0.36-test',
         skills: ['skills/json-demo'], shared_deps: [],
@@ -367,14 +367,14 @@ describe('skillpack flow (E2E)', () => {
     );
 
     const ws = scratchWorkspace();
-    spawnSync(GBRAIN_CMD, [...GBRAIN_ARGS, 'skillpack', 'scaffold', 'json-demo', '--workspace', ws], {
-      cwd: gbrainRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' },
+    spawnSync(VOLTMIND_CMD, [...VOLTMIND_ARGS, 'skillpack', 'scaffold', 'json-demo', '--workspace', ws], {
+      cwd: voltmindRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' },
     });
 
     const r = spawnSync(
-      GBRAIN_CMD,
-      [...GBRAIN_ARGS, 'skillpack', 'reference', 'json-demo', '--workspace', ws, '--apply-clean-hunks', '--json'],
-      { cwd: gbrainRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' } },
+      VOLTMIND_CMD,
+      [...VOLTMIND_ARGS, 'skillpack', 'reference', 'json-demo', '--workspace', ws, '--apply-clean-hunks', '--json'],
+      { cwd: voltmindRoot, encoding: 'utf-8', env: { ...process.env, OPENCLAW_WORKSPACE: '' } },
     );
     expect(r.status).toBe(0);
     // JSON mode: stderr stays clean for machine consumers.
@@ -390,10 +390,10 @@ describe('skillpack flow (E2E)', () => {
       join(ws, 'skills', 'RESOLVER.md'),
       `# RESOLVER
 
-<!-- gbrain:skillpack:begin -->
-<!-- gbrain:skillpack:manifest cumulative-slugs="lx" version="0.32.0" -->
+<!-- voltmind:skillpack:begin -->
+<!-- voltmind:skillpack:manifest cumulative-slugs="lx" version="0.32.0" -->
 | "trigger" | \`skills/lx/SKILL.md\` |
-<!-- gbrain:skillpack:end -->
+<!-- voltmind:skillpack:end -->
 `,
     );
     const r = runGbrain(['skillpack', 'migrate-fence', '--workspace', ws]);

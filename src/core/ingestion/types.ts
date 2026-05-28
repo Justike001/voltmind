@@ -23,7 +23,7 @@
  *     handler. Set by the webhook source (network input) and skillpack
  *     sources that fetch URLs. When true, put_page skips auto-link and
  *     applies the slug-allowlist gate. Untrusted in-process callers (CLI
- *     `gbrain capture`) leave it false.
+ *     `voltmind capture`) leave it false.
  *
  *   - The api_version constant on the skillpack manifest decouples the
  *     contract from skillpack release cadence. v1 sources fail loudly with a
@@ -34,13 +34,13 @@ import type { BrainEngine } from '../engine.ts';
 import type { Logger } from '../operations.ts';
 
 /**
- * Contract version stamped on every gbrain.plugin.json that ships an
+ * Contract version stamped on every voltmind.plugin.json that ships an
  * IngestionSource. Bumped only when the IngestionSource / IngestionEvent
  * shape changes incompatibly. Reverse aliases for prior versions live in the
  * skillpack-load module so existing packs continue to work across a
  * deprecation window.
  */
-export const INGESTION_SOURCE_API_VERSION = 'gbrain-ingestion-source-v1';
+export const INGESTION_SOURCE_API_VERSION = 'voltmind-ingestion-source-v1';
 
 /**
  * Canonical taxonomy of content types the daemon recognizes. The router
@@ -110,7 +110,7 @@ export interface IngestionEvent {
 
 /**
  * Health probe surface for sources that want to expose state to
- * `gbrain doctor ingestion_health`. Optional — sources that don't implement
+ * `voltmind doctor ingestion_health`. Optional — sources that don't implement
  * it surface as `ok` from the daemon side (no signal == healthy assumption).
  */
 export interface IngestionSourceHealth {
@@ -222,8 +222,8 @@ export interface IngestionSourceContext {
    *  exiting any pending operations within the grace window. Long-running
    *  watches should `Promise.race(..., new Promise(r => signal.addEventListener('abort', r)))`. */
   abortSignal: AbortSignal;
-  /** Source-specific config resolved at daemon startup from gbrain.yml
-   *  (built-in sources) or gbrain.plugin.json default_config + per-install
+  /** Source-specific config resolved at daemon startup from voltmind.yml
+   *  (built-in sources) or voltmind.plugin.json default_config + per-install
    *  overrides (skillpack sources). Free-form JSON-serializable. */
   config: Record<string, unknown>;
 }

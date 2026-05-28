@@ -6,7 +6,7 @@
 // plus RESCUE_SLUG_PREFIXES = ['meetings/', 'personal/', 'daily/'].
 //
 // v0.38 T7d: the active schema pack declares which types are
-// `extractable: true`. gbrain-base preserves the 7 legacy types so
+// `extractable: true`. voltmind-base preserves the 7 legacy types so
 // existing facts extraction behavior is byte-for-byte unchanged.
 // User packs (research-state, legal, …) override by setting
 // `extractable: true` on their domain-specific types — e.g. a paper
@@ -19,7 +19,7 @@
 //   if (!eligible.has(parsed.type)) { ... }
 //
 // Until the wiring lands, legacy facts/eligibility.ts callers continue
-// to use the hardcoded ELIGIBLE_TYPES list — which gbrain-base also
+// to use the hardcoded ELIGIBLE_TYPES list — which voltmind-base also
 // declares, so behavior is preserved.
 
 import type { SchemaPackManifest } from './manifest-v1.ts';

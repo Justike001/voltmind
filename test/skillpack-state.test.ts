@@ -1,6 +1,6 @@
 /**
  * Tests for src/core/skillpack/state.ts — machine-owned trust store
- * at ~/.gbrain/skillpack-state.json (codex G1).
+ * at ~/.voltmind/skillpack-state.json (codex G1).
  */
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'fs';
@@ -89,7 +89,7 @@ describe('loadState — error paths', () => {
   });
 
   test('throws state_schema_unknown on mismatched schema version', () => {
-    writeFileSync(statePath, JSON.stringify({ schema_version: 'gbrain-skillpack-state-v99', packs: [] }));
+    writeFileSync(statePath, JSON.stringify({ schema_version: 'voltmind-skillpack-state-v99', packs: [] }));
     try {
       loadState({ statePath });
       throw new Error('should have thrown');

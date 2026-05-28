@@ -7,7 +7,7 @@
  * every consumer simultaneously, which is precisely the point of
  * unifying them — single test target.
  *
- * Hermetic via `withEnv` for `GBRAIN_AUDIT_DIR` override; tmpdir per
+ * Hermetic via `withEnv` for `VOLTMIND_AUDIT_DIR` override; tmpdir per
  * test for isolation. No mock.module, no module-load env reads.
  */
 
@@ -29,7 +29,7 @@ interface TestEvent {
 }
 
 function tmpDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-audit-writer-test-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-audit-writer-test-'));
 }
 
 const tmpDirs: string[] = [];
@@ -82,22 +82,22 @@ describe('computeIsoWeekFilename', () => {
 });
 
 describe('resolveAuditDir', () => {
-  it('honors GBRAIN_AUDIT_DIR override', async () => {
+  it('honors VOLTMIND_AUDIT_DIR override', async () => {
     const dir = makeDir();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       expect(resolveAuditDir()).toBe(dir);
     });
   });
 
-  it('falls back to gbrainPath("audit") when override is unset', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: undefined }, async () => {
+  it('falls back to voltmindPath("audit") when override is unset', async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: undefined }, async () => {
       const resolved = resolveAuditDir();
       expect(resolved).toContain('audit');
     });
   });
 
   it('treats whitespace-only override as unset', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: '   ' }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: '   ' }, async () => {
       const resolved = resolveAuditDir();
       // Should fall back to the default path, not literally "   "
       expect(resolved.trim().length).toBeGreaterThan(3);
@@ -109,7 +109,7 @@ describe('resolveAuditDir', () => {
 describe('createAuditWriter — log()', () => {
   it('stamps ts at call time when not provided', async () => {
     const dir = makeDir();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter<TestEvent>({ featureName: 'log-stamps-ts' });
       writer.log({ message: 'hello' });
       const file = path.join(dir, writer.computeFilename());
@@ -126,7 +126,7 @@ describe('createAuditWriter — log()', () => {
   it('honors caller-supplied ts override', async () => {
     const dir = makeDir();
     const fixedTs = '2026-05-22T14:00:00.000Z';
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter<TestEvent>({ featureName: 'ts-override' });
       writer.log({ ts: fixedTs, message: 'pinned' });
       // Events route to the ISO-week file for their OWN ts (so back-dated
@@ -142,7 +142,7 @@ describe('createAuditWriter — log()', () => {
 
   it('appends one JSONL line per log() call (no in-place overwrite)', async () => {
     const dir = makeDir();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter<TestEvent>({ featureName: 'append-mode' });
       writer.log({ message: 'first', count: 1 });
       writer.log({ message: 'second', count: 2 });
@@ -159,7 +159,7 @@ describe('createAuditWriter — log()', () => {
   it('mkdirs the parent directory recursively', async () => {
     const root = makeDir();
     const dir = path.join(root, 'nested', 'deeper', 'audit');
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       // dir does NOT exist yet
       expect(fs.existsSync(dir)).toBe(false);
       const writer = createAuditWriter<TestEvent>({ featureName: 'mkdir-recursive' });
@@ -172,7 +172,7 @@ describe('createAuditWriter — log()', () => {
 
   it('best-effort: write failure stderr-warns but does not throw', async () => {
     // Force a non-creatable path: use a file-as-dir trick. Create a regular
-    // file at `${root}/blocker`, then point GBRAIN_AUDIT_DIR at
+    // file at `${root}/blocker`, then point VOLTMIND_AUDIT_DIR at
     // `${root}/blocker/sub` — mkdirSync(recursive:true) on a path whose
     // parent is a regular file fails with ENOTDIR. The writer must
     // swallow this error and write a stderr line.
@@ -189,7 +189,7 @@ describe('createAuditWriter — log()', () => {
     }) as any;
 
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: badDir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: badDir }, async () => {
         const writer = createAuditWriter<TestEvent>({
           featureName: 'fail-open',
           errorLabel: 'test-label',
@@ -218,7 +218,7 @@ describe('createAuditWriter — readRecent()', () => {
     // pre-existing hardcoded `2026-05-22T12:00:00Z` fixture broke when
     // the machine clock moved past that week.
     const now = new Date();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter<TestEvent>({ featureName: 'read-current' });
 
       // Write 3 events: 1 day ago (in window), 6 days ago (in window),
@@ -255,7 +255,7 @@ describe('createAuditWriter — readRecent()', () => {
     // Pick a Monday so the previous week is reachable through the
     // (now - 7 days) computation.
     const now = new Date('2026-05-25T12:00:00Z'); // Monday
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter<TestEvent>({ featureName: 'read-cross-week' });
 
       // Write an event 5 days ago by directly placing it in the
@@ -281,7 +281,7 @@ describe('createAuditWriter — readRecent()', () => {
   it('skips corrupt JSON lines silently', async () => {
     const dir = makeDir();
     const now = new Date('2026-05-22T12:00:00Z');
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter<TestEvent>({ featureName: 'corrupt-skip' });
       const goodTs = new Date(now.getTime() - 1 * 86400000).toISOString();
 
@@ -304,7 +304,7 @@ describe('createAuditWriter — readRecent()', () => {
 
   it('returns empty array when no audit files exist', async () => {
     const dir = makeDir();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter<TestEvent>({ featureName: 'missing-file' });
       const recent = writer.readRecent(7);
       expect(recent).toEqual([]);
@@ -314,7 +314,7 @@ describe('createAuditWriter — readRecent()', () => {
   it('skips events with non-finite ts', async () => {
     const dir = makeDir();
     const now = new Date('2026-05-22T12:00:00Z');
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter<TestEvent>({ featureName: 'non-finite-ts' });
       const file = path.join(dir, writer.computeFilename(now));
       fs.mkdirSync(dir, { recursive: true });
@@ -334,7 +334,7 @@ describe('createAuditWriter — readRecent()', () => {
 describe('createAuditWriter — round-trip', () => {
   it('log then readRecent recovers every field', async () => {
     const dir = makeDir();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter<TestEvent>({ featureName: 'round-trip' });
       writer.log({ message: 'round-trip-test', count: 42 });
       const recent = writer.readRecent(7);
@@ -351,7 +351,7 @@ describe('createAuditWriter — round-trip', () => {
       ts: string;
       nested: { a: number; b: string[]; c: { deep: boolean } };
     }
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter<NestedEvent>({ featureName: 'nested-fields' });
       writer.log({ nested: { a: 1, b: ['x', 'y'], c: { deep: true } } });
       const recent = writer.readRecent(7);
@@ -372,7 +372,7 @@ describe('createAuditWriter — filename behavior', () => {
 
   it('resolveDir matches the module-level resolveAuditDir', async () => {
     const dir = makeDir();
-    await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
       const writer = createAuditWriter({ featureName: 'resolve-dir-check' });
       expect(writer.resolveDir()).toBe(dir);
       expect(writer.resolveDir()).toBe(resolveAuditDir());

@@ -3,7 +3,7 @@
  *
  * Mirrors the 6-tier priority chain from source-resolver.test.ts but
  * asserts the returned `tier` label matches the winning tier.
- * Powers `gbrain sources current` so users can verify both the
+ * Powers `voltmind sources current` so users can verify both the
  * resolved source AND the reason it resolved.
  */
 
@@ -76,13 +76,13 @@ describe('resolveSourceWithTier — tier 1 (flag)', () => {
 });
 
 describe('resolveSourceWithTier — tier 2 (env)', () => {
-  test('GBRAIN_SOURCE env returns tier=env when no flag', async () => {
+  test('VOLTMIND_SOURCE env returns tier=env when no flag', async () => {
     const engine = makeStub(['default', 'wiki'], [], null);
-    await withEnv({ GBRAIN_SOURCE: 'wiki' }, async () => {
+    await withEnv({ VOLTMIND_SOURCE: 'wiki' }, async () => {
       const result = await resolveSourceWithTier(engine, null, '/tmp');
       expect(result.source_id).toBe('wiki');
       expect(result.tier).toBe('env');
-      expect(result.detail).toBe('GBRAIN_SOURCE=wiki');
+      expect(result.detail).toBe('VOLTMIND_SOURCE=wiki');
     });
   });
 });
@@ -90,23 +90,23 @@ describe('resolveSourceWithTier — tier 2 (env)', () => {
 describe('resolveSourceWithTier — tier 3 (dotfile)', () => {
   let scratchDir: string;
   beforeEach(() => {
-    scratchDir = mkdtempSync(join(tmpdir(), 'gbrain-tier-dotfile-'));
+    scratchDir = mkdtempSync(join(tmpdir(), 'voltmind-tier-dotfile-'));
   });
   afterEach(() => {
     rmSync(scratchDir, { recursive: true, force: true });
   });
 
-  test('.gbrain-source dotfile in CWD returns tier=dotfile', async () => {
-    writeFileSync(join(scratchDir, '.gbrain-source'), 'team-alpha\n');
+  test('.voltmind-source dotfile in CWD returns tier=dotfile', async () => {
+    writeFileSync(join(scratchDir, '.voltmind-source'), 'team-alpha\n');
     const engine = makeStub(['default', 'team-alpha'], [], null);
     const result = await resolveSourceWithTier(engine, null, scratchDir);
     expect(result.source_id).toBe('team-alpha');
     expect(result.tier).toBe('dotfile');
-    expect(result.detail).toBe('.gbrain-source');
+    expect(result.detail).toBe('.voltmind-source');
   });
 
   test('dotfile in ancestor directory walks up to find it', async () => {
-    writeFileSync(join(scratchDir, '.gbrain-source'), 'team-alpha\n');
+    writeFileSync(join(scratchDir, '.voltmind-source'), 'team-alpha\n');
     const nested = join(scratchDir, 'a', 'b', 'c');
     mkdirSync(nested, { recursive: true });
     const engine = makeStub(['default', 'team-alpha'], [], null);
@@ -172,7 +172,7 @@ describe('resolveSourceWithTier — priority assertion', () => {
       [],
       'default-src',
     );
-    await withEnv({ GBRAIN_SOURCE: 'env-src' }, async () => {
+    await withEnv({ VOLTMIND_SOURCE: 'env-src' }, async () => {
       // Flag highest priority
       const r1 = await resolveSourceWithTier(engine, 'flag-src', '/tmp');
       expect(r1.tier).toBe('flag');

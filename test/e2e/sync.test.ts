@@ -2,7 +2,7 @@
  * E2E Sync Tests — Tier 1 (no API keys required)
  *
  * Tests the full git-to-DB sync pipeline: create a git repo, commit
- * markdown files, run gbrain sync, verify pages appear in the database.
+ * markdown files, run voltmind sync, verify pages appear in the database.
  * Covers first sync, incremental add/modify/delete, and the critical
  * "edit → sync → search returns corrected text" flow.
  *
@@ -27,7 +27,7 @@ if (skip) {
 
 /** Create a temp git repo with initial markdown files */
 function createTestRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'gbrain-sync-e2e-'));
+  const dir = mkdtempSync(join(tmpdir(), 'voltmind-sync-e2e-'));
   execSync('git init', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
@@ -406,18 +406,18 @@ describeE2E('E2E: Git-to-DB Sync Pipeline', () => {
  *
  * Owns its own repo + sync-failures.jsonl lifecycle so it can't leak state
  * into the shared describeE2E above. Saves and restores the user's real
- * ~/.gbrain/sync-failures.jsonl so running E2E on a developer machine
+ * ~/.voltmind/sync-failures.jsonl so running E2E on a developer machine
  * doesn't trash their local sync state.
  */
 describeE2E('E2E: sync --skip-failed structured summary loop (v0.22.12, issue #500)', () => {
   let repoPath: string;
-  const realFailuresPath = join(homedir(), '.gbrain', 'sync-failures.jsonl');
+  const realFailuresPath = join(homedir(), '.voltmind', 'sync-failures.jsonl');
   let savedFailuresContent: string | null = null;
 
   beforeAll(async () => {
     await setupDB();
 
-    // Save+clear the real ~/.gbrain/sync-failures.jsonl so the test starts from
+    // Save+clear the real ~/.voltmind/sync-failures.jsonl so the test starts from
     // a known-empty state. Restored in afterAll. This file is per-machine, NOT
     // per-repo, so we have to be defensive about a developer running this
     // suite on their actual brain machine.
@@ -428,7 +428,7 @@ describeE2E('E2E: sync --skip-failed structured summary loop (v0.22.12, issue #5
 
     // Fresh git repo with one valid file. Mirrors createTestRepo above but
     // scoped to this describe block.
-    repoPath = mkdtempSync(join(tmpdir(), 'gbrain-skipfailed-e2e-'));
+    repoPath = mkdtempSync(join(tmpdir(), 'voltmind-skipfailed-e2e-'));
     execSync('git init', { cwd: repoPath, stdio: 'pipe' });
     execSync('git config user.email "test@test.com"', { cwd: repoPath, stdio: 'pipe' });
     execSync('git config user.name "Test"', { cwd: repoPath, stdio: 'pipe' });
@@ -445,7 +445,7 @@ describeE2E('E2E: sync --skip-failed structured summary loop (v0.22.12, issue #5
 
     // Restore the user's real sync-failures.jsonl, if any.
     if (savedFailuresContent !== null) {
-      mkdirSync(join(homedir(), '.gbrain'), { recursive: true });
+      mkdirSync(join(homedir(), '.voltmind'), { recursive: true });
       writeFileSync(realFailuresPath, savedFailuresContent);
     } else if (existsSync(realFailuresPath)) {
       // Test wrote one but there was none before. Clean up.

@@ -28,8 +28,8 @@ describe('runReindexCode — model field reflects gateway (IRON RULE regression)
 
   beforeAll(async () => {
     // Suppress nudge so it doesn't write to stderr during this test.
-    prevNudgeEnv = process.env.GBRAIN_NO_CODE_MODEL_NUDGE;
-    process.env.GBRAIN_NO_CODE_MODEL_NUDGE = '1';
+    prevNudgeEnv = process.env.VOLTMIND_NO_CODE_MODEL_NUDGE;
+    process.env.VOLTMIND_NO_CODE_MODEL_NUDGE = '1';
 
     engine = new PGLiteEngine();
     await engine.connect({});
@@ -48,8 +48,8 @@ describe('runReindexCode — model field reflects gateway (IRON RULE regression)
   afterAll(async () => {
     await engine.disconnect();
     resetGateway();
-    if (prevNudgeEnv === undefined) delete process.env.GBRAIN_NO_CODE_MODEL_NUDGE;
-    else process.env.GBRAIN_NO_CODE_MODEL_NUDGE = prevNudgeEnv;
+    if (prevNudgeEnv === undefined) delete process.env.VOLTMIND_NO_CODE_MODEL_NUDGE;
+    else process.env.VOLTMIND_NO_CODE_MODEL_NUDGE = prevNudgeEnv;
   }, 30_000);
 
   test('voyage:voyage-code-3 configured → result.model is "voyage-code-3", NOT "text-embedding-3-large"', async () => {

@@ -9,7 +9,7 @@
  * (what getEmbeddingModelName() returns — the gateway strips the
  * provider prefix). The nudge fires from runReindexCode (not the CLI
  * wrapper) so dry-run AND execute paths both surface it. The integration
- * tests guard the three suppression flags (--json, GBRAIN_NO_CODE_MODEL_NUDGE,
+ * tests guard the three suppression flags (--json, VOLTMIND_NO_CODE_MODEL_NUDGE,
  * --no-embed) + the stderr-vs-stdout placement contract.
  */
 
@@ -69,8 +69,8 @@ describe('runReindexCode — nudge integration (dry-run path reaches nudge)', ()
   let origStdout: typeof process.stdout.write;
 
   beforeAll(async () => {
-    prevNudgeEnv = process.env.GBRAIN_NO_CODE_MODEL_NUDGE;
-    delete process.env.GBRAIN_NO_CODE_MODEL_NUDGE;
+    prevNudgeEnv = process.env.VOLTMIND_NO_CODE_MODEL_NUDGE;
+    delete process.env.VOLTMIND_NO_CODE_MODEL_NUDGE;
 
     engine = new PGLiteEngine();
     await engine.connect({});
@@ -90,8 +90,8 @@ describe('runReindexCode — nudge integration (dry-run path reaches nudge)', ()
   afterAll(async () => {
     await engine.disconnect();
     resetGateway();
-    if (prevNudgeEnv === undefined) delete process.env.GBRAIN_NO_CODE_MODEL_NUDGE;
-    else process.env.GBRAIN_NO_CODE_MODEL_NUDGE = prevNudgeEnv;
+    if (prevNudgeEnv === undefined) delete process.env.VOLTMIND_NO_CODE_MODEL_NUDGE;
+    else process.env.VOLTMIND_NO_CODE_MODEL_NUDGE = prevNudgeEnv;
   }, 30_000);
 
   function captureStreams() {
@@ -170,19 +170,19 @@ describe('runReindexCode — nudge integration (dry-run path reaches nudge)', ()
     resetGateway();
   });
 
-  test('GBRAIN_NO_CODE_MODEL_NUDGE=1 → nudge suppressed', async () => {
+  test('VOLTMIND_NO_CODE_MODEL_NUDGE=1 → nudge suppressed', async () => {
     configureGateway({
       embedding_model: 'openai:text-embedding-3-large',
       embedding_dimensions: 1536,
       env: { OPENAI_API_KEY: 'sk-test' },
     });
-    process.env.GBRAIN_NO_CODE_MODEL_NUDGE = '1';
+    process.env.VOLTMIND_NO_CODE_MODEL_NUDGE = '1';
     captureStreams();
     try {
       await runReindexCode(engine, { dryRun: true });
     } finally {
       restoreStreams();
-      delete process.env.GBRAIN_NO_CODE_MODEL_NUDGE;
+      delete process.env.VOLTMIND_NO_CODE_MODEL_NUDGE;
     }
     expect(stderrBuf).not.toContain('[reindex-code]');
     resetGateway();

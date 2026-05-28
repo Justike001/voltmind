@@ -1,7 +1,7 @@
 // v0.38 Schema Pack Manifest v1
 //
 // Pack file shape (YAML or JSON; loader.ts handles sniffing). The contract
-// here is the SOURCE OF TRUTH for what a `.gbrain-schema` tarball can carry.
+// here is the SOURCE OF TRUTH for what a `.voltmind-schema` tarball can carry.
 //
 // Two orthogonal fields per type (E8 refinement):
 //   - `primitive` drives DEFAULTS (link verbs, frontmatter rules, enrichment
@@ -17,7 +17,7 @@
 
 import { z } from 'zod';
 
-export const SCHEMA_PACK_API_VERSION = 'gbrain-schema-pack-v1' as const;
+export const SCHEMA_PACK_API_VERSION = 'voltmind-schema-pack-v1' as const;
 
 /**
  * Five composable primitives. Closed enum — packs cannot add primitives,
@@ -93,10 +93,10 @@ const FilingRuleSchema = z.object({
  * v0.41 T3 — closed registry of calibration aggregator algorithms.
  *
  * Codex outside-voice refinement of D6: domain NAMES stay open (any pack
- * can declare `pricing_judgment` or `hiring_quality` without a gbrain
+ * can declare `pricing_judgment` or `hiring_quality` without a voltmind
  * release), but the AGGREGATOR — the actual SQL/code that computes a
  * scorecard for that domain — must be a closed enum. New aggregator
- * algorithms ship via gbrain release; new domain names ship via pack
+ * algorithms ship via voltmind release; new domain names ship via pack
  * manifest. This splits the "what" (open) from the "how" (closed),
  * preserving extensibility without SQL injection surface.
  *
@@ -116,7 +116,7 @@ const FilingRuleSchema = z.object({
  *                          there is no "right answer" to score against.
  *
  * Expand this enum in v0.42+ as real lens-pack usage surfaces new
- * aggregation needs. Each addition is a versioned gbrain release.
+ * aggregation needs. Each addition is a versioned voltmind release.
  */
 export const AGGREGATOR_KINDS = [
   'scalar_brier',
@@ -141,7 +141,7 @@ const AggregatorKindSchema = z.enum(AGGREGATOR_KINDS);
  *
  * Loaded by the registry at pack-load; validated against AggregatorKindSchema
  * before any aggregator code runs. Unknown aggregator values fail the pack
- * load with a paste-ready `gbrain models doctor`-style hint.
+ * load with a paste-ready `voltmind models doctor`-style hint.
  */
 const CalibrationDomainSchema = z.object({
   name: z.string().min(1).regex(/^[a-z][a-z0-9_]*$/, 'domain name must be lowercase snake_case'),
@@ -164,10 +164,10 @@ export const SchemaPackManifestSchema = z.object({
   author: z.string().optional(),
   license: z.string().optional(),
   homepage: z.string().url().optional(),
-  /** v0.38 — minimum gbrain version required to load this pack. */
-  gbrain_min_version: z.string().regex(/^\d+\.\d+\.\d+(?:\.\d+)?$/).default('0.38.0'),
-  /** Parent pack (one of: 'gbrain-base', another installed pack name, or null for full override). */
-  extends: z.string().nullable().default('gbrain-base'),
+  /** v0.38 — minimum voltmind version required to load this pack. */
+  voltmind_min_version: z.string().regex(/^\d+\.\d+\.\d+(?:\.\d+)?$/).default('0.38.0'),
+  /** Parent pack (one of: 'voltmind-base', another installed pack name, or null for full override). */
+  extends: z.string().nullable().default('voltmind-base'),
   /** v0.38 — selective borrow of types/link_types from another pack. */
   borrow_from: z.array(z.object({
     pack: z.string(),

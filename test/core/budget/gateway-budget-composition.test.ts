@@ -36,7 +36,7 @@ let tmp: string;
 let auditPath: string;
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-gw-budget-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-gw-budget-'));
   auditPath = join(tmp, 'budget.jsonl');
   _resetBudgetTrackerWarningsForTest();
 });

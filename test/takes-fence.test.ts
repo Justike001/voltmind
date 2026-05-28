@@ -240,7 +240,7 @@ describe('stripTakesFence', () => {
 // ============================================================
 // v0.30.0 (Slice A1): resolution columns + round-trip preservation.
 // The round-trip preservation tests are the codex-F3 regression gate.
-// Without these, every `gbrain takes update` after a resolve silently
+// Without these, every `voltmind takes update` after a resolve silently
 // deletes the resolution data on the next render.
 // ============================================================
 
@@ -303,7 +303,7 @@ ${TAKES_FENCE_END}\n`;
   // ============================================================
   // CODEX F3 REGRESSION GATE — DATA-LOSS BUG GUARD
   // ============================================================
-  // Without these tests, `gbrain takes update --row 2` on a page where row 1
+  // Without these tests, `voltmind takes update --row 2` on a page where row 1
   // is resolved would render only the 7-column shape on parse + render,
   // silently deleting row 1's resolution cells on the next disk write.
   // ============================================================

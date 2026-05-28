@@ -1,7 +1,7 @@
 /**
  * Tests for src/core/mcp-client.ts.
  *
- * Strategy: spin up an in-process HTTP server that mimics gbrain serve --http
+ * Strategy: spin up an in-process HTTP server that mimics voltmind serve --http
  * (OAuth discovery + /token + /mcp). Test callRemoteTool against it,
  * including the OAuth token cache, the 401 → refresh-once retry, and the
  * RemoteMcpError shape.
@@ -23,7 +23,7 @@ import {
   RemoteMcpError,
   _clearMcpClientTokenCache,
 } from '../src/core/mcp-client.ts';
-import type { GBrainConfig } from '../src/core/config.ts';
+import type { VoltMindConfig } from '../src/core/config.ts';
 import { withEnv } from './helpers/with-env.ts';
 
 let server: Server;
@@ -115,7 +115,7 @@ beforeEach(() => {
   _clearMcpClientTokenCache();
 });
 
-function makeConfig(): GBrainConfig {
+function makeConfig(): VoltMindConfig {
   return {
     engine: 'postgres',
     remote_mcp: {
@@ -205,7 +205,7 @@ describe('callRemoteTool — error surfaces', () => {
   });
 
   test('client_secret missing → throws RemoteMcpError(config)', async () => {
-    const config: GBrainConfig = {
+    const config: VoltMindConfig = {
       engine: 'postgres',
       remote_mcp: {
         issuer_url: `http://127.0.0.1:${port}`,
@@ -213,7 +213,7 @@ describe('callRemoteTool — error surfaces', () => {
         oauth_client_id: 'cid',
       },
     };
-    await withEnv({ GBRAIN_REMOTE_CLIENT_SECRET: undefined }, async () => {
+    await withEnv({ VOLTMIND_REMOTE_CLIENT_SECRET: undefined }, async () => {
       try {
         await callRemoteTool(config, 'foo', {});
         throw new Error('expected throw');
@@ -236,7 +236,7 @@ describe('callRemoteTool — error surfaces', () => {
   });
 
   test('discovery URL unreachable → throws RemoteMcpError(network)', async () => {
-    const config: GBrainConfig = {
+    const config: VoltMindConfig = {
       engine: 'postgres',
       remote_mcp: {
         issuer_url: 'http://127.0.0.1:1', // typically refused

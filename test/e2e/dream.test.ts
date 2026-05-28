@@ -31,7 +31,7 @@ if (skip) {
 }
 
 function makeGitRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'gbrain-e2e-dream-'));
+  const dir = mkdtempSync(join(tmpdir(), 'voltmind-e2e-dream-'));
   execSync('git init', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.email test@test.co', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.name test', { cwd: dir, stdio: 'pipe' });
@@ -60,7 +60,7 @@ function captureLog<T>(fn: () => Promise<T>): Promise<{ result: T; output: strin
   });
 }
 
-describeE2E('E2E: gbrain dream CLI against real Postgres', () => {
+describeE2E('E2E: voltmind dream CLI against real Postgres', () => {
   let repo: string;
 
   beforeAll(async () => {

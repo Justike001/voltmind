@@ -33,17 +33,17 @@ export function isMinorOrMajorBump(current: string, latest: string): boolean {
 
 function upgradeCommandForMethod(method: string): string {
   switch (method) {
-    case 'bun': return 'bun update gbrain';
-    case 'clawhub': return 'clawhub update gbrain';
-    case 'binary': return 'Download from https://github.com/garrytan/gbrain/releases';
-    default: return 'gbrain upgrade';
+    case 'bun': return 'bun update voltmind';
+    case 'clawhub': return 'clawhub update voltmind';
+    case 'binary': return 'Download from https://github.com/garrytan/voltmind/releases';
+    default: return 'voltmind upgrade';
   }
 }
 
 async function fetchLatestRelease(): Promise<{ tag: string; published_at: string; url: string } | null> {
   try {
-    const res = await fetch('https://api.github.com/repos/garrytan/gbrain/releases/latest', {
-      headers: { 'User-Agent': `gbrain/${VERSION}` },
+    const res = await fetch('https://api.github.com/repos/garrytan/voltmind/releases/latest', {
+      headers: { 'User-Agent': `voltmind/${VERSION}` },
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
@@ -60,7 +60,7 @@ async function fetchLatestRelease(): Promise<{ tag: string; published_at: string
 
 async function fetchChangelog(currentVersion: string, latestVersion: string): Promise<string> {
   try {
-    const res = await fetch('https://raw.githubusercontent.com/garrytan/gbrain/master/CHANGELOG.md', {
+    const res = await fetch('https://raw.githubusercontent.com/garrytan/voltmind/master/CHANGELOG.md', {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return '';
@@ -119,7 +119,7 @@ export function extractChangelogBetween(changelog: string, from: string, to: str
 
 export async function runCheckUpdate(args: string[]) {
   if (args.includes('--help') || args.includes('-h')) {
-    console.log('Usage: gbrain check-update [--json]\n\nCheck for new GBrain versions.\n\nOnly reports minor/major version bumps (v0.X.0), not patches.\nFails silently on network errors.');
+    console.log('Usage: voltmind check-update [--json]\n\nCheck for new VoltMind versions.\n\nOnly reports minor/major version bumps (v0.X.0), not patches.\nFails silently on network errors.');
     return;
   }
 
@@ -143,7 +143,7 @@ export async function runCheckUpdate(args: string[]) {
         error: 'no_releases',
       }, null, 2));
     } else {
-      console.log(`GBrain ${VERSION} — could not check for updates (no releases found or network unavailable).`);
+      console.log(`VoltMind ${VERSION} — could not check for updates (no releases found or network unavailable).`);
     }
     return;
   }
@@ -170,10 +170,10 @@ export async function runCheckUpdate(args: string[]) {
   if (json) {
     console.log(JSON.stringify(result, null, 2));
   } else if (updateAvailable) {
-    console.log(`GBrain update available: ${VERSION} → ${latestVersion}`);
+    console.log(`VoltMind update available: ${VERSION} → ${latestVersion}`);
     console.log(`Run: ${upgradeCmd}`);
     console.log(`Release: ${release.url}`);
   } else {
-    console.log(`GBrain ${VERSION} is up to date.`);
+    console.log(`VoltMind ${VERSION} is up to date.`);
   }
 }

@@ -166,7 +166,7 @@ export async function checkEntityLinkCoverage(
   // v0.41.18.0: warn-only, never fail. Empty entity link coverage is "needs
   // work" not "broken" — doctor's exit code should not flip from a fresh
   // brain with entity pages but no auto-extracted links yet. Fail status
-  // would break `gbrain doctor exits 0` contract; the recommendation
+  // would break `voltmind doctor exits 0` contract; the recommendation
   // surfaces the same fix via the onboard plan either way.
   if (coverage >= 0.7) {
     message = `Coverage ${pct}% ± ${ciPct}%${sampleNote}`;
@@ -324,7 +324,7 @@ export async function checkTakesCount(
   } else if (takesCount === 0) {
     status = 'warn';
     if (bootstrapEnabled) {
-      message = `0 takes (bootstrap eligible — gbrain takes extract --from-pages)`;
+      message = `0 takes (bootstrap eligible — voltmind takes extract --from-pages)`;
       remediations.push(makeRemediationStep({
         id: 'onboard.takes_bootstrap',
         job: 'extract-takes-from-pages',

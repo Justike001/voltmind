@@ -36,7 +36,7 @@ async function makePGLite() {
 
 /** Make an empty git repo. Lint/backlinks have nothing to scan → status=clean. */
 function makeGitRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'gbrain-dream-repo-'));
+  const dir = mkdtempSync(join(tmpdir(), 'voltmind-dream-repo-'));
   execSync('git init', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.email t@t.co', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.name t', { cwd: dir, stdio: 'pipe' });

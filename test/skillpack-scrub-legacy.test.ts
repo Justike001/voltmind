@@ -1,5 +1,5 @@
 /**
- * Tests for `gbrain skillpack scrub-legacy-fence-rows` (TODO-2 folded).
+ * Tests for `voltmind skillpack scrub-legacy-fence-rows` (TODO-2 folded).
  *
  * Pins:
  *   - removes legacy rows only when skill present AND triggers declared
@@ -126,9 +126,9 @@ describe('runScrubLegacy', () => {
     seedSkill(ws, 'book-mirror', ['mirror']);
     const inFence = `# RESOLVER
 
-<!-- gbrain:skillpack:begin -->
+<!-- voltmind:skillpack:begin -->
 | "mirror" | \`skills/book-mirror/SKILL.md\` |
-<!-- gbrain:skillpack:end -->
+<!-- voltmind:skillpack:end -->
 `;
     writeFileSync(join(ws, 'skills', 'RESOLVER.md'), inFence);
 

@@ -121,7 +121,9 @@ function makeHarness(opts: {
     setInterval: timers.setInterval,
     clearInterval: timers.clearInterval,
     probeWatchdog: () => probeWatchdogResult,
-    mcpStdio: opts.mcpStdio,
+    // Keep these tests hermetic when the runner itself is launched from an
+    // MCP stdio environment.
+    mcpStdio: opts.mcpStdio ?? false,
   };
 
   return {
@@ -297,7 +299,7 @@ describe('runServe stdio lifecycle', () => {
 
     // Watchdog NOT installed — message matches behavior.
     expect(h.timers.active()).toBe(0);
-    expect(h.logs.some(l => l.includes('[gbrain serve] watchdog disabled: ps unavailable'))).toBe(true);
+    expect(h.logs.some(l => l.includes('[voltmind serve] watchdog disabled: ps unavailable'))).toBe(true);
 
     // Sanity: the other lifecycle paths still work — the shutdown still
     // funnels through stdin EOF / signals, just not via the watchdog.
@@ -488,7 +490,7 @@ describe('runServe stdio lifecycle', () => {
     test('mcpStdio=false (default) preserves stdin EOF shutdown', async () => {
       // Regression guard: the guard must not over-trigger. With the env
       // unset, stdin EOF must still drive shutdown so existing CLI usage
-      // (gbrain serve under launchd, claude-desktop's stdio MCP) is
+      // (voltmind serve under launchd, claude-desktop's stdio MCP) is
       // unchanged.
       const h = makeHarness({ mcpStdio: false });
       await startInBackground(h.engine, [], h.opts);

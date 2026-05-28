@@ -43,7 +43,7 @@ describe('MinionSupervisor tini detection', () => {
   test('isTiniDetected = true when a tini binary exists on PATH', async () => {
     const dir = join(
       tmpdir(),
-      `gbrain-supervisor-tini-test-${process.pid}-${Date.now()}`,
+      `voltmind-supervisor-tini-test-${process.pid}-${Date.now()}`,
     );
     mkdirSync(dir, { recursive: true });
     const fakeTini = join(dir, 'tini');

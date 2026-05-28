@@ -9,7 +9,7 @@
  * Contracts (eng review + codex outside voice):
  *   - D7: every entry carries `test_positive[]` (>=2) + `test_negative[]`
  *     (>=2). Module-load validation in `validatePatternEntry` runs both
- *     sets on every entry at startup; gbrain throws if any drifts.
+ *     sets on every entry at startup; voltmind throws if any drifts.
  *   - D9: `DEFAULT_SPEAKER_CLEAN` is the exported default — patterns
  *     without a `speaker_clean` field inherit it. Only patterns with
  *     special speaker shapes (matrix-element strips ':matrix.org')
@@ -86,7 +86,7 @@ export const BUILTIN_PATTERNS: readonly PatternEntry[] = [
       'Alice — Today at 18:37',
       '<alice> irc',
     ],
-    source_doc: 'pre-existing gbrain MESSAGE_LINE_RX; PR #1461 preserved',
+    source_doc: 'pre-existing voltmind MESSAGE_LINE_RX; PR #1461 preserved',
   },
 
   {
@@ -488,5 +488,5 @@ function validateAllBuiltins(): void {
   }
 }
 
-// D7: run at module load. Any drift = gbrain refuses to start.
+// D7: run at module load. Any drift = voltmind refuses to start.
 validateAllBuiltins();

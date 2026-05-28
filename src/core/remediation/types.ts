@@ -5,7 +5,7 @@
 //
 // Three consumers wrap this library today:
 //   - src/commands/doctor.ts (runRemediationPlan + runRemediate)
-//   - src/commands/onboard.ts (gbrain onboard --check / --auto)
+//   - src/commands/onboard.ts (voltmind onboard --check / --auto)
 //   - src/core/operations.ts (MCP op run_onboard, admin scope)
 
 import type { RemediationStep } from '../remediation-step.ts';
@@ -30,7 +30,7 @@ export interface RemediationPlanOpts {
 
 /**
  * Read-only plan output. Stable JSON envelope — downstream agents
- * (gbrain onboard, MCP run_onboard) bind to this shape.
+ * (voltmind onboard, MCP run_onboard) bind to this shape.
  */
 export interface RemediationPlan {
   schema_version: 2;

@@ -1,5 +1,5 @@
 /**
- * gbrain extract-conversation-facts — batch fact extraction for
+ * voltmind extract-conversation-facts — batch fact extraction for
  * conversation pages (and adjacent long-form types).
  *
  * Background
@@ -17,7 +17,7 @@
  *     the surrounding 50K messages of context that establish the topic.
  *
  * The facts table doesn't have this problem. Each row is a discrete
- * claim with its own embedding and entity linkage, and `gbrain search`
+ * claim with its own embedding and entity linkage, and `voltmind search`
  * blends facts into the result set. The extraction pipeline that
  * builds facts (src/core/facts/extract.ts) is already wired into
  * real-time MCP turns and the post-sync backstop — but had never been
@@ -767,7 +767,7 @@ async function processPage(
           fact.context ?? `from ${page.slug} segment ${seg.startIso}..${seg.endIso}`,
       }));
       try {
-        const ins = await state.engine.insertFacts(rows, { source_id: state.sourceId }); // gbrain-allow-direct-insert: canonical bulk extraction path for conversation pages — fences-as-system-of-record doesn't apply because conversations don't carry `## Facts` fences (the chat-log shape is the source-of-truth)
+        const ins = await state.engine.insertFacts(rows, { source_id: state.sourceId }); // voltmind-allow-direct-insert: canonical bulk extraction path for conversation pages — fences-as-system-of-record doesn't apply because conversations don't carry `## Facts` fences (the chat-log shape is the source-of-truth)
         pageInsertedTotal += ins.inserted;
         state.result.facts_inserted += ins.inserted;
       } catch (err) {
@@ -844,7 +844,7 @@ async function writeTerminalAuditRow(
     row_num: rowNum,
     source_markdown_slug: slug,
   };
-  await engine.insertFacts([fact], { source_id: sourceId }); // gbrain-allow-direct-insert: page-level TERMINAL audit row (Codex C7 / E16) marks extraction completion in the durable facts table — there's no fence equivalent because this is internal audit state, not user-facing knowledge
+  await engine.insertFacts([fact], { source_id: sourceId }); // voltmind-allow-direct-insert: page-level TERMINAL audit row (Codex C7 / E16) marks extraction completion in the durable facts table — there's no fence equivalent because this is internal audit state, not user-facing knowledge
 }
 
 /**
@@ -1198,7 +1198,7 @@ function parseArgs(args: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `Usage: gbrain extract-conversation-facts [options]
+const HELP = `Usage: voltmind extract-conversation-facts [options]
 
 Batch-extract facts from conversation pages (and adjacent long-form
 types: meeting, slack, email) into the facts table. Each page is parsed
@@ -1230,17 +1230,17 @@ Options:
                          safety is guaranteed by the per-page advisory lock + replay
                          safety (delete-orphans-first on each page claim).
   --override-disabled    Bypass facts.extraction_enabled=false brain-wide kill-switch.
-  --background           Submit as a Minion job; print job_id; exit (use 'gbrain jobs follow').
+  --background           Submit as a Minion job; print job_id; exit (use 'voltmind jobs follow').
   --yes                  Auto-confirm cost preview in non-TTY contexts.
   --help, -h             Show this help.
 
 Multi-source: when --source-id is omitted, the command iterates ALL
-sources from gbrain sources list. Per-source budget cap defaults to
+sources from voltmind sources list. Per-source budget cap defaults to
 --max-cost-usd; the brain-wide cap when running via the autopilot cycle
 phase is cycle.conversation_facts_backfill.max_total_cost_usd.
 
 Resumability: per-page completion is durable via a terminal audit row
-in the facts table (source='${TERMINAL_AUDIT_SOURCE}'). gbrain doctor's
+in the facts table (source='${TERMINAL_AUDIT_SOURCE}'). voltmind doctor's
 conversation_facts_backlog check counts pages without this row.
 `;
 
@@ -1259,7 +1259,7 @@ function buildJobParams(args: string[]): Record<string, unknown> {
     maxCostUsd: parsed.maxCostUsd,
     overrideDisabled: parsed.overrideDisabled,
     // v0.41.15.0 (D9): thread workers through the Minion job envelope
-    // so `gbrain extract-conversation-facts --background --workers 20`
+    // so `voltmind extract-conversation-facts --background --workers 20`
     // round-trips. The handler in src/commands/jobs.ts reads
     // job.data.workers and passes to runExtractConversationFactsCore.
     workers: parsed.workers,

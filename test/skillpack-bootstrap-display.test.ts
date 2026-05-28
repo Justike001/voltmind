@@ -19,7 +19,7 @@ function makeManifest(over: Partial<SkillpackManifest> = {}): SkillpackManifest 
     author: 'a',
     license: 'MIT',
     homepage: 'https://example.com',
-    gbrain_min_version: '0.36.0',
+    voltmind_min_version: '0.36.0',
     skills: ['skills/foo'],
     ...over,
   };
@@ -74,7 +74,7 @@ describe('buildBootstrapDisplay', () => {
     mkdirSync(join(packRoot, 'runbooks'), { recursive: true });
     writeFileSync(
       join(packRoot, 'runbooks/bootstrap.md'),
-      '1. agent: gbrain put_page wiki/example\n2. show user: "All set."\n',
+      '1. agent: voltmind put_page wiki/example\n2. show user: "All set."\n',
     );
     const r = buildBootstrapDisplay({
       packRoot,
@@ -85,7 +85,7 @@ describe('buildBootstrapDisplay', () => {
     expect(r.text).toContain('BOOTSTRAP STEPS');
     expect(r.text).toContain('agent decides what to run');
     expect(r.text).toContain('deliberately does NOT auto-execute');
-    expect(r.text).toContain('1. agent: gbrain put_page wiki/example');
+    expect(r.text).toContain('1. agent: voltmind put_page wiki/example');
     expect(r.text).toContain('2. show user: "All set."');
     expect(r.text).toContain('End of bootstrap steps');
   });

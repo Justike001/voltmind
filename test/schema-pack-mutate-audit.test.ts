@@ -1,7 +1,7 @@
 // v0.40.6.0 — mutate-audit.ts contract tests.
 //
 // Pins privacy redaction (sha8 + first-slug-only), success+failure
-// logging, ISO-week rotation, GBRAIN_AUDIT_DIR honoring, and the
+// logging, ISO-week rotation, VOLTMIND_AUDIT_DIR honoring, and the
 // summarizeMutations() shape that doctor + a future audit CLI both bind to.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -21,7 +21,7 @@ import { withEnv } from './helpers/with-env.ts';
 let auditDir: string;
 
 beforeEach(() => {
-  auditDir = mkdtempSync(join(tmpdir(), 'gbrain-mutate-audit-test-'));
+  auditDir = mkdtempSync(join(tmpdir(), 'voltmind-mutate-audit-test-'));
 });
 
 afterEach(() => {
@@ -30,7 +30,7 @@ afterEach(() => {
 
 describe('privacy posture', () => {
   it('redacts type name to sha8 by default', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir, GBRAIN_SCHEMA_AUDIT_VERBOSE: undefined }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir, VOLTMIND_SCHEMA_AUDIT_VERBOSE: undefined }, async () => {
       await logMutationSuccess({
         op: 'add_type',
         pack: 'my-pack',
@@ -50,8 +50,8 @@ describe('privacy posture', () => {
     });
   });
 
-  it('writes raw type name when GBRAIN_SCHEMA_AUDIT_VERBOSE=1', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir, GBRAIN_SCHEMA_AUDIT_VERBOSE: '1' }, async () => {
+  it('writes raw type name when VOLTMIND_SCHEMA_AUDIT_VERBOSE=1', async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir, VOLTMIND_SCHEMA_AUDIT_VERBOSE: '1' }, async () => {
       await logMutationSuccess({
         op: 'add_type',
         pack: 'my-pack',
@@ -68,7 +68,7 @@ describe('privacy posture', () => {
   });
 
   it('pack name is NEVER redacted (it is user-chosen and non-PII)', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       await logMutationSuccess({ op: 'add_type', pack: 'my-pack', actor: 'cli' });
       const record = JSON.parse(
         readFileSync(computeMutateAuditPath(), 'utf-8').trim(),
@@ -78,7 +78,7 @@ describe('privacy posture', () => {
   });
 
   it('omits type_or_hash when op did not involve a type', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       // Hypothetical pack-level op (none today, but the shape must accept it).
       await logMutationSuccess({ op: 'add_type', pack: 'p', actor: 'cli' });
       const r = JSON.parse(readFileSync(computeMutateAuditPath(), 'utf-8').trim()) as MutationAuditRecord;
@@ -89,7 +89,7 @@ describe('privacy posture', () => {
 
 describe('success + failure logging', () => {
   it('logs success with outcome=success and reason=null', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       await logMutationSuccess({
         op: 'add_type',
         pack: 'my-pack',
@@ -107,10 +107,10 @@ describe('success + failure logging', () => {
   });
 
   it('logs failure with outcome=failure + reason code (the C11 signal doctor reads)', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       await logMutationFailure({
         op: 'add_type',
-        pack: 'gbrain-base',
+        pack: 'voltmind-base',
         type: 'researcher',
         actor: 'cli',
         reason: 'PACK_READONLY',
@@ -122,7 +122,7 @@ describe('success + failure logging', () => {
   });
 
   it('actor field surfaces mcp:<clientId8> shape', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       await logMutationSuccess({
         op: 'add_type', pack: 'p', type: 't',
         actor: 'mcp:abc12345',
@@ -133,19 +133,19 @@ describe('success + failure logging', () => {
   });
 });
 
-describe('ISO-week rotation + GBRAIN_AUDIT_DIR', () => {
+describe('ISO-week rotation + VOLTMIND_AUDIT_DIR', () => {
   it('writes filename in the schema-mutations-YYYY-Www.jsonl shape', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       const path = computeMutateAuditPath(new Date('2026-05-23T12:00:00Z'));
       expect(path).toMatch(/schema-mutations-2026-W\d{2}\.jsonl$/);
       expect(path.startsWith(auditDir)).toBe(true);
     });
   });
 
-  it('honors GBRAIN_AUDIT_DIR override', async () => {
-    const customDir = mkdtempSync(join(tmpdir(), 'gbrain-mutate-custom-'));
+  it('honors VOLTMIND_AUDIT_DIR override', async () => {
+    const customDir = mkdtempSync(join(tmpdir(), 'voltmind-mutate-custom-'));
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: customDir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: customDir }, async () => {
         await logMutationSuccess({ op: 'add_type', pack: 'p', actor: 'cli' });
         const path = computeMutateAuditPath();
         expect(path.startsWith(customDir)).toBe(true);
@@ -157,7 +157,7 @@ describe('ISO-week rotation + GBRAIN_AUDIT_DIR', () => {
   });
 
   it('readRecentMutations returns records sorted within file, skips malformed lines', async () => {
-    await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       await logMutationSuccess({ op: 'add_type', pack: 'a', actor: 'cli' });
       await logMutationFailure({ op: 'remove_type', pack: 'a', actor: 'cli', reason: 'TYPE_NOT_FOUND' });
       // Inject malformed line.
@@ -199,9 +199,9 @@ describe('summarizeMutations — cross-surface parity primitive', () => {
 describe('best-effort behavior', () => {
   it('does not throw when the audit dir is unwritable', async () => {
     // Point at a path that fs.mkdirSync will fail on (e.g. a regular file).
-    const fakeDir = join(mkdtempSync(join(tmpdir(), 'gbrain-mutate-baddir-')), 'not-a-dir');
+    const fakeDir = join(mkdtempSync(join(tmpdir(), 'voltmind-mutate-baddir-')), 'not-a-dir');
     writeFileSync(fakeDir, 'this-is-a-file-not-a-dir', 'utf-8');
-    await withEnv({ GBRAIN_AUDIT_DIR: fakeDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: fakeDir }, async () => {
       // Should NOT throw — best-effort posture.
       await expect(logMutationSuccess({ op: 'add_type', pack: 'p', actor: 'cli' })).resolves.toBeUndefined();
     });

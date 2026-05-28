@@ -41,7 +41,7 @@ function findCheck(checks: Check[], name: string): Check | undefined {
 describe('embedding_env_override check (buildChecks seam)', () => {
   test('env unset → ok', async () => {
     await withEnv(
-      { GBRAIN_EMBEDDING_MODEL: undefined, GBRAIN_EMBEDDING_DIMENSIONS: undefined },
+      { VOLTMIND_EMBEDDING_MODEL: undefined, VOLTMIND_EMBEDDING_DIMENSIONS: undefined },
       async () => {
         const checks = await buildChecks(engine, []);
         const check = findCheck(checks, 'embedding_env_override');
@@ -57,8 +57,8 @@ describe('embedding_env_override check (buildChecks seam)', () => {
     await engine.setConfig('embedding_dimensions', '1280');
     await withEnv(
       {
-        GBRAIN_EMBEDDING_MODEL: 'zeroentropyai:zembed-1',
-        GBRAIN_EMBEDDING_DIMENSIONS: '1280',
+        VOLTMIND_EMBEDDING_MODEL: 'zeroentropyai:zembed-1',
+        VOLTMIND_EMBEDDING_DIMENSIONS: '1280',
       },
       async () => {
         const checks = await buildChecks(engine, []);
@@ -72,18 +72,18 @@ describe('embedding_env_override check (buildChecks seam)', () => {
   test('env model disagrees with DB → warn with details.mismatches', async () => {
     await engine.setConfig('embedding_model', 'zeroentropyai:zembed-1');
     await withEnv(
-      { GBRAIN_EMBEDDING_MODEL: 'openai:text-embedding-3-large' },
+      { VOLTMIND_EMBEDDING_MODEL: 'openai:text-embedding-3-large' },
       async () => {
         const checks = await buildChecks(engine, []);
         const check = findCheck(checks, 'embedding_env_override');
         expect(check!.status).toBe('warn');
         const details = check!.details as { mismatches: Array<{ key: string; env: string; db: string }> };
         expect(details.mismatches).toHaveLength(1);
-        expect(details.mismatches[0].key).toBe('GBRAIN_EMBEDDING_MODEL');
+        expect(details.mismatches[0].key).toBe('VOLTMIND_EMBEDDING_MODEL');
         expect(details.mismatches[0].env).toBe('openai:text-embedding-3-large');
         expect(details.mismatches[0].db).toBe('zeroentropyai:zembed-1');
         // Message includes paste-ready unset
-        expect(check!.message).toContain('unset GBRAIN_EMBEDDING_MODEL');
+        expect(check!.message).toContain('unset VOLTMIND_EMBEDDING_MODEL');
       },
     );
   });
@@ -91,14 +91,14 @@ describe('embedding_env_override check (buildChecks seam)', () => {
   test('env dim disagrees with DB → warn with details.mismatches', async () => {
     await engine.setConfig('embedding_dimensions', '1280');
     await withEnv(
-      { GBRAIN_EMBEDDING_DIMENSIONS: '1536' },
+      { VOLTMIND_EMBEDDING_DIMENSIONS: '1536' },
       async () => {
         const checks = await buildChecks(engine, []);
         const check = findCheck(checks, 'embedding_env_override');
         expect(check!.status).toBe('warn');
         const details = check!.details as { mismatches: Array<{ key: string; env: string; db: string }> };
         expect(details.mismatches).toHaveLength(1);
-        expect(details.mismatches[0].key).toBe('GBRAIN_EMBEDDING_DIMENSIONS');
+        expect(details.mismatches[0].key).toBe('VOLTMIND_EMBEDDING_DIMENSIONS');
       },
     );
   });
@@ -108,8 +108,8 @@ describe('embedding_env_override check (buildChecks seam)', () => {
     await engine.setConfig('embedding_dimensions', '1280');
     await withEnv(
       {
-        GBRAIN_EMBEDDING_MODEL: 'openai:x',
-        GBRAIN_EMBEDDING_DIMENSIONS: '1536',
+        VOLTMIND_EMBEDDING_MODEL: 'openai:x',
+        VOLTMIND_EMBEDDING_DIMENSIONS: '1536',
       },
       async () => {
         const checks = await buildChecks(engine, []);
@@ -117,13 +117,13 @@ describe('embedding_env_override check (buildChecks seam)', () => {
         expect(check!.status).toBe('warn');
         const details = check!.details as { mismatches: Array<{ key: string }> };
         expect(details.mismatches).toHaveLength(2);
-        expect(check!.message).toContain('unset GBRAIN_EMBEDDING_MODEL GBRAIN_EMBEDDING_DIMENSIONS');
+        expect(check!.message).toContain('unset VOLTMIND_EMBEDDING_MODEL VOLTMIND_EMBEDDING_DIMENSIONS');
       },
     );
   });
 
   test('doctorReportRemote() includes the check (cross-surface parity)', async () => {
-    await withEnv({ GBRAIN_EMBEDDING_MODEL: 'openai:something' }, async () => {
+    await withEnv({ VOLTMIND_EMBEDDING_MODEL: 'openai:something' }, async () => {
       await engine.setConfig('embedding_model', 'zeroentropyai:zembed-1');
       const report = await doctorReportRemote(engine);
       const check = findCheck(report.checks, 'embedding_env_override');

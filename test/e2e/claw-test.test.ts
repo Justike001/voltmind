@@ -1,11 +1,11 @@
 /**
- * gbrain claw-test scripted-mode E2E.
+ * voltmind claw-test scripted-mode E2E.
  *
  * Invokes the harness via `bun run src/cli.ts` (NOT a compiled binary —
  * `bun build --compile` doesn't bundle PGLite's runtime assets like
- * pglite.data, so a compiled gbrain can't init a fresh PGLite brain).
+ * pglite.data, so a compiled voltmind can't init a fresh PGLite brain).
  * Uses a tiny shim script that the harness can spawn as if it were the
- * gbrain binary.
+ * voltmind binary.
  *
  * Asserts:
  *   - exit code 0 on a clean tree
@@ -24,7 +24,7 @@ import { join, resolve } from 'path';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 const BIN_CACHE = join(REPO_ROOT, 'test', '.cache');
-const BIN_PATH = join(BIN_CACHE, 'gbrain.sh');
+const BIN_PATH = join(BIN_CACHE, 'voltmind.sh');
 const SCENARIOS_DIR = join(REPO_ROOT, 'test', 'fixtures', 'claw-test-scenarios');
 
 beforeAll(() => {
@@ -37,7 +37,7 @@ beforeAll(() => {
   chmodSync(BIN_PATH, 0o755);
 }, 30_000);
 
-describe('gbrain claw-test --scenario fresh-install (scripted)', () => {
+describe('voltmind claw-test --scenario fresh-install (scripted)', () => {
   test('runs end-to-end clean and produces zero error/blocker friction', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'claw-test-e2e-fresh-'));
     try {
@@ -45,9 +45,9 @@ describe('gbrain claw-test --scenario fresh-install (scripted)', () => {
         cwd: REPO_ROOT,
         env: {
           ...process.env,
-          GBRAIN_HOME: tmp,
-          GBRAIN_BIN_OVERRIDE: BIN_PATH,
-          GBRAIN_CLAW_SCENARIOS_DIR: join(REPO_ROOT, 'test', 'fixtures', 'claw-test-scenarios'),
+          VOLTMIND_HOME: tmp,
+          VOLTMIND_BIN_OVERRIDE: BIN_PATH,
+          VOLTMIND_CLAW_SCENARIOS_DIR: join(REPO_ROOT, 'test', 'fixtures', 'claw-test-scenarios'),
         },
         encoding: 'utf-8',
         timeout: 120_000,
@@ -59,7 +59,7 @@ describe('gbrain claw-test --scenario fresh-install (scripted)', () => {
       expect(result.status).toBe(0);
 
       // Inspect the friction JSONL the harness wrote.
-      const frictionDir = join(tmp, '.gbrain', 'friction');
+      const frictionDir = join(tmp, '.voltmind', 'friction');
       expect(existsSync(frictionDir)).toBe(true);
       const files = readdirSync(frictionDir).filter(f => f.endsWith('.jsonl'));
       expect(files.length).toBeGreaterThan(0);
@@ -77,12 +77,12 @@ describe('gbrain claw-test --scenario fresh-install (scripted)', () => {
   }, 180_000);
 
   test('break path: an invented command produces an error friction entry and exits non-zero', () => {
-    // We do this by setting GBRAIN_BIN_OVERRIDE to a script that pretends to be gbrain
+    // We do this by setting VOLTMIND_BIN_OVERRIDE to a script that pretends to be voltmind
     // and rejects the `import` subcommand specifically.
     const tmp = mkdtempSync(join(tmpdir(), 'claw-test-e2e-break-'));
-    const fakeBin = join(tmp, 'fake-gbrain');
+    const fakeBin = join(tmp, 'fake-voltmind');
     try {
-      // Write a shim that delegates to real gbrain but rejects 'import' to simulate breakage.
+      // Write a shim that delegates to real voltmind but rejects 'import' to simulate breakage.
       const shimContent = `#!/bin/sh\nif [ "$1" = "import" ]; then echo "fake import error" >&2; exit 17; fi\nexec "${BIN_PATH}" "$@"\n`;
       const { writeFileSync, chmodSync } = require('fs');
       writeFileSync(fakeBin, shimContent, 'utf-8');
@@ -92,9 +92,9 @@ describe('gbrain claw-test --scenario fresh-install (scripted)', () => {
         cwd: REPO_ROOT,
         env: {
           ...process.env,
-          GBRAIN_HOME: tmp,
-          GBRAIN_BIN_OVERRIDE: fakeBin,
-          GBRAIN_CLAW_SCENARIOS_DIR: join(REPO_ROOT, 'test', 'fixtures', 'claw-test-scenarios'),
+          VOLTMIND_HOME: tmp,
+          VOLTMIND_BIN_OVERRIDE: fakeBin,
+          VOLTMIND_CLAW_SCENARIOS_DIR: join(REPO_ROOT, 'test', 'fixtures', 'claw-test-scenarios'),
         },
         encoding: 'utf-8',
         timeout: 60_000,
@@ -102,7 +102,7 @@ describe('gbrain claw-test --scenario fresh-install (scripted)', () => {
       expect(result.status).not.toBe(0);
 
       // The friction log should have an error-severity entry for the 'import' phase.
-      const frictionDir = join(tmp, '.gbrain', 'friction');
+      const frictionDir = join(tmp, '.voltmind', 'friction');
       const files = readdirSync(frictionDir).filter(f => f.endsWith('.jsonl'));
       const lines = readFileSync(join(frictionDir, files[0]), 'utf-8').split('\n').filter(l => l.trim());
       const entries = lines.map(l => JSON.parse(l));
@@ -114,19 +114,19 @@ describe('gbrain claw-test --scenario fresh-install (scripted)', () => {
   }, 90_000);
 });
 
-describe('gbrain friction render integration', () => {
+describe('voltmind friction render integration', () => {
   test('render produces a markdown report with the redact placeholder', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'claw-test-e2e-render-'));
     try {
       // Log a friction entry with $HOME embedded, then render --redact md
       const home = process.env.HOME ?? '/tmp';
-      const env = { ...process.env, GBRAIN_HOME: tmp, GBRAIN_FRICTION_RUN_ID: 'render-e2e' };
-      execFileSync(BIN_PATH, ['friction', 'log', '--phase', 'p', '--message', `error at ${home}/.gbrain/x`], { env, encoding: 'utf-8' });
+      const env = { ...process.env, VOLTMIND_HOME: tmp, VOLTMIND_FRICTION_RUN_ID: 'render-e2e' };
+      execFileSync(BIN_PATH, ['friction', 'log', '--phase', 'p', '--message', `error at ${home}/.voltmind/x`], { env, encoding: 'utf-8' });
       const out = execFileSync(BIN_PATH, ['friction', 'render', '--run-id', 'render-e2e'], { env, encoding: 'utf-8' });
       expect(out).toContain('# Friction report');
       expect(out).toContain('<HOME>');
       // --redact is the default for md, so home itself should not appear.
-      expect(out).not.toContain(home + '/.gbrain');
+      expect(out).not.toContain(home + '/.voltmind');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

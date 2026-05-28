@@ -31,7 +31,7 @@ function emptySnap(opts: Partial<WatchSnapshot> = {}): WatchSnapshot {
 describe('renderSnapshot', () => {
   test('renders header + queue panel even when nothing is happening', () => {
     const out = renderSnapshot(emptySnap(), { useAnsi: false });
-    expect(out).toContain('gbrain jobs watch');
+    expect(out).toContain('voltmind jobs watch');
     expect(out).toContain('q to quit');
     expect(out).toContain('Queue');
     expect(out).toContain('waiting=0');

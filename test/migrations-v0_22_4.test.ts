@@ -71,7 +71,7 @@ describe('v0.22.4 migration (B11)', () => {
     const fs = await import('fs');
     const path = await import('path');
     const os = await import('os');
-    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-migration-test-'));
+    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-migration-test-'));
     const origHome = process.env.HOME;
     process.env.HOME = tmpHome;
     try {
@@ -138,7 +138,7 @@ describe('v0.22.4 migration (B11)', () => {
       for (const e of entries) {
         expect(e.migration).toBe('0.22.4');
         expect(e.skill).toBe('skills/migrations/v0.22.4.md');
-        expect(e.command).toContain('gbrain frontmatter validate');
+        expect(e.command).toContain('voltmind frontmatter validate');
         expect(e.command).toContain('--fix');
       }
     } finally {

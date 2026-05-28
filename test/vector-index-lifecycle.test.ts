@@ -62,13 +62,13 @@ describe('checkActiveBuild', () => {
     const fakeEngine = {
       kind: 'postgres' as const,
       executeRaw: async () => [
-        { pid: 12345, query: 'CREATE INDEX CONCURRENTLY idx_chunks_embedding ON ...', application_name: 'gbrain' },
+        { pid: 12345, query: 'CREATE INDEX CONCURRENTLY idx_chunks_embedding ON ...', application_name: 'voltmind' },
       ],
     } as never;
     const r = await checkActiveBuild(fakeEngine, 'idx_chunks_embedding');
     expect(r.active).toBe(true);
     expect(r.pid).toBe(12345);
-    expect(r.application_name).toBe('gbrain');
+    expect(r.application_name).toBe('voltmind');
   });
 
   test('query failure returns active: false (best-effort)', async () => {
@@ -87,8 +87,8 @@ describe('isSupabaseAutoMaintenance', () => {
     expect(isSupabaseAutoMaintenance({ active: true, application_name: 'postgres-meta' })).toBe(true);
   });
 
-  test('false for gbrain', () => {
-    expect(isSupabaseAutoMaintenance({ active: true, application_name: 'gbrain-worker' })).toBe(false);
+  test('false for voltmind', () => {
+    expect(isSupabaseAutoMaintenance({ active: true, application_name: 'voltmind-worker' })).toBe(false);
   });
 
   test('false when not active', () => {
@@ -141,7 +141,7 @@ describe('dropZombieIndexes', () => {
       kind: 'postgres' as const,
       executeRaw: async (sql: string) => {
         if (sql.includes('pg_stat_activity')) {
-          return [{ pid: 555, query: 'CREATE INDEX zombie_idx_a ...', application_name: 'gbrain' }];
+          return [{ pid: 555, query: 'CREATE INDEX zombie_idx_a ...', application_name: 'voltmind' }];
         }
         if (sql.includes('pg_index')) {
           return [{ indexname: 'zombie_idx_a', tablename: 'content_chunks' }];

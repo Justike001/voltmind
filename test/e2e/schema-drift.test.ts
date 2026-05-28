@@ -13,7 +13,7 @@
  * Out of scope: detecting "manual ALTER TABLE on production Postgres that
  * never made it into source files" (the actual v0.26.1 trigger). That
  * requires comparing prod's information_schema against source — a separate
- * `gbrain doctor --schema-audit` mechanism deferred to v0.26.4.
+ * `voltmind doctor --schema-audit` mechanism deferred to v0.26.4.
  *
  * Skips gracefully when DATABASE_URL is unset (matches the existing E2E
  * pattern in test/e2e/postgres-bootstrap.test.ts and test/e2e/postgres-jsonb.test.ts).
@@ -42,10 +42,10 @@ if (skip) {
 }
 
 // Tier 3 opt-out: this file constructs a fresh in-memory PGLite to compare
-// against fresh Postgres. If GBRAIN_PGLITE_SNAPSHOT is set (ci:local sets it
+// against fresh Postgres. If VOLTMIND_PGLITE_SNAPSHOT is set (ci:local sets it
 // for unit shards), PGLite would boot post-initSchema with a snapshot — fine
 // for the comparison, but we want the canonical path here.
-delete process.env.GBRAIN_PGLITE_SNAPSHOT;
+delete process.env.VOLTMIND_PGLITE_SNAPSHOT;
 
 /**
  * Tables that exist in src/schema.sql but are intentionally absent from
@@ -77,7 +77,7 @@ describe.skipIf(skip)('schema drift: PGLite ↔ Postgres post-initSchema parity 
 
     // Postgres side: ensure the test database is FRESH before initSchema.
     // v0.37.2.0 fix: previously the test trusted the caller to pass a fresh
-    // DATABASE_URL, but `gbrain doctor` (used by the CLAUDE.md E2E bootstrap
+    // DATABASE_URL, but `voltmind doctor` (used by the CLAUDE.md E2E bootstrap
     // ritual) populates `content_chunks.model DEFAULT` from the configured
     // gateway model. On a re-run, `CREATE TABLE IF NOT EXISTS` is a no-op so
     // the stale default sticks while PGLite (always fresh-in-memory) gets the
@@ -86,7 +86,7 @@ describe.skipIf(skip)('schema drift: PGLite ↔ Postgres post-initSchema parity 
     //
     // SAFETY GATE (codex P0, tightened in v0.37.2.0): DROP SCHEMA public CASCADE is
     // destructive. The db name MUST always look test-shaped — no env-var override
-    // bypasses that floor. GBRAIN_TEST_DB=1 only relaxes the localhost requirement
+    // bypasses that floor. VOLTMIND_TEST_DB=1 only relaxes the localhost requirement
     // so CI environments where the host is a service name (e.g. "postgres") can
     // still reset. If the db name doesn't match the test pattern, nothing nukes it.
     pg = new PostgresEngine();
@@ -99,9 +99,9 @@ describe.skipIf(skip)('schema drift: PGLite ↔ Postgres post-initSchema parity 
     const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
     // db-name pattern is the floor: gbrain_test, *_test, test_*, *_e2e.
     // Required REGARDLESS of any override — a production db named "production_data"
-    // cannot be reset even with GBRAIN_TEST_DB=1.
+    // cannot be reset even with VOLTMIND_TEST_DB=1.
     const looksLikeTestDb = /^(gbrain_test|.*_test|test_.*|.*_e2e)$/i.test(dbName);
-    const ciOptIn = process.env.GBRAIN_TEST_DB === '1';
+    const ciOptIn = process.env.VOLTMIND_TEST_DB === '1';
     // resetAllowed semantics: db name is test-shaped AND (localhost OR ci-opt-in).
     // Neither host nor env-var alone is sufficient.
     const resetAllowed = looksLikeTestDb && (isLocalhost || ciOptIn);
@@ -113,9 +113,9 @@ describe.skipIf(skip)('schema drift: PGLite ↔ Postgres post-initSchema parity 
       // if the caller already had a fresh DB the parity check passes anyway.
       const reason = !looksLikeTestDb
         ? `db name "${dbName}" doesn't match the test pattern (gbrain_test, *_test, test_*, *_e2e). ` +
-          `GBRAIN_TEST_DB=1 does NOT override this — db name is the hard floor.`
-        : `host="${host}" is non-local AND GBRAIN_TEST_DB=1 is not set. ` +
-          `Set GBRAIN_TEST_DB=1 to allow non-local hosts (e.g. CI service names) — ` +
+          `VOLTMIND_TEST_DB=1 does NOT override this — db name is the hard floor.`
+        : `host="${host}" is non-local AND VOLTMIND_TEST_DB=1 is not set. ` +
+          `Set VOLTMIND_TEST_DB=1 to allow non-local hosts (e.g. CI service names) — ` +
           `but only when the db name is already test-shaped.`;
       console.warn(`[schema-drift] Skipping DROP SCHEMA — ${reason}`);
     }

@@ -3,7 +3,7 @@
  * batch loop. The progressive-batch primitive's stage model (trial →
  * ramp → full) doesn't fit Minion handler semantics (one job per page,
  * worker-driven). The primitive's audit + cost-cap value lives at the
- * SUBMITTER side (`gbrain reindex --markdown`, which IS retrofitted in
+ * SUBMITTER side (`voltmind reindex --markdown`, which IS retrofitted in
  * T11), not at the handler. The handler already routes its cost through
  * the global Haiku rate-leaser (D26 P0-3). No further retrofit needed.
  *
@@ -58,7 +58,7 @@ const RATE_LEASE_KEY = 'anthropic:utility:contextual-synopsis';
 const DEFAULT_HAIKU_RPM = 50;
 
 function resolveMaxConcurrent(): number {
-  const env = process.env.GBRAIN_CONTEXTUAL_HAIKU_RPM;
+  const env = process.env.VOLTMIND_CONTEXTUAL_HAIKU_RPM;
   if (env) {
     const n = parseInt(env, 10);
     if (Number.isFinite(n) && n > 0) return n;

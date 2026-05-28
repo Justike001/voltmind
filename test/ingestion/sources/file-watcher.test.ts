@@ -19,7 +19,7 @@ import type { FSWatcher } from 'chokidar';
 let tmpRoot: string;
 
 beforeEach(() => {
-  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-fw-test-'));
+  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-fw-test-'));
 });
 
 afterEach(() => {

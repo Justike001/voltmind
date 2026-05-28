@@ -16,8 +16,8 @@
  * rubber-stamp baseline drift.
  *
  * Env overrides (via withEnv() per CLAUDE.md R1):
- *   GBRAIN_REPLAY_GATE_TOP1_FLOOR   (default 0.80)
- *   GBRAIN_REPLAY_GATE_RECALL_FLOOR (default 0.85)
+ *   VOLTMIND_REPLAY_GATE_TOP1_FLOOR   (default 0.80)
+ *   VOLTMIND_REPLAY_GATE_RECALL_FLOOR (default 0.85)
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
@@ -158,8 +158,8 @@ const DEFAULT_TOP1_FLOOR = 0.80;
 const DEFAULT_RECALL_FLOOR = 0.85;
 
 function resolveFloors(): { top1: number; recall: number } {
-  const t = process.env.GBRAIN_REPLAY_GATE_TOP1_FLOOR;
-  const r = process.env.GBRAIN_REPLAY_GATE_RECALL_FLOOR;
+  const t = process.env.VOLTMIND_REPLAY_GATE_TOP1_FLOOR;
+  const r = process.env.VOLTMIND_REPLAY_GATE_RECALL_FLOOR;
   return {
     top1: t !== undefined ? Number(t) : DEFAULT_TOP1_FLOOR,
     recall: r !== undefined ? Number(r) : DEFAULT_RECALL_FLOOR,
@@ -192,7 +192,7 @@ describe('eval replay gate — hermetic retrieval qrels (v0.40.1.0 Track D / T5)
     expect(recallAt10).toBeGreaterThanOrEqual(recall);
   });
 
-  test('env-overridable floors via GBRAIN_REPLAY_GATE_TOP1_FLOOR / GBRAIN_REPLAY_GATE_RECALL_FLOOR', async () => {
+  test('env-overridable floors via VOLTMIND_REPLAY_GATE_TOP1_FLOOR / VOLTMIND_REPLAY_GATE_RECALL_FLOOR', async () => {
     const fix = loadFixture();
     await seedCorpus(fix);
 
@@ -200,7 +200,7 @@ describe('eval replay gate — hermetic retrieval qrels (v0.40.1.0 Track D / T5)
     // We don't ASSERT failure here (that would make the test flaky against
     // any future ranking improvement); we just assert the resolver respects
     // env vars.
-    await withEnv({ GBRAIN_REPLAY_GATE_TOP1_FLOOR: '0.999', GBRAIN_REPLAY_GATE_RECALL_FLOOR: '0.999' }, async () => {
+    await withEnv({ VOLTMIND_REPLAY_GATE_TOP1_FLOOR: '0.999', VOLTMIND_REPLAY_GATE_RECALL_FLOOR: '0.999' }, async () => {
       const { top1, recall } = resolveFloors();
       expect(top1).toBeCloseTo(0.999, 3);
       expect(recall).toBeCloseTo(0.999, 3);

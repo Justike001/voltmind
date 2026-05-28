@@ -376,7 +376,7 @@ describe('migrate — ordering guarantee (v15 must NOT be skipped by v16)', () =
 // v0.18.1 RLS hardening — structural guard for migration v24
 // ─────────────────────────────────────────────────────────────────
 //
-// The base schema shipped 8 gbrain-managed public tables without RLS
+// The base schema shipped 8 voltmind-managed public tables without RLS
 // enabled (access_tokens, mcp_request_log, minion_inbox,
 // minion_attachments, subagent_messages, subagent_tool_executions,
 // subagent_rate_leases, gbrain_cycle_locks). Migration v12 created
@@ -1022,47 +1022,47 @@ describe('migrate: v9 (timeline_dedup_index) regression — must be fast on 1K d
 });
 
 // ─────────────────────────────────────────────────────────────────
-// resolvePoolSize — GBRAIN_POOL_SIZE env override
+// resolvePoolSize — VOLTMIND_POOL_SIZE env override
 // ─────────────────────────────────────────────────────────────────
 //
 // Guards the Bug 2 fix: users on constrained poolers (Supabase port 6543)
-// must be able to cap the pool size via GBRAIN_POOL_SIZE. The default
+// must be able to cap the pool size via VOLTMIND_POOL_SIZE. The default
 // (10) is unchanged when the env var is unset.
 
 describe('resolvePoolSize — env var + explicit override', () => {
   const { resolvePoolSize } = require('../src/core/db.ts');
-  const original = process.env.GBRAIN_POOL_SIZE;
+  const original = process.env.VOLTMIND_POOL_SIZE;
 
   afterAll(() => {
-    if (original === undefined) delete process.env.GBRAIN_POOL_SIZE;
-    else process.env.GBRAIN_POOL_SIZE = original;
+    if (original === undefined) delete process.env.VOLTMIND_POOL_SIZE;
+    else process.env.VOLTMIND_POOL_SIZE = original;
   });
 
   test('returns 10 default when unset and no explicit override', () => {
-    delete process.env.GBRAIN_POOL_SIZE;
+    delete process.env.VOLTMIND_POOL_SIZE;
     expect(resolvePoolSize()).toBe(10);
   });
 
-  test('reads GBRAIN_POOL_SIZE as an integer', () => {
-    process.env.GBRAIN_POOL_SIZE = '2';
+  test('reads VOLTMIND_POOL_SIZE as an integer', () => {
+    process.env.VOLTMIND_POOL_SIZE = '2';
     expect(resolvePoolSize()).toBe(2);
-    process.env.GBRAIN_POOL_SIZE = '5';
+    process.env.VOLTMIND_POOL_SIZE = '5';
     expect(resolvePoolSize()).toBe(5);
   });
 
-  test('ignores invalid GBRAIN_POOL_SIZE values', () => {
-    process.env.GBRAIN_POOL_SIZE = 'not-a-number';
+  test('ignores invalid VOLTMIND_POOL_SIZE values', () => {
+    process.env.VOLTMIND_POOL_SIZE = 'not-a-number';
     expect(resolvePoolSize()).toBe(10);
-    process.env.GBRAIN_POOL_SIZE = '0';
+    process.env.VOLTMIND_POOL_SIZE = '0';
     expect(resolvePoolSize()).toBe(10);
-    process.env.GBRAIN_POOL_SIZE = '-1';
+    process.env.VOLTMIND_POOL_SIZE = '-1';
     expect(resolvePoolSize()).toBe(10);
   });
 
   test('explicit argument wins over env + default', () => {
-    delete process.env.GBRAIN_POOL_SIZE;
+    delete process.env.VOLTMIND_POOL_SIZE;
     expect(resolvePoolSize(3)).toBe(3);
-    process.env.GBRAIN_POOL_SIZE = '7';
+    process.env.VOLTMIND_POOL_SIZE = '7';
     expect(resolvePoolSize(3)).toBe(3);
   });
 });
@@ -1145,13 +1145,13 @@ describe('PR #356 — 57014 catch path emits actionable 4-part diagnostic', () =
     // rethrow preserving err.code so callers can re-branch.
     //
     // v0.30.1: retry wrapper now retries 3x on 57014. We set
-    // GBRAIN_MIGRATE_BACKOFF_MS=0 in test env to skip the 5s/15s wait
+    // VOLTMIND_MIGRATE_BACKOFF_MS=0 in test env to skip the 5s/15s wait
     // so the test still completes within its budget. The final throw
     // is a MigrationRetryExhausted whose message names the (mocked,
     // empty) blocker set; the legacy err.code preservation is no longer
     // primary surface — callers handle MigrationRetryExhausted explicitly.
-    const original = process.env.GBRAIN_MIGRATE_BACKOFF_MS;
-    process.env.GBRAIN_MIGRATE_BACKOFF_MS = '0';
+    const original = process.env.VOLTMIND_MIGRATE_BACKOFF_MS;
+    process.env.VOLTMIND_MIGRATE_BACKOFF_MS = '0';
 
     const err = Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014' });
 
@@ -1178,8 +1178,8 @@ describe('PR #356 — 57014 catch path emits actionable 4-part diagnostic', () =
       caughtCode = (e as { code?: string }).code;
       caughtName = (e as { name?: string }).name;
     }
-    if (original === undefined) delete process.env.GBRAIN_MIGRATE_BACKOFF_MS;
-    else process.env.GBRAIN_MIGRATE_BACKOFF_MS = original;
+    if (original === undefined) delete process.env.VOLTMIND_MIGRATE_BACKOFF_MS;
+    else process.env.VOLTMIND_MIGRATE_BACKOFF_MS = original;
     // v0.30.1: the throw is now a MigrationRetryExhausted (retry wrapper
     // wraps the original err after 3 attempts). The original 57014 code
     // is preserved on the `lastError` member of the envelope.
@@ -1195,10 +1195,10 @@ describe('PR #356 — 57014 catch path emits actionable 4-part diagnostic', () =
     const msgs = errSpy.mock.calls.map(c => String(c[0]));
     const joined = msgs.join('\n');
     expect(joined).toContain('exhausted retries');
-    expect(joined).toContain('gbrain doctor --locks');
-    expect(joined).toContain('gbrain apply-migrations --yes');
+    expect(joined).toContain('voltmind doctor --locks');
+    expect(joined).toContain('voltmind apply-migrations --yes');
     expect(joined).toContain('Verify:');
-    expect(joined).toContain('gbrain doctor');
+    expect(joined).toContain('voltmind doctor');
 
     errSpy.mockRestore();
   });
@@ -1389,7 +1389,7 @@ describe('migration v48 — takes_weight_round_to_grid (v0.32)', () => {
   test('uses transaction:false (codex review #2 — non-blocking, idempotent via WHERE)', () => {
     // The original plan called this "mid-statement resume" — that was wrong.
     // What transaction:false actually buys is freeing the migration runner
-    // from a long transaction so other gbrain processes can interleave.
+    // from a long transaction so other voltmind processes can interleave.
     const v48 = MIGRATIONS.find(m => m.version === 48);
     expect(v48?.transaction).toBe(false);
   });
@@ -1428,7 +1428,7 @@ describe('migration v48 — takes_weight_round_to_grid (v0.32)', () => {
 
 describe('migration v49 — eval_takes_quality_runs (v0.32)', () => {
   // v0.32 EXP-5 — Renumbered from v47 → v49 after merging master's v0.31.3 wave.
-  // DB-authoritative receipts table for `gbrain eval takes-quality`.
+  // DB-authoritative receipts table for `voltmind eval takes-quality`.
   // Codex review #6 corrected the original two-phase split-brain plan: DB row
   // is the source of truth (carries full receipt JSON), disk artifact is
   // best-effort. The 4-sha unique key (corpus, prompt, models, rubric) makes
@@ -1533,7 +1533,7 @@ describe('migration v51 — facts_fence_columns (v0.32.2)', () => {
 
 // ─────────────────────────────────────────────────────────────────
 // PR #363 regression guards — session timeouts via startup parameters
-// resolveSessionTimeouts — GBRAIN_*_TIMEOUT env overrides
+// resolveSessionTimeouts — VOLTMIND_*_TIMEOUT env overrides
 // ─────────────────────────────────────────────────────────────────
 //
 // Guards: orphan pgbouncer backends that hold table locks for hours when
@@ -1543,24 +1543,24 @@ describe('migration v51 — facts_fence_columns (v0.32.2)', () => {
 
 describe('resolveSessionTimeouts — env var overrides', () => {
   const { resolveSessionTimeouts } = require('../src/core/db.ts');
-  const origStatement = process.env.GBRAIN_STATEMENT_TIMEOUT;
-  const origIdleTx = process.env.GBRAIN_IDLE_TX_TIMEOUT;
-  const origCheck = process.env.GBRAIN_CLIENT_CHECK_INTERVAL;
+  const origStatement = process.env.VOLTMIND_STATEMENT_TIMEOUT;
+  const origIdleTx = process.env.VOLTMIND_IDLE_TX_TIMEOUT;
+  const origCheck = process.env.VOLTMIND_CLIENT_CHECK_INTERVAL;
 
   afterAll(() => {
     const restore = (key: string, val: string | undefined) => {
       if (val === undefined) delete process.env[key];
       else process.env[key] = val;
     };
-    restore('GBRAIN_STATEMENT_TIMEOUT', origStatement);
-    restore('GBRAIN_IDLE_TX_TIMEOUT', origIdleTx);
-    restore('GBRAIN_CLIENT_CHECK_INTERVAL', origCheck);
+    restore('VOLTMIND_STATEMENT_TIMEOUT', origStatement);
+    restore('VOLTMIND_IDLE_TX_TIMEOUT', origIdleTx);
+    restore('VOLTMIND_CLIENT_CHECK_INTERVAL', origCheck);
   });
 
   const resetEnv = () => {
-    delete process.env.GBRAIN_STATEMENT_TIMEOUT;
-    delete process.env.GBRAIN_IDLE_TX_TIMEOUT;
-    delete process.env.GBRAIN_CLIENT_CHECK_INTERVAL;
+    delete process.env.VOLTMIND_STATEMENT_TIMEOUT;
+    delete process.env.VOLTMIND_IDLE_TX_TIMEOUT;
+    delete process.env.VOLTMIND_CLIENT_CHECK_INTERVAL;
   };
 
   test('returns statement_timeout + idle_in_transaction defaults when unset', () => {
@@ -1577,9 +1577,9 @@ describe('resolveSessionTimeouts — env var overrides', () => {
 
   test('env vars override the defaults', () => {
     resetEnv();
-    process.env.GBRAIN_STATEMENT_TIMEOUT = '10min';
-    process.env.GBRAIN_IDLE_TX_TIMEOUT = '30s';
-    process.env.GBRAIN_CLIENT_CHECK_INTERVAL = '15s';
+    process.env.VOLTMIND_STATEMENT_TIMEOUT = '10min';
+    process.env.VOLTMIND_IDLE_TX_TIMEOUT = '30s';
+    process.env.VOLTMIND_CLIENT_CHECK_INTERVAL = '15s';
     const t = resolveSessionTimeouts();
     expect(t.statement_timeout).toBe('10min');
     expect(t.idle_in_transaction_session_timeout).toBe('30s');
@@ -1588,7 +1588,7 @@ describe('resolveSessionTimeouts — env var overrides', () => {
 
   test("'0' disables a specific GUC", () => {
     resetEnv();
-    process.env.GBRAIN_STATEMENT_TIMEOUT = '0';
+    process.env.VOLTMIND_STATEMENT_TIMEOUT = '0';
     const t = resolveSessionTimeouts();
     expect(t.statement_timeout).toBeUndefined();
     expect(t.idle_in_transaction_session_timeout).toBe('5min');
@@ -1596,7 +1596,7 @@ describe('resolveSessionTimeouts — env var overrides', () => {
 
   test("'off' disables a specific GUC", () => {
     resetEnv();
-    process.env.GBRAIN_IDLE_TX_TIMEOUT = 'off';
+    process.env.VOLTMIND_IDLE_TX_TIMEOUT = 'off';
     const t = resolveSessionTimeouts();
     expect(t.statement_timeout).toBe('5min');
     expect(t.idle_in_transaction_session_timeout).toBeUndefined();
@@ -1604,8 +1604,8 @@ describe('resolveSessionTimeouts — env var overrides', () => {
 
   test('all three can be disabled independently', () => {
     resetEnv();
-    process.env.GBRAIN_STATEMENT_TIMEOUT = '0';
-    process.env.GBRAIN_IDLE_TX_TIMEOUT = 'off';
+    process.env.VOLTMIND_STATEMENT_TIMEOUT = '0';
+    process.env.VOLTMIND_IDLE_TX_TIMEOUT = 'off';
     const t = resolveSessionTimeouts();
     expect(Object.keys(t)).toHaveLength(0);
   });
@@ -1717,7 +1717,7 @@ describe('migrate v80 — CHECK widening end-to-end on PGLite', () => {
                 resolved_outcome = $2,
                 resolved_by = $3
           WHERE page_id = $4 AND row_num = $5`,
-        [quality, outcome, 'gbrain:test', pageId, rowNum],
+        [quality, outcome, 'voltmind:test', pageId, rowNum],
       );
       return { ok: true };
     } catch (err) {
@@ -1857,7 +1857,7 @@ describe('migrate v81 — pages_provenance_columns', () => {
   test('v81 does NOT create any index (provenance is admin-surface only)', () => {
     const sql = (v81!.sql ?? '').toLowerCase();
     // Documented in the migration comment: provenance queries are admin-
-    // surface only (admin SPA Sources tab + gbrain doctor
+    // surface only (admin SPA Sources tab + voltmind doctor
     // ingestion_health). Throwing an index on a low-cardinality TEXT
     // column would inflate the brain repo for negligible read benefit.
     expect(sql).not.toContain('create index');
@@ -1980,7 +1980,7 @@ describe('migrate v81 — round-trip on PGLite', () => {
 //
 // Adds nullable `event_type TEXT` to facts so the typed-claim substrate
 // (v0.35.4 / v67) can carry event-shaped rows alongside metric-shaped
-// rows. The migration is the substrate behind v0.40.2.0's `gbrain think`
+// rows. The migration is the substrate behind v0.40.2.0's `voltmind think`
 // trajectory injection AND the LongMemEval harness's intent routing.
 //
 // Renumbered v81 → v82 → v89 across two successive master merges:

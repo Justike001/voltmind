@@ -228,7 +228,7 @@ describeBoth('Engine parity — Postgres vs PGLite', () => {
   // v0.39.3.0 T3 — provenance write+read parity (WARN-8 + CV5).
   // Both engines must write the same 4 provenance columns (source_kind,
   // source_uri, ingested_via, ingested_at) on putPage AND surface them
-  // on getPage. A drift here would mean `gbrain migrate --to supabase`
+  // on getPage. A drift here would mean `voltmind migrate --to supabase`
   // silently loses half a user's provenance audit trail.
   test('provenance columns: putPage writes + getPage returns identical shape on both engines', async () => {
     const slug = 'wiki/provenance-parity';

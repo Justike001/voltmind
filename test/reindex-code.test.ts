@@ -26,8 +26,8 @@ describe('Layer 13 E2 — runReindexCode', () => {
     // nudge. Configure the gateway with the historical default so the
     // existing model-name assertion stays exact, and suppress the nudge
     // so test stderr stays clean.
-    prevNudgeEnv = process.env.GBRAIN_NO_CODE_MODEL_NUDGE;
-    process.env.GBRAIN_NO_CODE_MODEL_NUDGE = '1';
+    prevNudgeEnv = process.env.VOLTMIND_NO_CODE_MODEL_NUDGE;
+    process.env.VOLTMIND_NO_CODE_MODEL_NUDGE = '1';
     configureGateway({
       embedding_model: 'openai:text-embedding-3-large',
       embedding_dimensions: 1536,
@@ -79,8 +79,8 @@ describe('Layer 13 E2 — runReindexCode', () => {
   afterAll(async () => {
     await engine.disconnect();
     resetGateway();
-    if (prevNudgeEnv === undefined) delete process.env.GBRAIN_NO_CODE_MODEL_NUDGE;
-    else process.env.GBRAIN_NO_CODE_MODEL_NUDGE = prevNudgeEnv;
+    if (prevNudgeEnv === undefined) delete process.env.VOLTMIND_NO_CODE_MODEL_NUDGE;
+    else process.env.VOLTMIND_NO_CODE_MODEL_NUDGE = prevNudgeEnv;
   }, 30_000);
 
   test('counts code pages, ignores markdown', async () => {

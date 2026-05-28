@@ -30,9 +30,9 @@ import {
  * up the dir after. `withEnv` handles env-restore via try/finally.
  */
 async function withFreshAuditDir(body: (tmpDir: string) => void | Promise<void>): Promise<void> {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-rerank-audit-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-rerank-audit-'));
   try {
-    await withEnv({ GBRAIN_AUDIT_DIR: tmpDir }, async () => {
+    await withEnv({ VOLTMIND_AUDIT_DIR: tmpDir }, async () => {
       await body(tmpDir);
     });
   } finally {
@@ -126,9 +126,9 @@ describe('rerank-audit JSONL round-trip', () => {
   test('missing audit dir → readRecentRerankFailures returns []', async () => {
     // Point at a never-existing path; readRecentRerankFailures should
     // skip the readFileSync error and return [].
-    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-rerank-empty-'));
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-rerank-empty-'));
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: path.join(tmpRoot, 'nonexistent') }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: path.join(tmpRoot, 'nonexistent') }, async () => {
         const events = readRecentRerankFailures(7);
         expect(events).toEqual([]);
       });

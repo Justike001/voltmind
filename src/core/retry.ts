@@ -54,9 +54,9 @@
  *
  * ENV OVERRIDES (D3 cherry-pick)
  * ------------------------------
- * - GBRAIN_BULK_MAX_RETRIES   — int >= 0 (0 disables retries for debugging)
- * - GBRAIN_BULK_RETRY_BASE_MS — int > 0
- * - GBRAIN_BULK_RETRY_MAX_MS  — int >= base
+ * - VOLTMIND_BULK_MAX_RETRIES   — int >= 0 (0 disables retries for debugging)
+ * - VOLTMIND_BULK_RETRY_BASE_MS — int > 0
+ * - VOLTMIND_BULK_RETRY_MAX_MS  — int >= base
  *
  * Bad values throw `GBrainError` with a paste-ready fix hint. Doctor's
  * `batch_retry_health` check also runs the validator at startup so misconfig
@@ -248,37 +248,37 @@ export function resolveBulkRetryOpts(
 ): typeof BULK_RETRY_OPTS {
   const out = { ...BULK_RETRY_OPTS };
 
-  const maxRetries = env.GBRAIN_BULK_MAX_RETRIES;
+  const maxRetries = env.VOLTMIND_BULK_MAX_RETRIES;
   if (maxRetries !== undefined && maxRetries !== '') {
     const n = Number(maxRetries);
     if (!Number.isInteger(n) || n < 0) {
       throw new Error(
-        `GBRAIN_BULK_MAX_RETRIES must be an integer >= 0 (got "${maxRetries}"). ` +
-        `Fix: export GBRAIN_BULK_MAX_RETRIES=3   # or 0 to disable retries`,
+        `VOLTMIND_BULK_MAX_RETRIES must be an integer >= 0 (got "${maxRetries}"). ` +
+        `Fix: export VOLTMIND_BULK_MAX_RETRIES=3   # or 0 to disable retries`,
       );
     }
     out.maxRetries = n;
   }
 
-  const baseMs = env.GBRAIN_BULK_RETRY_BASE_MS;
+  const baseMs = env.VOLTMIND_BULK_RETRY_BASE_MS;
   if (baseMs !== undefined && baseMs !== '') {
     const n = Number(baseMs);
     if (!Number.isInteger(n) || n <= 0) {
       throw new Error(
-        `GBRAIN_BULK_RETRY_BASE_MS must be an integer > 0 (got "${baseMs}"). ` +
-        `Fix: export GBRAIN_BULK_RETRY_BASE_MS=1000`,
+        `VOLTMIND_BULK_RETRY_BASE_MS must be an integer > 0 (got "${baseMs}"). ` +
+        `Fix: export VOLTMIND_BULK_RETRY_BASE_MS=1000`,
       );
     }
     out.delayMs = n;
   }
 
-  const maxMs = env.GBRAIN_BULK_RETRY_MAX_MS;
+  const maxMs = env.VOLTMIND_BULK_RETRY_MAX_MS;
   if (maxMs !== undefined && maxMs !== '') {
     const n = Number(maxMs);
     if (!Number.isInteger(n) || n < out.delayMs) {
       throw new Error(
-        `GBRAIN_BULK_RETRY_MAX_MS must be an integer >= GBRAIN_BULK_RETRY_BASE_MS=${out.delayMs} ` +
-        `(got "${maxMs}"). Fix: export GBRAIN_BULK_RETRY_MAX_MS=10000`,
+        `VOLTMIND_BULK_RETRY_MAX_MS must be an integer >= VOLTMIND_BULK_RETRY_BASE_MS=${out.delayMs} ` +
+        `(got "${maxMs}"). Fix: export VOLTMIND_BULK_RETRY_MAX_MS=10000`,
       );
     }
     out.delayMaxMs = n;

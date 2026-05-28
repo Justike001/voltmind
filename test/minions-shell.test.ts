@@ -13,7 +13,7 @@ import * as os from 'node:os';
 let engine: PGLiteEngine;
 let queue: MinionQueue;
 // The shell handler at src/core/minions/handlers/shell.ts:210 throws
-// UnrecoverableError when GBRAIN_ALLOW_SHELL_JOBS !== '1'. That's the
+// UnrecoverableError when VOLTMIND_ALLOW_SHELL_JOBS !== '1'. That's the
 // production-worker RCE guard. Unit tests here exercise the handler
 // mechanics, not the guard, so we enable it for the whole file and
 // restore on teardown. The separate "rejects when env not set" case
@@ -22,8 +22,8 @@ let queue: MinionQueue;
 let prevAllowShellJobs: string | undefined;
 
 beforeAll(async () => {
-  prevAllowShellJobs = process.env.GBRAIN_ALLOW_SHELL_JOBS;
-  process.env.GBRAIN_ALLOW_SHELL_JOBS = '1';
+  prevAllowShellJobs = process.env.VOLTMIND_ALLOW_SHELL_JOBS;
+  process.env.VOLTMIND_ALLOW_SHELL_JOBS = '1';
   engine = new PGLiteEngine();
   await engine.connect({ database_url: '' });
   await engine.initSchema();
@@ -32,8 +32,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await engine.disconnect();
-  if (prevAllowShellJobs === undefined) delete process.env.GBRAIN_ALLOW_SHELL_JOBS;
-  else process.env.GBRAIN_ALLOW_SHELL_JOBS = prevAllowShellJobs;
+  if (prevAllowShellJobs === undefined) delete process.env.VOLTMIND_ALLOW_SHELL_JOBS;
+  else process.env.VOLTMIND_ALLOW_SHELL_JOBS = prevAllowShellJobs;
 });
 
 beforeEach(async () => {
@@ -173,7 +173,7 @@ describe('shell handler: spawn', () => {
     await expect(p).rejects.toThrow(/exit 7/);
   });
   test('argv with bogus binary → Error (retryable)', async () => {
-    const p = shellHandler(makeCtx({ argv: ['gbrain-nonexistent-binary-xyz'], cwd: '/tmp' }));
+    const p = shellHandler(makeCtx({ argv: ['voltmind-nonexistent-binary-xyz'], cwd: '/tmp' }));
     // spawn emits 'error' on ENOENT
     await expect(p).rejects.toThrow();
   });
@@ -283,18 +283,18 @@ describe('shell-audit: write', () => {
   let tmpDir: string;
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-audit-test-'));
-    process.env.GBRAIN_AUDIT_DIR = tmpDir;
+    process.env.VOLTMIND_AUDIT_DIR = tmpDir;
   });
   afterAll(() => {
-    delete process.env.GBRAIN_AUDIT_DIR;
+    delete process.env.VOLTMIND_AUDIT_DIR;
   });
 
-  test('GBRAIN_AUDIT_DIR env override resolves to the custom dir', () => {
+  test('VOLTMIND_AUDIT_DIR env override resolves to the custom dir', () => {
     expect(resolveAuditDir()).toBe(tmpDir);
   });
   test('writes a JSONL line; creates dir if missing', () => {
     const inner = path.join(tmpDir, 'nested-not-yet-created');
-    process.env.GBRAIN_AUDIT_DIR = inner;
+    process.env.VOLTMIND_AUDIT_DIR = inner;
     logShellSubmission({
       caller: 'cli', remote: false, job_id: 42, cwd: '/tmp', cmd_display: 'echo ok',
     });
@@ -328,7 +328,7 @@ describe('shell-audit: write', () => {
   });
   test('write failure (EACCES) is non-blocking', () => {
     // Point at a read-only target. /dev/null is not a directory.
-    process.env.GBRAIN_AUDIT_DIR = '/dev/null/not-a-dir';
+    process.env.VOLTMIND_AUDIT_DIR = '/dev/null/not-a-dir';
     // Should not throw — failures go to stderr.
     expect(() => logShellSubmission({
       caller: 'cli', remote: false, job_id: 1, cwd: '/tmp',

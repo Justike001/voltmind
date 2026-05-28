@@ -134,8 +134,8 @@ describe('undoWave — happy path', () => {
     await undoWave(engine, { waveVersion: 'v0.36.1.0' });
     const updateCall = sqls.find(s => s.sql.includes('UPDATE takes'));
     expect(updateCall).toBeDefined();
-    // resolved_by parameter is $2 = 'gbrain:grade_takes' (default label)
-    expect(updateCall!.params[1]).toBe('gbrain:grade_takes');
+    // resolved_by parameter is $2 = 'voltmind:grade_takes' (default label)
+    expect(updateCall!.params[1]).toBe('voltmind:grade_takes');
   });
 
   test('custom resolvedByLabel is honored', async () => {
@@ -143,9 +143,9 @@ describe('undoWave — happy path', () => {
       targetTakeIds: [1],
       revertedTakes: [1],
     });
-    await undoWave(engine, { waveVersion: 'v0.36.1.0', resolvedByLabel: 'gbrain:grade_takes-custom' });
+    await undoWave(engine, { waveVersion: 'v0.36.1.0', resolvedByLabel: 'voltmind:grade_takes-custom' });
     const updateCall = sqls.find(s => s.sql.includes('UPDATE takes'));
-    expect(updateCall!.params[1]).toBe('gbrain:grade_takes-custom');
+    expect(updateCall!.params[1]).toBe('voltmind:grade_takes-custom');
   });
 });
 

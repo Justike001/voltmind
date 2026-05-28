@@ -24,7 +24,7 @@ function makeManifest(name: string, extendsName: string | null = null): SchemaPa
     name,
     version: '1.0.0',
     description: '',
-    gbrain_min_version: '0.38.0',
+    voltmind_min_version: '0.38.0',
     extends: extendsName,
     borrow_from: [],
     page_types: [],

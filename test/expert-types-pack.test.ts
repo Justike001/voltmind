@@ -1,6 +1,6 @@
 // v0.38 T_W: pack-driven expert types parity tests.
 //
-// Pins the contract that expertTypesFromPack(gbrain-base) returns the
+// Pins the contract that expertTypesFromPack(voltmind-base) returns the
 // pre-v0.38 hardcoded DEFAULT_TYPES = ['person', 'company']. User packs
 // override by setting expert_routing: true on different types.
 
@@ -13,18 +13,18 @@ import {
 } from '../src/core/schema-pack/index.ts';
 import { join } from 'node:path';
 
-const GBRAIN_BASE_PATH = join(import.meta.dir, '../src/core/schema-pack/base/gbrain-base.yaml');
+const VOLTMIND_BASE_PATH = join(import.meta.dir, '../src/core/schema-pack/base/voltmind-base.yaml');
 
-describe('expertTypesFromPack (T_W) — gbrain-base parity', () => {
-  test('gbrain-base returns [person, company]', () => {
-    const pack = loadPackFromFile(GBRAIN_BASE_PATH);
+describe('expertTypesFromPack (T_W) — voltmind-base parity', () => {
+  test('voltmind-base returns [person, company]', () => {
+    const pack = loadPackFromFile(VOLTMIND_BASE_PATH);
     const types = expertTypesFromPack(pack);
     expect(types.sort()).toEqual(['company', 'person']);
   });
 
   test('research-shaped pack returns researcher + principal-investigator', () => {
     const pack = parseSchemaPackManifest({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'research-state',
       version: '0.1.0',
       extends: null,
@@ -42,7 +42,7 @@ describe('expertTypesFromPack (T_W) — gbrain-base parity', () => {
 
   test('preserves declaration order from manifest', () => {
     const pack = parseSchemaPackManifest({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'test',
       version: '0.1.0',
       extends: null,
@@ -59,7 +59,7 @@ describe('expertTypesFromPack (T_W) — gbrain-base parity', () => {
 
   test('pack with no expert_routing types returns empty array', () => {
     const pack = parseSchemaPackManifest({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'media-only',
       version: '0.1.0',
       extends: null,
@@ -74,7 +74,7 @@ describe('expertTypesFromPack (T_W) — gbrain-base parity', () => {
 
   test('expertTypesFromPackOrThrow throws on empty', () => {
     const pack = parseSchemaPackManifest({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'media-only',
       version: '0.1.0',
       extends: null,
@@ -87,7 +87,7 @@ describe('expertTypesFromPack (T_W) — gbrain-base parity', () => {
   });
 
   test('expertTypesFromPackOrThrow passes when types exist', () => {
-    const pack = loadPackFromFile(GBRAIN_BASE_PATH);
+    const pack = loadPackFromFile(VOLTMIND_BASE_PATH);
     expect(() => expertTypesFromPackOrThrow(pack)).not.toThrow();
   });
 });

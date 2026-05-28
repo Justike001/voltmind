@@ -15,7 +15,7 @@
  *
  * This is the substrate-level e2e — it's the unit-test concept lifted
  * one layer up to the daemon+handler wiring. The full server-process
- * e2e (gbrain serve --http + POST /ingest + real OAuth) is a separate
+ * e2e (voltmind serve --http + POST /ingest + real OAuth) is a separate
  * test that requires DATABASE_URL.
  */
 
@@ -72,7 +72,7 @@ beforeEach(async () => {
   // and the waitFor(15s) for the first file drop times out. See
   // ingestion-roundtrip cross-test contamination notes.
   await new Promise((r) => setTimeout(r, 200));
-  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-e2e-roundtrip-'));
+  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-e2e-roundtrip-'));
   inboxDir = path.join(tmpRoot, 'inbox');
   brainDir = path.join(tmpRoot, 'brain');
   fs.mkdirSync(brainDir, { recursive: true });

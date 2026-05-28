@@ -1,5 +1,5 @@
 /**
- * `gbrain agent` CLI tests. Covers arg parsing, --since parser, and the
+ * `voltmind agent` CLI tests. Covers arg parsing, --since parser, and the
  * submit path end-to-end against PGLite so we verify trusted submission,
  * protected-name guard, and fan-out wiring.
  *

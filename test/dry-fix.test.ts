@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 function makeSkillsFixture(files: Record<string, string>, opts: { gitInit?: boolean } = {}): string {
-  const dir = mkdtempSync(join(tmpdir(), "gbrain-dryfix-"));
+  const dir = mkdtempSync(join(tmpdir(), "voltmind-dryfix-"));
   fixtures.push(dir);
   const skillNames = Object.keys(files);
   writeFileSync(

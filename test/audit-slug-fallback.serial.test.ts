@@ -2,7 +2,7 @@
  * v0.32.7 CJK wave — slug-fallback audit JSONL.
  *
  * Direct unit coverage for `logSlugFallback` and `readRecentSlugFallbacks`.
- * Uses GBRAIN_AUDIT_DIR override pointed at a tmpdir for hermeticity (the
+ * Uses VOLTMIND_AUDIT_DIR override pointed at a tmpdir for hermeticity (the
  * shared-audit-dir helper honors that env var; see shell-audit.ts).
  */
 
@@ -20,14 +20,14 @@ let auditDir: string;
 let savedEnv: string | undefined;
 
 beforeAll(() => {
-  auditDir = mkdtempSync(join(tmpdir(), 'gbrain-slug-fallback-audit-'));
-  savedEnv = process.env.GBRAIN_AUDIT_DIR;
-  process.env.GBRAIN_AUDIT_DIR = auditDir;
+  auditDir = mkdtempSync(join(tmpdir(), 'voltmind-slug-fallback-audit-'));
+  savedEnv = process.env.VOLTMIND_AUDIT_DIR;
+  process.env.VOLTMIND_AUDIT_DIR = auditDir;
 });
 
 afterAll(() => {
-  if (savedEnv === undefined) delete process.env.GBRAIN_AUDIT_DIR;
-  else process.env.GBRAIN_AUDIT_DIR = savedEnv;
+  if (savedEnv === undefined) delete process.env.VOLTMIND_AUDIT_DIR;
+  else process.env.VOLTMIND_AUDIT_DIR = savedEnv;
   rmSync(auditDir, { recursive: true, force: true });
 });
 

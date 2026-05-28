@@ -1,7 +1,7 @@
 /**
  * Tests for `src/core/doctor-remote.ts` — the thin-client doctor check set.
  *
- * Strategy: spin up a tiny in-process HTTP server that mimics `gbrain serve --http`
+ * Strategy: spin up a tiny in-process HTTP server that mimics `voltmind serve --http`
  * for OAuth discovery, /token, and /mcp. This tests the REAL probe code in
  * `remote-mcp-probe.ts` end-to-end, not a mocked version. Each test seeds the
  * server's behavior (200 / 401 / 404 / network drop) and asserts the resulting
@@ -17,7 +17,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { collectRemoteDoctorReport, runUpgradeDriftCheck } from '../src/core/doctor-remote.ts';
-import type { GBrainConfig } from '../src/core/config.ts';
+import type { VoltMindConfig } from '../src/core/config.ts';
 import { withEnv } from './helpers/with-env.ts';
 import { VERSION } from '../src/version.ts';
 
@@ -124,7 +124,7 @@ function reset() {
   mcpToolResults = {};
 }
 
-function makeConfig(overrides: Partial<NonNullable<GBrainConfig['remote_mcp']>> = {}): GBrainConfig {
+function makeConfig(overrides: Partial<NonNullable<VoltMindConfig['remote_mcp']>> = {}): VoltMindConfig {
   return {
     engine: 'postgres',
     remote_mcp: {
@@ -231,20 +231,20 @@ describe('collectRemoteDoctorReport', () => {
     reset();
     // Clear env via withEnv() so the env-var fallback doesn't satisfy the
     // check. withEnv restores prior value on finally + satisfies R1 lint.
-    await withEnv({ GBRAIN_REMOTE_CLIENT_SECRET: undefined }, async () => {
+    await withEnv({ VOLTMIND_REMOTE_CLIENT_SECRET: undefined }, async () => {
       const config = makeConfig();
       delete config.remote_mcp!.oauth_client_secret;
       const report = await collectRemoteDoctorReport(config);
       const creds = report.checks.find(c => c.name === 'oauth_credentials')!;
       expect(creds.status).toBe('fail');
-      expect(creds.message).toContain('GBRAIN_REMOTE_CLIENT_SECRET');
+      expect(creds.message).toContain('VOLTMIND_REMOTE_CLIENT_SECRET');
       expect(report.checks.find(c => c.name === 'oauth_discovery')).toBeUndefined();
     });
   });
 
   test('missing remote_mcp on config — fails config_integrity', async () => {
     reset();
-    const config: GBrainConfig = { engine: 'postgres' };
+    const config: VoltMindConfig = { engine: 'postgres' };
     const report = await collectRemoteDoctorReport(config);
     expect(report.status).toBe('fail');
     expect(report.checks[0].name).toBe('config_integrity');
@@ -257,9 +257,9 @@ describe('collectRemoteDoctorReport', () => {
     expect(report.schema_version).toBe(2);
   });
 
-  test('env var GBRAIN_REMOTE_CLIENT_SECRET overrides config-file secret', async () => {
+  test('env var VOLTMIND_REMOTE_CLIENT_SECRET overrides config-file secret', async () => {
     reset();
-    await withEnv({ GBRAIN_REMOTE_CLIENT_SECRET: 'env-supplied-secret' }, async () => {
+    await withEnv({ VOLTMIND_REMOTE_CLIENT_SECRET: 'env-supplied-secret' }, async () => {
       const config = makeConfig({ oauth_client_secret: 'config-file-secret' });
       const report = await collectRemoteDoctorReport(config, SKIP_PROBE_OPTS);
       const creds = report.checks.find(c => c.name === 'oauth_credentials')!;
@@ -280,7 +280,7 @@ describe('runUpgradeDriftCheck', () => {
   test('unreachable host returns informational ok with inconclusive=true', async () => {
     // Point at a port that is not bound. callRemoteTool will throw; the check
     // must catch and return ok+inconclusive, not warn or fail.
-    const config: GBrainConfig = {
+    const config: VoltMindConfig = {
       engine: 'postgres',
       remote_mcp: {
         issuer_url: 'http://127.0.0.1:1', // unreachable
@@ -301,9 +301,9 @@ describe('runUpgradeDriftCheck', () => {
     mcpToolResults['get_brain_identity'] = {
       content: [{ type: 'text', text: JSON.stringify({ version: '99.99.99' }) }],
     };
-    const tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-doctor-drift-'));
+    const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-doctor-drift-'));
     try {
-      await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+      await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
         const result = await runUpgradeDriftCheck(makeConfig());
         expect(result.name).toBe('thin_client_upgrade_drift');
         expect(result.status).toBe('warn');
@@ -311,7 +311,7 @@ describe('runUpgradeDriftCheck', () => {
         expect(result.message).toContain(`v${VERSION}`);
         expect(result.message).toContain('v99.99.99');
         // Auto-upgrade hint (no prior failure on file)
-        expect(result.message).toContain('Run `gbrain upgrade`');
+        expect(result.message).toContain('Run `voltmind upgrade`');
         expect(result.detail?.prior_failed).toBe(false);
         expect(result.detail?.level).toBe('major');
       });
@@ -325,13 +325,13 @@ describe('runUpgradeDriftCheck', () => {
     mcpToolResults['get_brain_identity'] = {
       content: [{ type: 'text', text: JSON.stringify({ version: '99.99.99' }) }],
     };
-    const tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-doctor-drift-'));
+    const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-doctor-drift-'));
     try {
       const config = makeConfig();
       // Seed the prompt-state file with a 'failed' entry for THIS mcp_url +
       // the same remote version the fixture is about to advertise. The check
       // should pivot the fix hint to the manual install URL.
-      const stateDir = join(tmpHome, '.gbrain');
+      const stateDir = join(tmpHome, '.voltmind');
       mkdirSync(stateDir, { recursive: true });
       writeFileSync(join(stateDir, 'upgrade-prompt-state.json'), JSON.stringify({
         schema_version: 1,
@@ -343,14 +343,14 @@ describe('runUpgradeDriftCheck', () => {
           },
         },
       }));
-      await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+      await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
         const result = await runUpgradeDriftCheck(config);
         expect(result.status).toBe('warn');
         expect(result.message).toContain('major upgrade available');
         // Manual-install hint, NOT the auto-upgrade hint
-        expect(result.message).toContain('Prior `gbrain upgrade` did not advance');
-        expect(result.message).toContain('https://github.com/garrytan/gbrain/releases');
-        expect(result.message).not.toContain('Run `gbrain upgrade`');
+        expect(result.message).toContain('Prior `voltmind upgrade` did not advance');
+        expect(result.message).toContain('https://github.com/garrytan/voltmind/releases');
+        expect(result.message).not.toContain('Run `voltmind upgrade`');
         expect(result.detail?.prior_failed).toBe(true);
       });
     } finally {
@@ -366,10 +366,10 @@ describe('runUpgradeDriftCheck', () => {
     mcpToolResults['get_brain_identity'] = {
       content: [{ type: 'text', text: JSON.stringify({ version: '99.99.99' }) }],
     };
-    const tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-doctor-drift-'));
+    const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-doctor-drift-'));
     try {
       const config = makeConfig();
-      const stateDir = join(tmpHome, '.gbrain');
+      const stateDir = join(tmpHome, '.voltmind');
       mkdirSync(stateDir, { recursive: true });
       writeFileSync(join(stateDir, 'upgrade-prompt-state.json'), JSON.stringify({
         schema_version: 1,
@@ -381,10 +381,10 @@ describe('runUpgradeDriftCheck', () => {
           },
         },
       }));
-      await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+      await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
         const result = await runUpgradeDriftCheck(config);
         expect(result.status).toBe('warn');
-        expect(result.message).toContain('Run `gbrain upgrade`');
+        expect(result.message).toContain('Run `voltmind upgrade`');
         expect(result.detail?.prior_failed).toBe(false);
       });
     } finally {
@@ -397,9 +397,9 @@ describe('runUpgradeDriftCheck', () => {
     mcpToolResults['get_brain_identity'] = {
       content: [{ type: 'text', text: JSON.stringify({ version: VERSION }) }],
     };
-    const tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-doctor-drift-'));
+    const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-doctor-drift-'));
     try {
-      await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+      await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
         const result = await runUpgradeDriftCheck(makeConfig());
         expect(result.status).toBe('ok');
         expect(result.message).toContain(`local v${VERSION}`);

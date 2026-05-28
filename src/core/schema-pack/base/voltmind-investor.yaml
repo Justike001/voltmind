@@ -1,4 +1,4 @@
-# gbrain-investor — investor/YC lens pack
+# voltmind-investor — investor/YC lens pack
 #
 # v0.41 lens packs wave. Declares the investor work surface that the user
 # (YC president) already runs every day across the your OpenClaw agent + brain:
@@ -35,24 +35,24 @@
 #
 # Cron consolidation: existing your OpenClaw's crons (yc-radar-weekly,
 # yc-portfolio-health monthly, yc-oh-ingest daily) continue running on
-# their own schedules in your OpenClaw — gbrain-investor doesn't displace
+# their own schedules in your OpenClaw — voltmind-investor doesn't displace
 # them, only declares their output types + calibration semantics. v0.42+
 # may migrate those crons too once their phase contracts stabilize.
 
-api_version: gbrain-schema-pack-v1
-name: gbrain-investor
+api_version: voltmind-schema-pack-v1
+name: voltmind-investor
 version: 1.0.0
-description: "Investor / YC president lens. Adds thesis + bet_resolution_log types to the deal/investor/company/person surface that already exists in gbrain-base. Declares deal_success / founder_evaluation / market_call calibration domains feeding the widened calibration_profile."
-gbrain_min_version: 0.41.0
-extends: gbrain-base
+description: "Investor / YC president lens. Adds thesis + bet_resolution_log types to the deal/investor/company/person surface that already exists in voltmind-base. Declares deal_success / founder_evaluation / market_call calibration domains feeding the widened calibration_profile."
+voltmind_min_version: 0.41.0
+extends: voltmind-base
 
-# Borrow deal + person + company + yc from gbrain-base — they remain
+# Borrow deal + person + company + yc from voltmind-base — they remain
 # base-owned (other packs may also use them) but this pack's calibration
 # domains reference them. No new declarations needed because borrow_from
 # just signals intent; the registry already merges types from the
 # extends chain.
 borrow_from:
-  - pack: gbrain-base
+  - pack: voltmind-base
     types:
       - deal
       - person
@@ -64,7 +64,7 @@ borrow_from:
 # tracks outcomes for take rows of kind='bet'.
 # takes_kinds intentionally omitted (inherits from base).
 
-# Pack-specific page types. `deal` already exists in gbrain-base seed.
+# Pack-specific page types. `deal` already exists in voltmind-base seed.
 # `thesis` and `bet_resolution_log` are net-new for v0.41.
 #
 # `investor` and `founder` (alias for person in deal context) are

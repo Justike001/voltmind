@@ -1,16 +1,16 @@
 /**
- * v0.36.1.x #1100: PGLite + `gbrain apply-migrations` chain spawn test.
+ * v0.36.1.x #1100: PGLite + `voltmind apply-migrations` chain spawn test.
  *
- * Spawns `gbrain init --migrate-only` followed by `gbrain apply-migrations
+ * Spawns `voltmind init --migrate-only` followed by `voltmind apply-migrations
  * --yes --non-interactive` against a fresh tmpdir, asserts the full
  * migration chain walks to head without wedging on the v0.11.0 Minions
  * phase A subprocess deadlock.
  *
- * Pre-fix, this exact sequence hit `GBrain: Timed out waiting for PGLite
+ * Pre-fix, this exact sequence hit `VoltMind: Timed out waiting for PGLite
  * lock` because:
  *   1. apply-migrations pre-flight schema-version probe held the
  *      single-writer lock briefly and raced the v0.11.0 subprocess.
- *   2. v0.11.0 phase A spawned `gbrain init --migrate-only` as a child;
+ *   2. v0.11.0 phase A spawned `voltmind init --migrate-only` as a child;
  *      the child inherited HOME and tried to acquire the same lock.
  *
  * The fix routes phase A in-process for PGLite and skips the pre-flight
@@ -32,19 +32,19 @@ import { tmpdir } from 'os';
 const REPO = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 
 /**
- * Make a shim `gbrain` binary that routes to `bun run <repo>/src/cli.ts`.
+ * Make a shim `voltmind` binary that routes to `bun run <repo>/src/cli.ts`.
  *
- * The v0.11.0 orchestrator chain spawns subprocesses via `execSync('gbrain
- * jobs smoke')` and `execSync('gbrain init --migrate-only')` (the Postgres
+ * The v0.11.0 orchestrator chain spawns subprocesses via `execSync('voltmind
+ * jobs smoke')` and `execSync('voltmind init --migrate-only')` (the Postgres
  * path; PGLite now routes in-process, but phase B's smoke still shells out).
- * On a developer machine `gbrain` resolves via `bun link`; on CI it
+ * On a developer machine `voltmind` resolves via `bun link`; on CI it
  * doesn't exist on PATH and execSync fails with "command not found",
  * propagating up as an orchestrator failure. The shim avoids the global-
  * install dependency.
  */
 function makeGbrainShim(): { binDir: string; cleanup: () => void } {
-  const binDir = mkdtempSync(join(tmpdir(), 'gbrain-shim-'));
-  const shimPath = join(binDir, 'gbrain');
+  const binDir = mkdtempSync(join(tmpdir(), 'voltmind-shim-'));
+  const shimPath = join(binDir, 'voltmind');
   writeFileSync(
     shimPath,
     `#!/bin/sh\nexec bun run ${REPO}/src/cli.ts "$@"\n`,
@@ -90,25 +90,25 @@ describe('apply-migrations on fresh PGLite (v0.36.1.x #1100)', () => {
   // per-spawn cold-start on Ubuntu CI (~10-20s) is the dominant cost; we
   // pay it 4 times here, not 8.
   test('init --migrate-only → apply-migrations --yes → re-run → --list (all exit 0)', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'gbrain-pglite-spawn-'));
+    const home = mkdtempSync(join(tmpdir(), 'voltmind-pglite-spawn-'));
     const shim = makeGbrainShim();
     try {
-      mkdirSync(join(home, '.gbrain'), { recursive: true });
+      mkdirSync(join(home, '.voltmind'), { recursive: true });
       writeFileSync(
-        join(home, '.gbrain', 'config.json'),
+        join(home, '.voltmind', 'config.json'),
         JSON.stringify({
           engine: 'pglite',
-          database_path: join(home, '.gbrain', 'brain.pglite'),
+          database_path: join(home, '.voltmind', 'brain.pglite'),
           embedding_dimensions: 1536,
         }) + '\n',
       );
-      // PATH shim so orchestrator phase-B execSync('gbrain jobs smoke')
+      // PATH shim so orchestrator phase-B execSync('voltmind jobs smoke')
       // and similar resolve to our shim instead of requiring a global
       // install. This matches the contract users hit in production
-      // (gbrain on PATH) without depending on `bun link` having run.
+      // (voltmind on PATH) without depending on `bun link` having run.
       const env = {
         HOME: home,
-        GBRAIN_HOME: home,
+        VOLTMIND_HOME: home,
         PATH: `${shim.binDir}:${process.env.PATH ?? ''}`,
       };
 
@@ -138,7 +138,7 @@ describe('apply-migrations on fresh PGLite (v0.36.1.x #1100)', () => {
       const applyOut = apply.stdout + apply.stderr;
       expect(applyOut).not.toMatch(/Timed out waiting for PGLite lock/);
       expect(applyOut).not.toMatch(/Phase A \(schema\) failed/);
-      expect(existsSync(join(home, '.gbrain', 'brain.pglite'))).toBe(true);
+      expect(existsSync(join(home, '.voltmind', 'brain.pglite'))).toBe(true);
 
       // Step 3: re-run is idempotent — "All migrations up to date" must exit
       // 0, not fall through to implicit non-zero (the #1062 fix path).

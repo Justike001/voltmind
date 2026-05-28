@@ -34,8 +34,8 @@ async function setupRig(): Promise<TestRig> {
   const engine = new PGLiteEngine();
   await engine.connect({ engine: 'pglite' } as never);
   await engine.initSchema();
-  const brainDir = mkdtempSync(join(tmpdir(), 'gbrain-chunk-brain-'));
-  const corpusDir = mkdtempSync(join(tmpdir(), 'gbrain-chunk-corpus-'));
+  const brainDir = mkdtempSync(join(tmpdir(), 'voltmind-chunk-brain-'));
+  const corpusDir = mkdtempSync(join(tmpdir(), 'voltmind-chunk-corpus-'));
   return {
     engine,
     brainDir,

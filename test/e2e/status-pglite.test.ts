@@ -1,5 +1,5 @@
 /**
- * E2E `gbrain status` against a real PGLite brain.
+ * E2E `voltmind status` against a real PGLite brain.
  *
  * Seeds:
  *   - 1 source row
@@ -62,7 +62,7 @@ async function seedSource(engine: PGLiteEngine, id: string) {
   );
 }
 
-describe('gbrain status E2E (PGLite)', () => {
+describe('voltmind status E2E (PGLite)', () => {
   test('JSON envelope shape includes schema_version + sync + cycle + locks + workers + queue + autopilot', async () => {
     await seedSource(engine, 'default');
     let jsonOut = '';
@@ -147,7 +147,7 @@ describe('gbrain status E2E (PGLite)', () => {
     await seedSource(engine, 'default');
     await engine.executeRaw(
       `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
-       VALUES ('gbrain-cycle', 1234, 'test-host', NOW(), NOW() + INTERVAL '30 minutes', NOW())`,
+       VALUES ('voltmind-cycle', 1234, 'test-host', NOW(), NOW() + INTERVAL '30 minutes', NOW())`,
     );
     let jsonOut = '';
     await runStatus(engine, ['--json'], {
@@ -159,7 +159,7 @@ describe('gbrain status E2E (PGLite)', () => {
     const parsed = JSON.parse(jsonOut.trim());
     expect(Array.isArray(parsed.locks)).toBe(true);
     expect(parsed.locks).toHaveLength(1);
-    expect(parsed.locks[0].id).toBe('gbrain-cycle');
+    expect(parsed.locks[0].id).toBe('voltmind-cycle');
     expect(parsed.locks[0].holder_pid).toBe(1234);
   });
 

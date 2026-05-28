@@ -1,10 +1,10 @@
 /**
- * Tests for `gbrain init --migrate-only` — the schema-only primitive used by
+ * Tests for `voltmind init --migrate-only` — the schema-only primitive used by
  * apply-migrations, the stopgap script, and the postinstall hook.
  *
  * The key contract: migrate-only MUST NOT call saveConfig. Running it on an
  * existing Postgres install must not flip it to PGLite. Running it against a
- * missing config must fail loudly with a clear "run gbrain init first" error.
+ * missing config must fail loudly with a clear "run voltmind init first" error.
  *
  * Uses child_process subprocess invocations (not in-proc) because runInit
  * calls process.exit(1) on error paths, which breaks test isolation.
@@ -22,13 +22,13 @@ let tmp: string;
 let origHome: string | undefined;
 
 function run(args: string[]): { exitCode: number; stdout: string; stderr: string } {
-  // Strip DATABASE_URL / GBRAIN_DATABASE_URL from the subprocess env. The
+  // Strip DATABASE_URL / VOLTMIND_DATABASE_URL from the subprocess env. The
   // "no config" error-path tests need loadConfig() to return null, which it
   // won't if any env var fallback is set (src/core/config.ts:30). Tests
   // that seed their own config use freshHomeWithConfig() below.
   const env = { ...process.env, HOME: tmp } as Record<string, string | undefined>;
   delete env.DATABASE_URL;
-  delete env.GBRAIN_DATABASE_URL;
+  delete env.VOLTMIND_DATABASE_URL;
   try {
     const stdout = execFileSync('bun', ['run', CLI, ...args], {
       env: env as Record<string, string>,
@@ -47,7 +47,7 @@ function run(args: string[]): { exitCode: number; stdout: string; stderr: string
 
 beforeEach(() => {
   origHome = process.env.HOME;
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-init-migrate-only-test-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-init-migrate-only-test-'));
 });
 
 afterEach(() => {
@@ -56,13 +56,13 @@ afterEach(() => {
   try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort */ }
 });
 
-describe('gbrain init --migrate-only — error paths', () => {
+describe('voltmind init --migrate-only — error paths', () => {
   test('errors with clear message when no config exists', () => {
     const result = run(['init', '--migrate-only']);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('No brain configured');
     // Config file must not have been created (no saveConfig silently)
-    expect(existsSync(join(tmp, '.gbrain', 'config.json'))).toBe(false);
+    expect(existsSync(join(tmp, '.voltmind', 'config.json'))).toBe(false);
   });
 
   test('JSON output flag emits a structured error', () => {
@@ -77,13 +77,13 @@ describe('gbrain init --migrate-only — error paths', () => {
   });
 });
 
-describe('gbrain init --migrate-only — happy path with PGLite config', () => {
+describe('voltmind init --migrate-only — happy path with PGLite config', () => {
   test('applies schema against existing PGLite config; does NOT modify config.json', () => {
     // Seed an existing PGLite config + brain file.
-    const gbrainDir = join(tmp, '.gbrain');
-    mkdirSync(gbrainDir, { recursive: true });
-    const dbPath = join(gbrainDir, 'brain.pglite');
-    const configPath = join(gbrainDir, 'config.json');
+    const voltmindDir = join(tmp, '.voltmind');
+    mkdirSync(voltmindDir, { recursive: true });
+    const dbPath = join(voltmindDir, 'brain.pglite');
+    const configPath = join(voltmindDir, 'config.json');
     const cfg = { engine: 'pglite', database_path: dbPath };
     writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
 
@@ -112,10 +112,10 @@ describe('gbrain init --migrate-only — happy path with PGLite config', () => {
   }, 30_000);
 
   test('idempotent on rerun — second call succeeds without error', () => {
-    const gbrainDir = join(tmp, '.gbrain');
-    mkdirSync(gbrainDir, { recursive: true });
-    const dbPath = join(gbrainDir, 'brain.pglite');
-    const configPath = join(gbrainDir, 'config.json');
+    const voltmindDir = join(tmp, '.voltmind');
+    mkdirSync(voltmindDir, { recursive: true });
+    const dbPath = join(voltmindDir, 'brain.pglite');
+    const configPath = join(voltmindDir, 'config.json');
     writeFileSync(configPath, JSON.stringify({ engine: 'pglite', database_path: dbPath }) + '\n');
 
     const first = run(['init', '--migrate-only', '--json']);

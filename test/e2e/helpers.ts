@@ -226,7 +226,7 @@ export const FIXTURES_PATH = FIXTURES_DIR;
  * Used by the v15→v23 chain E2E to simulate the field report's starting
  * state (schema at v15, ~100 real rows, kick off full migration). Before
  * this helper, no CLI flag or test hook existed to stop the migration
- * chain at an intermediate version — `gbrain init --migrate-only` always
+ * chain at an intermediate version — `voltmind init --migrate-only` always
  * ran to latest.
  *
  * Caveats:

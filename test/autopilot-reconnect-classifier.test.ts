@@ -35,12 +35,12 @@ describe('classifyReconnectError (#1162)', () => {
   });
 
   test('auth failure → unrecoverable (creds don\'t fix themselves)', () => {
-    expect(classifyReconnectError(new Error('password authentication failed for user "gbrain"'))).toBe('unrecoverable');
+    expect(classifyReconnectError(new Error('password authentication failed for user "voltmind"'))).toBe('unrecoverable');
     expect(classifyReconnectError(new Error('role "ghost" does not exist'))).toBe('unrecoverable');
   });
 
   test('no brain configured → unrecoverable', () => {
-    expect(classifyReconnectError(new Error('No brain configured. Run: gbrain init'))).toBe('unrecoverable');
+    expect(classifyReconnectError(new Error('No brain configured. Run: voltmind init'))).toBe('unrecoverable');
   });
 
   test('network blip → recoverable', () => {
@@ -72,12 +72,12 @@ describe('classifyReconnectError (#1162)', () => {
 
 describe('generateLaunchdPlist (#1162)', () => {
   test('plist contains ThrottleInterval=60', () => {
-    const plist = generateLaunchdPlist('/Users/me/.gbrain/autopilot-run.sh', '/Users/me');
+    const plist = generateLaunchdPlist('/Users/me/.voltmind/autopilot-run.sh', '/Users/me');
     expect(plist).toMatch(/<key>ThrottleInterval<\/key><integer>60<\/integer>/);
   });
 
   test('plist contains KeepAlive (existing behavior preserved)', () => {
-    const plist = generateLaunchdPlist('/Users/me/.gbrain/autopilot-run.sh', '/Users/me');
+    const plist = generateLaunchdPlist('/Users/me/.voltmind/autopilot-run.sh', '/Users/me');
     expect(plist).toMatch(/<key>KeepAlive<\/key><true\/>/);
   });
 
@@ -96,6 +96,6 @@ describe('generateLaunchdPlist (#1162)', () => {
 
   test('plist writes StandardErrorPath under the home dir (#1162 — error visibility)', () => {
     const plist = generateLaunchdPlist('/wrapper.sh', '/Users/alice');
-    expect(plist).toContain('/Users/alice/.gbrain/autopilot.err');
+    expect(plist).toContain('/Users/alice/.voltmind/autopilot.err');
   });
 });

@@ -6,7 +6,7 @@
  * bootstrap adds enough state for PGLITE_SCHEMA_SQL to replay safely.
  *
  * The bootstrap covers the wedge incidents from issues
- * #239/#266/#357/#366/#374/#375/#378/#396 — every gbrain release that added
+ * #239/#266/#357/#366/#374/#375/#378/#396 — every voltmind release that added
  * a column-with-index in the schema blob without a corresponding bootstrap
  * triggered the same wedge family.
  *
@@ -24,11 +24,11 @@ import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { LATEST_VERSION } from '../src/core/migrate.ts';
 
 // Tier 3 opt-out: this file tests the cold init / bootstrap path explicitly.
-// If GBRAIN_PGLITE_SNAPSHOT is set (ci:local sets it for unit shards), every
+// If VOLTMIND_PGLITE_SNAPSHOT is set (ci:local sets it for unit shards), every
 // PGlite would boot post-initSchema and these assertions ("0 tables on fresh
 // install", "bootstrap converts pre-v0.18 brain to LATEST") would fail
 // trivially. Unset for this file's process.
-delete process.env.GBRAIN_PGLITE_SNAPSHOT;
+delete process.env.VOLTMIND_PGLITE_SNAPSHOT;
 
 describe('PGLiteEngine#applyForwardReferenceBootstrap', () => {
   test('no-op on fresh install (no pages or links table)', async () => {

@@ -74,7 +74,7 @@ describe('buildReceiptFilename — 4-sha shape (codex review #3)', () => {
 });
 
 describe('buildReceiptPath', () => {
-  test('returns an absolute path under ~/.gbrain/eval-receipts', () => {
+  test('returns an absolute path under ~/.voltmind/eval-receipts', () => {
     const path = buildReceiptPath({
       corpus_sha8: 'aaaa1111',
       prompt_sha8: 'bbbb2222',

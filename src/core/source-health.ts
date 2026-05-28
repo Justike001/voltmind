@@ -1,7 +1,7 @@
 /**
  * Per-source health metrics (v0.40 D12 + D9 + D17 + D19).
  *
- * Single source of truth for `gbrain sources status` AND `gbrain doctor`'s
+ * Single source of truth for `voltmind sources status` AND `voltmind doctor`'s
  * `federation_health` check. Sharing the implementation prevents the dashboard
  * and the doctor warning from drifting.
  *
@@ -80,8 +80,8 @@ export function resolvePriorityLabel(
   if (!_warnedSources.has(sourceId)) {
     _warnedSources.add(sourceId);
     process.stderr.write(
-      `[gbrain] source "${sourceId}": invalid config.priority value ${JSON.stringify(raw)}; ` +
-      `falling back to 'normal'. Fix: gbrain sources config set ${sourceId} priority normal\n`,
+      `[voltmind] source "${sourceId}": invalid config.priority value ${JSON.stringify(raw)}; ` +
+      `falling back to 'normal'. Fix: voltmind sources config set ${sourceId} priority normal\n`,
     );
   }
   return 'normal';

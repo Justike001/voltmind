@@ -80,7 +80,7 @@ describe('R2: contradictions probe UNCHANGED when no calibration profile', () =>
       axis: 'evidence',
       confidence: 0.8,
       resolution_kind: 'manual_review' as const,
-      resolution_command: 'gbrain takes resolve N',
+      resolution_command: 'voltmind takes resolve N',
     };
     expect(tagFindingWithCalibration(finding, null)).toBeNull();
   });

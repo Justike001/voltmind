@@ -1,5 +1,5 @@
 /**
- * v0.32 — `gbrain recall` extensions: --since-last-run + --pending + --rollup
+ * v0.32 — `voltmind recall` extensions: --since-last-run + --pending + --rollup
  * + --watch + thin-client routing. PGLite-backed unit tests (no DATABASE_URL,
  * no API keys). Canonical block pattern from CLAUDE.md.
  *
@@ -30,10 +30,10 @@ import { dirname, basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Allocate a unique temp dir per test (cross-test safe; each test runs its
-// body inside withEnv({ GBRAIN_HOME: tmpHome }) so process.env mutations are
+// body inside withEnv({ VOLTMIND_HOME: tmpHome }) so process.env mutations are
 // scoped + restored via try/finally instead of leaking across files).
 function makeTmpHome(): string {
-  return join(tmpdir(), `gbrain-recall-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  return join(tmpdir(), `voltmind-recall-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
 }
 
 let engine: PGLiteEngine;
@@ -113,7 +113,7 @@ describe('recall-cursor-state file helper', () => {
   test('missing file returns null (first-run case)', async () => {
     const tmpHome = makeTmpHome();
     mkdirSync(tmpHome, { recursive: true });
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       expect(readCursor('default', 'briefing')).toBeNull();
       expect(readCursor('default', 'watch')).toBeNull();
     });
@@ -122,7 +122,7 @@ describe('recall-cursor-state file helper', () => {
   test('round-trip: write then read returns the same instant (ms precision)', async () => {
     const tmpHome = makeTmpHome();
     mkdirSync(tmpHome, { recursive: true });
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const t = new Date('2026-05-10T14:30:00.000Z');
       writeCursor('default', t, 'briefing');
       const read = readCursor('default', 'briefing');
@@ -134,7 +134,7 @@ describe('recall-cursor-state file helper', () => {
   test('briefing cursor and watch cursor are separate files (Codex round 2 #8 — operator quitting watch must not clobber briefing position)', async () => {
     const tmpHome = makeTmpHome();
     mkdirSync(tmpHome, { recursive: true });
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const tBriefing = new Date('2026-05-10T08:00:00.000Z');
       const tWatch = new Date('2026-05-10T16:00:00.000Z');
       writeCursor('default', tBriefing, 'briefing');
@@ -156,7 +156,7 @@ describe('recall-cursor-state file helper', () => {
   test('corrupt JSON returns null + leaves the file in place for diagnosis', async () => {
     const tmpHome = makeTmpHome();
     mkdirSync(tmpHome, { recursive: true });
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const path = _cursorPathForTests('default', 'briefing');
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, '{not valid json', { mode: 0o600 });
@@ -168,7 +168,7 @@ describe('recall-cursor-state file helper', () => {
   test('future-shifted timestamp returns null (clock-skew sanity check)', async () => {
     const tmpHome = makeTmpHome();
     mkdirSync(tmpHome, { recursive: true });
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const path = _cursorPathForTests('default', 'briefing');
       mkdirSync(dirname(path), { recursive: true });
       const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
@@ -184,7 +184,7 @@ describe('recall-cursor-state file helper', () => {
   test('wrong schema_version returns null', async () => {
     const tmpHome = makeTmpHome();
     mkdirSync(tmpHome, { recursive: true });
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const path = _cursorPathForTests('default', 'briefing');
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(
@@ -199,7 +199,7 @@ describe('recall-cursor-state file helper', () => {
   test('atomic write: per-call tmp filename uses pid+random suffix so concurrent processes do not clobber each other (Codex round 1 #7 regression)', async () => {
     const tmpHome = makeTmpHome();
     mkdirSync(tmpHome, { recursive: true });
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const dir = dirname(_cursorPathForTests('default', 'briefing'));
       mkdirSync(dir, { recursive: true });
       writeCursor('default', new Date(), 'briefing');
@@ -213,7 +213,7 @@ describe('recall-cursor-state file helper', () => {
   test('write to non-writable parent is non-fatal (best-effort warn + return)', async () => {
     const tmpHome = makeTmpHome();
     mkdirSync(tmpHome, { recursive: true });
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const path = _cursorPathForTests('blocked', 'briefing');
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(dirname(path) + '-as-file', 'not a dir', { mode: 0o600 });
@@ -224,7 +224,7 @@ describe('recall-cursor-state file helper', () => {
   test('stable file contents: schema_version + last_run_iso in JSON', async () => {
     const tmpHome = makeTmpHome();
     mkdirSync(tmpHome, { recursive: true });
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const t = new Date('2026-01-15T12:00:00.000Z');
       writeCursor('default', t, 'briefing');
       const path = _cursorPathForTests('default', 'briefing');
@@ -237,7 +237,7 @@ describe('recall-cursor-state file helper', () => {
   test('source slug used verbatim in filename (so kebab-case slugs round-trip)', async () => {
     const tmpHome = makeTmpHome();
     mkdirSync(tmpHome, { recursive: true });
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       writeCursor('my-team', new Date(), 'briefing');
       writeCursor('my-team', new Date(), 'watch');
       const briefing = _cursorPathForTests('my-team', 'briefing');
@@ -270,7 +270,7 @@ describe('recall MCP op include_pending output field (round-trip)', () => {
 
 describe('briefing skill invocation surface', () => {
   // The briefing skill calls:
-  //   gbrain recall --since-last-run --supersessions --pending --rollup --json
+  //   voltmind recall --since-last-run --supersessions --pending --rollup --json
   //
   // The engine surfaces this combo exercises are:
   //   listSupersessions (with since cutoff)

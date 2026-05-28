@@ -42,8 +42,8 @@ beforeEach(async () => {
   // Per-test cleanup: truncate the tables this suite mutates.
   await engine.executeRaw('TRUNCATE TABLE facts RESTART IDENTITY CASCADE');
   await engine.executeRaw('DELETE FROM pages');
-  // v0.40: phantom redirect now uses per-source lock id (gbrain-sync:<source>).
-  await engine.executeRaw(`DELETE FROM gbrain_cycle_locks WHERE id='gbrain-sync:default'`);
+  // v0.40: phantom redirect now uses per-source lock id (voltmind-sync:<source>).
+  await engine.executeRaw(`DELETE FROM gbrain_cycle_locks WHERE id='voltmind-sync:default'`);
 });
 
 function tempBrain(): string {
@@ -63,11 +63,11 @@ const FACT_FENCE = (rows: string): string => `# alice
 
 ## Facts
 
-<!--- gbrain:facts:begin -->
+<!--- voltmind:facts:begin -->
 | # | claim | kind | confidence | visibility | notability | valid_from | valid_until | source | context |
 |---|-------|------|------------|------------|------------|------------|-------------|--------|---------|
 ${rows}
-<!--- gbrain:facts:end -->
+<!--- voltmind:facts:end -->
 `;
 
 async function seedPage(slug: string, body: string, type = 'person'): Promise<void> {
@@ -97,7 +97,7 @@ describeMaybe('phantom-redirect E2E (Postgres)', () => {
       }
 
       const engine = getEngine();
-      await withEnv({ GBRAIN_PHANTOM_REDIRECT_LIMIT: '50' }, async () => {
+      await withEnv({ VOLTMIND_PHANTOM_REDIRECT_LIMIT: '50' }, async () => {
         const result = await runExtractFacts(engine, {
           sourceId: 'default',
           brainDir,
@@ -150,16 +150,16 @@ describeMaybe('phantom-redirect E2E (Postgres)', () => {
       writeMd(brainDir, 'alice', STUB);
 
       const engine = getEngine();
-      // Take the gbrain-sync lock manually (simulates concurrent gbrain sync).
+      // Take the voltmind-sync lock manually (simulates concurrent voltmind sync).
       // tryAcquireDbLock uses pid from the current process; we acquire here,
       // then run runExtractFacts in the same process — the second acquire
       // would still see the row as held (different "logical" holder via the
       // pid check, but the TTL is what really gates re-acquire). Override
       // by inserting a row with a different pid + future TTL.
-      // v0.40 D16: phantom acquires per-source lock; default source = gbrain-sync:default.
+      // v0.40 D16: phantom acquires per-source lock; default source = voltmind-sync:default.
       await engine.executeRaw(
         `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
-         VALUES ('gbrain-sync:default', 9999, 'simulated-other-host', now(), now() + interval '1 hour')
+         VALUES ('voltmind-sync:default', 9999, 'simulated-other-host', now(), now() + interval '1 hour')
          ON CONFLICT (id) DO UPDATE SET holder_pid=9999, ttl_expires_at=now() + interval '1 hour'`,
       );
 
@@ -183,8 +183,8 @@ describeMaybe('phantom-redirect E2E (Postgres)', () => {
       expect(existsSync(join(brainDir, 'alice.md'))).toBe(true);
 
       // Cleanup
-      // v0.40: phantom redirect now uses per-source lock id (gbrain-sync:<source>).
-  await engine.executeRaw(`DELETE FROM gbrain_cycle_locks WHERE id='gbrain-sync:default'`);
+      // v0.40: phantom redirect now uses per-source lock id (voltmind-sync:<source>).
+  await engine.executeRaw(`DELETE FROM gbrain_cycle_locks WHERE id='voltmind-sync:default'`);
     } finally {
       rmSync(brainDir, { recursive: true, force: true });
     }

@@ -9,7 +9,7 @@
 //   - Each pack registered in BUNDLED (loadPackManifestByName resolves)
 //   - Each pack declares the expected page_types, phases, calibration_domains
 //   - extends chain resolves through registry without depth error
-//   - gbrain-everything unions all three lens packs' contributions
+//   - voltmind-everything unions all three lens packs' contributions
 //   - Calibration domain aggregator is the closed AggregatorKind enum on every entry
 
 import { describe, test, expect } from 'bun:test';
@@ -24,10 +24,10 @@ import {
 } from '../src/core/schema-pack/index.ts';
 
 const PACK_NAMES = [
-  'gbrain-creator',
-  'gbrain-investor',
-  'gbrain-engineer',
-  'gbrain-everything',
+  'voltmind-creator',
+  'voltmind-investor',
+  'voltmind-engineer',
+  'voltmind-everything',
 ] as const;
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -49,7 +49,7 @@ describe('v0.41 T4: all 4 bundled lens packs parse cleanly', () => {
       const pack = loadPack(name);
       expect(pack.name).toBe(name);
       expect(pack.version).toMatch(/^\d+\.\d+\.\d+$/);
-      expect(pack.api_version).toBe('gbrain-schema-pack-v1');
+      expect(pack.api_version).toBe('voltmind-schema-pack-v1');
     });
   }
 });
@@ -66,11 +66,11 @@ describe('v0.41 T4: bundled registry includes lens packs', () => {
   });
 });
 
-describe('v0.41 T4: gbrain-creator manifest shape', () => {
-  const pack = loadPack('gbrain-creator');
+describe('v0.41 T4: voltmind-creator manifest shape', () => {
+  const pack = loadPack('voltmind-creator');
 
-  test('extends gbrain-base', () => {
-    expect(pack.extends).toBe('gbrain-base');
+  test('extends voltmind-base', () => {
+    expect(pack.extends).toBe('voltmind-base');
   });
 
   test('declares atom page type (NEW to base)', () => {
@@ -102,12 +102,12 @@ describe('v0.41 T4: gbrain-creator manifest shape', () => {
   });
 });
 
-describe('v0.41 T4: gbrain-investor manifest shape', () => {
-  const pack = loadPack('gbrain-investor');
+describe('v0.41 T4: voltmind-investor manifest shape', () => {
+  const pack = loadPack('voltmind-investor');
 
-  test('extends gbrain-base + borrows deal/person/company/yc', () => {
-    expect(pack.extends).toBe('gbrain-base');
-    const borrowEntry = pack.borrow_from.find((b) => b.pack === 'gbrain-base');
+  test('extends voltmind-base + borrows deal/person/company/yc', () => {
+    expect(pack.extends).toBe('voltmind-base');
+    const borrowEntry = pack.borrow_from.find((b) => b.pack === 'voltmind-base');
     expect(borrowEntry).toBeDefined();
     expect(borrowEntry?.types).toEqual(expect.arrayContaining(['deal', 'person', 'company', 'yc']));
   });
@@ -149,12 +149,12 @@ describe('v0.41 T4: gbrain-investor manifest shape', () => {
   });
 });
 
-describe('v0.41 T4: gbrain-engineer manifest shape', () => {
-  const pack = loadPack('gbrain-engineer');
+describe('v0.41 T4: voltmind-engineer manifest shape', () => {
+  const pack = loadPack('voltmind-engineer');
 
-  test('extends gbrain-base + borrows code/project', () => {
-    expect(pack.extends).toBe('gbrain-base');
-    const borrowEntry = pack.borrow_from.find((b) => b.pack === 'gbrain-base');
+  test('extends voltmind-base + borrows code/project', () => {
+    expect(pack.extends).toBe('voltmind-base');
+    const borrowEntry = pack.borrow_from.find((b) => b.pack === 'voltmind-base');
     expect(borrowEntry?.types).toEqual(expect.arrayContaining(['code', 'project']));
   });
 
@@ -185,22 +185,22 @@ describe('v0.41 T4: gbrain-engineer manifest shape', () => {
   });
 });
 
-describe('v0.41 T4: gbrain-everything meta-pack shape', () => {
-  const pack = loadPack('gbrain-everything');
+describe('v0.41 T4: voltmind-everything meta-pack shape', () => {
+  const pack = loadPack('voltmind-everything');
 
-  test('extends gbrain-investor (chain head)', () => {
-    expect(pack.extends).toBe('gbrain-investor');
+  test('extends voltmind-investor (chain head)', () => {
+    expect(pack.extends).toBe('voltmind-investor');
   });
 
-  test('borrows from gbrain-creator + gbrain-engineer', () => {
+  test('borrows from voltmind-creator + voltmind-engineer', () => {
     const borrowedPacks = pack.borrow_from.map((b) => b.pack).sort();
-    expect(borrowedPacks).toEqual(['gbrain-creator', 'gbrain-engineer']);
+    expect(borrowedPacks).toEqual(['voltmind-creator', 'voltmind-engineer']);
   });
 
   test('borrows atom from creator and learning from engineer', () => {
-    const creatorBorrow = pack.borrow_from.find((b) => b.pack === 'gbrain-creator');
+    const creatorBorrow = pack.borrow_from.find((b) => b.pack === 'voltmind-creator');
     expect(creatorBorrow?.types).toContain('atom');
-    const engineerBorrow = pack.borrow_from.find((b) => b.pack === 'gbrain-engineer');
+    const engineerBorrow = pack.borrow_from.find((b) => b.pack === 'voltmind-engineer');
     expect(engineerBorrow?.types).toContain('learning');
   });
 

@@ -86,27 +86,27 @@ if [ "$DIFF" = "1" ]; then
 fi
 
 # Pre-flight: postgres host ports for 4 shards. Defaults to 5434-5437 (avoid
-# 5432 manual gbrain-test-pg, 5433 commonly held by sibling projects).
-# GBRAIN_CI_PG_PORT defines BASE; shards take BASE..BASE+3.
-PG_PORT_BASE="${GBRAIN_CI_PG_PORT:-5434}"
+# 5432 manual voltmind-test-pg, 5433 commonly held by sibling projects).
+# VOLTMIND_CI_PG_PORT defines BASE; shards take BASE..BASE+3.
+PG_PORT_BASE="${VOLTMIND_CI_PG_PORT:-5434}"
 for shard in 1 2 3 4; do
   port=$((PG_PORT_BASE + shard - 1))
   PORT_OWNER=$(docker ps --filter "publish=$port" --format "{{.Names}}" | head -1)
   if [ -n "$PORT_OWNER" ]; then
     echo "[ci-local] ERROR: host port $port (shard $shard) is already used by docker container '$PORT_OWNER'." >&2
-    echo "[ci-local] Either stop that container or run with: GBRAIN_CI_PG_PORT=NNNN bun run ci:local" >&2
+    echo "[ci-local] Either stop that container or run with: VOLTMIND_CI_PG_PORT=NNNN bun run ci:local" >&2
     exit 1
   fi
   if lsof -iTCP:"$port" -sTCP:LISTEN -P -n >/dev/null 2>&1; then
     echo "[ci-local] ERROR: host port $port (shard $shard) is held by a non-docker process." >&2
-    echo "[ci-local] Run with: GBRAIN_CI_PG_PORT=NNNN bun run ci:local" >&2
+    echo "[ci-local] Run with: VOLTMIND_CI_PG_PORT=NNNN bun run ci:local" >&2
     exit 1
   fi
 done
-export GBRAIN_CI_PG_PORT="$PG_PORT_BASE"
-export GBRAIN_CI_PG_PORT_2=$((PG_PORT_BASE + 1))
-export GBRAIN_CI_PG_PORT_3=$((PG_PORT_BASE + 2))
-export GBRAIN_CI_PG_PORT_4=$((PG_PORT_BASE + 3))
+export VOLTMIND_CI_PG_PORT="$PG_PORT_BASE"
+export VOLTMIND_CI_PG_PORT_2=$((PG_PORT_BASE + 1))
+export VOLTMIND_CI_PG_PORT_3=$((PG_PORT_BASE + 2))
+export VOLTMIND_CI_PG_PORT_4=$((PG_PORT_BASE + 3))
 
 # Step 0: gitleaks on the host (no docker, no postgres, no bun needed).
 # Mirrors test.yml's separate gitleaks job. Fail loudly if not installed.
@@ -236,7 +236,7 @@ if [ ! -f test/fixtures/pglite-snapshot.tar ] || [ ! -f test/fixtures/pglite-sna
 else
   echo \"[runner] snapshot fixture exists; engine will validate hash at load time\"
 fi
-export GBRAIN_PGLITE_SNAPSHOT=test/fixtures/pglite-snapshot.tar
+export VOLTMIND_PGLITE_SNAPSHOT=test/fixtures/pglite-snapshot.tar
 echo \"[runner] resolving E2E file selection (--diff aware)\"
 ${DIFF_E2E_PREP}
 mkdir -p /tmp/shard-logs

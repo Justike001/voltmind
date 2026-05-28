@@ -38,7 +38,7 @@ function buildPackFixture(root: string, opts: FixtureOptions = {}): SkillpackMan
     author: 'Test Author',
     license: 'MIT',
     homepage: 'https://example.com/sample-pack',
-    gbrain_min_version: '0.30.0',
+    voltmind_min_version: '0.30.0',
     skills: ['skills/sample-skill'],
     ...opts.manifestOverrides,
   };
@@ -57,7 +57,7 @@ function buildPackFixture(root: string, opts: FixtureOptions = {}): SkillpackMan
     mkdirSync(join(root, 'runbooks'), { recursive: true });
     writeFileSync(
       join(root, 'runbooks/bootstrap.md'),
-      '1. agent: gbrain put_page wiki/example\n2. show user: "Pack installed."\n',
+      '1. agent: voltmind put_page wiki/example\n2. show user: "Pack installed."\n',
     );
   }
   return manifest;
@@ -166,14 +166,14 @@ describe('runScaffoldThirdParty — happy path', () => {
 
     expect(result.bootstrap.shown).toBe(true);
     expect(result.bootstrap.text).toContain('BOOTSTRAP STEPS');
-    expect(result.bootstrap.text).toContain('agent: gbrain put_page wiki/example');
+    expect(result.bootstrap.text).toContain('agent: voltmind put_page wiki/example');
   });
 });
 
-describe('runScaffoldThirdParty — gbrain version gate', () => {
-  test('rejects when current version is below gbrain_min_version', async () => {
+describe('runScaffoldThirdParty — voltmind version gate', () => {
+  test('rejects when current version is below voltmind_min_version', async () => {
     freshSandbox();
-    buildPackFixture(packDir, { manifestOverrides: { gbrain_min_version: '99.0.0' } });
+    buildPackFixture(packDir, { manifestOverrides: { voltmind_min_version: '99.0.0' } });
     const resolved = resolveSource(packDir);
 
     try {
@@ -190,7 +190,7 @@ describe('runScaffoldThirdParty — gbrain version gate', () => {
 
   test('accepts exact-version match', async () => {
     freshSandbox();
-    buildPackFixture(packDir, { manifestOverrides: { gbrain_min_version: '0.36.0' } });
+    buildPackFixture(packDir, { manifestOverrides: { voltmind_min_version: '0.36.0' } });
     const resolved = resolveSource(packDir);
 
     const r = await runScaffoldThirdParty(
@@ -202,7 +202,7 @@ describe('runScaffoldThirdParty — gbrain version gate', () => {
 
   test('accepts current > min', async () => {
     freshSandbox();
-    buildPackFixture(packDir, { manifestOverrides: { gbrain_min_version: '0.36.0' } });
+    buildPackFixture(packDir, { manifestOverrides: { voltmind_min_version: '0.36.0' } });
     const resolved = resolveSource(packDir);
 
     const r = await runScaffoldThirdParty(

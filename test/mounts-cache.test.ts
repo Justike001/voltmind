@@ -232,7 +232,7 @@ describe('renderResolverMarkdown', () => {
     const mountSkills = makeSkillsDir([{ name: 'ingest', trigger: 'media ingest' }]);
     const composed = composeResolvers(hostSkills, [makeMount('yc-media', mountSkills)]);
     const md = renderResolverMarkdown(composed);
-    expect(md).toContain('# GBrain Skill Resolver (aggregated)');
+    expect(md).toContain('# VoltMind Skill Resolver (aggregated)');
     expect(md).toContain('Auto-generated');
     expect(md).toContain('| Trigger | Skill | Brain |');
     expect(md).toContain('| search');
@@ -267,7 +267,7 @@ describe('renderManifestJson', () => {
     const composed = composeManifests(hostSkills, []);
     const json = renderManifestJson(composed);
     const parsed = JSON.parse(json);
-    expect(parsed.generated_by).toBe('gbrain mounts');
+    expect(parsed.generated_by).toBe('voltmind mounts');
     expect(parsed.skills).toHaveLength(1);
     expect(parsed.skills[0].name).toBe('query');
     expect(parsed.skills[0].brain).toBe(HOST_BRAIN_ID);
@@ -282,7 +282,7 @@ describe('writeMountsCache + clearMountsCache', () => {
     expect(existsSync(resolverPath)).toBe(true);
     expect(existsSync(manifestPath)).toBe(true);
     const md = readFileSync(resolverPath, 'utf-8');
-    expect(md).toContain('# GBrain Skill Resolver (aggregated)');
+    expect(md).toContain('# VoltMind Skill Resolver (aggregated)');
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
     expect(manifest.skills).toHaveLength(1);
   });

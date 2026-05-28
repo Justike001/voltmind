@@ -1,7 +1,7 @@
 /**
  * Tests for resolveTrustProxy() in src/commands/serve-http.ts.
  *
- * v0.41.3 (T8): GBRAIN_HTTP_TRUST_PROXY env var replaces the pre-fix hardcoded
+ * v0.41.3 (T8): VOLTMIND_HTTP_TRUST_PROXY env var replaces the pre-fix hardcoded
  * `app.set('trust proxy', 'loopback')`. The Express trust-proxy value
  * determines whether X-Forwarded-For is honored (rate limit IP correctness)
  * and whether req.secure detects HTTPS termination at a proxy.
@@ -38,7 +38,7 @@ describe('resolveTrustProxy', () => {
     expect(resolveTrustProxy('true')).toBe(1);
   });
 
-  test('"2" → 2 (trust two hops — Cloudflare → nginx → gbrain)', () => {
+  test('"2" → 2 (trust two hops — Cloudflare → nginx → voltmind)', () => {
     expect(resolveTrustProxy('2')).toBe(2);
   });
 

@@ -1,8 +1,8 @@
 import { describe, test, expect } from 'bun:test';
 import { withEnv } from './with-env.ts';
 
-const KEY = 'GBRAIN_WITH_ENV_TEST_KEY';
-const KEY2 = 'GBRAIN_WITH_ENV_TEST_KEY2';
+const KEY = 'VOLTMIND_WITH_ENV_TEST_KEY';
+const KEY2 = 'VOLTMIND_WITH_ENV_TEST_KEY2';
 
 describe('withEnv', () => {
   test('sync callback: sets value, runs, restores prior value', async () => {

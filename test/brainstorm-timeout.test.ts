@@ -4,7 +4,7 @@
  * Pre-fix: brainstorm + lsd silently produced no output on PgBouncer
  * transaction-mode environments when listPrefixSampledPages or hybrid
  * search exceeded the statement timeout. The error surfaced as a
- * generic 'gbrain: unknown error' fallback, consuming the cost-preview
+ * generic 'voltmind: unknown error' fallback, consuming the cost-preview
  * wait and producing zero ideas.
  *
  * Per CV11 + T4: orchestrator-level wrap classifies any SQLSTATE 57014

@@ -2,7 +2,7 @@
 //
 // Pins the contract that `inferLinkTypeFromPack` consults pack-declared
 // verbs WITHOUT replacing legacy in-code inferLinkType. Two scenarios:
-//   1. Legacy gbrain-base routes (founded/invested_in/advises/works_at)
+//   1. Legacy voltmind-base routes (founded/invested_in/advises/works_at)
 //      stay reachable via the existing inferLinkType call.
 //   2. User packs can ADD new verbs via link_types[].inference.regex;
 //      the new verb resolves on the pack-aware path before the legacy
@@ -20,7 +20,7 @@ import { inferLinkType } from '../src/core/link-extraction.ts';
 describe('inferLinkTypeFromPack (T7b)', () => {
   const minimalPack = (link_types: Array<Record<string, unknown>>) =>
     parseSchemaPackManifest({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'test',
       version: '0.1.0',
       extends: null,
@@ -99,7 +99,7 @@ describe('inferLinkTypeFromPack (T7b)', () => {
 describe('frontmatterLinkTypeFromPack (T7b)', () => {
   test('person:company → works_at via pack declaration', () => {
     const pack = parseSchemaPackManifest({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'test',
       version: '0.1.0',
       extends: null,
@@ -122,7 +122,7 @@ describe('frontmatterLinkTypeFromPack (T7b)', () => {
 
   test('empty frontmatter_links returns null for every field', () => {
     const pack = parseSchemaPackManifest({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'test',
       version: '0.1.0',
       extends: null,

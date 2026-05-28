@@ -10,7 +10,7 @@
 //      semantics against future drift).
 //   5. Pre-existing 17 core phases ALWAYS run regardless of active pack —
 //      only the 2 new lens-pack phases are gated (source-shape regression).
-//   6. borrow_from does NOT borrow phases — gbrain-everything explicitly
+//   6. borrow_from does NOT borrow phases — voltmind-everything explicitly
 //      re-declares creator's phases per D4-B (verified in T4 test;
 //      cross-referenced here as a pinning hint via source grep).
 //
@@ -116,7 +116,7 @@ describe('v0.41 T9 R-GATE: orchestrator dispatch wires the pack-gate', () => {
     // Source-pin: the helper reads `resolved.manifest.phases` — D4-B
     // says phases are local to the declaring manifest. Future drift
     // that adds extends-chain merging would silently change semantics
-    // for users who extend gbrain-creator expecting inheritance; this
+    // for users who extend voltmind-creator expecting inheritance; this
     // assertion catches it.
     expect(cycleTsSrc).toContain('resolved.manifest.phases');
   });
@@ -136,7 +136,7 @@ describe('v0.41 T9 R-GATE: orchestrator dispatch wires the pack-gate', () => {
 
 describe('v0.41 T9 R-GATE: pre-existing 17 core phases always run', () => {
   // The IRON RULE that the wave depends on: pack-gating is ADDITIVE,
-  // not subtractive. A user on gbrain-base (which declares phases:[])
+  // not subtractive. A user on voltmind-base (which declares phases:[])
   // must still see all 17 pre-existing phases run as before. The static
   // assertion: only the 2 new lens-pack phases reference packDeclaresPhase
   // in the dispatch.

@@ -24,11 +24,11 @@ let tmpDir: string;
 
 function fakeManifest(name: string, opts: { extends?: string; version?: string } = {}): SchemaPackManifest {
   return {
-    api_version: 'gbrain-schema-pack-v1',
+    api_version: 'voltmind-schema-pack-v1',
     name,
     version: opts.version ?? '1.0.0',
     description: '',
-    gbrain_min_version: '0.38.0',
+    voltmind_min_version: '0.38.0',
     extends: opts.extends ?? null,
     borrow_from: [],
     page_types: [
@@ -51,7 +51,7 @@ function fakeManifest(name: string, opts: { extends?: string; version?: string }
 
 beforeEach(() => {
   _resetPackCacheForTests();
-  tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-registry-test-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-registry-test-'));
 });
 
 afterEach(() => {
@@ -138,8 +138,8 @@ describe('tryCachedPack — TTL gate', () => {
     expect(hit?.manifest.name).toBe('foo');
   });
 
-  it('respects GBRAIN_PACK_STAT_TTL_MS env override', async () => {
-    await withEnv({ GBRAIN_PACK_STAT_TTL_MS: '0' }, async () => {
+  it('respects VOLTMIND_PACK_STAT_TTL_MS env override', async () => {
+    await withEnv({ VOLTMIND_PACK_STAT_TTL_MS: '0' }, async () => {
       // Cache + a file snapshot on disk.
       const packPath = join(tmpDir, 'foo-pack.yaml');
       writeFileSync(packPath, 'placeholder', 'utf-8');
@@ -158,7 +158,7 @@ describe('tryCachedPack — TTL gate', () => {
   });
 
   it('falls back to default TTL when env override is invalid', async () => {
-    await withEnv({ GBRAIN_PACK_STAT_TTL_MS: 'not-a-number' }, async () => {
+    await withEnv({ VOLTMIND_PACK_STAT_TTL_MS: 'not-a-number' }, async () => {
       // Default TTL is 1000ms; just check it doesn't crash + returns hit.
       const m = fakeManifest('foo');
       await resolvePack(m, async () => { throw new Error('no parent'); });
@@ -169,7 +169,7 @@ describe('tryCachedPack — TTL gate', () => {
 
 describe('stat-snapshot cross-process invalidation (D11)', () => {
   it('detects mtime change on the pack file and invalidates', async () => {
-    await withEnv({ GBRAIN_PACK_STAT_TTL_MS: '0' }, async () => {
+    await withEnv({ VOLTMIND_PACK_STAT_TTL_MS: '0' }, async () => {
       const packPath = join(tmpDir, 'p.yaml');
       writeFileSync(packPath, 'v1', 'utf-8');
       const m = fakeManifest('p');
@@ -188,7 +188,7 @@ describe('stat-snapshot cross-process invalidation (D11)', () => {
   });
 
   it('detects file deletion and evicts (cross-process delete)', async () => {
-    await withEnv({ GBRAIN_PACK_STAT_TTL_MS: '0' }, async () => {
+    await withEnv({ VOLTMIND_PACK_STAT_TTL_MS: '0' }, async () => {
       const packPath = join(tmpDir, 'p.yaml');
       writeFileSync(packPath, 'v1', 'utf-8');
       const m = fakeManifest('p');
@@ -203,7 +203,7 @@ describe('stat-snapshot cross-process invalidation (D11)', () => {
   });
 
   it('cascades when parent file mtime changes (codex C6 fix at file level)', async () => {
-    await withEnv({ GBRAIN_PACK_STAT_TTL_MS: '0' }, async () => {
+    await withEnv({ VOLTMIND_PACK_STAT_TTL_MS: '0' }, async () => {
       const parentPath = join(tmpDir, 'parent.yaml');
       const childPath = join(tmpDir, 'child.yaml');
       writeFileSync(parentPath, 'parent v1', 'utf-8');

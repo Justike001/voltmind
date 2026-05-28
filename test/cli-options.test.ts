@@ -105,29 +105,29 @@ describe('getCliOptions / setCliOptions singleton', () => {
 describe('cli.ts global-flag stripping (integration)', () => {
   const CLI = join(import.meta.dir, '..', 'src', 'cli.ts');
 
-  test('gbrain --progress-json --version works (global flag stripped before dispatch)', () => {
+  test('voltmind --progress-json --version works (global flag stripped before dispatch)', () => {
     const res = spawnSync('bun', [CLI, '--progress-json', '--version'], {
       encoding: 'utf-8',
       env: { ...process.env, NO_COLOR: '1' },
     });
     expect(res.status).toBe(0);
-    expect(res.stdout).toContain('gbrain ');
+    expect(res.stdout).toContain('voltmind ');
   });
 
-  test('gbrain --quiet --progress-interval=500 version works (flags interleaved, all stripped)', () => {
+  test('voltmind --quiet --progress-interval=500 version works (flags interleaved, all stripped)', () => {
     const res = spawnSync('bun', [CLI, '--quiet', '--progress-interval=500', 'version'], {
       encoding: 'utf-8',
       env: { ...process.env, NO_COLOR: '1' },
     });
     expect(res.status).toBe(0);
-    expect(res.stdout).toContain('gbrain ');
+    expect(res.stdout).toContain('voltmind ');
   });
 });
 
 describe('CLI integration: progress streams to the right channel', () => {
   const CLI = join(import.meta.dir, '..', 'src', 'cli.ts');
 
-  test('gbrain --progress-json --version emits only the version on stdout', () => {
+  test('voltmind --progress-json --version emits only the version on stdout', () => {
     // `version` is a single-shot command that goes through the main()
     // dispatch path. We want to confirm --progress-json doesn't force
     // stray progress onto stdout for commands that don't use a reporter.
@@ -136,12 +136,12 @@ describe('CLI integration: progress streams to the right channel', () => {
       env: { ...process.env, NO_COLOR: '1' },
     });
     expect(res.status).toBe(0);
-    expect(res.stdout.trim()).toMatch(/^gbrain /);
+    expect(res.stdout.trim()).toMatch(/^voltmind /);
     // No JSON progress object should end up on stdout.
     expect(res.stdout).not.toContain('"event":"start"');
   });
 
-  test('gbrain --quiet skillpack-check returns exit code with no stdout', () => {
+  test('voltmind --quiet skillpack-check returns exit code with no stdout', () => {
     // Regression guard for the flag-collision that skillpack-check hit
     // when --quiet briefly passed through argv. Now it reads the singleton.
     const res = spawnSync('bun', [CLI, '--quiet', 'skillpack-check'], {

@@ -1,4 +1,4 @@
-// v0.39 T3 — gbrain schema suggest: LLM-powered runSuggest library.
+// v0.39 T3 — voltmind schema suggest: LLM-powered runSuggest library.
 //
 // Layers refinement on top of T2's `runDetect` heuristic clustering.
 // Single library function called by T3 CLI, T12 dream-cycle phase,
@@ -124,7 +124,7 @@ export async function runSuggest(
   suggestions.sort((a, b) => b.confidence - a.confidence);
 
   if (detected.untyped_pages > 0 && suggestions.length === 0) {
-    notes.push(`${detected.untyped_pages} untyped pages detected but no suggestions produced — run \`gbrain schema review-candidates --json\` to see the disk-derived candidate set.`);
+    notes.push(`${detected.untyped_pages} untyped pages detected but no suggestions produced — run \`voltmind schema review-candidates --json\` to see the disk-derived candidate set.`);
   }
 
   return { suggestions, notes, source_id: sourceId };

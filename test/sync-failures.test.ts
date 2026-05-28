@@ -6,11 +6,11 @@
  * because it was behind the bookmark. Silent data loss.
  *
  * After the fix:
- *   - failures append to ~/.gbrain/sync-failures.jsonl (with dedup)
+ *   - failures append to ~/.voltmind/sync-failures.jsonl (with dedup)
  *   - incremental + full-sync + import git-continuity paths gate the
  *     sync.last_commit advance on "no failures"
- *   - `gbrain sync --skip-failed` acknowledges the current set
- *   - `gbrain doctor` surfaces unacknowledged failures
+ *   - `voltmind sync --skip-failed` acknowledges the current set
+ *   - `voltmind doctor` surfaces unacknowledged failures
  *
  * This suite exercises the helper + the dedup behavior. The full CLI
  * round-trip is covered by E2E tests.
@@ -21,12 +21,12 @@ import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'fs
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-// Point HOME at a tmpdir so we don't stomp the real ~/.gbrain/sync-failures.jsonl
+// Point HOME at a tmpdir so we don't stomp the real ~/.voltmind/sync-failures.jsonl
 let tmpHome: string;
 const originalHome = process.env.HOME;
 
 beforeEach(async () => {
-  tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-sync-failures-'));
+  tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-sync-failures-'));
   process.env.HOME = tmpHome;
   // Belt-and-suspenders: explicitly clear the jsonl at the resolved path.
   const { syncFailuresPath } = await import('../src/core/sync.ts');
@@ -127,7 +127,7 @@ describe('Bug 9 — doctor surfaces sync failures', () => {
     const source = await Bun.file(new URL('../src/commands/doctor.ts', import.meta.url)).text();
     expect(source).toContain('sync_failures');
     expect(source).toContain('unacknowledgedSyncFailures');
-    expect(source).toContain("'gbrain sync --skip-failed'");
+    expect(source).toContain("'voltmind sync --skip-failed'");
   });
 });
 
@@ -143,7 +143,7 @@ describe('Bug 9 — sync.ts CLI flag wiring', () => {
   test('runSync acks pre-existing unacked failures up-front when --skip-failed is set', async () => {
     // Without this gate, a user who fixes their broken YAML, re-runs sync
     // (which finds nothing new and prints "Already up to date."), and then
-    // runs `gbrain sync --skip-failed` to clear the log gets a no-op —
+    // runs `voltmind sync --skip-failed` to clear the log gets a no-op —
     // performSync's inner ack path only fires when failedFiles.length > 0
     // in the current run. This test pins the up-front ack at the top of
     // runSync so the flag means "ack whatever is currently flagged".
@@ -387,7 +387,7 @@ describe('classifyErrorCode — canonical message coverage', () => {
 });
 
 // acknowledgeSyncFailures backfills `code` on legacy entries that were
-// recorded before the code field existed (~/.gbrain/sync-failures.jsonl
+// recorded before the code field existed (~/.voltmind/sync-failures.jsonl
 // from pre-PR brains). Without this branch, upgraded users see "UNKNOWN"
 // for every previously-recorded failure even when the message is parseable.
 describe('acknowledgeSyncFailures — backfill on legacy entries', () => {
@@ -396,7 +396,7 @@ describe('acknowledgeSyncFailures — backfill on legacy entries', () => {
       await import('../src/core/sync.ts');
 
     // Hand-write a legacy entry with no `code` field. Mimics a pre-PR
-    // ~/.gbrain/sync-failures.jsonl row that exists on real upgrades.
+    // ~/.voltmind/sync-failures.jsonl row that exists on real upgrades.
     const { mkdirSync } = await import('fs');
     const { dirname } = await import('path');
     mkdirSync(dirname(syncFailuresPath()), { recursive: true });

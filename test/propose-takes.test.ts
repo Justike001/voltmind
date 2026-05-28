@@ -182,11 +182,11 @@ describe('hasCompleteFence', () => {
   test('detects a well-formed fence', () => {
     const body = `# Page
 
-<!-- gbrain:takes:begin -->
+<!-- voltmind:takes:begin -->
 | # | claim | kind | who | weight | since | source |
 |---|-------|------|-----|--------|-------|--------|
 | 1 | X | take | brain | 0.5 | 2026-01 | |
-<!-- gbrain:takes:end -->
+<!-- voltmind:takes:end -->
 
 prose continues
 `;
@@ -194,7 +194,7 @@ prose continues
   });
 
   test('returns false when fence is incomplete (begin only)', () => {
-    expect(hasCompleteFence('<!-- gbrain:takes:begin -->\n| #')).toBe(false);
+    expect(hasCompleteFence('<!-- voltmind:takes:begin -->\n| #')).toBe(false);
   });
 
   test('returns false when no fence at all', () => {
@@ -202,7 +202,7 @@ prose continues
   });
 
   test('detects fence with triple-dash variant', () => {
-    expect(hasCompleteFence('<!--- gbrain:takes:begin -->\n| # |\n<!--- gbrain:takes:end -->')).toBe(true);
+    expect(hasCompleteFence('<!--- voltmind:takes:begin -->\n| # |\n<!--- voltmind:takes:end -->')).toBe(true);
   });
 });
 
@@ -214,12 +214,12 @@ describe('extractExistingTakesForDedup', () => {
   });
 
   test('parses active rows from a well-formed fence', () => {
-    const body = `<!-- gbrain:takes:begin -->
+    const body = `<!-- voltmind:takes:begin -->
 | # | claim | kind | who | weight | since | source |
 |---|-------|------|-----|--------|-------|--------|
 | 1 | Cities send messages | take | brain | 0.65 | 2026-01 | essay |
 | 2 | Y will happen | bet | garry | 0.8 | 2026-01 | |
-<!-- gbrain:takes:end -->`;
+<!-- voltmind:takes:end -->`;
     const out = extractExistingTakesForDedup(body);
     expect(out).toHaveLength(2);
     expect(out[0]!.claim).toBe('Cities send messages');
@@ -228,12 +228,12 @@ describe('extractExistingTakesForDedup', () => {
   });
 
   test('skips strikethrough rows', () => {
-    const body = `<!-- gbrain:takes:begin -->
+    const body = `<!-- voltmind:takes:begin -->
 | # | claim | kind | who | weight |
 |---|-------|------|-----|--------|
 | 1 | ~~stale claim~~ | take | brain | 0.5 |
 | 2 | active claim | take | brain | 0.5 |
-<!-- gbrain:takes:end -->`;
+<!-- voltmind:takes:end -->`;
     const out = extractExistingTakesForDedup(body);
     expect(out).toHaveLength(1);
     expect(out[0]!.claim).toBe('active claim');
@@ -288,11 +288,11 @@ describe('runPhaseProposeTakes — phase integration', () => {
   test('passes existing fence rows to extractor as dedup context (F2 fix)', async () => {
     const body = `# Page
 
-<!-- gbrain:takes:begin -->
+<!-- voltmind:takes:begin -->
 | # | claim | kind | who | weight | since | source |
 |---|-------|------|-----|--------|-------|--------|
 | 1 | Already captured claim | take | brain | 0.5 | 2026-01 | |
-<!-- gbrain:takes:end -->
+<!-- voltmind:takes:end -->
 
 New prose appended here.`;
     const pages = [buildPage({ slug: 'wiki/existing', body })];
@@ -350,7 +350,7 @@ New prose appended here.`;
     const pages = [
       buildPage({
         slug: 'wiki/fenced',
-        body: `<!-- gbrain:takes:begin -->\n| # | claim | kind | who | weight |\n|---|---|---|---|---|\n| 1 | x | take | brain | 0.5 |\n<!-- gbrain:takes:end -->\n\nprose`,
+        body: `<!-- voltmind:takes:begin -->\n| # | claim | kind | who | weight |\n|---|---|---|---|---|\n| 1 | x | take | brain | 0.5 |\n<!-- voltmind:takes:end -->\n\nprose`,
       }),
       buildPage({ slug: 'wiki/unfenced', body: 'plain prose only' }),
     ];

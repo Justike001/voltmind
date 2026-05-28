@@ -271,28 +271,28 @@ describe('BrainRegistry — lazy init', () => {
     // test proves the fall-through to HOST_BRAIN_ID happens before any
     // lookup, not that host init actually succeeds.
     //
-    // Hermeticity: dev machines often have a real ~/.gbrain/config.json
-    // (the maintainer's own brain). Without GBRAIN_HOME isolation, the
+    // Hermeticity: dev machines often have a real ~/.voltmind/config.json
+    // (the maintainer's own brain). Without VOLTMIND_HOME isolation, the
     // host-init path RESOLVES successfully on those machines instead of
     // rejecting, breaking the `rejects.not.toBeInstanceOf` assertion. Pin
-    // GBRAIN_HOME to a guaranteed-empty tempdir so host-init has nothing
+    // VOLTMIND_HOME to a guaranteed-empty tempdir so host-init has nothing
     // to find and fails loudly (which is exactly the error the assertion
     // wants — not UnknownBrainError, but ALSO not a successful resolve).
     const isolatedHome = mkdtempSync(join(tmpdir(), 'brain-registry-home-'));
     track(isolatedHome);
-    const savedHome = process.env.GBRAIN_HOME;
-    process.env.GBRAIN_HOME = isolatedHome;
+    const savedHome = process.env.VOLTMIND_HOME;
+    process.env.VOLTMIND_HOME = isolatedHome;
     try {
       const reg = new BrainRegistry([]);
       // Expect the host-init path to be attempted (it'll fail on missing
-      // <isolated>/.gbrain/config.json, but the error will come from
+      // <isolated>/.voltmind/config.json, but the error will come from
       // initHostBrain, not UnknownBrainError — proving routing hit host).
       await expect(reg.getBrain(null)).rejects.not.toBeInstanceOf(UnknownBrainError);
       await expect(reg.getBrain(undefined)).rejects.not.toBeInstanceOf(UnknownBrainError);
       await expect(reg.getBrain('')).rejects.not.toBeInstanceOf(UnknownBrainError);
     } finally {
-      if (savedHome !== undefined) process.env.GBRAIN_HOME = savedHome;
-      else delete process.env.GBRAIN_HOME;
+      if (savedHome !== undefined) process.env.VOLTMIND_HOME = savedHome;
+      else delete process.env.VOLTMIND_HOME;
     }
   });
 });

@@ -6,7 +6,7 @@
  * `sole_non_default` tier to source-resolver.ts is dead code unless
  * `runSync` actually calls the resolver in the no-explicit-source case.
  * Pre-fix at commands/sync.ts:1500-1505, the resolver was skipped when
- * neither --source nor GBRAIN_SOURCE was set, leaving sourceId undefined.
+ * neither --source nor VOLTMIND_SOURCE was set, leaving sourceId undefined.
  *
  * This test proves the wiring works end-to-end on PGLite: register one
  * non-default source, call performSync with no source arg, assert pages
@@ -47,7 +47,7 @@ describe('#1434 — runSync auto-routes to sole_non_default source', () => {
 
   beforeEach(async () => {
     await resetPgliteState(engine);
-    repoPath = mkdtempSync(join(tmpdir(), 'gbrain-snd-routing-'));
+    repoPath = mkdtempSync(join(tmpdir(), 'voltmind-snd-routing-'));
     execSync('git init', { cwd: repoPath, stdio: 'pipe' });
     execSync('git config user.email "t@t.com"', { cwd: repoPath, stdio: 'pipe' });
     execSync('git config user.name "T"', { cwd: repoPath, stdio: 'pipe' });
@@ -164,7 +164,7 @@ describe('#1434 — runSync auto-routes to sole_non_default source', () => {
   test('2+ non-default sources: no auto-route, no nudge, falls through to default', async () => {
     // Both need local_path to be counted by the sole_non_default helper.
     // Pre-existing helper filters local_path IS NOT NULL.
-    const secondRepo = mkdtempSync(join(tmpdir(), 'gbrain-snd-routing-second-'));
+    const secondRepo = mkdtempSync(join(tmpdir(), 'voltmind-snd-routing-second-'));
     await runSources(engine, ['add', 'studiovault', '--path', repoPath, '--no-federated']);
     await runSources(engine, ['add', 'second-vault', '--path', secondRepo, '--no-federated']);
     const { runSync } = await import('../src/commands/sync.ts');

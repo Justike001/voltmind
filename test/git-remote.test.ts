@@ -20,7 +20,7 @@ import { withEnv } from './helpers/with-env.ts';
 // without invoking real git.
 // ---------------------------------------------------------------------------
 
-const FAKE_GIT_DIR = join(tmpdir(), `gbrain-git-remote-test-${process.pid}`);
+const FAKE_GIT_DIR = join(tmpdir(), `voltmind-git-remote-test-${process.pid}`);
 const FAKE_GIT_LOG = join(FAKE_GIT_DIR, 'argv.log');
 const FAKE_GIT_MODE = join(FAKE_GIT_DIR, 'mode');
 
@@ -199,7 +199,7 @@ describe('parseRemoteUrl — rejection cases', () => {
 // T3 — Tailscale CGNAT regression cases.
 describe('parseRemoteUrl — CGNAT 100.64/10 (Tailscale)', () => {
   test('rejected by default', async () => {
-    await withEnv({ GBRAIN_ALLOW_PRIVATE_REMOTES: undefined }, async () => {
+    await withEnv({ VOLTMIND_ALLOW_PRIVATE_REMOTES: undefined }, async () => {
       try {
         parseRemoteUrl('https://100.64.0.1/repo.git');
         throw new Error('expected throw');
@@ -209,14 +209,14 @@ describe('parseRemoteUrl — CGNAT 100.64/10 (Tailscale)', () => {
       }
     });
   });
-  test('accepted with GBRAIN_ALLOW_PRIVATE_REMOTES=1', async () => {
-    await withEnv({ GBRAIN_ALLOW_PRIVATE_REMOTES: '1' }, async () => {
+  test('accepted with VOLTMIND_ALLOW_PRIVATE_REMOTES=1', async () => {
+    await withEnv({ VOLTMIND_ALLOW_PRIVATE_REMOTES: '1' }, async () => {
       const r = parseRemoteUrl('https://100.64.0.1/repo.git');
       expect(r.hostname).toBe('100.64.0.1');
     });
   });
   test('also covers 100.127.x (upper end of CGNAT range)', async () => {
-    await withEnv({ GBRAIN_ALLOW_PRIVATE_REMOTES: undefined }, async () => {
+    await withEnv({ VOLTMIND_ALLOW_PRIVATE_REMOTES: undefined }, async () => {
       expect(() => parseRemoteUrl('https://100.127.255.1/x')).toThrow(/internal/i);
     });
   });

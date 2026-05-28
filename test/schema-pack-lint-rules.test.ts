@@ -23,11 +23,11 @@ import {
 function mk(opts: Partial<SchemaPackManifest>): SchemaPackManifest {
   const baseTypes = opts.page_types ?? [];
   return {
-    api_version: 'gbrain-schema-pack-v1',
+    api_version: 'voltmind-schema-pack-v1',
     name: opts.name ?? 'p',
     version: '1.0.0',
     description: '',
-    gbrain_min_version: '0.38.0',
+    voltmind_min_version: '0.38.0',
     extends: null,
     borrow_from: [],
     page_types: baseTypes,

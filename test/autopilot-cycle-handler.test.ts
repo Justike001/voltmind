@@ -33,7 +33,7 @@ beforeEach(async () => {
   await engine.executeRaw('DELETE FROM minion_jobs').catch(() => {});
   await engine.executeRaw('DELETE FROM gbrain_cycle_locks').catch(() => {});
   await engine.executeRaw(`DELETE FROM sources WHERE id <> 'default'`).catch(() => {});
-  brainDir = mkdtempSync(join(tmpdir(), 'gbrain-autopilot-handler-'));
+  brainDir = mkdtempSync(join(tmpdir(), 'voltmind-autopilot-handler-'));
 });
 
 async function seedSource(id: string, opts: { archived?: boolean } = {}): Promise<void> {

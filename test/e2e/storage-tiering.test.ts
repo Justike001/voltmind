@@ -2,7 +2,7 @@
  * E2E test for storage tiering — Postgres-only.
  *
  * Per the v0.23.0 plan: full lifecycle. Container restart simulation:
- * write pages via Postgres, delete files from disk, run gbrain export
+ * write pages via Postgres, delete files from disk, run voltmind export
  * --restore-only, assert files restored. Real .gitignore round-trip.
  * Real source-resolver path through getDefaultSourcePath().
  *
@@ -40,7 +40,7 @@ if (!hasDatabase()) {
     });
 
     beforeEach(() => {
-      tmp = mkdtempSync(join(tmpdir(), 'gbrain-e2e-storage-'));
+      tmp = mkdtempSync(join(tmpdir(), 'voltmind-e2e-storage-'));
       __resetMissingStorageWarning();
       __resetPGLiteWarn();
       __resetPGLiteTierWarn();
@@ -52,7 +52,7 @@ if (!hasDatabase()) {
 
     function writeGbrainYml(): void {
       writeFileSync(
-        join(tmp, 'gbrain.yml'),
+        join(tmp, 'voltmind.yml'),
         `storage:
   db_tracked:
     - people/
@@ -126,7 +126,7 @@ if (!hasDatabase()) {
         // .gitignore management: empty .gitignore → managed block written.
         manageGitignore(tmp, 'postgres');
         const gitignore = readFileSync(join(tmp, '.gitignore'), 'utf-8');
-        expect(gitignore).toContain('# Auto-managed by gbrain');
+        expect(gitignore).toContain('# Auto-managed by voltmind');
         expect(gitignore).toContain('media/x/');
         expect(gitignore).toContain('media/articles/');
 

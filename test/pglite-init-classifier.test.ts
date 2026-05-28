@@ -67,7 +67,7 @@ describe('buildPgliteInitErrorMessage — hint routing', () => {
 
   test('macos-26-3 verdict surfaces the #223 link AND original error', () => {
     const msg = buildPgliteInitErrorMessage('macos-26-3', original);
-    expect(msg).toContain('https://github.com/garrytan/gbrain/issues/223');
+    expect(msg).toContain('https://github.com/garrytan/voltmind/issues/223');
     expect(msg).toContain('macOS 26.3');
     expect(msg).toContain(original);
     expect(msg).not.toContain('Bun vfs');
@@ -75,7 +75,7 @@ describe('buildPgliteInitErrorMessage — hint routing', () => {
 
   test('unknown verdict surfaces the doctor + #223 fallback AND original error', () => {
     const msg = buildPgliteInitErrorMessage('unknown', original);
-    expect(msg).toContain('gbrain doctor');
+    expect(msg).toContain('voltmind doctor');
     expect(msg).toContain('issues/223');
     expect(msg).toContain(original);
   });

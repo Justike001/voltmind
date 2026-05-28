@@ -34,7 +34,7 @@ let tmpHome: string;
 beforeAll(async () => {
   if (!RUN) return;
   await setupDB();
-  tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-e2e-receipt-'));
+  tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-e2e-receipt-'));
   // Best-effort: clear any prior e2e fixtures to keep test isolation.
   const engine = getEngine();
   await engine.executeRaw(`DELETE FROM eval_takes_quality_runs WHERE receipt_sha8_corpus LIKE 'e2e%'`);
@@ -183,7 +183,7 @@ d('v0.32 EXP-5 — eval_takes_quality_runs on real Postgres', () => {
 
   test('writeReceipt (combined) succeeds with disk artifact + DB row on Postgres', async () => {
     const engine = getEngine();
-    await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
       const r = fixture({ corpus: 'e2e_007' });
       const result = await writeReceipt(engine, r);
       expect(result.db).toBe(true);

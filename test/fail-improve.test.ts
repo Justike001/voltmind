@@ -9,7 +9,7 @@ describe('fail-improve', () => {
   let loop: FailImproveLoop;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'gbrain-fail-improve-'));
+    tempDir = mkdtempSync(join(tmpdir(), 'voltmind-fail-improve-'));
     loop = new FailImproveLoop(tempDir);
   });
 

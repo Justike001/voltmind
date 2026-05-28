@@ -29,7 +29,7 @@ import { join } from 'node:path';
 // preserves it.
 //
 //   - consolidate.ts (v0.35.4 — chronological writeback)
-//   - facts/forget.ts (v0.32.2 — user-initiated `gbrain forget`; user is
+//   - facts/forget.ts (v0.32.2 — user-initiated `voltmind forget`; user is
 //     the supersession authority, not the probe)
 const VALID_UNTIL_WRITE_ALLOWLIST: ReadonlySet<string> = new Set([
   'src/core/cycle/phases/consolidate.ts',

@@ -1,5 +1,5 @@
 /**
- * v0.28: prompt-injection defense for take claims fed into `gbrain think`.
+ * v0.28: prompt-injection defense for take claims fed into `voltmind think`.
  *
  * The threat: a claim row in the takes table contains attacker-supplied text.
  * Without sanitization, an LLM-bound system prompt that includes those claims

@@ -4,7 +4,7 @@
  * The migration ships:
  *   - Phase A (schema): ALTER minion_jobs.max_stalled SET DEFAULT 3
  *   - Phase B (host-work): append skill-ping entry to
- *     ~/.gbrain/migrations/pending-host-work.jsonl
+ *     ~/.voltmind/migrations/pending-host-work.jsonl
  *
  * Both phases are idempotent — re-running the migration is a no-op after
  * the first successful pass.
@@ -16,17 +16,17 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 
 let tmpHome: string;
-const originalGbrainHome = process.env.GBRAIN_HOME;
+const originalVoltmindHome = process.env.VOLTMIND_HOME;
 
 beforeEach(() => {
-  tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-v0_14_0-'));
-  // GBRAIN_HOME is the parent dir; configDir() appends '.gbrain' itself.
-  process.env.GBRAIN_HOME = tmpHome;
+  tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-v0_14_0-'));
+  // VOLTMIND_HOME is the parent dir; configDir() appends '.voltmind' itself.
+  process.env.VOLTMIND_HOME = tmpHome;
 });
 
 afterEach(() => {
-  if (originalGbrainHome !== undefined) process.env.GBRAIN_HOME = originalGbrainHome;
-  else delete process.env.GBRAIN_HOME;
+  if (originalVoltmindHome !== undefined) process.env.VOLTMIND_HOME = originalVoltmindHome;
+  else delete process.env.VOLTMIND_HOME;
   try { rmSync(tmpHome, { recursive: true, force: true }); } catch { /* ignore */ }
 });
 
@@ -64,7 +64,7 @@ describe('Bug 5 — Phase B host-work entry dedup', () => {
     const { v0_14_0 } = await import('../src/commands/migrations/v0_14_0.ts');
 
     const first = await v0_14_0.orchestrator({ yes: true, dryRun: false, noAutopilotInstall: true });
-    const hostPath = join(tmpHome, '.gbrain', 'migrations', 'pending-host-work.jsonl');
+    const hostPath = join(tmpHome, '.voltmind', 'migrations', 'pending-host-work.jsonl');
     expect(existsSync(hostPath)).toBe(true);
 
     const beforeLines = readFileSync(hostPath, 'utf-8').split('\n').filter(l => l.trim()).length;
@@ -83,7 +83,7 @@ describe('Bug 5 — Phase B host-work entry dedup', () => {
   test('dry-run writes nothing', async () => {
     const { v0_14_0 } = await import('../src/commands/migrations/v0_14_0.ts');
     await v0_14_0.orchestrator({ yes: true, dryRun: true, noAutopilotInstall: true });
-    const hostPath = join(tmpHome, '.gbrain', 'migrations', 'pending-host-work.jsonl');
+    const hostPath = join(tmpHome, '.voltmind', 'migrations', 'pending-host-work.jsonl');
     expect(existsSync(hostPath)).toBe(false);
   });
 });

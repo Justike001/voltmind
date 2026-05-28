@@ -1,11 +1,11 @@
 #!/bin/bash
-# smoke-test.sh — GBrain post-restart smoke tests + auto-fix
+# smoke-test.sh — VoltMind post-restart smoke tests + auto-fix
 #
-# Ships with gbrain. Tests gbrain core services + OpenClaw plugin health.
-# Users extend via ~/.gbrain/smoke-tests.d/*.sh (user-defined tests).
+# Ships with voltmind. Tests voltmind core services + OpenClaw plugin health.
+# Users extend via ~/.voltmind/smoke-tests.d/*.sh (user-defined tests).
 #
 # Usage:
-#   gbrain smoke-test          # run all tests
+#   voltmind smoke-test          # run all tests
 #   bash scripts/smoke-test.sh # direct invocation
 #
 # Each test: check → if broken, attempt fix → re-check → report.
@@ -15,7 +15,7 @@ set -a
 [ -f /data/.env ] && . /data/.env 2>/dev/null || true
 set +a
 
-LOG="${GBRAIN_SMOKE_LOG:-/tmp/gbrain-smoke-test.log}"
+LOG="${VOLTMIND_SMOKE_LOG:-/tmp/voltmind-smoke-test.log}"
 FAILURES=0
 FIXES=0
 TOTAL=0
@@ -27,20 +27,20 @@ fail()    { TOTAL=$((TOTAL + 1)); FAILURES=$((FAILURES + 1)); echo "❌ $1"; ech
 fixed()   { FIXES=$((FIXES + 1)); echo "🔧 Fixed: $1"; echo "$(timestamp) FIXED: $1" >> "$LOG"; }
 skip()    { SKIPPED=$((SKIPPED + 1)); echo "⏭️  $1"; echo "$(timestamp) SKIP: $1" >> "$LOG"; }
 
-echo "$(timestamp) === GBrain Smoke Tests ===" >> "$LOG"
-echo "🧪 Running gbrain smoke tests..."
+echo "$(timestamp) === VoltMind Smoke Tests ===" >> "$LOG"
+echo "🧪 Running voltmind smoke tests..."
 echo ""
 
 # ── Resolve paths ───────────────────────────────────────────
-# Find gbrain — could be global install, workspace dep, or /data/gbrain
-GBRAIN_DIR=""
+# Find voltmind — could be global install, workspace dep, or /data/voltmind
+VOLTMIND_DIR=""
 for candidate in \
-  "${GBRAIN_DIR_OVERRIDE:-}" \
-  "/data/gbrain" \
+  "${VOLTMIND_DIR_OVERRIDE:-}" \
+  "/data/voltmind" \
   "$(dirname "$0")/.." \
-  "${OPENCLAW_WORKSPACE:-/data/.openclaw/workspace}/node_modules/gbrain" \
-  "./node_modules/gbrain"; do
-  [ -n "$candidate" ] && [ -f "$candidate/src/cli.ts" ] && GBRAIN_DIR="$candidate" && break
+  "${OPENCLAW_WORKSPACE:-/data/.openclaw/workspace}/node_modules/voltmind" \
+  "./node_modules/voltmind"; do
+  [ -n "$candidate" ] && [ -f "$candidate/src/cli.ts" ] && VOLTMIND_DIR="$candidate" && break
 done
 
 # Find bun
@@ -50,9 +50,9 @@ for bp in "/root/.bun/bin/bun" "/data/.bun/bin/bun" "$(which bun 2>/dev/null)"; 
 done
 
 # Resolve database URL
-DB_URL="${GBRAIN_DATABASE_URL:-${DATABASE_URL:-}}"
+DB_URL="${VOLTMIND_DATABASE_URL:-${DATABASE_URL:-}}"
 # Fallback: grep from .env (handles files with parse-breaking lines)
-[ -z "$DB_URL" ] && DB_URL=$(grep '^GBRAIN_DATABASE_URL=' /data/.env 2>/dev/null | head -1 | cut -d= -f2-)
+[ -z "$DB_URL" ] && DB_URL=$(grep '^VOLTMIND_DATABASE_URL=' /data/.env 2>/dev/null | head -1 | cut -d= -f2-)
 [ -z "$DB_URL" ] && DB_URL=$(grep '^DATABASE_URL=' /data/.env 2>/dev/null | head -1 | cut -d= -f2-)
 
 # ── 1. Bun runtime ─────────────────────────────────────────
@@ -72,58 +72,58 @@ else
   fi
 fi
 
-# ── 2. GBrain CLI loads ────────────────────────────────────
-if [ -n "$GBRAIN_DIR" ] && [ -n "$BUN_PATH" ]; then
-  if timeout 15 "$BUN_PATH" run "$GBRAIN_DIR/src/cli.ts" --help >/dev/null 2>&1; then
-    pass "GBrain CLI ($GBRAIN_DIR)"
+# ── 2. VoltMind CLI loads ────────────────────────────────────
+if [ -n "$VOLTMIND_DIR" ] && [ -n "$BUN_PATH" ]; then
+  if timeout 15 "$BUN_PATH" run "$VOLTMIND_DIR/src/cli.ts" --help >/dev/null 2>&1; then
+    pass "VoltMind CLI ($VOLTMIND_DIR)"
   else
     # Auto-fix: reinstall deps
-    cd "$GBRAIN_DIR" && "$BUN_PATH" install --frozen-lockfile 2>/dev/null
-    if timeout 15 "$BUN_PATH" run "$GBRAIN_DIR/src/cli.ts" --help >/dev/null 2>&1; then
-      fixed "GBrain deps reinstalled"
-      pass "GBrain CLI (after dep fix)"
+    cd "$VOLTMIND_DIR" && "$BUN_PATH" install --frozen-lockfile 2>/dev/null
+    if timeout 15 "$BUN_PATH" run "$VOLTMIND_DIR/src/cli.ts" --help >/dev/null 2>&1; then
+      fixed "VoltMind deps reinstalled"
+      pass "VoltMind CLI (after dep fix)"
     else
-      fail "GBrain CLI — won't start"
+      fail "VoltMind CLI — won't start"
     fi
   fi
 else
-  [ -z "$GBRAIN_DIR" ] && fail "GBrain CLI — not found"
-  [ -z "$BUN_PATH" ] && skip "GBrain CLI — bun not available"
+  [ -z "$VOLTMIND_DIR" ] && fail "VoltMind CLI — not found"
+  [ -z "$BUN_PATH" ] && skip "VoltMind CLI — bun not available"
 fi
 
-# ── 3. GBrain database ────────────────────────────────────
-if [ -n "$DB_URL" ] && [ -n "$GBRAIN_DIR" ] && [ -n "$BUN_PATH" ]; then
-  DOCTOR_OUT=$(DATABASE_URL="$DB_URL" GBRAIN_DATABASE_URL="$DB_URL" timeout 20 "$BUN_PATH" run "$GBRAIN_DIR/src/cli.ts" doctor 2>&1)
+# ── 3. VoltMind database ────────────────────────────────────
+if [ -n "$DB_URL" ] && [ -n "$VOLTMIND_DIR" ] && [ -n "$BUN_PATH" ]; then
+  DOCTOR_OUT=$(DATABASE_URL="$DB_URL" VOLTMIND_DATABASE_URL="$DB_URL" timeout 20 "$BUN_PATH" run "$VOLTMIND_DIR/src/cli.ts" doctor 2>&1)
   if echo "$DOCTOR_OUT" | grep -q "Health score\|brain_score\|Health Check"; then
     SCORE=$(echo "$DOCTOR_OUT" | grep -oP 'Health score: \K[0-9]+' || echo '?')
-    pass "GBrain database (health score: $SCORE/100)"
+    pass "VoltMind database (health score: $SCORE/100)"
   else
-    fail "GBrain database — doctor returned no health data"
+    fail "VoltMind database — doctor returned no health data"
   fi
 else
-  [ -z "$DB_URL" ] && fail "GBrain database — no DATABASE_URL or GBRAIN_DATABASE_URL"
-  [ -z "$GBRAIN_DIR" ] && skip "GBrain database — gbrain not found"
+  [ -z "$DB_URL" ] && fail "VoltMind database — no DATABASE_URL or VOLTMIND_DATABASE_URL"
+  [ -z "$VOLTMIND_DIR" ] && skip "VoltMind database — voltmind not found"
 fi
 
-# ── 4. GBrain worker process ──────────────────────────────
-if [ -n "$GBRAIN_DIR" ] && [ -n "$BUN_PATH" ] && [ -n "$DB_URL" ]; then
-  if [ -f /tmp/gbrain-worker.pid ] && kill -0 "$(cat /tmp/gbrain-worker.pid)" 2>/dev/null; then
-    pass "GBrain worker (PID: $(cat /tmp/gbrain-worker.pid))"
+# ── 4. VoltMind worker process ──────────────────────────────
+if [ -n "$VOLTMIND_DIR" ] && [ -n "$BUN_PATH" ] && [ -n "$DB_URL" ]; then
+  if [ -f /tmp/voltmind-worker.pid ] && kill -0 "$(cat /tmp/voltmind-worker.pid)" 2>/dev/null; then
+    pass "VoltMind worker (PID: $(cat /tmp/voltmind-worker.pid))"
   else
     # Auto-fix: start worker
-    DATABASE_URL="$DB_URL" GBRAIN_DATABASE_URL="$DB_URL" GBRAIN_ALLOW_SHELL_JOBS=1 \
-      nohup "$BUN_PATH" run "$GBRAIN_DIR/src/cli.ts" jobs work --concurrency 2 > /tmp/gbrain-worker.log 2>&1 &
-    echo $! > /tmp/gbrain-worker.pid
+    DATABASE_URL="$DB_URL" VOLTMIND_DATABASE_URL="$DB_URL" VOLTMIND_ALLOW_SHELL_JOBS=1 \
+      nohup "$BUN_PATH" run "$VOLTMIND_DIR/src/cli.ts" jobs work --concurrency 2 > /tmp/voltmind-worker.log 2>&1 &
+    echo $! > /tmp/voltmind-worker.pid
     sleep 2
-    if kill -0 "$(cat /tmp/gbrain-worker.pid)" 2>/dev/null; then
-      fixed "GBrain worker started"
-      pass "GBrain worker (PID: $(cat /tmp/gbrain-worker.pid))"
+    if kill -0 "$(cat /tmp/voltmind-worker.pid)" 2>/dev/null; then
+      fixed "VoltMind worker started"
+      pass "VoltMind worker (PID: $(cat /tmp/voltmind-worker.pid))"
     else
-      fail "GBrain worker — failed to start (check /tmp/gbrain-worker.log)"
+      fail "VoltMind worker — failed to start (check /tmp/voltmind-worker.log)"
     fi
   fi
 else
-  skip "GBrain worker — prerequisites missing"
+  skip "VoltMind worker — prerequisites missing"
 fi
 
 # ── 5. OpenClaw plugin health (if OpenClaw is installed) ──
@@ -163,7 +163,7 @@ else
 fi
 
 # ── 8. Brain repo (if configured) ────────────────────────
-BRAIN_PATH="${GBRAIN_BRAIN_PATH:-/data/brain}"
+BRAIN_PATH="${VOLTMIND_BRAIN_PATH:-/data/brain}"
 if [ -d "$BRAIN_PATH/.git" ]; then
   PAGE_COUNT=$(find "$BRAIN_PATH" -name "*.md" -not -path "*/.git/*" 2>/dev/null | wc -l)
   pass "Brain repo ($PAGE_COUNT pages at $BRAIN_PATH)"
@@ -173,8 +173,8 @@ else
   skip "Brain repo — $BRAIN_PATH not found"
 fi
 
-# ── User-defined tests (~/.gbrain/smoke-tests.d/*.sh) ────
-USER_TESTS_DIR="${HOME}/.gbrain/smoke-tests.d"
+# ── User-defined tests (~/.voltmind/smoke-tests.d/*.sh) ────
+USER_TESTS_DIR="${HOME}/.voltmind/smoke-tests.d"
 if [ -d "$USER_TESTS_DIR" ]; then
   for test_script in "$USER_TESTS_DIR"/*.sh; do
     [ -f "$test_script" ] || continue

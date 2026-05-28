@@ -106,14 +106,14 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-resume-e2e-'));
-  homeBackup = process.env.GBRAIN_HOME;
-  process.env.GBRAIN_HOME = tmp;
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-resume-e2e-'));
+  homeBackup = process.env.VOLTMIND_HOME;
+  process.env.VOLTMIND_HOME = tmp;
 });
 
 afterEach(() => {
-  if (homeBackup === undefined) delete process.env.GBRAIN_HOME;
-  else process.env.GBRAIN_HOME = homeBackup;
+  if (homeBackup === undefined) delete process.env.VOLTMIND_HOME;
+  else process.env.VOLTMIND_HOME = homeBackup;
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -198,7 +198,7 @@ describe('brainstorm --resume (TX3 load-bearing)', () => {
     }
     expect(err1).toBeInstanceOf(BudgetExhausted);
 
-    const dir = join(tmp, '.gbrain', 'brainstorm');
+    const dir = join(tmp, '.voltmind', 'brainstorm');
     expect(existsSync(dir)).toBe(true);
     const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
     expect(files.length).toBe(1);
@@ -229,7 +229,7 @@ describe('brainstorm --resume (TX3 load-bearing)', () => {
     } catch {
       // expected
     }
-    const dir = join(tmp, '.gbrain', 'brainstorm');
+    const dir = join(tmp, '.voltmind', 'brainstorm');
     const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
     expect(files.length).toBe(1);
     const runId = files[0].replace(/\.json$/, '');

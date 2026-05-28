@@ -35,7 +35,7 @@ describe('logStubGuardEvent', () => {
   it('appends a JSONL line to the current ISO-week file', async () => {
     const tmpAuditDir = freshTmpDir();
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: tmpAuditDir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: tmpAuditDir }, async () => {
         logStubGuardEvent({ slug: 'alice', source_id: 'default', fact_count: 3 });
         const filename = computeStubGuardAuditFilename();
         const fullPath = join(tmpAuditDir, filename);
@@ -56,12 +56,12 @@ describe('logStubGuardEvent', () => {
   });
 
   it('never throws when audit dir is unwritable', async () => {
-    // Point GBRAIN_AUDIT_DIR at a file (not a directory) — mkdirSync will fail,
+    // Point VOLTMIND_AUDIT_DIR at a file (not a directory) — mkdirSync will fail,
     // appendFileSync will fail. Both should be swallowed.
     const blockerFile = join(tmpdir(), `stub-guard-blocker-${Date.now()}.txt`);
     writeFileSync(blockerFile, 'this is a regular file');
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: blockerFile }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: blockerFile }, async () => {
         expect(() => logStubGuardEvent({ slug: 'bob', source_id: 'default', fact_count: 1 })).not.toThrow();
       });
     } finally {
@@ -77,7 +77,7 @@ describe('readRecentStubGuardEvents — cross-week-boundary correctness', () => 
     // must surface it. This is the case readSupervisorEvents misses.
     const tmpAuditDir = freshTmpDir();
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: tmpAuditDir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: tmpAuditDir }, async () => {
         const fakeNow = new Date('2026-05-11T00:01:00Z'); // Monday W20 2026
         const prevSunday = new Date('2026-05-10T23:55:00Z'); // Sunday W19 2026
         const earlierInWindow = new Date('2026-05-10T00:30:00Z'); // earlier in 24h window, W19
@@ -119,7 +119,7 @@ describe('readRecentStubGuardEvents — cross-week-boundary correctness', () => 
   it('returns events sorted oldest-first', async () => {
     const tmpAuditDir = freshTmpDir();
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: tmpAuditDir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: tmpAuditDir }, async () => {
         const now = new Date('2026-05-13T12:00:00Z');
         const filename = computeStubGuardAuditFilename(now);
         const fullPath = join(tmpAuditDir, filename);
@@ -141,7 +141,7 @@ describe('readRecentStubGuardEvents — cross-week-boundary correctness', () => 
   it('returns empty array when no files exist', async () => {
     const tmpAuditDir = freshTmpDir();
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: tmpAuditDir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: tmpAuditDir }, async () => {
         const events = readRecentStubGuardEvents({ sinceMs: 24 * 60 * 60 * 1000 });
         expect(events).toEqual([]);
       });
@@ -153,7 +153,7 @@ describe('readRecentStubGuardEvents — cross-week-boundary correctness', () => 
   it('skips malformed JSON lines without crashing', async () => {
     const tmpAuditDir = freshTmpDir();
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: tmpAuditDir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: tmpAuditDir }, async () => {
         const now = new Date('2026-05-13T12:00:00Z');
         const filename = computeStubGuardAuditFilename(now);
         const fullPath = join(tmpAuditDir, filename);
@@ -177,7 +177,7 @@ describe('readRecentStubGuardEvents — cross-week-boundary correctness', () => 
   it('skips rows missing required fields (ts, slug)', async () => {
     const tmpAuditDir = freshTmpDir();
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: tmpAuditDir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: tmpAuditDir }, async () => {
         const now = new Date('2026-05-13T12:00:00Z');
         const filename = computeStubGuardAuditFilename(now);
         const fullPath = join(tmpAuditDir, filename);

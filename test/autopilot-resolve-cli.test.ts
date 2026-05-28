@@ -6,7 +6,7 @@
  * must NEVER return a `.ts` path. TypeScript source files are not executable;
  * spawning them fails with EACCES and autopilot silently loses its worker.
  * Earlier versions short-circuited on `argv[1].endsWith('/cli.ts')`, which
- * caused the bug. The canonical resolution is the `gbrain` shim on PATH.
+ * caused the bug. The canonical resolution is the `voltmind` shim on PATH.
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -18,7 +18,7 @@ describe('resolveGbrainCliPath', () => {
     try {
       path = resolveGbrainCliPath();
     } catch (e) {
-      // Machine without gbrain on PATH and no compiled binary: throw is
+      // Machine without voltmind on PATH and no compiled binary: throw is
       // expected. The error message must point the user at the install step.
       expect((e as Error).message).toMatch(/PATH|resolve/i);
       return;
@@ -48,14 +48,14 @@ describe('resolveGbrainCliPath', () => {
   });
 
   test('shim on PATH wins over argv[1]=cli.ts', () => {
-    // If `which gbrain` resolves (most dev machines), the resolver should
+    // If `which voltmind` resolves (most dev machines), the resolver should
     // return that shim path, not argv[1]=cli.ts. This is the canonical
     // install shape.
     const origArg1 = process.argv[1];
     process.argv[1] = '/some/project/src/cli.ts';
     try {
       const path = resolveGbrainCliPath();
-      // On a machine where `which gbrain` resolves, path ends in /gbrain.
+      // On a machine where `which voltmind` resolves, path ends in /voltmind.
       // On a machine without, we throw. Both outcomes prove the resolver
       // did not short-circuit on the .ts suffix.
       expect(path.endsWith('/cli.ts')).toBe(false);
@@ -66,16 +66,16 @@ describe('resolveGbrainCliPath', () => {
     }
   });
 
-  test('accepts argv[1]=/gbrain when shim is absent (compiled binary)', () => {
+  test('accepts argv[1]=/voltmind when shim is absent (compiled binary)', () => {
     // If the machine has neither shim nor compiled exec, but argv[1]
-    // happens to be a literal /gbrain path (direct invocation), accept it.
+    // happens to be a literal /voltmind path (direct invocation), accept it.
     const origArg1 = process.argv[1];
-    process.argv[1] = '/usr/local/bin/gbrain';
+    process.argv[1] = '/usr/local/bin/voltmind';
     try {
       const path = resolveGbrainCliPath();
-      // On a machine with `which gbrain`, we get the shim. On a machine
+      // On a machine with `which voltmind`, we get the shim. On a machine
       // without, argv[1] fallback fires. Either way the result is valid.
-      expect(path.endsWith('/gbrain') || path.endsWith('\\gbrain.exe')).toBe(true);
+      expect(path.endsWith('/voltmind') || path.endsWith('\\voltmind.exe')).toBe(true);
     } finally {
       process.argv[1] = origArg1;
     }

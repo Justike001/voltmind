@@ -100,12 +100,12 @@ describe('multi-source bug class', () => {
 
   test('extract-takes processes both alice pages independently', async () => {
     // Re-seed with takes fences so extract-takes has something to find.
-    // Fence markers come from src/core/takes-fence.ts (`<!--- gbrain:takes:begin -->`).
-    const TAKES_BODY = `<!--- gbrain:takes:begin -->
+    // Fence markers come from src/core/takes-fence.ts (`<!--- voltmind:takes:begin -->`).
+    const TAKES_BODY = `<!--- voltmind:takes:begin -->
 | # | claim | kind | who | weight | since | source |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Alice founded the thing | fact | garry | 0.9 | 2024-01-01 |  |
-<!--- gbrain:takes:end -->`;
+<!--- voltmind:takes:end -->`;
     await engine.putPage('people/alice', {
       type: 'person', title: 'Alice (default)',
       compiled_truth: 'Default alice.\n' + TAKES_BODY,
@@ -192,7 +192,7 @@ describe('multi-source bug class', () => {
     // full dream cycle here — that requires LLM + subagent infra. Instead
     // we replicate the path computation and verify the file layout matches
     // what the production code would write.
-    const tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-multi-source-disk-'));
+    const tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-multi-source-disk-'));
     try {
       const computePath = (source_id: string, slug: string): string =>
         source_id === 'default'

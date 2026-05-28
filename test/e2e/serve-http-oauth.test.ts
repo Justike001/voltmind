@@ -1,7 +1,7 @@
 /**
  * E2E tests for serve-http.ts OAuth 2.1 fixes (v0.26.1).
  *
- * Spins up a real `gbrain serve --http` against real Postgres, registers an
+ * Spins up a real `voltmind serve --http` against real Postgres, registers an
  * OAuth client, mints tokens, and exercises the full MCP JSON-RPC pipeline
  * end-to-end. Catches the three bugs fixed in v0.26.1:
  *
@@ -9,7 +9,7 @@
  *   2. OAuth metadata missing client_credentials grant type
  *   3. Express 5 trust proxy + admin SPA wildcard
  *
- * Run: GBRAIN_DATABASE_URL=... bun test test/e2e/serve-http-oauth.test.ts
+ * Run: VOLTMIND_DATABASE_URL=... bun test test/e2e/serve-http-oauth.test.ts
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
@@ -56,8 +56,8 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
       'bun run src/cli.ts auth register-client e2e-oauth-test --grant-types client_credentials --scopes "read write admin"',
       { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env } }
     );
-    const idMatch = regOutput.match(/Client ID:\s+(gbrain_cl_\S+)/);
-    const secretMatch = regOutput.match(/Client Secret:\s+(gbrain_cs_\S+)/);
+    const idMatch = regOutput.match(/Client ID:\s+(voltmind_cl_\S+)/);
+    const secretMatch = regOutput.match(/Client Secret:\s+(voltmind_cs_\S+)/);
     if (!idMatch || !secretMatch) throw new Error('Failed to register test client:\n' + regOutput);
     clientId = idMatch[1];
     clientSecret = secretMatch[1];
@@ -146,7 +146,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
 
   test('mint token via client_credentials grant', async () => {
     const data = await mintToken('read write');
-    expect(data.access_token).toMatch(/^gbrain_at_/);
+    expect(data.access_token).toMatch(/^voltmind_at_/);
     expect(data.expires_in).toBe(3600);
     expect(data.scope).toContain('read');
   });
@@ -168,7 +168,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     const { access_token } = await mintToken('read');
     const res = await mcpCall(access_token, 'tools/call', {
       name: 'search',
-      arguments: { query: 'gbrain', limit: 1 },
+      arguments: { query: 'voltmind', limit: 1 },
     });
 
     expect(res.status).not.toBe(401);
@@ -179,7 +179,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
   }, 15_000);
 
   test('expired/invalid token is rejected at /mcp', async () => {
-    const res = await mcpCall('gbrain_at_totally_fake_token', 'tools/list');
+    const res = await mcpCall('voltmind_at_totally_fake_token', 'tools/list');
     // Invalid tokens should not return 200 with tool results
     const body = await res.text();
     expect(body).not.toContain('"tools"');
@@ -244,14 +244,14 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
   test('admin dashboard serves SPA index.html (not Express error)', async () => {
     const res = await fetch(`${BASE}/admin/`);
     const html = await res.text();
-    expect(html).toContain('GBrain Admin');
+    expect(html).toContain('VoltMind Admin');
     expect(html).not.toContain('<pre>Cannot GET');
   });
 
   test('admin sub-routes serve SPA fallback', async () => {
     const res = await fetch(`${BASE}/admin/agents`);
     const html = await res.text();
-    expect(html).toContain('GBrain Admin');
+    expect(html).toContain('VoltMind Admin');
   });
 
   // v0.36.1.x #1076: GET /mcp must return 405 (Method Not Allowed) per the
@@ -362,12 +362,12 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     const click = await fetch(url, { redirect: 'manual' });
     expect(click.status).toBe(302);
     const setCookie = click.headers.get('set-cookie') || '';
-    const cookieMatch = setCookie.match(/gbrain_admin=([^;]+)/);
+    const cookieMatch = setCookie.match(/voltmind_admin=([^;]+)/);
     expect(cookieMatch).toBeTruthy();
     const cookieValue = cookieMatch![1];
 
     const statsRes = await fetch(`${BASE}/admin/api/full-stats`, {
-      headers: { Cookie: `gbrain_admin=${cookieValue}` },
+      headers: { Cookie: `voltmind_admin=${cookieValue}` },
     });
     expect(statsRes.ok).toBe(true);
     const stats = await statsRes.json() as any;
@@ -400,7 +400,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     const res = await fetch(`${BASE}/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `grant_type=client_credentials&client_id=${clientId}&client_secret=gbrain_cs_wrong_secret&scope=read`,
+      body: `grant_type=client_credentials&client_id=${clientId}&client_secret=voltmind_cs_wrong_secret&scope=read`,
     });
     expect(res.ok).toBe(false);
     const data = await res.json() as any;
@@ -469,8 +469,8 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
       'bun run src/cli.ts auth register-client e2e-revoke-cli --grant-types client_credentials --scopes read',
       { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env } }
     );
-    const idMatch = regOutput.match(/Client ID:\s+(gbrain_cl_\S+)/);
-    const secretMatch = regOutput.match(/Client Secret:\s+(gbrain_cs_\S+)/);
+    const idMatch = regOutput.match(/Client ID:\s+(voltmind_cl_\S+)/);
+    const secretMatch = regOutput.match(/Client Secret:\s+(voltmind_cs_\S+)/);
     expect(idMatch).not.toBeNull();
     expect(secretMatch).not.toBeNull();
     const id = idMatch![1];
@@ -537,7 +537,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
 
   test('v0.26.3: /mcp request persists agent_name + params + error_message', async () => {
     const postgres = (await import('postgres')).default;
-    const sql = postgres(process.env.GBRAIN_DATABASE_URL || process.env.DATABASE_URL || '', { prepare: false });
+    const sql = postgres(process.env.VOLTMIND_DATABASE_URL || process.env.DATABASE_URL || '', { prepare: false });
     try {
       // Wipe any prior log rows for our test client so we can assert exact counts.
       await sql`DELETE FROM mcp_request_log WHERE token_name = ${clientId!}`;
@@ -648,7 +648,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
 
   test('v0.26.3: per-client token_ttl is honored on token mint', async () => {
     const postgres = (await import('postgres')).default;
-    const sql = postgres(process.env.GBRAIN_DATABASE_URL || process.env.DATABASE_URL || '', { prepare: false });
+    const sql = postgres(process.env.VOLTMIND_DATABASE_URL || process.env.DATABASE_URL || '', { prepare: false });
     try {
       // Register a client + set a custom token_ttl (24 hours = 86400 seconds).
       const { execSync } = await import('child_process');
@@ -656,8 +656,8 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
         'bun run src/cli.ts auth register-client e2e-test-ttl --grant-types client_credentials --scopes read',
         { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env } }
       );
-      const idMatch = regOutput.match(/Client ID:\s+(gbrain_cl_\S+)/);
-      const secretMatch = regOutput.match(/Client Secret:\s+(gbrain_cs_\S+)/);
+      const idMatch = regOutput.match(/Client ID:\s+(voltmind_cl_\S+)/);
+      const secretMatch = regOutput.match(/Client Secret:\s+(voltmind_cs_\S+)/);
       expect(idMatch).not.toBeNull();
       expect(secretMatch).not.toBeNull();
       const id = idMatch![1];
@@ -721,7 +721,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     expect(ct).toContain('text/html');
     const body = await res.text();
     expect(body).toContain('expired');
-    expect(body).toContain('GBrain');
+    expect(body).toContain('VoltMind');
   });
 
   test('v0.26.3: magic-link nonce is single-use (second click fails)', async () => {
@@ -761,13 +761,13 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     const first = await fetch(url, { redirect: 'manual' });
     expect(first.status).toBe(302);
     const cookie = first.headers.get('set-cookie') || '';
-    expect(cookie).toContain('gbrain_admin=');
+    expect(cookie).toContain('voltmind_admin=');
 
     // Second click on the same URL — must fail (single-use consumed).
     const second = await fetch(url, { redirect: 'manual' });
     expect(second.status).toBe(401);
     const secondBody = await second.text();
-    expect(secondBody).toContain('GBrain');
+    expect(secondBody).toContain('VoltMind');
   }, 15_000);
 
   // =========================================================================
@@ -781,7 +781,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
 
   test('v0.26.3: agent_name resolves correctly for OAuth + legacy paths', async () => {
     const postgres = (await import('postgres')).default;
-    const sql = postgres(process.env.GBRAIN_DATABASE_URL || process.env.DATABASE_URL || '', { prepare: false });
+    const sql = postgres(process.env.VOLTMIND_DATABASE_URL || process.env.DATABASE_URL || '', { prepare: false });
     try {
       // Make an OAuth-authenticated request — agent_name should be the OAuth client_name.
       const tokenRes = await fetch(`${BASE}/token`, {
@@ -834,7 +834,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
   // operations.ts:1391's protected-job-name guard (`if (ctx.remote && ...)`)
   // saw a falsy undefined and skipped. An HTTP MCP caller with a write-scoped
   // token could then submit `{name: "shell", params: {cmd: "id"}}` over /mcp
-  // and execute arbitrary commands on the gbrain host.
+  // and execute arbitrary commands on the voltmind host.
   //
   // The fix is two-layered:
   //   1) F7  — serve-http.ts sets `remote: true` explicitly.

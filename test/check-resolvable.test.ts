@@ -70,7 +70,7 @@ describe("parseResolverEntries", () => {
   // ──────────────────────────────────────────────────────────────────────
   // v0.41.7.0 — Compact list-format support (OpenClaw-native shape)
   //
-  // The list branch was added so `gbrain doctor` no longer reports every
+  // The list branch was added so `voltmind doctor` no longer reports every
   // skill as unreachable on agents that write the compact `- **name**: t1 | t2`
   // shape instead of the markdown table. The OpenClaw 306-skill regression
   // was 238 FAIL errors → 0 errors after this fix.
@@ -187,7 +187,7 @@ describe("parseResolverEntries", () => {
 
   test("[list] D4 negative: convention-violating uppercase names are silently skipped", () => {
     // Documents the trade: a real skill named `MyTool` would not parse.
-    // The user would notice on the first `gbrain doctor` run and lowercase it.
+    // The user would notice on the first `voltmind doctor` run and lowercase it.
     const content = `- **MyTool**: this trigger silently disappears
 - **camelCase**: also silently dropped`;
     const entries = parseResolverEntries(content);
@@ -265,7 +265,7 @@ describe("checkResolvable — real skills directory", () => {
 // ---------------------------------------------------------------------------
 
 function makeSkillsFixture(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "gbrain-dry-"));
+  const dir = mkdtempSync(join(tmpdir(), "voltmind-dry-"));
   // Minimal RESOLVER.md and manifest.json so checkResolvable doesn't bail.
   const skillNames = Object.keys(files);
   const resolverRows = skillNames.map(n => `| "${n}" | \`skills/${n}/SKILL.md\` |`).join("\n");

@@ -16,7 +16,7 @@
  *   - Snapshot+diff audit logic (A2 contract: zero writes on no-transition runs)
  *
  * Hermetic: no DATABASE_URL, no network, no real audit dir. The audit
- * snapshot tests redirect `GBRAIN_AUDIT_DIR` to a tempdir.
+ * snapshot tests redirect `VOLTMIND_AUDIT_DIR` to a tempdir.
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -187,12 +187,12 @@ describe('stripFrontmatter', () => {
       '',
       '# x',
       '',
-      'Body says gbrain search comes first.',
+      'Body says voltmind search comes first.',
       'Then perplexity for follow-up.',
     ].join('\n');
     const body = stripFrontmatter(content);
     // `web_search` appears ONLY in frontmatter — body has no external pattern
-    // before the gbrain reference.
+    // before the voltmind reference.
     expect(findFirstBrainRefOffset(body)).toBeGreaterThanOrEqual(0);
     // Body should NOT contain `web_search` (it was in the stripped frontmatter).
     expect(body.includes('web_search')).toBe(false);
@@ -200,10 +200,10 @@ describe('stripFrontmatter', () => {
 });
 
 describe('offset helpers', () => {
-  test('findFirstBrainRefOffset finds earliest gbrain ref', () => {
-    const body = 'Some preamble. gbrain search and later gbrain query.';
+  test('findFirstBrainRefOffset finds earliest voltmind ref', () => {
+    const body = 'Some preamble. voltmind search and later voltmind query.';
     const o = findFirstBrainRefOffset(body);
-    expect(o).toBe(body.indexOf('gbrain search'));
+    expect(o).toBe(body.indexOf('voltmind search'));
   });
 
   test('findFirstExternalRefOffset finds earliest external pattern', () => {
@@ -317,7 +317,7 @@ describe('FORMERLY_HARDCODED_EXEMPT', () => {
   test('preserves all 40+ entries from PR #1206 allowlist', () => {
     // Spot-check across the three categories from PR #1206.
     expect(FORMERLY_HARDCODED_EXEMPT.has('brain-ops')).toBe(true);
-    expect(FORMERLY_HARDCODED_EXEMPT.has('gbrain')).toBe(true);
+    expect(FORMERLY_HARDCODED_EXEMPT.has('voltmind')).toBe(true);
     expect(FORMERLY_HARDCODED_EXEMPT.has('exa')).toBe(true);
     expect(FORMERLY_HARDCODED_EXEMPT.has('perplexity-research')).toBe(false); // not in PR allowlist
     expect(FORMERLY_HARDCODED_EXEMPT.has('browser')).toBe(true);
@@ -424,7 +424,7 @@ describe('analyzeSkillBrainFirst (fixture corpus)', () => {
 describe('analyzeSkillBrainFirst (PR #1206 regression preservation)', () => {
   test('PR test case: good skill with Step 0 brain context passes', () => {
     // Direct copy of PR #1206 `good-skill` test case shape.
-    const content = `---\nname: good-skill\n---\n# Good Skill\n\n## Step 0: Brain Context\nSearch the brain first with \`gbrain search\` for relevant context.\n\n## Step 1: External Lookup\nUse web_search to find additional information.\n`;
+    const content = `---\nname: good-skill\n---\n# Good Skill\n\n## Step 0: Brain Context\nSearch the brain first with \`voltmind search\` for relevant context.\n\n## Step 1: External Lookup\nUse web_search to find additional information.\n`;
     const result = analyzeSkillBrainFirst(content, 'good-skill', parseSkillFrontmatter(content));
     expect(result.status).toBe('ok');
   });
@@ -436,7 +436,7 @@ describe('analyzeSkillBrainFirst (PR #1206 regression preservation)', () => {
   });
 
   test('PR test case: skill with brain search reference is not flagged', () => {
-    const content = `---\nname: bf\n---\n# Brain-First\n\nFirst, search the brain for existing context.\nThen use web_search for anything missing. Use gbrain search.\n`;
+    const content = `---\nname: bf\n---\n# Brain-First\n\nFirst, search the brain for existing context.\nThen use web_search for anything missing. Use voltmind search.\n`;
     const result = analyzeSkillBrainFirst(content, 'bf', parseSkillFrontmatter(content));
     expect(result.status).toBe('ok');
   });
@@ -510,7 +510,7 @@ describe('buildBrainFirstSummaryLine', () => {
 /**
  * Helper: provision an isolated audit tempdir for one test body and tear
  * it down via try/finally. Wraps the body in `withEnv()` so the
- * GBRAIN_AUDIT_DIR mutation is scoped to this test only — cross-test-
+ * VOLTMIND_AUDIT_DIR mutation is scoped to this test only — cross-test-
  * safe (no leak to other tests in the same shard) per the test-
  * isolation lint (R1).
  */
@@ -522,7 +522,7 @@ async function withAuditDir<T>(fn: (auditDir: string) => Promise<T> | T): Promis
   );
   mkdirSync(auditDir, { recursive: true });
   try {
-    return await withEnv({ GBRAIN_AUDIT_DIR: auditDir }, () => fn(auditDir));
+    return await withEnv({ VOLTMIND_AUDIT_DIR: auditDir }, () => fn(auditDir));
   } finally {
     try { rmSync(auditDir, { recursive: true, force: true }); } catch { /* ignore */ }
   }

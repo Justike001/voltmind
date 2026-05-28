@@ -2,9 +2,9 @@
  * v0.41.13 (#1433) — re-sync preserves previously-indexed metafile pages.
  *
  * Bug class (infiniteGameExp): a domain `log.md` page that was indexed by
- * an older gbrain version (back when isSyncable() didn't filter `log.md`)
+ * an older voltmind version (back when isSyncable() didn't filter `log.md`)
  * or via a direct put_page was being deleted on every subsequent
- * `gbrain sync --skip-failed` because the cleanup loop at
+ * `voltmind sync --skip-failed` because the cleanup loop at
  * commands/sync.ts:772 treated all unsyncable-modified paths the same.
  *
  * Fix: the cleanup loop skips the delete when `unsyncableReason(path)`
@@ -46,7 +46,7 @@ describe('#1433 — re-sync preserves previously-indexed metafile pages', () => 
 
   beforeEach(async () => {
     await resetPgliteState(engine);
-    repoPath = mkdtempSync(join(tmpdir(), 'gbrain-metafile-'));
+    repoPath = mkdtempSync(join(tmpdir(), 'voltmind-metafile-'));
     gitInit(repoPath);
     // Seed a non-metafile page that DOES get synced — this exercises the
     // happy path so we know sync ran at all.
@@ -77,7 +77,7 @@ describe('#1433 — re-sync preserves previously-indexed metafile pages', () => 
     expect(['first_sync', 'synced']).toContain(first.status);
 
     // Seed the log page directly — simulate it being indexed by an older
-    // gbrain version or via a hand-rolled put_page call. This is the
+    // voltmind version or via a hand-rolled put_page call. This is the
     // exact pre-condition that triggered infiniteGameExp's bug.
     await engine.putPage('learning/log', {
       type: 'concept',

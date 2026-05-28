@@ -1,17 +1,17 @@
 /**
  * E2E test for thin-client mode (multi-topology v1).
  *
- * Spins up `gbrain serve --http` against a real Postgres, registers a
- * client with `read,write,admin` scope, runs `gbrain init --mcp-only`
+ * Spins up `voltmind serve --http` against a real Postgres, registers a
+ * client with `read,write,admin` scope, runs `voltmind init --mcp-only`
  * against it from a second tempdir HOME, and exercises the canonical
  * thin-client flows:
  *
- *   - `gbrain init --mcp-only` succeeds and writes remote_mcp config
- *   - `gbrain doctor` reports `mode: thin-client` with all checks green
- *   - `gbrain sync` is refused with the canonical thin-client error
- *   - re-running `gbrain init` refuses without --force
+ *   - `voltmind init --mcp-only` succeeds and writes remote_mcp config
+ *   - `voltmind doctor` reports `mode: thin-client` with all checks green
+ *   - `voltmind sync` is refused with the canonical thin-client error
+ *   - re-running `voltmind init` refuses without --force
  *
- * Tier B flows (`gbrain remote ping` / `remote doctor`) are stubbed for now
+ * Tier B flows (`voltmind remote ping` / `remote doctor`) are stubbed for now
  * and will be exercised when the Tier B commands ship.
  *
  * Skips when DATABASE_URL is unset (matches the e2e gate convention used
@@ -37,8 +37,8 @@ async function spawn(args: string[], home: string, extraEnv: Record<string, stri
   for (const [k, v] of Object.entries(process.env)) {
     if (v !== undefined) env[k] = v;
   }
-  env.GBRAIN_HOME = home;
-  delete env.GBRAIN_REMOTE_CLIENT_SECRET;
+  env.VOLTMIND_HOME = home;
+  delete env.VOLTMIND_REMOTE_CLIENT_SECRET;
   for (const [k, v] of Object.entries(extraEnv)) {
     if (v === undefined) delete env[k];
     else env[k] = v;
@@ -63,16 +63,16 @@ async function spawn(args: string[], home: string, extraEnv: Record<string, stri
 const describeWhen = DATABASE_URL ? describe : describe.skip;
 
 describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
-  let hostHome: string;          // GBRAIN_HOME for the host (with local engine)
-  let clientHome: string;        // GBRAIN_HOME for the thin client (no engine)
+  let hostHome: string;          // VOLTMIND_HOME for the host (with local engine)
+  let clientHome: string;        // VOLTMIND_HOME for the thin client (no engine)
   let serverProc: ReturnType<typeof Bun.spawn> | null = null;
   let serverPort: number;
   let clientId: string;
   let clientSecret: string;
 
   beforeAll(async () => {
-    hostHome = mkdtempSync(join(tmpdir(), 'gbrain-thin-host-'));
-    clientHome = mkdtempSync(join(tmpdir(), 'gbrain-thin-client-'));
+    hostHome = mkdtempSync(join(tmpdir(), 'voltmind-thin-host-'));
+    clientHome = mkdtempSync(join(tmpdir(), 'voltmind-thin-client-'));
 
     // 1. Init host with a real Postgres. `--no-embedding` defers embedding
     //    setup (v0.37.10.0+ requires an explicit embedding provider OR the
@@ -89,7 +89,7 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
     for (const [k, v] of Object.entries(process.env)) {
       if (v !== undefined) env[k] = v;
     }
-    env.GBRAIN_HOME = hostHome;
+    env.VOLTMIND_HOME = hostHome;
     serverProc = Bun.spawn({
       cmd: ['bun', 'run', CLI, 'serve', '--http', '--port', String(serverPort)],
       env,
@@ -126,7 +126,7 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
   });
 
   function parseRegisterClientOutput(out: string): { clientId: string; clientSecret: string } {
-    // `gbrain auth register-client` doesn't have --json; parse human output:
+    // `voltmind auth register-client` doesn't have --json; parse human output:
     //   Client ID:     <id>
     //   Client Secret: <secret>
     const idMatch = out.match(/Client ID:\s*(\S+)/);
@@ -155,12 +155,12 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
       '--oauth-client-secret', clientSecret,
     ], clientHome);
     expect(r.exitCode).toBe(0);
-    const cfgPath = join(clientHome, '.gbrain', 'config.json');
+    const cfgPath = join(clientHome, '.voltmind', 'config.json');
     expect(existsSync(cfgPath)).toBe(true);
     const cfg = JSON.parse(readFileSync(cfgPath, 'utf-8'));
     expect(cfg.remote_mcp.oauth_client_id).toBe(clientId);
     // No PGLite file
-    expect(existsSync(join(clientHome, '.gbrain', 'brain.pglite'))).toBe(false);
+    expect(existsSync(join(clientHome, '.voltmind', 'brain.pglite'))).toBe(false);
   });
 
   test('doctor reports mode: thin-client with all checks green', async () => {
@@ -193,9 +193,9 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
     expect(parsed.reason).toBe('thin_client_config_present');
   });
 
-  // ─── Tier B: gbrain remote ping + remote doctor ───
+  // ─── Tier B: voltmind remote ping + remote doctor ───
 
-  test('gbrain remote doctor returns the host DoctorReport', async () => {
+  test('voltmind remote doctor returns the host DoctorReport', async () => {
     const r = await spawn(['remote', 'doctor', '--json'], clientHome);
     // Exit code reflects the host brain's health. On an empty fresh brain
     // brain_score is 0, so status is 'unhealthy' and exit is 1. That's
@@ -218,11 +218,11 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
   });
 
   // Skipped: the test fixture is structurally incompatible with what this
-  // assertion needs. `gbrain serve --http` does NOT start a job worker
-  // (workers run via the separate `gbrain jobs work` process). So a
+  // assertion needs. `voltmind serve --http` does NOT start a job worker
+  // (workers run via the separate `voltmind jobs work` process). So a
   // submit_job(autopilot-cycle) call from this fixture leaves the job in
   // `waiting` forever — no worker to advance it. The test was supposed to
-  // fall back to the self-imposed `--timeout` firing, but `gbrain remote
+  // fall back to the self-imposed `--timeout` firing, but `voltmind remote
   // ping --timeout` doesn't actually honor the cap when callRemoteTool
   // hangs (the polling loop only checks elapsed time between iterations;
   // a single in-flight callTool with no AbortSignal blocks forever).
@@ -231,7 +231,7 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
   //   1. Thread an AbortSignal through callRemoteTool's MCP `callTool`
   //      path so `--timeout` actually caps individual calls (not just
   //      the loop overhead).
-  //   2. OR start a `gbrain jobs work` subprocess in this test's beforeAll
+  //   2. OR start a `voltmind jobs work` subprocess in this test's beforeAll
   //      so the autopilot-cycle job actually fails-fast on a no-repo
   //      fixture and reaches a real terminal state.
   //
@@ -239,7 +239,7 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
   // dispatch) is exercised by the doctor + low-scope tests in this file
   // and by the entire serve-http-oauth.test.ts suite, so coverage of the
   // protocol is not lost while this test sits skipped.
-  testRaw.skip('gbrain remote ping triggers autopilot-cycle and returns terminal state', async () => {
+  testRaw.skip('voltmind remote ping triggers autopilot-cycle and returns terminal state', async () => {
     const r = await spawn(['remote', 'ping', '--json', '--timeout', '5s'], clientHome);
     expect(r.stdout.length).toBeGreaterThan(0);
     const parsed = JSON.parse(r.stdout.trim());
@@ -254,7 +254,7 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
 
   test('client without admin scope cannot call run_doctor', async () => {
     // Register a separate client with read+write only (no admin) and verify
-    // that gbrain remote doctor surfaces an auth-error message. This is the
+    // that voltmind remote doctor surfaces an auth-error message. This is the
     // codex review #7 regression guard — the verification flow MUST require
     // admin scope.
     const reg = await spawn([
@@ -268,7 +268,7 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
     const lowScopeSecret = parsed.clientSecret;
 
     // Spin up a separate clientHome for the lower-scope client
-    const lowScopeHome = mkdtempSync(join(tmpdir(), 'gbrain-thin-client-lowscope-'));
+    const lowScopeHome = mkdtempSync(join(tmpdir(), 'voltmind-thin-client-lowscope-'));
     try {
       const init = await spawn([
         'init', '--mcp-only', '--json',

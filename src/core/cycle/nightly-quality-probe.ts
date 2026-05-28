@@ -2,13 +2,13 @@
  * v0.40.1.0 Track D / T6 — Nightly cross-modal quality probe phase.
  *
  * Once per 24h, runs the canonical quality pipeline:
- *   1. `gbrain eval longmemeval --by-type` against the committed nightly
+ *   1. `voltmind eval longmemeval --by-type` against the committed nightly
  *      fixture (test/fixtures/longmemeval-nightly.jsonl) → JSONL output.
- *   2. `gbrain eval cross-modal --batch <jsonl> --max-usd $cap --yes`
+ *   2. `voltmind eval cross-modal --batch <jsonl> --max-usd $cap --yes`
  *      → batch summary with verdict.
  *   3. Audit JSONL row recording outcome / cost / pass-fail counts.
  *
- * Default: DISABLED. Opt-in via `gbrain config set
+ * Default: DISABLED. Opt-in via `voltmind config set
  * autopilot.nightly_quality_probe.enabled true`. Doctor surfaces a
  * paste-ready enable hint when disabled.
  *

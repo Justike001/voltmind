@@ -1,7 +1,7 @@
 /**
  * v0.41.16.0 — Progressive-batch primitive orchestrator.
  *
- * The single seam every batch-style gbrain operation routes through.
+ * The single seam every batch-style voltmind operation routes through.
  * Replaces 12+ ad-hoc cost-prompt / TTY-grace / ramp-up patterns
  * scattered across reindex, reindex-multimodal, book-mirror,
  * brainstorm, eval-suspected-contradictions, post-upgrade-reembed,
@@ -29,14 +29,14 @@
  *
  * Stages (4): trial(10), ramp_100(100), ramp_500(500), full(rest).
  * Stage counts override-able via Policy.stages OR env var
- * `GBRAIN_PROGRESSIVE_BATCH_STAGES=10,100,500`.
+ * `VOLTMIND_PROGRESSIVE_BATCH_STAGES=10,100,500`.
  *
  * Env overrides:
- *   - GBRAIN_PROGRESSIVE_BATCH_DISABLED=1 — skip ramp, go to full,
+ *   - VOLTMIND_PROGRESSIVE_BATCH_DISABLED=1 — skip ramp, go to full,
  *     stderr-warn at orchestrator entry.
- *   - GBRAIN_PROGRESSIVE_BATCH_AUTO=1 — skip interactive grace
+ *   - VOLTMIND_PROGRESSIVE_BATCH_AUTO=1 — skip interactive grace
  *     window (cron / launchd / Minion workers).
- *   - GBRAIN_PROGRESSIVE_BATCH_STAGES=10,100,500 — override default
+ *   - VOLTMIND_PROGRESSIVE_BATCH_STAGES=10,100,500 — override default
  *     stage list.
  */
 
@@ -75,7 +75,7 @@ function generateOperationId(): string {
 }
 
 /**
- * Parse `GBRAIN_PROGRESSIVE_BATCH_STAGES` env override.
+ * Parse `VOLTMIND_PROGRESSIVE_BATCH_STAGES` env override.
  * Returns null when unset / invalid (caller falls through to
  * Policy.stages or DEFAULT_STAGES).
  *
@@ -96,7 +96,7 @@ export function parseEnvStages(raw: string | undefined): number[] | null {
 
 /**
  * Resolve the stage item-count list. Precedence:
- *   1. env GBRAIN_PROGRESSIVE_BATCH_STAGES (if parseable)
+ *   1. env VOLTMIND_PROGRESSIVE_BATCH_STAGES (if parseable)
  *   2. Policy.stages
  *   3. DEFAULT_STAGES ([10, 100, 500])
  *
@@ -104,7 +104,7 @@ export function parseEnvStages(raw: string | undefined): number[] | null {
  * Exported for unit tests.
  */
 export function resolveStages(policy: Policy): number[] {
-  const envStages = parseEnvStages(process.env.GBRAIN_PROGRESSIVE_BATCH_STAGES);
+  const envStages = parseEnvStages(process.env.VOLTMIND_PROGRESSIVE_BATCH_STAGES);
   if (envStages !== null) return envStages;
   if (policy.stages !== undefined) return policy.stages;
   return [...DEFAULT_STAGES];
@@ -167,10 +167,10 @@ function trackerHeadroom(tracker: BudgetTracker): number | null {
  * Detect TTY for interactive grace. Skips when stdin OR stdout is
  * not a TTY (e.g. piped output, cron, launchd, Minion workers).
  *
- * GBRAIN_PROGRESSIVE_BATCH_AUTO=1 forces non-interactive.
+ * VOLTMIND_PROGRESSIVE_BATCH_AUTO=1 forces non-interactive.
  */
 function isInteractive(): boolean {
-  if (process.env.GBRAIN_PROGRESSIVE_BATCH_AUTO === '1') return false;
+  if (process.env.VOLTMIND_PROGRESSIVE_BATCH_AUTO === '1') return false;
   return Boolean(process.stdin.isTTY && process.stderr.isTTY);
 }
 
@@ -179,7 +179,7 @@ function isInteractive(): boolean {
  * SIGINT was received (caller should abort). Resolves to `false`
  * if the timeout elapsed without interrupt.
  *
- * Defensively removes its listener on exit so other gbrain handlers
+ * Defensively removes its listener on exit so other voltmind handlers
  * don't see double-delivery.
  *
  * Exported for unit tests (call with ms=0 to short-circuit).
@@ -402,10 +402,10 @@ export async function runProgressiveBatch<T>(
   let cumulativeAttempts = 0;
 
   // Resolve env-driven disable BEFORE anything else.
-  const disabled = process.env.GBRAIN_PROGRESSIVE_BATCH_DISABLED === '1';
+  const disabled = process.env.VOLTMIND_PROGRESSIVE_BATCH_DISABLED === '1';
   if (disabled) {
     process.stderr.write(
-      `[progressive-batch] DISABLED via GBRAIN_PROGRESSIVE_BATCH_DISABLED=1 — skipping ramp for label=${label}\n`,
+      `[progressive-batch] DISABLED via VOLTMIND_PROGRESSIVE_BATCH_DISABLED=1 — skipping ramp for label=${label}\n`,
     );
   }
 
@@ -758,7 +758,7 @@ async function emitStageReport(
 
 /**
  * Re-export the public types so callers can do
- *   `import { runProgressiveBatch, type Verifier } from 'gbrain/progressive-batch'`
+ *   `import { runProgressiveBatch, type Verifier } from 'voltmind/progressive-batch'`
  * without dragging in the internal audit/types/stage-report modules.
  */
 export type {

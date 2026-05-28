@@ -1,5 +1,5 @@
 /**
- * v0.28.1: LongMemEval haystack -> gbrain page conversion.
+ * v0.28.1: LongMemEval haystack -> voltmind page conversion.
  *
  * Pure data-shape converter. No I/O, no engine, no LLM. Fed by the harness in
  * src/commands/eval-longmemeval.ts which then calls importFromContent on each
@@ -81,7 +81,7 @@ function renderSession(session: LongMemEvalSession, date?: string): string {
  * for the IDs. The pre-v0.35.1.1 adapter assumed only the oracle shape
  * and crashed with `session.turns` undefined on the _s split. This
  * normalizer accepts both. Mirrors the proven `normalizeSessions` helper
- * in gbrain-evals/eval/runner/longmemeval.ts.
+ * in voltmind-evals/eval/runner/longmemeval.ts.
  */
 function normalizeSessions(question: LongMemEvalQuestion): LongMemEvalSession[] {
   const sessions: LongMemEvalSession[] = [];

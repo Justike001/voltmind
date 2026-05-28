@@ -257,8 +257,8 @@ describe('phaseCVerify', () => {
     const path = join(brainDir, 'people/alice.md');
     const body = readFileSync(path, 'utf-8');
     const corrupted = body.replace(
-      '<!--- gbrain:facts:end -->',
-      '| 99 | extra row | fact | 1.0 | world | medium | 2026-01-01 |  | manual |  |\n<!--- gbrain:facts:end -->',
+      '<!--- voltmind:facts:end -->',
+      '| 99 | extra row | fact | 1.0 | world | medium | 2026-01-01 |  | manual |  |\n<!--- voltmind:facts:end -->',
     );
     writeFileSync(path, corrupted, 'utf-8');
 

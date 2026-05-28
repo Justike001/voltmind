@@ -10,8 +10,8 @@ let connectedUrl: string | null = null;
 /**
  * Default pool size for Postgres connections. Users on the Supabase transaction
  * pooler (port 6543) or any multi-tenant pooler can lower this to avoid
- * MaxClients errors when `gbrain upgrade` spawns subprocesses that each open
- * their own pool. Set `GBRAIN_POOL_SIZE=2` (or similar) before the command.
+ * MaxClients errors when `voltmind upgrade` spawns subprocesses that each open
+ * their own pool. Set `VOLTMIND_POOL_SIZE=2` (or similar) before the command.
  */
 const DEFAULT_POOL_SIZE_FALLBACK = 10;
 
@@ -24,7 +24,7 @@ const DEFAULT_POOL_SIZE_FALLBACK = 10;
  *
  * This is a heuristic, not a protocol guarantee. A direct-Postgres server
  * deliberately bound to 6543 will also get `prepare: false`; the
- * `GBRAIN_PREPARE=true` env var (or `?prepare=true` on the URL) is the
+ * `VOLTMIND_PREPARE=true` env var (or `?prepare=true` on the URL) is the
  * documented escape hatch.
  */
 const AUTO_DETECT_PORTS = new Set(['6543']);
@@ -33,7 +33,7 @@ const AUTO_DETECT_PORTS = new Set(['6543']);
  * Decide whether to force `prepare: true`/`false` on the postgres.js client.
  *
  * Precedence:
- *   1. `GBRAIN_PREPARE` env var (`true`/`1` or `false`/`0`)
+ *   1. `VOLTMIND_PREPARE` env var (`true`/`1` or `false`/`0`)
  *   2. `?prepare=true|false` query param on the URL
  *   3. Auto-detect: port 6543 → `false`
  *   4. Default: `undefined` (caller omits the option; postgres.js default stands)
@@ -43,7 +43,7 @@ const AUTO_DETECT_PORTS = new Set(['6543']);
  * `undefined` through to `postgres(url, {prepare: undefined})`.
  */
 export function resolvePrepare(url: string): boolean | undefined {
-  const envPrepare = process.env.GBRAIN_PREPARE;
+  const envPrepare = process.env.VOLTMIND_PREPARE;
   if (envPrepare === 'false' || envPrepare === '0') return false;
   if (envPrepare === 'true' || envPrepare === '1') return true;
 
@@ -65,7 +65,7 @@ export function resolvePrepare(url: string): boolean | undefined {
 
 export function resolvePoolSize(explicit?: number): number {
   if (typeof explicit === 'number' && explicit > 0) return explicit;
-  const raw = process.env.GBRAIN_POOL_SIZE;
+  const raw = process.env.VOLTMIND_POOL_SIZE;
   if (raw) {
     const parsed = parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -94,9 +94,9 @@ export function resolvePoolSize(explicit?: number): number {
  *     long-running embed passes)
  *
  * Override per-GUC with env vars:
- *   - GBRAIN_STATEMENT_TIMEOUT
- *   - GBRAIN_IDLE_TX_TIMEOUT
- *   - GBRAIN_CLIENT_CHECK_INTERVAL (Postgres 14+; empty default - opt-in
+ *   - VOLTMIND_STATEMENT_TIMEOUT
+ *   - VOLTMIND_IDLE_TX_TIMEOUT
+ *   - VOLTMIND_CLIENT_CHECK_INTERVAL (Postgres 14+; empty default - opt-in
  *     only since older self-hosted Postgres rejects this startup param)
  *
  * Set any env var to '0' or 'off' to disable that GUC entirely.
@@ -124,12 +124,12 @@ export function resolveSessionTimeouts(): Record<string, string> {
     const val = raw ?? defaultVal;
     if (val) out[gucKey] = val;
   };
-  add('GBRAIN_STATEMENT_TIMEOUT', 'statement_timeout', DEFAULT_STATEMENT_TIMEOUT);
-  add('GBRAIN_IDLE_TX_TIMEOUT', 'idle_in_transaction_session_timeout', DEFAULT_IDLE_TX_TIMEOUT);
+  add('VOLTMIND_STATEMENT_TIMEOUT', 'statement_timeout', DEFAULT_STATEMENT_TIMEOUT);
+  add('VOLTMIND_IDLE_TX_TIMEOUT', 'idle_in_transaction_session_timeout', DEFAULT_IDLE_TX_TIMEOUT);
   // client_connection_check_interval is opt-in: Postgres 14+ only, and some
   // managed pooler tiers reject unknown startup parameters. Users can enable
   // it explicitly once they know their Postgres version supports it.
-  add('GBRAIN_CLIENT_CHECK_INTERVAL', 'client_connection_check_interval', '');
+  add('VOLTMIND_CLIENT_CHECK_INTERVAL', 'client_connection_check_interval', '');
   return out;
 }
 
@@ -153,7 +153,7 @@ export function getConnection(): ReturnType<typeof postgres> {
     throw new GBrainError(
       'No database connection',
       'connect() has not been called',
-      'Run gbrain init --supabase or gbrain init --url <connection_string>',
+      'Run voltmind init --supabase or voltmind init --url <connection_string>',
     );
   }
   return sql;
@@ -163,7 +163,7 @@ export async function connect(config: EngineConfig): Promise<void> {
   if (sql) {
     // Warn if a different URL is passed — the old connection is still in use
     if (config.database_url && connectedUrl && config.database_url !== connectedUrl) {
-      console.warn('[gbrain] connect() called with a different database_url but a connection already exists. Using existing connection.');
+      console.warn('[voltmind] connect() called with a different database_url but a connection already exists. Using existing connection.');
     }
     return;
   }
@@ -173,7 +173,7 @@ export async function connect(config: EngineConfig): Promise<void> {
     throw new GBrainError(
       'No database URL',
       'database_url is missing from config',
-      'Run gbrain init --supabase or gbrain init --url <connection_string>',
+      'Run voltmind init --supabase or voltmind init --url <connection_string>',
     );
   }
 
@@ -191,8 +191,8 @@ export async function connect(config: EngineConfig): Promise<void> {
       // Silence postgres NOTICE-level messages by default ("relation already
       // exists, skipping" floods stdout under idempotent CREATE statements
       // during migrations + initSchema, and breaks stdout-parsing callers like
-      // `gbrain jobs submit --json | ...`). Opt back in with GBRAIN_PG_NOTICES=1.
-      onnotice: process.env.GBRAIN_PG_NOTICES === '1' ? undefined : () => {},
+      // `voltmind jobs submit --json | ...`). Opt back in with VOLTMIND_PG_NOTICES=1.
+      onnotice: process.env.VOLTMIND_PG_NOTICES === '1' ? undefined : () => {},
     };
     if (Object.keys(timeouts).length > 0) {
       opts.connection = timeouts;
@@ -201,7 +201,7 @@ export async function connect(config: EngineConfig): Promise<void> {
       opts.prepare = prepare;
       if (!prepare) {
         console.warn(
-          '[gbrain] Prepared statements disabled (PgBouncer transaction-mode convention on port 6543). Override with GBRAIN_PREPARE=true if your pooler runs in session mode.',
+          '[voltmind] Prepared statements disabled (PgBouncer transaction-mode convention on port 6543). Override with VOLTMIND_PREPARE=true if your pooler runs in session mode.',
         );
       }
     }
@@ -219,7 +219,7 @@ export async function connect(config: EngineConfig): Promise<void> {
     throw new GBrainError(
       'Cannot connect to database',
       msg,
-      'Check your connection URL in ~/.gbrain/config.json',
+      'Check your connection URL in ~/.voltmind/config.json',
     );
   }
 }
@@ -278,7 +278,7 @@ export async function connectWithRetry(
   config: EngineConfig & { poolSize?: number },
   opts: ConnectWithRetryOpts = {},
 ): Promise<void> {
-  const noRetry = opts.noRetry ?? (process.env.GBRAIN_NO_RETRY_CONNECT === '1');
+  const noRetry = opts.noRetry ?? (process.env.VOLTMIND_NO_RETRY_CONNECT === '1');
   const attempts = noRetry ? 1 : (opts.attempts ?? 3);
   const baseDelayMs = opts.baseDelayMs ?? 1000;
   const log = opts.log ?? ((line) => console.warn(line));

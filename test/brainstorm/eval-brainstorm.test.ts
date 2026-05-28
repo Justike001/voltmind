@@ -1,5 +1,5 @@
 /**
- * v0.37.0 — `gbrain eval brainstorm` pure-function tests (D3 + codex r2 #11).
+ * v0.37.0 — `voltmind eval brainstorm` pure-function tests (D3 + codex r2 #11).
  *
  * The orchestrator + judge themselves are exercised in E2E with a real
  * brain; here we pin the eval math (grounding rate + verdict computation +
@@ -151,7 +151,7 @@ describe('computeVerdict', () => {
 });
 
 describe('readBrainstormEvalFixture', () => {
-  const tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-eval-brainstorm-'));
+  const tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-eval-brainstorm-'));
 
   test('parses valid JSONL with one question per line', () => {
     const f = join(tmpDir, 'good.jsonl');

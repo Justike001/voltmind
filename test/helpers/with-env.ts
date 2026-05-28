@@ -26,8 +26,8 @@
  *   });
  *
  *   // Delete a var (override is undefined):
- *   await withEnv({ GBRAIN_HOME: undefined }, async () => {
- *     expect(process.env.GBRAIN_HOME).toBeUndefined();
+ *   await withEnv({ VOLTMIND_HOME: undefined }, async () => {
+ *     expect(process.env.VOLTMIND_HOME).toBeUndefined();
  *   });
  *
  *   // Multiple keys:

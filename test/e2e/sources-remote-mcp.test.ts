@@ -1,14 +1,14 @@
 /**
- * E2E: gstack /setup-gbrain Path 4 unblock — register a remote source over
+ * E2E: gstack /setup-voltmind Path 4 unblock — register a remote source over
  * HTTP MCP, sync it, recover from clone deletion.
  *
- * Spawns a real `gbrain serve --http` against real Postgres with a fake-git
+ * Spawns a real `voltmind serve --http` against real Postgres with a fake-git
  * binary in PATH (so `git clone` is exercised end-to-end without network),
  * registers a sources_admin-scoped OAuth client, mints a token, calls
  * sources_add via /mcp, asserts the source row + clone exist, then rm-rfs
  * the clone and asserts the auto-recovery branch in performSync re-clones.
  *
- * Run: GBRAIN_DATABASE_URL=... bun test test/e2e/sources-remote-mcp.test.ts
+ * Run: VOLTMIND_DATABASE_URL=... bun test test/e2e/sources-remote-mcp.test.ts
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
@@ -27,8 +27,8 @@ if (skip) {
 const PORT = 19132; // Avoid collisions with other E2E tests
 const BASE = `http://localhost:${PORT}`;
 
-const FIXTURE_DIR = join(tmpdir(), `gbrain-e2e-sources-${process.pid}`);
-const GBRAIN_HOME = join(FIXTURE_DIR, 'gbrain-home');
+const FIXTURE_DIR = join(tmpdir(), `voltmind-e2e-sources-${process.pid}`);
+const VOLTMIND_HOME = join(FIXTURE_DIR, 'voltmind-home');
 const FAKE_GIT_DIR = join(FIXTURE_DIR, 'fake-git');
 const TEST_URL = 'https://github.com/example-org/test-repo';
 
@@ -106,7 +106,7 @@ async function callMcp(token: string, opName: string, args: Record<string, unkno
   return JSON.parse(content);
 }
 
-describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
+describeE2E('sources-remote-mcp E2E (gstack /setup-voltmind Path 4)', () => {
   let serverProcess: ReturnType<typeof import('child_process').spawn> | null = null;
   let clientId: string | undefined;
   let token: string | undefined;
@@ -128,18 +128,18 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
     }
 
     writeFakeGit();
-    rmSync(GBRAIN_HOME, { recursive: true, force: true });
-    mkdirSync(GBRAIN_HOME, { recursive: true });
+    rmSync(VOLTMIND_HOME, { recursive: true, force: true });
+    mkdirSync(VOLTMIND_HOME, { recursive: true });
 
     const { execSync, spawn } = await import('child_process');
 
     // Subprocess inherits process.env — but we need to thread:
     //   - PATH: prepend FAKE_GIT_DIR so the spawned brain spawns OUR git
-    //   - GBRAIN_HOME: scope the clone dir to FIXTURE_DIR
+    //   - VOLTMIND_HOME: scope the clone dir to FIXTURE_DIR
     const subprocessEnv = {
       ...process.env,
       PATH: `${FAKE_GIT_DIR}:${process.env.PATH ?? ''}`,
-      GBRAIN_HOME,
+      VOLTMIND_HOME,
     };
 
     // Register a sources_admin-scoped client (the "gstack token").
@@ -148,8 +148,8 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
         '--grant-types client_credentials --scopes "read sources_admin"',
       { cwd: process.cwd(), encoding: 'utf8', env: subprocessEnv },
     );
-    clientId = reg1.match(/Client ID:\s+(gbrain_cl_\S+)/)?.[1];
-    const clientSecret = reg1.match(/Client Secret:\s+(gbrain_cs_\S+)/)?.[1];
+    clientId = reg1.match(/Client ID:\s+(voltmind_cl_\S+)/)?.[1];
+    const clientSecret = reg1.match(/Client Secret:\s+(voltmind_cs_\S+)/)?.[1];
     if (!clientId || !clientSecret) throw new Error('Failed to register e2e client:\n' + reg1);
 
     // Register a read-only client (proves the scope-enforcement gate).
@@ -158,11 +158,11 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
         '--grant-types client_credentials --scopes "read"',
       { cwd: process.cwd(), encoding: 'utf8', env: subprocessEnv },
     );
-    readOnlyClientId = reg2.match(/Client ID:\s+(gbrain_cl_\S+)/)?.[1];
-    const readOnlySecret = reg2.match(/Client Secret:\s+(gbrain_cs_\S+)/)?.[1];
+    readOnlyClientId = reg2.match(/Client ID:\s+(voltmind_cl_\S+)/)?.[1];
+    const readOnlySecret = reg2.match(/Client Secret:\s+(voltmind_cs_\S+)/)?.[1];
     if (!readOnlyClientId || !readOnlySecret) throw new Error('Failed to register read-only client');
 
-    // Start the HTTP server with the fake-git PATH and our GBRAIN_HOME.
+    // Start the HTTP server with the fake-git PATH and our VOLTMIND_HOME.
     serverProcess = spawn(
       'bun',
       ['run', 'src/cli.ts', 'serve', '--http',
@@ -219,7 +219,7 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
     for (const id of [clientId, readOnlyClientId].filter(Boolean) as string[]) {
       try {
         execSync(`bun run src/cli.ts auth revoke-client ${id}`, {
-          cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, GBRAIN_HOME },
+          cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, VOLTMIND_HOME },
         });
       } catch (e) {
         process.stderr.write(`[afterAll] revoke ${id} failed: ${(e as Error).message}\n`);
@@ -230,7 +230,7 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
   }, 30_000);
 
   // -------------------------------------------------------------------------
-  // Headline flow: gstack /setup-gbrain Path 4 unblock
+  // Headline flow: gstack /setup-voltmind Path 4 unblock
   // -------------------------------------------------------------------------
 
   test('whoami reports oauth transport + sources_admin scope', async () => {
@@ -254,7 +254,7 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
       url: TEST_URL,
       federated: true,
     });
-    if (process.env.GBRAIN_E2E_DEBUG) {
+    if (process.env.VOLTMIND_E2E_DEBUG) {
       console.error('[debug sources_add]', JSON.stringify(result));
     }
     expect(result.id).toBe('e2e-yc-artifacts');
@@ -266,7 +266,7 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
     expect(cfg.remote_url).toBe(TEST_URL);
     expect(cfg.federated).toBe(true);
     // Clone exists with a .git dir (fake-git wrote one).
-    expect(existsSync(join(GBRAIN_HOME, '.gbrain', 'clones', 'e2e-yc-artifacts', '.git'))).toBe(true);
+    expect(existsSync(join(VOLTMIND_HOME, '.voltmind', 'clones', 'e2e-yc-artifacts', '.git'))).toBe(true);
   });
 
   test('sources_status reports clone_state=healthy', async () => {
@@ -323,7 +323,7 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
     try {
       execSync(
         'bun run src/cli.ts auth register-client should-fail --scopes "read flying-unicorn"',
-        { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, GBRAIN_HOME } },
+        { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, VOLTMIND_HOME } },
       );
     } catch (e: any) {
       threw = true;
@@ -337,7 +337,7 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
   // ------------------------------------------------------------------------
 
   test('recovery: rm clone dir → sources_status reports missing', async () => {
-    const clonePath = join(GBRAIN_HOME, '.gbrain', 'clones', 'e2e-yc-artifacts');
+    const clonePath = join(VOLTMIND_HOME, '.voltmind', 'clones', 'e2e-yc-artifacts');
     rmSync(clonePath, { recursive: true, force: true });
     expect(existsSync(clonePath)).toBe(false);
     const result = await callMcp(token!, 'sources_status', { id: 'e2e-yc-artifacts' });
@@ -357,7 +357,7 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-gbrain Path 4)', () => {
       id: 'e2e-removable',
       url: TEST_URL,
     });
-    const clonePath = join(GBRAIN_HOME, '.gbrain', 'clones', 'e2e-removable');
+    const clonePath = join(VOLTMIND_HOME, '.voltmind', 'clones', 'e2e-removable');
     expect(existsSync(clonePath)).toBe(true);
     const result = await callMcp(token!, 'sources_remove', {
       id: 'e2e-removable',

@@ -25,7 +25,7 @@ import { describe, expect, test } from 'bun:test';
 import { operations } from '../src/core/operations.ts';
 import { buildBrainTools } from '../src/core/minions/tools/brain-allowlist.ts';
 import type { BrainEngine } from '../src/core/engine.ts';
-import type { GBrainConfig } from '../src/core/config.ts';
+import type { VoltMindConfig } from '../src/core/config.ts';
 
 describe('v0.29 — serve-http localOnly filter', () => {
   // serve-http.ts:745 is the canonical filter expression.
@@ -74,7 +74,7 @@ describe('v0.29 — buildBrainTools subagent surfacing', () => {
   // Cast through `unknown` because the BrainEngine surface is large and
   // we only touch one property.
   const fakeEngine = { kind: 'pglite' } as unknown as BrainEngine;
-  const config: GBrainConfig = { engine: 'pglite' } as GBrainConfig;
+  const config: VoltMindConfig = { engine: 'pglite' } as VoltMindConfig;
 
   test('subagent registry includes brain_get_recent_salience', () => {
     const tools = buildBrainTools({ subagentId: 1, engine: fakeEngine, config });

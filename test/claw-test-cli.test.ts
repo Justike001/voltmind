@@ -1,10 +1,10 @@
 /**
- * gbrain claw-test CLI dispatch tests.
+ * voltmind claw-test CLI dispatch tests.
  *
  * These tests exercise the harness's argument parsing, scenario loading,
  * agent registry resolution, and friction-report path. They do NOT spawn
- * real gbrain commands (no built binary in CI yet); the canonical scripted
- * E2E that walks `gbrain init → import → query → extract → verify` lives
+ * real voltmind commands (no built binary in CI yet); the canonical scripted
+ * E2E that walks `voltmind init → import → query → extract → verify` lives
  * in test/e2e/claw-test.test.ts and gates on a built binary.
  */
 
@@ -21,29 +21,29 @@ import {
 } from '../src/core/claw-test/agent-runner.ts';
 
 let tmp: string;
-const ORIG_HOME = process.env.GBRAIN_HOME;
+const ORIG_HOME = process.env.VOLTMIND_HOME;
 
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), 'claw-test-cli-'));
-  process.env.GBRAIN_HOME = tmp;
+  process.env.VOLTMIND_HOME = tmp;
   _resetRegistryForTests();
 });
 
 afterEach(() => {
-  process.env.GBRAIN_HOME = ORIG_HOME;
+  process.env.VOLTMIND_HOME = ORIG_HOME;
   rmSync(tmp, { recursive: true, force: true });
 });
 
 describe('shipped scenarios are loadable', () => {
   test('default fixtures root contains both v1 scenarios', () => {
-    delete process.env.GBRAIN_CLAW_SCENARIOS_DIR;
+    delete process.env.VOLTMIND_CLAW_SCENARIOS_DIR;
     const names = listScenarios();
     expect(names).toContain('fresh-install');
     expect(names).toContain('upgrade-from-v0.18');
   });
 
   test('fresh-install has expected_phases', () => {
-    delete process.env.GBRAIN_CLAW_SCENARIOS_DIR;
+    delete process.env.VOLTMIND_CLAW_SCENARIOS_DIR;
     const cfg = loadScenario('fresh-install');
     expect(cfg.expectedPhases).toContain('import.files');
     expect(cfg.expectedPhases).toContain('extract.links_fs');
@@ -51,7 +51,7 @@ describe('shipped scenarios are loadable', () => {
   });
 
   test('upgrade-from-v0.18 declares from_version', () => {
-    delete process.env.GBRAIN_CLAW_SCENARIOS_DIR;
+    delete process.env.VOLTMIND_CLAW_SCENARIOS_DIR;
     const cfg = loadScenario('upgrade-from-v0.18');
     expect(cfg.kind).toBe('upgrade');
     expect(cfg.fromVersion).toBe('0.18.0');
@@ -95,19 +95,19 @@ describe('agent registry — fake-runner integration', () => {
 });
 
 describe('friction CLI integrates with harness run-id env', () => {
-  test('GBRAIN_FRICTION_RUN_ID populates harness-style run-ids', () => {
-    process.env.GBRAIN_FRICTION_RUN_ID = 'claw-test-20260428-fake-abcd1234';
+  test('VOLTMIND_FRICTION_RUN_ID populates harness-style run-ids', () => {
+    process.env.VOLTMIND_FRICTION_RUN_ID = 'claw-test-20260428-fake-abcd1234';
     try {
       const code = runFriction(['log', '--phase', 'install', '--message', 'simulated harness write']);
       expect(code).toBe(0);
-      const expectedFile = join(tmp, '.gbrain', 'friction', 'claw-test-20260428-fake-abcd1234.jsonl');
+      const expectedFile = join(tmp, '.voltmind', 'friction', 'claw-test-20260428-fake-abcd1234.jsonl');
       expect(existsSync(expectedFile)).toBe(true);
       const raw = readFileSync(expectedFile, 'utf-8');
       const entry = JSON.parse(raw.split('\n')[0]);
       expect(entry.run_id).toBe('claw-test-20260428-fake-abcd1234');
       expect(entry.message).toBe('simulated harness write');
     } finally {
-      delete process.env.GBRAIN_FRICTION_RUN_ID;
+      delete process.env.VOLTMIND_FRICTION_RUN_ID;
     }
   });
 });

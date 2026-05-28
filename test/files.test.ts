@@ -158,7 +158,7 @@ describe('collectFiles (production import)', () => {
   });
 
   test('collectFiles skips symlinks', () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-symlink-'));
+    const tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-symlink-'));
     try {
       writeFileSync(join(tmpDir, 'real.txt'), 'content');
       symlinkSync('/etc/passwd', join(tmpDir, 'evil.txt'));
@@ -171,7 +171,7 @@ describe('collectFiles (production import)', () => {
   });
 
   test('collectFiles skips broken symlinks', () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-broken-'));
+    const tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-broken-'));
     try {
       writeFileSync(join(tmpDir, 'real.txt'), 'content');
       symlinkSync('/nonexistent/path', join(tmpDir, 'broken.txt'));
@@ -184,7 +184,7 @@ describe('collectFiles (production import)', () => {
   });
 
   test('collectFiles skips node_modules', () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-nodemod-'));
+    const tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-nodemod-'));
     try {
       mkdirSync(join(tmpDir, 'node_modules'));
       writeFileSync(join(tmpDir, 'node_modules', 'pkg.js'), 'x');

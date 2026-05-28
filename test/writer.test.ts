@@ -447,7 +447,7 @@ describe('citation validator', () => {
   });
 
   test('ignores inline code within paragraph (but paragraph still needs citation)', async () => {
-    const compiled = 'Alice shipped `gbrain` last week.';
+    const compiled = 'Alice shipped `voltmind` last week.';
     const findings = await run(compiled);
     expect(findings).toHaveLength(1);
   });

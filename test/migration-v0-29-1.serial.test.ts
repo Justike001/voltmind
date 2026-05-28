@@ -13,18 +13,18 @@ const opts = {
 
 describe('v0.29.1 migration', () => {
   let tmp: string;
-  let oldGbrainHome: string | undefined;
+  let oldVoltmindHome: string | undefined;
 
   beforeEach(async () => {
-    oldGbrainHome = process.env.GBRAIN_HOME;
-    tmp = mkdtempSync(join(tmpdir(), 'gbrain-v0291-'));
-    process.env.GBRAIN_HOME = tmp;
+    oldVoltmindHome = process.env.VOLTMIND_HOME;
+    tmp = mkdtempSync(join(tmpdir(), 'voltmind-v0291-'));
+    process.env.VOLTMIND_HOME = tmp;
 
-    const gbrainHome = join(tmp, '.gbrain');
+    const voltmindHome = join(tmp, '.voltmind');
     const dbPath = join(tmp, 'brain-db');
-    mkdirSync(gbrainHome, { recursive: true });
+    mkdirSync(voltmindHome, { recursive: true });
     writeFileSync(
-      join(gbrainHome, 'config.json'),
+      join(voltmindHome, 'config.json'),
       JSON.stringify({ engine: 'pglite', database_path: dbPath }, null, 2) + '\n',
     );
 
@@ -38,8 +38,8 @@ describe('v0.29.1 migration', () => {
   });
 
   afterEach(() => {
-    if (oldGbrainHome === undefined) delete process.env.GBRAIN_HOME;
-    else process.env.GBRAIN_HOME = oldGbrainHome;
+    if (oldVoltmindHome === undefined) delete process.env.VOLTMIND_HOME;
+    else process.env.VOLTMIND_HOME = oldVoltmindHome;
     rmSync(tmp, { recursive: true, force: true });
   });
 

@@ -38,7 +38,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-export-test-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-export-test-'));
   outDir = join(tmp, 'out');
   exitCode = null;
   stderr = [];
@@ -99,10 +99,10 @@ describe('export --restore-only resolution chain (D5)', () => {
   });
 
   test('uses explicit --repo when provided', async () => {
-    // Make a brain repo with gbrain.yml that has empty db_only — so we
+    // Make a brain repo with voltmind.yml that has empty db_only — so we
     // exit through the "0 pages to restore" path without needing real data.
     writeFileSync(
-      join(tmp, 'gbrain.yml'),
+      join(tmp, 'voltmind.yml'),
       `storage:
   db_tracked: []
   db_only: []
@@ -114,12 +114,12 @@ describe('export --restore-only resolution chain (D5)', () => {
   });
 
   test('falls back to sources default local_path when --repo absent', async () => {
-    // Configure default source path, write a real gbrain.yml so the storage
-    // config check passes — without gbrain.yml the Codex-P0 guard correctly
+    // Configure default source path, write a real voltmind.yml so the storage
+    // config check passes — without voltmind.yml the Codex-P0 guard correctly
     // refuses --restore-only (no storage config to scope to).
     await engine.executeRaw(`UPDATE sources SET local_path = $1 WHERE id = 'default'`, [tmp]);
     writeFileSync(
-      join(tmp, 'gbrain.yml'),
+      join(tmp, 'voltmind.yml'),
       `storage:\n  db_tracked: []\n  db_only:\n    - media/x/\n`,
     );
     await tryRunExport(['--dir', outDir, '--restore-only']);
@@ -127,13 +127,13 @@ describe('export --restore-only resolution chain (D5)', () => {
   });
 
   test('refuses --restore-only when no storage config is present (Codex P0)', async () => {
-    // Default source has a path but no gbrain.yml. Without a storage config,
+    // Default source has a path but no voltmind.yml. Without a storage config,
     // --restore-only would silently fall through to a full export — exactly
     // the silent-footgun D5 was supposed to prevent.
     await engine.executeRaw(`UPDATE sources SET local_path = $1 WHERE id = 'default'`, [tmp]);
     await tryRunExport(['--dir', outDir, '--restore-only']);
     expect(exitCode).toBe(1);
-    expect(stderr.join('\n')).toMatch(/storage tiering config|gbrain\.yml/);
+    expect(stderr.join('\n')).toMatch(/storage tiering config|voltmind\.yml/);
   });
 
   test('non-restore export does NOT require --repo (D26)', async () => {

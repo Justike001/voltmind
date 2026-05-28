@@ -2,7 +2,7 @@
  * v0.37.7.0 #1166 — OAuth confidential clients regression test.
  *
  * The MCP SDK's clientAuth middleware does `client.client_secret !==
- * presented_secret` plaintext compare. gbrain stores SHA-256 hashes,
+ * presented_secret` plaintext compare. voltmind stores SHA-256 hashes,
  * so the SDK's compare always failed for confidential authorization_code
  * and refresh_token grants. v0.34.1.0 fixed PUBLIC PKCE clients
  * (client_secret = undefined); confidential clients regressed.
@@ -17,17 +17,17 @@
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
-import { GBrainOAuthProvider } from '../src/core/oauth-provider.ts';
+import { VoltMindOAuthProvider } from '../src/core/oauth-provider.ts';
 import { sqlQueryForEngine } from '../src/core/sql-query.ts';
 
 let engine: PGLiteEngine;
-let provider: GBrainOAuthProvider;
+let provider: VoltMindOAuthProvider;
 
 beforeAll(async () => {
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
-  provider = new GBrainOAuthProvider({ sql: sqlQueryForEngine(engine) });
+  provider = new VoltMindOAuthProvider({ sql: sqlQueryForEngine(engine) });
 });
 
 afterAll(async () => {

@@ -10,7 +10,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
-import { loadConfigWithEngine, type GBrainConfig } from '../src/core/config.ts';
+import { loadConfigWithEngine, type VoltMindConfig } from '../src/core/config.ts';
 import {
   configureGateway,
   getEmbeddingModel,
@@ -24,7 +24,7 @@ import type { AIGatewayConfig } from '../src/core/ai/types.ts';
 // shape of the contract, not the helper's identity. If cli.ts drifts, the
 // e2e behavior these tests care about (DB-set value lands in gateway) still
 // holds, but a helper-shape test would also catch the drift in PR review.
-function buildGatewayConfig(c: GBrainConfig): AIGatewayConfig {
+function buildGatewayConfig(c: VoltMindConfig): AIGatewayConfig {
   return {
     embedding_model: c.embedding_model,
     embedding_dimensions: c.embedding_dimensions,
@@ -61,7 +61,7 @@ describe('cli connectEngine — embedding_multimodal_model DB→gateway plumbing
   test('DB-set multimodal_model flows to gateway via merge + reconfigure', async () => {
     await engine.setConfig('embedding_multimodal_model', 'voyage:voyage-multimodal-3');
 
-    const baseConfig: GBrainConfig = {
+    const baseConfig: VoltMindConfig = {
       engine: 'pglite',
       embedding_model: 'openai:text-embedding-3-large',
       embedding_dimensions: 1536,
@@ -85,7 +85,7 @@ describe('cli connectEngine — embedding_multimodal_model DB→gateway plumbing
   test('file value wins over DB value (env > file > DB precedence at gateway level)', async () => {
     await engine.setConfig('embedding_multimodal_model', 'voyage:voyage-3-large');
 
-    const baseConfig: GBrainConfig = {
+    const baseConfig: VoltMindConfig = {
       engine: 'pglite',
       embedding_model: 'openai:text-embedding-3-large',
       embedding_dimensions: 1536,
@@ -104,7 +104,7 @@ describe('cli connectEngine — embedding_multimodal_model DB→gateway plumbing
     // re-config always fires when merge succeeds, even when no DB key
     // changed. Schema-sizing fields stay stable because loadConfigWithEngine
     // respects file/env first.
-    const baseConfig: GBrainConfig = {
+    const baseConfig: VoltMindConfig = {
       engine: 'pglite',
       embedding_model: 'openai:text-embedding-3-large',
       embedding_dimensions: 1536,

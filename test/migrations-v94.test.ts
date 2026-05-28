@@ -99,14 +99,14 @@ describe('v0.41.2 R-MIG: take_domain_assignments migration v94', () => {
     const takeId = takeRow[0].id;
 
     await engine.executeRaw(
-      `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'deal_success', 'gbrain-investor')`,
+      `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'deal_success', 'voltmind-investor')`,
       [takeId]
     );
     // Second insert with same (take_id, domain) violates PK
     let threw = false;
     try {
       await engine.executeRaw(
-        `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'deal_success', 'gbrain-investor')`,
+        `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'deal_success', 'voltmind-investor')`,
         [takeId]
       );
     } catch {
@@ -139,11 +139,11 @@ describe('v0.41.2 R-MIG: take_domain_assignments migration v94', () => {
 
     // Same take, two domains — should both insert cleanly
     await engine.executeRaw(
-      `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'deal_success', 'gbrain-investor')`,
+      `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'deal_success', 'voltmind-investor')`,
       [takeId]
     );
     await engine.executeRaw(
-      `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'market_call', 'gbrain-investor')`,
+      `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'market_call', 'voltmind-investor')`,
       [takeId]
     );
     const rows = await engine.executeRaw<{ count: number }>(
@@ -176,7 +176,7 @@ describe('v0.41.2 R-MIG: take_domain_assignments migration v94', () => {
     const takeId = takeRow[0].id;
 
     await engine.executeRaw(
-      `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'deal_success', 'gbrain-investor')`,
+      `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'deal_success', 'voltmind-investor')`,
       [takeId]
     );
     expect(
@@ -220,7 +220,7 @@ describe('v0.41.2 R-MIG: take_domain_assignments migration v94', () => {
     let threw = false;
     try {
       await engine.executeRaw(
-        `INSERT INTO take_domain_assignments (take_id, domain, pack, confidence) VALUES ($1, 'deal_success', 'gbrain-investor', 1.5)`,
+        `INSERT INTO take_domain_assignments (take_id, domain, pack, confidence) VALUES ($1, 'deal_success', 'voltmind-investor', 1.5)`,
         [takeId]
       );
     } catch {
@@ -231,7 +231,7 @@ describe('v0.41.2 R-MIG: take_domain_assignments migration v94', () => {
     threw = false;
     try {
       await engine.executeRaw(
-        `INSERT INTO take_domain_assignments (take_id, domain, pack, confidence) VALUES ($1, 'deal_success', 'gbrain-investor', -0.1)`,
+        `INSERT INTO take_domain_assignments (take_id, domain, pack, confidence) VALUES ($1, 'deal_success', 'voltmind-investor', -0.1)`,
         [takeId]
       );
     } catch {
@@ -274,7 +274,7 @@ describe('v0.41.2 R-MIG: take_domain_assignments migration v94', () => {
       const takeId = takeRow[0].id;
       const domain = i <= 2 ? 'deal_success' : 'market_call';
       await engine.executeRaw(
-        `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, $2, 'gbrain-investor')`,
+        `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, $2, 'voltmind-investor')`,
         [takeId, domain]
       );
     }

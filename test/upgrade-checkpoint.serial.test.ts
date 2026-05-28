@@ -18,14 +18,14 @@ let tmpHome: string;
 let originalHome: string | undefined;
 
 beforeEach(() => {
-  tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-upgrade-checkpoint-test-'));
-  originalHome = process.env.GBRAIN_HOME;
-  process.env.GBRAIN_HOME = tmpHome;
+  tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-upgrade-checkpoint-test-'));
+  originalHome = process.env.VOLTMIND_HOME;
+  process.env.VOLTMIND_HOME = tmpHome;
 });
 
 afterEach(() => {
-  if (originalHome === undefined) delete process.env.GBRAIN_HOME;
-  else process.env.GBRAIN_HOME = originalHome;
+  if (originalHome === undefined) delete process.env.VOLTMIND_HOME;
+  else process.env.VOLTMIND_HOME = originalHome;
   if (existsSync(tmpHome)) rmSync(tmpHome, { recursive: true, force: true });
 });
 
@@ -86,8 +86,8 @@ describe('writeCheckpoint + loadCheckpoint round-trip', () => {
       completed_steps: [],
     };
     writeCheckpoint(cp);
-    // Corrupt the file. gbrainPath resolves to GBRAIN_HOME/.gbrain/<file>.
-    const path = join(tmpHome, '.gbrain', 'upgrade-checkpoint.json');
+    // Corrupt the file. voltmindPath resolves to VOLTMIND_HOME/.voltmind/<file>.
+    const path = join(tmpHome, '.voltmind', 'upgrade-checkpoint.json');
     writeFileSync(path, 'not json {{');
     expect(loadCheckpoint()).toBeNull();
   });

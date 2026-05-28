@@ -1,5 +1,5 @@
 /**
- * v0.41 Bug 2 / Eng D8 — `gbrain doctor` `subagent_health` check coverage.
+ * v0.41 Bug 2 / Eng D8 — `voltmind doctor` `subagent_health` check coverage.
  *
  * Reads the last 24h of `minion_lease_pressure_log` (populated by the
  * Bug 2 worker bypass path) and classifies pressure into ok / warn / fail
@@ -97,7 +97,7 @@ describe('doctor subagent_health (v0.41 Bug 2 / Eng D8)', () => {
     expect(check.status).toBe('warn');
     expect(check.message).toContain('100');
     // Paste-ready hint with the canonical env-var name.
-    expect(check.message).toContain('GBRAIN_ANTHROPIC_MAX_INFLIGHT');
+    expect(check.message).toContain('VOLTMIND_ANTHROPIC_MAX_INFLIGHT');
   });
 
   test('1000+ bounces → fail (blocking real work)', async () => {
@@ -120,6 +120,6 @@ describe('doctor subagent_health (v0.41 Bug 2 / Eng D8)', () => {
     expect(check.status).toBe('fail');
     expect(check.message).toContain('1000');
     expect(check.message).toContain('blocking real work');
-    expect(check.message).toContain('GBRAIN_ANTHROPIC_MAX_INFLIGHT');
+    expect(check.message).toContain('VOLTMIND_ANTHROPIC_MAX_INFLIGHT');
   });
 });

@@ -2,7 +2,7 @@
  * Tests for the TS migration registry (src/commands/migrations/index.ts).
  *
  * The registry replaces filesystem discovery of skills/migrations/*.md so
- * the compiled `gbrain` binary can enumerate migrations without a readdir.
+ * the compiled `voltmind` binary can enumerate migrations without a readdir.
  */
 
 import { describe, test, expect } from 'bun:test';

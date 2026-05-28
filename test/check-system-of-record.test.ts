@@ -24,17 +24,17 @@ import { join } from 'node:path';
 const SCRIPT_PATH = join(import.meta.dir, '..', 'scripts', 'check-system-of-record.sh');
 
 function runGate(cwd: string): { code: number; stdout: string; stderr: string } {
-  // GBRAIN_SCAN_ROOT pins the gate's scan directory to our fake repo.
+  // VOLTMIND_SCAN_ROOT pins the gate's scan directory to our fake repo.
   // Without this, `git rev-parse --show-toplevel` inside the gate can walk
   // up past our /tmp/gate-test-* fakeRepo (when its `git init -q` silently
-  // failed under shard-concurrency load) into the real gbrain repo and
+  // failed under shard-concurrency load) into the real voltmind repo and
   // scan the clean src+scripts — false-negative the negative-case test.
   // v0.40.10 flake-hardening fix.
   const r = spawnSync('bash', [SCRIPT_PATH], {
     cwd,
     encoding: 'utf-8',
     timeout: 30_000,
-    env: { ...process.env, GBRAIN_SCAN_ROOT: cwd },
+    env: { ...process.env, VOLTMIND_SCAN_ROOT: cwd },
   });
   return {
     code: r.status ?? -1,
@@ -99,7 +99,7 @@ async function bad(engine: BrainEngine) {
         `// A legitimate reconciler — explicit allow comment.
 import type { BrainEngine } from './engine.ts';
 async function reconcile(engine: BrainEngine) {
-  await engine.insertFact({ fact: 'ok' } as any, { source_id: 'default' }); // gbrain-allow-direct-insert: this is the canonical reconcile path
+  await engine.insertFact({ fact: 'ok' } as any, { source_id: 'default' }); // voltmind-allow-direct-insert: this is the canonical reconcile path
 }
 `,
         'utf-8',
@@ -120,7 +120,7 @@ async function reconcile(engine: BrainEngine) {
       mkdirSync(fakeSrc, { recursive: true });
       writeFileSync(
         join(fakeSrc, 'tricky.ts'),
-        `// gbrain-allow-direct-insert: misplaced comment on the wrong line
+        `// voltmind-allow-direct-insert: misplaced comment on the wrong line
 import type { BrainEngine } from './engine.ts';
 async function tricky(engine: BrainEngine) {
   await engine.insertFact({ fact: 'sneaky' } as any, { source_id: 'default' });

@@ -10,7 +10,7 @@
 // codex #7 finding's wrong shape. Cancelled queries actually stop on
 // Postgres; PGLite has a documented gap.
 //
-// Bypass: GBRAIN_NO_ONBOARD_NUDGE=1 short-circuits. Non-TTY default
+// Bypass: VOLTMIND_NO_ONBOARD_NUDGE=1 short-circuits. Non-TTY default
 // also short-circuits (CI/scripted callers see nothing).
 
 import type { BrainEngine } from '../engine.ts';
@@ -21,7 +21,7 @@ const NUDGE_BUDGET_MS = 3000;
  * Post-initSchema nudge. Fail-open per A18.
  *
  * Returns silently when:
- *   - GBRAIN_NO_ONBOARD_NUDGE=1
+ *   - VOLTMIND_NO_ONBOARD_NUDGE=1
  *   - Non-TTY environment (CI, scripted)
  *   - All 4 onboard checks complete within 3s AND surface 0 recommendations
  *   - ANY error during check execution (logged to stderr, suppressed)
@@ -32,7 +32,7 @@ const NUDGE_BUDGET_MS = 3000;
  */
 export async function runInitNudge(engine: BrainEngine): Promise<void> {
   try {
-    if (process.env.GBRAIN_NO_ONBOARD_NUDGE === '1') return;
+    if (process.env.VOLTMIND_NO_ONBOARD_NUDGE === '1') return;
     if (!process.stderr.isTTY) return;
 
     const controller = new AbortController();
@@ -125,8 +125,8 @@ export async function runInitNudge(engine: BrainEngine): Promise<void> {
 
     process.stderr.write(
       `\n[onboard] Brain has opportunities: ${parts.join(', ')}.\n` +
-      `[onboard] Run 'gbrain onboard --check' to see the plan.` +
-      (partial ? ` (${checksRan}/${checksAttempted} checks complete; run gbrain onboard --check for full recommendations)` : '') +
+      `[onboard] Run 'voltmind onboard --check' to see the plan.` +
+      (partial ? ` (${checksRan}/${checksAttempted} checks complete; run voltmind onboard --check for full recommendations)` : '') +
       `\n`,
     );
   } catch (err) {
@@ -141,10 +141,10 @@ export async function runInitNudge(engine: BrainEngine): Promise<void> {
  */
 export async function runUpgradeBanner(_engine: BrainEngine): Promise<void> {
   try {
-    if (process.env.GBRAIN_NO_ONBOARD_NUDGE === '1') return;
+    if (process.env.VOLTMIND_NO_ONBOARD_NUDGE === '1') return;
     if (!process.stderr.isTTY) return;
     process.stderr.write(
-      `\n[onboard] Upgrade complete. Run 'gbrain onboard --check' to see if the new version surfaces any new opportunities.\n`,
+      `\n[onboard] Upgrade complete. Run 'voltmind onboard --check' to see if the new version surfaces any new opportunities.\n`,
     );
   } catch {
     // A18 posture for symmetry.

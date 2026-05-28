@@ -2,7 +2,7 @@
  * Tests for the v0.13.0 frontmatter relationship indexing migration.
  *
  * Iron rule (regression guard for Bug 1, v0.14.0 upgrade night): phase
- * handlers must shell out to the bare string `gbrain`, NOT to
+ * handlers must shell out to the bare string `voltmind`, NOT to
  * `process.execPath`. On bun-installed trees execPath is the bun runtime;
  * `bun extract ...` gets interpreted as `bun run extract` and the upgrade
  * crashes mid-migration. The canonical shim on PATH is the right target.
@@ -59,13 +59,13 @@ describe('v0.13.0 — Frontmatter relationship indexing migration', () => {
     expect(src).not.toMatch(/\$\{GBRAIN\}/);
   });
 
-  test('phase commands invoke bare `gbrain` shell-out (Bug 1 fix)', () => {
+  test('phase commands invoke bare `voltmind` shell-out (Bug 1 fix)', () => {
     const src = readFileSync(SRC_PATH, 'utf-8');
-    // All three phases shell out to bare `gbrain` so the canonical shim
+    // All three phases shell out to bare `voltmind` so the canonical shim
     // on PATH wins. This is the shape v0_12_0 has always used.
-    expect(src).toContain("execSync('gbrain init --migrate-only'");
-    expect(src).toContain("execSync('gbrain extract links --source db --include-frontmatter'");
-    expect(src).toContain("execSync('gbrain call get_stats'");
+    expect(src).toContain("execSync('voltmind init --migrate-only'");
+    expect(src).toContain("execSync('voltmind extract links --source db --include-frontmatter'");
+    expect(src).toContain("execSync('voltmind call get_stats'");
   });
 
   test('phase commands never reference `bun` or `.ts` paths (Bug 1 regression)', () => {

@@ -3,7 +3,7 @@
  *
  * The batch path (Postgres-only fast path added in v0.20.x) and the sequential
  * path (engine.getAllSlugs + getPage loop) MUST return the same result for
- * every supported case, otherwise gbrain doctor reports different numbers
+ * every supported case, otherwise voltmind doctor reports different numbers
  * depending on engine type or whether batch was attempted.
  *
  * Codex review of the original perf commit caught a multi-source dedup

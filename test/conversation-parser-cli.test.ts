@@ -1,5 +1,5 @@
 /**
- * v0.41.16.0 — `gbrain conversation-parser` debug CLI tests.
+ * v0.41.16.0 — `voltmind conversation-parser` debug CLI tests.
  *
  * Pins:
  *   - list-builtins prints all 12 patterns + accepts --json
@@ -59,7 +59,7 @@ describe('runConversationParser — help', () => {
       cap.restore();
     }
     const text = cap.out.join('');
-    expect(text).toContain('Usage: gbrain conversation-parser');
+    expect(text).toContain('Usage: voltmind conversation-parser');
     expect(text).toContain('scan');
     expect(text).toContain('list-builtins');
     expect(text).toContain('validate');
@@ -72,7 +72,7 @@ describe('runConversationParser — help', () => {
     } finally {
       cap.restore();
     }
-    expect(cap.out.join('')).toContain('Usage: gbrain conversation-parser');
+    expect(cap.out.join('')).toContain('Usage: voltmind conversation-parser');
   });
 });
 

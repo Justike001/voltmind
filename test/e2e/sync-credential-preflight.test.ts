@@ -1,20 +1,20 @@
 /**
- * v0.41.6.0 D1 E2E — `gbrain sync` preflight rejects missing creds
+ * v0.41.6.0 D1 E2E — `voltmind sync` preflight rejects missing creds
  * cleanly without writing N failures to sync-failures.jsonl.
  *
  * Repro from the production bug report:
  *   unset OPENAI_API_KEY
- *   gbrain sync --repo /tmp/test --full --yes
+ *   voltmind sync --repo /tmp/test --full --yes
  *
  * Pre-v0.41.6.0: 565 identical "OpenAI embedding requires
- * OPENAI_API_KEY" entries in ~/.gbrain/sync-failures.jsonl, bookmark
+ * OPENAI_API_KEY" entries in ~/.voltmind/sync-failures.jsonl, bookmark
  * blocked.
  *
  * Post-v0.41.6.0: single clean stderr line, exit 1, zero
  * sync-failures.jsonl entries.
  *
- * Hermetic: GBRAIN_HOME points at a tmpdir; OPENAI_API_KEY explicitly
- * unset; runs against PGLite via `gbrain init --pglite` so no real
+ * Hermetic: VOLTMIND_HOME points at a tmpdir; OPENAI_API_KEY explicitly
+ * unset; runs against PGLite via `voltmind init --pglite` so no real
  * Postgres needed.
  */
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
@@ -29,17 +29,17 @@ let tmpHome: string;
 let repoDir: string;
 
 beforeAll(() => {
-  tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-preflight-e2e-'));
-  // gbrainPath() appends `.gbrain` to GBRAIN_HOME — pre-create the dir.
-  const gbrainDir = join(tmpHome, '.gbrain');
-  mkdirSync(gbrainDir, { recursive: true });
+  tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-preflight-e2e-'));
+  // voltmindPath() appends `.voltmind` to VOLTMIND_HOME — pre-create the dir.
+  const voltmindDir = join(tmpHome, '.voltmind');
+  mkdirSync(voltmindDir, { recursive: true });
   // Pre-populate config.json so we can exercise the preflight without
-  // running `gbrain init` (which refuses when multiple provider env keys
+  // running `voltmind init` (which refuses when multiple provider env keys
   // are already in the parent shell — out of scope for this test).
-  // GBRAIN_HOME is hermetic; this config is private to this test run.
-  writeFileSync(join(gbrainDir, 'config.json'), JSON.stringify({
+  // VOLTMIND_HOME is hermetic; this config is private to this test run.
+  writeFileSync(join(voltmindDir, 'config.json'), JSON.stringify({
     database: 'pglite',
-    pglite_dir: join(gbrainDir, 'pglite'),
+    pglite_dir: join(voltmindDir, 'pglite'),
     embedding_model: 'openai:text-embedding-3-small',
     embedding_dimensions: 1536,
   }, null, 2));
@@ -52,7 +52,7 @@ afterAll(() => {
 beforeEach(() => {
   // Create a fresh repo with one markdown file.
   if (repoDir) { try { rmSync(repoDir, { recursive: true, force: true }); } catch { /* */ } }
-  repoDir = mkdtempSync(join(tmpdir(), 'gbrain-preflight-repo-'));
+  repoDir = mkdtempSync(join(tmpdir(), 'voltmind-preflight-repo-'));
   mkdirSync(join(repoDir, 'people'), { recursive: true });
   writeFileSync(join(repoDir, 'people', 'alice-example.md'), [
     '---',
@@ -71,7 +71,7 @@ beforeEach(() => {
 });
 
 function runCli(args: string[], env: Record<string, string | undefined>): { code: number; stdout: string; stderr: string } {
-  const fullEnv: Record<string, string | undefined> = { ...(process.env as Record<string, string | undefined>), GBRAIN_HOME: tmpHome, ...env };
+  const fullEnv: Record<string, string | undefined> = { ...(process.env as Record<string, string | undefined>), VOLTMIND_HOME: tmpHome, ...env };
   // Strip ALL provider keys by default — the preflight test is about
   // the OPENAI path; other keys would route preflight elsewhere and
   // muddy the test signal.
@@ -88,7 +88,7 @@ function runCli(args: string[], env: Record<string, string | undefined>): { code
   return { code: res.status ?? -1, stdout: res.stdout, stderr: res.stderr };
 }
 
-describe('v0.41.6.0 D1 E2E — gbrain sync preflight rejects missing OPENAI_API_KEY', () => {
+describe('v0.41.6.0 D1 E2E — voltmind sync preflight rejects missing OPENAI_API_KEY', () => {
   test('exits non-zero with paste-ready stderr message', () => {
     const result = runCli(['sync', '--repo', repoDir, '--full', '--yes'], {});
 
@@ -105,7 +105,7 @@ describe('v0.41.6.0 D1 E2E — gbrain sync preflight rejects missing OPENAI_API_
   test('does NOT write 565 identical entries to sync-failures.jsonl', () => {
     runCli(['sync', '--repo', repoDir, '--full', '--yes'], {});
 
-    const failuresPath = join(tmpHome, '.gbrain', 'sync-failures.jsonl');
+    const failuresPath = join(tmpHome, '.voltmind', 'sync-failures.jsonl');
     if (!existsSync(failuresPath)) {
       // File never created — perfect outcome.
       expect(true).toBe(true);

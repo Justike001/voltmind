@@ -201,7 +201,7 @@ export interface GradeTakesOpts extends BasePhaseOpts {
    * lives in the takes resolution layer, not here.
    */
   autoResolveThreshold?: number;
-  /** Identifier recorded as resolved_by when auto-applying. Default 'gbrain:grade_takes'. */
+  /** Identifier recorded as resolved_by when auto-applying. Default 'voltmind:grade_takes'. */
   resolvedByLabel?: string;
   /**
    * v0.36.1.0 (T11 / E4) — gstack-learnings coupling on incorrect/partial
@@ -394,7 +394,7 @@ class GradeTakesPhase extends BaseCyclePhase {
     const takeLimit = opts.takeLimit ?? 50;
     const autoResolve = opts.autoResolve ?? false; // D17 default OFF
     const autoResolveThreshold = opts.autoResolveThreshold ?? 0.95; // D12 conservative
-    const resolvedByLabel = opts.resolvedByLabel ?? 'gbrain:grade_takes';
+    const resolvedByLabel = opts.resolvedByLabel ?? 'voltmind:grade_takes';
     const judgeModelId = opts.model ?? 'claude-sonnet-4-6';
 
     const useEnsemble = opts.useEnsemble ?? false;

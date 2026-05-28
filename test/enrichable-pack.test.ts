@@ -9,11 +9,11 @@ import {
 } from '../src/core/schema-pack/index.ts';
 import { join } from 'node:path';
 
-const GBRAIN_BASE_PATH = join(import.meta.dir, '../src/core/schema-pack/base/gbrain-base.yaml');
+const VOLTMIND_BASE_PATH = join(import.meta.dir, '../src/core/schema-pack/base/voltmind-base.yaml');
 
-describe('enrichableTypesFromPack (T_E) — gbrain-base parity', () => {
-  test('gbrain-base declares person + company + deal as enrichable', () => {
-    const pack = loadPackFromFile(GBRAIN_BASE_PATH);
+describe('enrichableTypesFromPack (T_E) — voltmind-base parity', () => {
+  test('voltmind-base declares person + company + deal as enrichable', () => {
+    const pack = loadPackFromFile(VOLTMIND_BASE_PATH);
     const enrichable = enrichableTypesFromPack(pack);
     expect(enrichable.has('person')).toBe(true);
     expect(enrichable.has('company')).toBe(true);
@@ -21,21 +21,21 @@ describe('enrichableTypesFromPack (T_E) — gbrain-base parity', () => {
   });
 
   test('rubricNameForType returns the declared slot name', () => {
-    const pack = loadPackFromFile(GBRAIN_BASE_PATH);
+    const pack = loadPackFromFile(VOLTMIND_BASE_PATH);
     expect(rubricNameForType(pack, 'person')).toBe('person-default');
     expect(rubricNameForType(pack, 'company')).toBe('company-default');
     expect(rubricNameForType(pack, 'deal')).toBe('deal-default');
   });
 
   test('rubricNameForType returns null for unknown / non-enrichable type', () => {
-    const pack = loadPackFromFile(GBRAIN_BASE_PATH);
+    const pack = loadPackFromFile(VOLTMIND_BASE_PATH);
     expect(rubricNameForType(pack, 'note')).toBeNull();
     expect(rubricNameForType(pack, 'random')).toBeNull();
   });
 
   test('custom pack overrides enrichable types', () => {
     const pack = parseSchemaPackManifest({
-      api_version: 'gbrain-schema-pack-v1',
+      api_version: 'voltmind-schema-pack-v1',
       name: 'research',
       version: '0.1.0',
       extends: null,

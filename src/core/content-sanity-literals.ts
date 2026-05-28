@@ -1,7 +1,7 @@
 /**
  * Operator-extensible literal-substring loader for the content-sanity gate.
  *
- * Reads `~/.gbrain/junk-substrings.txt` (operator-maintained) and returns
+ * Reads `~/.voltmind/junk-substrings.txt` (operator-maintained) and returns
  * `OperatorLiteral[]` for `assessContentSanity` to evaluate alongside the
  * built-in junk patterns.
  *
@@ -56,15 +56,15 @@
 import { existsSync, readFileSync } from 'fs';
 import type { OperatorLiteral } from './content-sanity.ts';
 
-/** Path to the operator literals file. Honors `GBRAIN_HOME` via
- *  `gbrainPath`. Resolved at load time so test fixtures can set
- *  `GBRAIN_HOME` to a tempdir per the test-isolation conventions in
+/** Path to the operator literals file. Honors `VOLTMIND_HOME` via
+ *  `voltmindPath`. Resolved at load time so test fixtures can set
+ *  `VOLTMIND_HOME` to a tempdir per the test-isolation conventions in
  *  CLAUDE.md. */
 function resolveLiteralsPath(): string {
   // Lazy-import to avoid loading config.ts surface for the pure
   // assessor's consumers that only need built-ins.
-  const { gbrainPath } = require('./config.ts');
-  return gbrainPath('junk-substrings.txt');
+  const { voltmindPath } = require('./config.ts');
+  return voltmindPath('junk-substrings.txt');
 }
 
 interface ParsedDirective {

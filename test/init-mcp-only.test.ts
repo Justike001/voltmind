@@ -1,12 +1,12 @@
 /**
- * Tests for `gbrain init --mcp-only` — thin-client setup branch.
+ * Tests for `voltmind init --mcp-only` — thin-client setup branch.
  *
  * Strategy: subprocess invocation against a tiny in-process HTTP server that
  * mimics the host's OAuth + /mcp endpoints. Subprocess because runInit calls
  * process.exit() on error paths, which breaks in-proc test isolation.
  *
- * Each test sets `GBRAIN_HOME` to a fresh tempdir so the config write is
- * isolated and we can inspect the resulting `~/.gbrain/config.json` without
+ * Each test sets `VOLTMIND_HOME` to a fresh tempdir so the config write is
+ * isolated and we can inspect the resulting `~/.voltmind/config.json` without
  * polluting the developer's home.
  */
 
@@ -72,7 +72,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-init-mcp-only-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-init-mcp-only-'));
   discoveryStatus = 200;
   tokenStatus = 200;
   mcpStatus = 200;
@@ -95,14 +95,14 @@ async function run(args: string[], extraEnv: Record<string, string | undefined> 
   for (const [k, v] of Object.entries(process.env)) {
     if (v !== undefined) env[k] = v;
   }
-  env.GBRAIN_HOME = tmp;
+  env.VOLTMIND_HOME = tmp;
   // Strip DB env vars so loadConfig() doesn't pick them up.
   delete env.DATABASE_URL;
-  delete env.GBRAIN_DATABASE_URL;
-  delete env.GBRAIN_REMOTE_CLIENT_SECRET;
-  delete env.GBRAIN_REMOTE_ISSUER_URL;
-  delete env.GBRAIN_REMOTE_MCP_URL;
-  delete env.GBRAIN_REMOTE_CLIENT_ID;
+  delete env.VOLTMIND_DATABASE_URL;
+  delete env.VOLTMIND_REMOTE_CLIENT_SECRET;
+  delete env.VOLTMIND_REMOTE_ISSUER_URL;
+  delete env.VOLTMIND_REMOTE_MCP_URL;
+  delete env.VOLTMIND_REMOTE_CLIENT_ID;
   for (const [k, v] of Object.entries(extraEnv)) {
     if (v === undefined) delete env[k];
     else env[k] = v;
@@ -123,9 +123,9 @@ async function run(args: string[], extraEnv: Record<string, string | undefined> 
   return { exitCode, stdout, stderr };
 }
 
-function configPath(): string { return join(tmp, '.gbrain', 'config.json'); }
+function configPath(): string { return join(tmp, '.voltmind', 'config.json'); }
 
-describe('gbrain init --mcp-only — happy path', () => {
+describe('voltmind init --mcp-only — happy path', () => {
   test('writes remote_mcp config and creates NO local DB', async () => {
     const r = await run([
       'init', '--mcp-only', '--json',
@@ -143,7 +143,7 @@ describe('gbrain init --mcp-only — happy path', () => {
     expect(cfg.remote_mcp.oauth_client_id).toBe('cid');
     expect(cfg.remote_mcp.oauth_client_secret).toBe('csecret');
     // CRITICAL: thin-client install must not have created a PGLite file.
-    expect(existsSync(join(tmp, '.gbrain', 'brain.pglite'))).toBe(false);
+    expect(existsSync(join(tmp, '.voltmind', 'brain.pglite'))).toBe(false);
     // database fields must NOT be set
     expect(cfg.database_url).toBeUndefined();
     expect(cfg.database_path).toBeUndefined();
@@ -159,7 +159,7 @@ describe('gbrain init --mcp-only — happy path', () => {
       '--issuer-url', `http://127.0.0.1:${port}`,
       '--mcp-url', `http://127.0.0.1:${port}/mcp`,
       '--oauth-client-id', 'cid',
-    ], { GBRAIN_REMOTE_CLIENT_SECRET: 'env-secret' });
+    ], { VOLTMIND_REMOTE_CLIENT_SECRET: 'env-secret' });
     expect(r.exitCode).toBe(0);
     const cfg = JSON.parse(readFileSync(configPath(), 'utf-8'));
     expect(cfg.remote_mcp).toBeDefined();
@@ -183,7 +183,7 @@ describe('gbrain init --mcp-only — happy path', () => {
   });
 });
 
-describe('gbrain init --mcp-only — required-flag errors', () => {
+describe('voltmind init --mcp-only — required-flag errors', () => {
   test('missing --issuer-url exits 1 with clear error', async () => {
     const r = await run([
       'init', '--mcp-only', '--json',
@@ -233,7 +233,7 @@ describe('gbrain init --mcp-only — required-flag errors', () => {
   });
 });
 
-describe('gbrain init --mcp-only — pre-flight smoke failures', () => {
+describe('voltmind init --mcp-only — pre-flight smoke failures', () => {
   test('discovery 404 → exits 1 with discovery_http reason', async () => {
     discoveryStatus = 404;
     const r = await run([
@@ -295,9 +295,9 @@ describe('gbrain init --mcp-only — pre-flight smoke failures', () => {
   });
 });
 
-describe('gbrain init re-run guard', () => {
+describe('voltmind init re-run guard', () => {
   function seedThinClientConfig() {
-    mkdirSync(join(tmp, '.gbrain'), { recursive: true });
+    mkdirSync(join(tmp, '.voltmind'), { recursive: true });
     writeFileSync(configPath(), JSON.stringify({
       engine: 'postgres',
       remote_mcp: {
@@ -309,7 +309,7 @@ describe('gbrain init re-run guard', () => {
     }, null, 2));
   }
 
-  test('default `gbrain init` (no flags) refuses when remote_mcp is set', async () => {
+  test('default `voltmind init` (no flags) refuses when remote_mcp is set', async () => {
     seedThinClientConfig();
     const r = await run(['init', '--json', '--non-interactive']);
     expect(r.exitCode).toBe(1);
@@ -318,7 +318,7 @@ describe('gbrain init re-run guard', () => {
     expect(parsed.mcp_url).toBe('https://existing.example/mcp');
   });
 
-  test('`gbrain init --pglite` refuses when remote_mcp is set', async () => {
+  test('`voltmind init --pglite` refuses when remote_mcp is set', async () => {
     seedThinClientConfig();
     const r = await run(['init', '--pglite', '--json', '--non-interactive']);
     expect(r.exitCode).toBe(1);
@@ -326,7 +326,7 @@ describe('gbrain init re-run guard', () => {
     expect(parsed.reason).toBe('thin_client_config_present');
   });
 
-  test('`gbrain init --mcp-only` (no --force) refuses when remote_mcp is already set', async () => {
+  test('`voltmind init --mcp-only` (no --force) refuses when remote_mcp is already set', async () => {
     seedThinClientConfig();
     const r = await run([
       'init', '--mcp-only', '--json',
@@ -343,7 +343,7 @@ describe('gbrain init re-run guard', () => {
     expect(cfg.remote_mcp.oauth_client_id).toBe('old-cid');
   });
 
-  test('`gbrain init --mcp-only --force` overwrites existing thin-client config', async () => {
+  test('`voltmind init --mcp-only --force` overwrites existing thin-client config', async () => {
     seedThinClientConfig();
     const r = await run([
       'init', '--mcp-only', '--force', '--json',

@@ -1,11 +1,11 @@
 // Phase 4 (F3): loadConfigWithEngine() DB-merge contract.
 //
 // Verifies precedence (env > file > DB > defaults) for the new v0.27.1
-// multimodal flags so `gbrain config set embedding_multimodal true`
+// multimodal flags so `voltmind config set embedding_multimodal true`
 // actually flips the runtime gate even when the file plane is silent.
 
 import { describe, expect, test } from 'bun:test';
-import { loadConfigWithEngine, type GBrainConfig } from '../src/core/config.ts';
+import { loadConfigWithEngine, type VoltMindConfig } from '../src/core/config.ts';
 
 interface FakeEngine {
   getConfig(key: string): Promise<string | null | undefined>;
@@ -23,7 +23,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
   test('synthesizes a minimal base when base config is null (v0.36 codex /ship #3)', async () => {
     // Pre-v0.36 this returned null and skipped DB-plane merge entirely.
     // That meant env-only Postgres installs (no file config) couldn't see
-    // DB-plane overrides set via `gbrain config set` — the documented
+    // DB-plane overrides set via `voltmind config set` — the documented
     // smoke test for `search_embedding_column` would silently fail.
     // The fix synthesizes a minimal `{ engine: 'postgres' }` base so DB
     // merge still runs; downstream callers either find the DB key or
@@ -35,7 +35,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
 
   test('DB-plane embedding_columns merge works even with null base (codex /ship #3 round-trip)', async () => {
     // The whole point of the synthesized fallback: env-only installs
-    // calling `gbrain config set embedding_columns '...'` get those keys
+    // calling `voltmind config set embedding_columns '...'` get those keys
     // back when the resolver re-reads config. Verifies the merge path
     // actually runs (not just that the function returns truthy).
     const engine = makeEngine({
@@ -48,7 +48,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
   });
 
   test('DB flag fills in when file/env did not set it', async () => {
-    const base: GBrainConfig = { engine: 'pglite' };
+    const base: VoltMindConfig = { engine: 'pglite' };
     const engine = makeEngine({
       embedding_multimodal: 'true',
       embedding_image_ocr: 'false',
@@ -61,7 +61,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
   });
 
   test('file/env precedence: file value wins over DB value', async () => {
-    const base: GBrainConfig = {
+    const base: VoltMindConfig = {
       engine: 'pglite',
       embedding_multimodal: false,
       embedding_image_ocr_model: 'file-set-model',
@@ -76,7 +76,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
   });
 
   test('partial DB merge: only undefined fields fall through', async () => {
-    const base: GBrainConfig = {
+    const base: VoltMindConfig = {
       engine: 'pglite',
       embedding_multimodal: true,
       // embedding_image_ocr NOT set in file plane
@@ -93,7 +93,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
   });
 
   test('engine.getConfig throwing is non-fatal — file/env config still returned', async () => {
-    const base: GBrainConfig = {
+    const base: VoltMindConfig = {
       engine: 'pglite',
       embedding_multimodal: true,
     };
@@ -107,7 +107,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
   });
 
   test('null/empty DB values are ignored (not coerced to false)', async () => {
-    const base: GBrainConfig = { engine: 'pglite' };
+    const base: VoltMindConfig = { engine: 'pglite' };
     const engine = makeEngine({
       embedding_multimodal: null,
       embedding_image_ocr: '',
@@ -120,7 +120,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
   });
 
   test('non-"true" DB string values resolve to false (strict equality)', async () => {
-    const base: GBrainConfig = { engine: 'pglite' };
+    const base: VoltMindConfig = { engine: 'pglite' };
     const engine = makeEngine({
       embedding_multimodal: 'TRUE', // wrong case
       embedding_image_ocr: '1',     // wrong format
@@ -136,7 +136,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
   // embedMultimodal() routes correctly regardless of which plane set it.
   describe('embedding_multimodal_model precedence', () => {
     test('DB value fills in when file/env did not set it', async () => {
-      const base: GBrainConfig = { engine: 'pglite' };
+      const base: VoltMindConfig = { engine: 'pglite' };
       const engine = makeEngine({
         embedding_multimodal_model: 'voyage:voyage-multimodal-3',
       });
@@ -145,7 +145,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
     });
 
     test('file value wins over DB value', async () => {
-      const base: GBrainConfig = {
+      const base: VoltMindConfig = {
         engine: 'pglite',
         embedding_multimodal_model: 'voyage:voyage-multimodal-3',
       };
@@ -157,14 +157,14 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
     });
 
     test('all unset stays undefined', async () => {
-      const base: GBrainConfig = { engine: 'pglite' };
+      const base: VoltMindConfig = { engine: 'pglite' };
       const engine = makeEngine({});
       const merged = await loadConfigWithEngine(engine, base);
       expect(merged?.embedding_multimodal_model).toBeUndefined();
     });
 
     test('null/empty DB string is ignored (does not clobber)', async () => {
-      const base: GBrainConfig = { engine: 'pglite' };
+      const base: VoltMindConfig = { engine: 'pglite' };
       const engine = makeEngine({
         embedding_multimodal_model: '',
       });
@@ -179,7 +179,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
   // fix wave). These tests pin that contract.
   describe('dream.* DB-plane merge (v0.41.2.1)', () => {
     test('DB value fills in for all 5 dream.synthesize.* keys when base unset', async () => {
-      const base: GBrainConfig = { engine: 'pglite' };
+      const base: VoltMindConfig = { engine: 'pglite' };
       const engine = makeEngine({
         'dream.synthesize.session_corpus_dir': '/tmp/sessions',
         'dream.synthesize.meeting_transcripts_dir': '/tmp/meetings',
@@ -196,7 +196,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
     });
 
     test('DB value fills in for both dream.patterns.* keys when base unset', async () => {
-      const base: GBrainConfig = { engine: 'pglite' };
+      const base: VoltMindConfig = { engine: 'pglite' };
       const engine = makeEngine({
         'dream.patterns.lookback_days': '45',
         'dream.patterns.min_evidence': '4',
@@ -207,7 +207,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
     });
 
     test('file value wins over DB value (per-key precedence)', async () => {
-      const base: GBrainConfig = {
+      const base: VoltMindConfig = {
         engine: 'pglite',
         dream: {
           synthesize: { session_corpus_dir: '/from-file' },
@@ -228,7 +228,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
     });
 
     test('parent objects (cfg.dream, cfg.dream.synthesize, cfg.dream.patterns) are allocated even when file plane has none', async () => {
-      const base: GBrainConfig = { engine: 'pglite' };
+      const base: VoltMindConfig = { engine: 'pglite' };
       const engine = makeEngine({
         'dream.synthesize.session_corpus_dir': '/just-this-one',
       });
@@ -241,7 +241,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
     });
 
     test('invalid DB int values fall back to undefined (do not throw)', async () => {
-      const base: GBrainConfig = { engine: 'pglite' };
+      const base: VoltMindConfig = { engine: 'pglite' };
       const engine = makeEngine({
         'dream.synthesize.max_prompt_tokens': 'abc',
         'dream.patterns.min_evidence': 'not-a-number',
@@ -256,7 +256,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
     });
 
     test('empty DB values do not clobber unset file plane', async () => {
-      const base: GBrainConfig = { engine: 'pglite' };
+      const base: VoltMindConfig = { engine: 'pglite' };
       const engine = makeEngine({
         'dream.synthesize.session_corpus_dir': '',
         'dream.synthesize.meeting_transcripts_dir': undefined,
@@ -267,14 +267,14 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
     });
 
     test('cfg.dream stays undefined when neither plane sets anything', async () => {
-      const base: GBrainConfig = { engine: 'pglite' };
+      const base: VoltMindConfig = { engine: 'pglite' };
       const engine = makeEngine({});
       const merged = await loadConfigWithEngine(engine, base);
       expect(merged?.dream).toBeUndefined();
     });
 
     test('mixed: file sets synthesize.session_corpus_dir; DB sets patterns.lookback_days', async () => {
-      const base: GBrainConfig = {
+      const base: VoltMindConfig = {
         engine: 'pglite',
         dream: { synthesize: { session_corpus_dir: '/file-only' } },
       };
@@ -287,7 +287,7 @@ describe('loadConfigWithEngine (Phase 4 / F3)', () => {
     });
 
     test('engine.getConfig throwing leaves dream.* unset (non-fatal, mirrors content_sanity)', async () => {
-      const base: GBrainConfig = { engine: 'pglite' };
+      const base: VoltMindConfig = { engine: 'pglite' };
       const engine: FakeEngine = {
         async getConfig() {
           throw new Error('config table missing');

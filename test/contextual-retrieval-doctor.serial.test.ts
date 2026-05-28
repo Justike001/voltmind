@@ -14,19 +14,19 @@ import { MARKDOWN_CHUNKER_VERSION } from '../src/core/chunkers/recursive.ts';
 
 let engine: PGLiteEngine;
 let tmpDir: string;
-const originalEnv = process.env.GBRAIN_AUDIT_DIR;
+const originalEnv = process.env.VOLTMIND_AUDIT_DIR;
 
 beforeAll(async () => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gbrain-doctor-cr-test-'));
-  process.env.GBRAIN_AUDIT_DIR = tmpDir;
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voltmind-doctor-cr-test-'));
+  process.env.VOLTMIND_AUDIT_DIR = tmpDir;
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
 });
 
 afterAll(async () => {
-  if (originalEnv === undefined) delete process.env.GBRAIN_AUDIT_DIR;
-  else process.env.GBRAIN_AUDIT_DIR = originalEnv;
+  if (originalEnv === undefined) delete process.env.VOLTMIND_AUDIT_DIR;
+  else process.env.VOLTMIND_AUDIT_DIR = originalEnv;
   fs.rmSync(tmpDir, { recursive: true, force: true });
   await engine.disconnect();
 });
@@ -68,7 +68,7 @@ describe('contextual_retrieval_coverage doctor check', () => {
     const result = await checkContextualRetrievalCoverage(engine);
     expect(result.status).toBe('warn');
     expect(result.message).toContain('older chunker_version');
-    expect(result.message).toContain('gbrain reindex --markdown');
+    expect(result.message).toContain('voltmind reindex --markdown');
   });
 
   test('NULL mode column is flagged separately', async () => {

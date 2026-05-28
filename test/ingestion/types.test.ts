@@ -33,7 +33,7 @@ function makeEvent(overrides: Partial<IngestionEvent> = {}): IngestionEvent {
 
 describe('IngestionSource contract constants', () => {
   test('INGESTION_SOURCE_API_VERSION is the v1 string', () => {
-    expect(INGESTION_SOURCE_API_VERSION).toBe('gbrain-ingestion-source-v1');
+    expect(INGESTION_SOURCE_API_VERSION).toBe('voltmind-ingestion-source-v1');
   });
 
   test('INGESTION_CONTENT_TYPES covers the documented taxonomy', () => {

@@ -21,7 +21,7 @@ cd "$ROOT"
 
 # Match: withRetry(...) wrapping any of the 3 engine batch methods.
 # The greedy `.*` between `withRetry(` and `engine.` covers both the
-# arrow-fn form and any direct invocation. (gbrain-allow-direct-insert: doc comment)
+# arrow-fn form and any direct invocation. (voltmind-allow-direct-insert: doc comment)
 # Multi-line wraps are caught by `grep -E` per file (line-wise) for the
 # common single-line case; multi-line wraps still get caught by a separate
 # multi-line pass below.
@@ -42,8 +42,8 @@ if grep -rEn "$PATTERN" src/ --include='*.ts' 2>/dev/null; then
   echo "         await engine.addLinks(batch, { auditSite: 'extract.links_inc' }); // example"
   echo
   echo "       Audit JSONL records the retries silently at "
-  echo "       ~/.gbrain/audit/batch-retry-YYYY-Www.jsonl; check"
-  echo "       \`gbrain doctor\` for the batch_retry_health surface."
+  echo "       ~/.voltmind/audit/batch-retry-YYYY-Www.jsonl; check"
+  echo "       \`voltmind doctor\` for the batch_retry_health surface."
   exit 1
 fi
 

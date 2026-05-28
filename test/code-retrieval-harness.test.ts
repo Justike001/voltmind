@@ -134,7 +134,7 @@ describe('loadQuestions', () => {
   test('parses the v0.34 baseline questions.json', () => {
     const file = loadQuestions('src/eval/code-retrieval/questions.json');
     expect(file.version).toBe(1);
-    expect(file.corpus).toBe('gbrain');
+    expect(file.corpus).toBe('voltmind');
     expect(file.questions.length).toBeGreaterThanOrEqual(12);
     for (const q of file.questions) {
       expect(q.id).toBeDefined();

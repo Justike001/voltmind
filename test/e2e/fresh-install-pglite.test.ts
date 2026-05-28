@@ -1,11 +1,11 @@
 /**
- * E2E: fresh `gbrain init --pglite` produces a brain that can embed end-to-end.
+ * E2E: fresh `voltmind init --pglite` produces a brain that can embed end-to-end.
  *
  * The headline behavior the v0.37 fix wave exists to fix. Pre-fix, this
  * exact path broke: schema sized to 1536 (stale default), embed pipeline
  * used ZE/1280, first chunk insert failed with vector dim mismatch.
  *
- * Hermetic: in-process (NOT a CLI subprocess), GBRAIN_HOME pinned to a
+ * Hermetic: in-process (NOT a CLI subprocess), VOLTMIND_HOME pinned to a
  * tmpdir, embed transport stubbed via `__setEmbedTransportForTests` so we
  * don't need real provider credentials. CDX2-12 from the plan explicitly
  * called this design out.
@@ -23,7 +23,7 @@ import {
   DEFAULT_EMBEDDING_DIMENSIONS,
 } from '../../src/core/ai/gateway.ts';
 
-describe('E2E: fresh gbrain init --pglite → import → embed works end-to-end', () => {
+describe('E2E: fresh voltmind init --pglite → import → embed works end-to-end', () => {
   let tmpHome: string;
   let origHome: string | undefined;
   let origZeKey: string | undefined;
@@ -31,8 +31,8 @@ describe('E2E: fresh gbrain init --pglite → import → embed works end-to-end'
   let origVoyageKey: string | undefined;
 
   beforeEach(() => {
-    tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-e2e-fresh-'));
-    origHome = process.env.GBRAIN_HOME;
+    tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-e2e-fresh-'));
+    origHome = process.env.VOLTMIND_HOME;
     origZeKey = process.env.ZEROENTROPY_API_KEY;
     // Save + clear OPENAI_API_KEY + VOYAGE_API_KEY so init only sees
     // one provider as env-ready (ZE). Without this, dev machines with
@@ -43,15 +43,15 @@ describe('E2E: fresh gbrain init --pglite → import → embed works end-to-end'
     origVoyageKey = process.env.VOYAGE_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.VOYAGE_API_KEY;
-    process.env.GBRAIN_HOME = tmpHome;
+    process.env.VOLTMIND_HOME = tmpHome;
     // Stub key so init's setup-hint check passes.
     process.env.ZEROENTROPY_API_KEY = 'sk-test-ze';
   });
 
   afterEach(() => {
     rmSync(tmpHome, { recursive: true, force: true });
-    if (origHome === undefined) delete process.env.GBRAIN_HOME;
-    else process.env.GBRAIN_HOME = origHome;
+    if (origHome === undefined) delete process.env.VOLTMIND_HOME;
+    else process.env.VOLTMIND_HOME = origHome;
     if (origZeKey === undefined) delete process.env.ZEROENTROPY_API_KEY;
     else process.env.ZEROENTROPY_API_KEY = origZeKey;
     if (origOpenaiKey !== undefined) process.env.OPENAI_API_KEY = origOpenaiKey;
@@ -68,7 +68,7 @@ describe('E2E: fresh gbrain init --pglite → import → embed works end-to-end'
   test('bare `init --pglite`: schema sized to gateway defaults (ZE/1280)', async () => {
     // Reset gateway so init.ts has to resolve defaults from
     // ai/defaults.ts. This is the actual production code path for a
-    // fresh install: bare `gbrain init --pglite` with no env or file
+    // fresh install: bare `voltmind init --pglite` with no env or file
     // config.
     resetGateway();
 
@@ -110,7 +110,7 @@ describe('E2E: fresh gbrain init --pglite → import → embed works end-to-end'
     expect(allOut).toContain(`(${DEFAULT_EMBEDDING_DIMENSIONS}d)`);
 
     // config.json contains the saved resolved defaults (B.4 + CDX-3).
-    const cfgPath = join(tmpHome, '.gbrain', 'config.json');
+    const cfgPath = join(tmpHome, '.voltmind', 'config.json');
     expect(existsSync(cfgPath)).toBe(true);
     const cfg = JSON.parse(readFileSync(cfgPath, 'utf-8'));
     expect(cfg.engine).toBe('pglite');
@@ -152,7 +152,7 @@ describe('E2E: fresh gbrain init --pglite → import → embed works end-to-end'
       console.warn = origWarn;
     }
 
-    const cfgPath = join(tmpHome, '.gbrain', 'config.json');
+    const cfgPath = join(tmpHome, '.voltmind', 'config.json');
     const cfg = JSON.parse(readFileSync(cfgPath, 'utf-8'));
 
     const { PGLiteEngine } = await import('../../src/core/pglite-engine.ts');

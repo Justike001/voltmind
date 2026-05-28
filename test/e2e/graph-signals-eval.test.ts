@@ -219,7 +219,7 @@ describeFn('v0.40.4 — graph_signals eval gates (longmemeval-mini A/B)', () => 
       );
     }
     // Log the observed delta for posterity (informational, not assertion).
-    if (process.env.GBRAIN_EVAL_VERBOSE) {
+    if (process.env.VOLTMIND_EVAL_VERBOSE) {
       console.log(`Gate 1: observedDelta=${result.observedDelta.toFixed(3)}, p=${result.pValue.toFixed(3)}`);
     }
     expect(true).toBe(true);  // gate passed

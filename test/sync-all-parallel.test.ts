@@ -1,6 +1,6 @@
 /**
  * Tests for the v0.40.3.0 `sync --all` parallel fan-out + read-only
- * `gbrain sources status` dashboard.
+ * `voltmind sources status` dashboard.
  *
  * Why this exists:
  *   The CLI `sync --all` path used to walk sources SEQUENTIALLY via a
@@ -21,8 +21,8 @@
  *        all the inputs (PGLite, explicit --parallel, --workers ceiling,
  *        source-count floor, zero-source guard).
  *     2. The lock-identity invariant: any sync with sourceId set takes
- *        the per-source lock `gbrain-sync:<source_id>`, NOT the global
- *        `gbrain-sync` lock. Closes the bug class where `sync --all`
+ *        the per-source lock `voltmind-sync:<source_id>`, NOT the global
+ *        `voltmind-sync` lock. Closes the bug class where `sync --all`
  *        and `sync --source foo` would otherwise race.
  *     3. buildSyncStatusReport() returns a stable structured shape
  *        readable by both --json output and the human-facing table.

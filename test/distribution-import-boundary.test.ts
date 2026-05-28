@@ -88,6 +88,6 @@ describe('distribution module import boundary (E2 + Codex F6)', () => {
     expect(typeof dist.effectiveTier).toBe('function');
     expect(typeof dist.validateRegistryCatalog).toBe('function');
     expect(typeof dist.runScaffoldThirdParty).toBe('function');
-    expect(dist.REGISTRY_SCHEMA_VERSION).toBe('gbrain-registry-v1');
+    expect(dist.REGISTRY_SCHEMA_VERSION).toBe('voltmind-registry-v1');
   });
 });

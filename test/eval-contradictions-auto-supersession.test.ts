@@ -67,22 +67,22 @@ describe('classifyResolution', () => {
 });
 
 describe('renderResolutionCommand', () => {
-  test('takes_supersede emits gbrain takes supersede with row id', () => {
+  test('takes_supersede emits voltmind takes supersede with row id', () => {
     const pair = mkIntraPagePair('people/alice', 7);
     const cmd = renderResolutionCommand(pair, 'takes_supersede');
-    expect(cmd).toBe('gbrain takes supersede people/alice --row 7');
+    expect(cmd).toBe('voltmind takes supersede people/alice --row 7');
   });
 
   test('dream_synthesize targets the curated entity side', () => {
     const pair = mkCrossSlugPair('openclaw/chat/x', 'companies/acme');
     const cmd = renderResolutionCommand(pair, 'dream_synthesize');
-    expect(cmd).toBe('gbrain dream --phase synthesize --slug companies/acme');
+    expect(cmd).toBe('voltmind dream --phase synthesize --slug companies/acme');
   });
 
   test('takes_mark_debate emits mark-debate with row id', () => {
     const pair = mkIntraPagePair('people/alice', 12);
     const cmd = renderResolutionCommand(pair, 'takes_mark_debate');
-    expect(cmd).toBe('gbrain takes mark-debate people/alice --row 12');
+    expect(cmd).toBe('voltmind takes mark-debate people/alice --row 12');
   });
 
   test('manual_review emits a no-op comment naming both slugs', () => {
@@ -105,14 +105,14 @@ describe('proposeResolution (classify + render combined)', () => {
     const pair = mkIntraPagePair('people/alice', 42);
     const p = proposeResolution(pair, null);
     expect(p.resolution_kind).toBe('takes_supersede');
-    expect(p.resolution_command).toBe('gbrain takes supersede people/alice --row 42');
+    expect(p.resolution_command).toBe('voltmind takes supersede people/alice --row 42');
   });
 
   test('cross_slug curated → dream_synthesize on curated slug', () => {
     const pair = mkCrossSlugPair('openclaw/chat/foo', 'companies/acme');
     const p = proposeResolution(pair, null);
     expect(p.resolution_kind).toBe('dream_synthesize');
-    expect(p.resolution_command).toBe('gbrain dream --phase synthesize --slug companies/acme');
+    expect(p.resolution_command).toBe('voltmind dream --phase synthesize --slug companies/acme');
   });
 });
 
@@ -132,7 +132,7 @@ describe('pairToFinding', () => {
     expect(finding.axis).toBe('CFO role status');
     expect(finding.confidence).toBe(0.92);
     expect(finding.resolution_kind).toBe('takes_supersede');
-    expect(finding.resolution_command).toContain('gbrain takes supersede');
+    expect(finding.resolution_command).toContain('voltmind takes supersede');
     expect(finding.kind).toBe(pair.kind);
     expect(finding.a).toEqual(pair.a);
     expect(finding.b).toEqual(pair.b);

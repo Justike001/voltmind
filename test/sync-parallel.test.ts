@@ -52,7 +52,7 @@ describe('sync-parallel: PGLite + concurrency=4 (T4)', () => {
     engine = new PGLiteEngine();
     await engine.connect({});
     await engine.initSchema();
-    repoPath = mkdtempSync(join(tmpdir(), 'gbrain-sync-par-'));
+    repoPath = mkdtempSync(join(tmpdir(), 'voltmind-sync-par-'));
   });
 
   afterEach(async () => {
@@ -99,7 +99,7 @@ describe('sync-parallel: bookmark gate under concurrency request (T1)', () => {
     engine = new PGLiteEngine();
     await engine.connect({});
     await engine.initSchema();
-    repoPath = mkdtempSync(join(tmpdir(), 'gbrain-sync-gate-'));
+    repoPath = mkdtempSync(join(tmpdir(), 'voltmind-sync-gate-'));
   });
 
   afterEach(async () => {
@@ -170,7 +170,7 @@ describe('sync-parallel: head-drift gate (CODEX-3)', () => {
     engine = new PGLiteEngine();
     await engine.connect({});
     await engine.initSchema();
-    repoPath = mkdtempSync(join(tmpdir(), 'gbrain-sync-drift-'));
+    repoPath = mkdtempSync(join(tmpdir(), 'voltmind-sync-drift-'));
   });
 
   afterEach(async () => {
@@ -218,7 +218,7 @@ describe('sync-parallel: writer lock prevents reentrance (CODEX-2)', () => {
     engine = new PGLiteEngine();
     await engine.connect({});
     await engine.initSchema();
-    repoPath = mkdtempSync(join(tmpdir(), 'gbrain-sync-lock-'));
+    repoPath = mkdtempSync(join(tmpdir(), 'voltmind-sync-lock-'));
   });
 
   afterEach(async () => {
@@ -251,7 +251,7 @@ describe('sync-parallel: writer lock prevents reentrance (CODEX-2)', () => {
     // OR (b) second call hit the lock-busy error path. Either is correct.
     if (secondError) {
       const msg = secondError instanceof Error ? secondError.message : String(secondError);
-      expect(msg).toMatch(/Another sync is in progress|lock|gbrain-sync/i);
+      expect(msg).toMatch(/Another sync is in progress|lock|voltmind-sync/i);
     }
   });
 });

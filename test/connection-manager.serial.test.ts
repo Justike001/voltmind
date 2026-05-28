@@ -80,65 +80,65 @@ describe('deriveDirectUrl', () => {
 
 describe('readKillSwitchEnv', () => {
   let original: string | undefined;
-  beforeEach(() => { original = process.env.GBRAIN_DISABLE_DIRECT_POOL; });
+  beforeEach(() => { original = process.env.VOLTMIND_DISABLE_DIRECT_POOL; });
   afterEach(() => {
-    if (original === undefined) delete process.env.GBRAIN_DISABLE_DIRECT_POOL;
-    else process.env.GBRAIN_DISABLE_DIRECT_POOL = original;
+    if (original === undefined) delete process.env.VOLTMIND_DISABLE_DIRECT_POOL;
+    else process.env.VOLTMIND_DISABLE_DIRECT_POOL = original;
   });
 
   test('false when unset', () => {
-    delete process.env.GBRAIN_DISABLE_DIRECT_POOL;
+    delete process.env.VOLTMIND_DISABLE_DIRECT_POOL;
     expect(readKillSwitchEnv()).toBe(false);
   });
 
   test('true when "1"', () => {
-    process.env.GBRAIN_DISABLE_DIRECT_POOL = '1';
+    process.env.VOLTMIND_DISABLE_DIRECT_POOL = '1';
     expect(readKillSwitchEnv()).toBe(true);
   });
 
   test('true when "true"', () => {
-    process.env.GBRAIN_DISABLE_DIRECT_POOL = 'true';
+    process.env.VOLTMIND_DISABLE_DIRECT_POOL = 'true';
     expect(readKillSwitchEnv()).toBe(true);
   });
 
   test('false for any other value', () => {
-    process.env.GBRAIN_DISABLE_DIRECT_POOL = '0';
+    process.env.VOLTMIND_DISABLE_DIRECT_POOL = '0';
     expect(readKillSwitchEnv()).toBe(false);
-    process.env.GBRAIN_DISABLE_DIRECT_POOL = 'false';
+    process.env.VOLTMIND_DISABLE_DIRECT_POOL = 'false';
     expect(readKillSwitchEnv()).toBe(false);
   });
 });
 
 describe('resolveDirectPoolSize', () => {
   let original: string | undefined;
-  beforeEach(() => { original = process.env.GBRAIN_DIRECT_POOL_SIZE; });
+  beforeEach(() => { original = process.env.VOLTMIND_DIRECT_POOL_SIZE; });
   afterEach(() => {
-    if (original === undefined) delete process.env.GBRAIN_DIRECT_POOL_SIZE;
-    else process.env.GBRAIN_DIRECT_POOL_SIZE = original;
+    if (original === undefined) delete process.env.VOLTMIND_DIRECT_POOL_SIZE;
+    else process.env.VOLTMIND_DIRECT_POOL_SIZE = original;
   });
 
   test('default to 3', () => {
-    delete process.env.GBRAIN_DIRECT_POOL_SIZE;
+    delete process.env.VOLTMIND_DIRECT_POOL_SIZE;
     expect(resolveDirectPoolSize()).toBe(DEFAULT_DIRECT_POOL_SIZE);
     expect(DEFAULT_DIRECT_POOL_SIZE).toBe(3);
   });
 
   test('explicit overrides env', () => {
-    process.env.GBRAIN_DIRECT_POOL_SIZE = '5';
+    process.env.VOLTMIND_DIRECT_POOL_SIZE = '5';
     expect(resolveDirectPoolSize(7)).toBe(7);
   });
 
   test('env overrides default', () => {
-    process.env.GBRAIN_DIRECT_POOL_SIZE = '5';
+    process.env.VOLTMIND_DIRECT_POOL_SIZE = '5';
     expect(resolveDirectPoolSize()).toBe(5);
   });
 
   test('rejects invalid env values', () => {
-    process.env.GBRAIN_DIRECT_POOL_SIZE = 'abc';
+    process.env.VOLTMIND_DIRECT_POOL_SIZE = 'abc';
     expect(resolveDirectPoolSize()).toBe(DEFAULT_DIRECT_POOL_SIZE);
-    process.env.GBRAIN_DIRECT_POOL_SIZE = '0';
+    process.env.VOLTMIND_DIRECT_POOL_SIZE = '0';
     expect(resolveDirectPoolSize()).toBe(DEFAULT_DIRECT_POOL_SIZE);
-    process.env.GBRAIN_DIRECT_POOL_SIZE = '999';
+    process.env.VOLTMIND_DIRECT_POOL_SIZE = '999';
     expect(resolveDirectPoolSize()).toBe(DEFAULT_DIRECT_POOL_SIZE);
   });
 });
@@ -146,12 +146,12 @@ describe('resolveDirectPoolSize', () => {
 describe('ConnectionManager — describeMode + dual-pool routing', () => {
   let originalKillSwitch: string | undefined;
   beforeEach(() => {
-    originalKillSwitch = process.env.GBRAIN_DISABLE_DIRECT_POOL;
-    delete process.env.GBRAIN_DISABLE_DIRECT_POOL;
+    originalKillSwitch = process.env.VOLTMIND_DISABLE_DIRECT_POOL;
+    delete process.env.VOLTMIND_DISABLE_DIRECT_POOL;
   });
   afterEach(() => {
-    if (originalKillSwitch === undefined) delete process.env.GBRAIN_DISABLE_DIRECT_POOL;
-    else process.env.GBRAIN_DISABLE_DIRECT_POOL = originalKillSwitch;
+    if (originalKillSwitch === undefined) delete process.env.VOLTMIND_DISABLE_DIRECT_POOL;
+    else process.env.VOLTMIND_DISABLE_DIRECT_POOL = originalKillSwitch;
   });
 
   test('non-Supabase URL → single mode', () => {
@@ -172,7 +172,7 @@ describe('ConnectionManager — describeMode + dual-pool routing', () => {
   });
 
   test('kill-switch active → single mode (kill-switch)', () => {
-    process.env.GBRAIN_DISABLE_DIRECT_POOL = '1';
+    process.env.VOLTMIND_DISABLE_DIRECT_POOL = '1';
     const cm = new ConnectionManager({
       url: 'postgresql://postgres.abc:p@aws.pooler.supabase.com:6543/db',
     });
@@ -201,14 +201,14 @@ describe('ConnectionManager — describeMode + dual-pool routing', () => {
 
 describe('ConnectionManager — parent inheritance (A2)', () => {
   test('child inherits kill-switch from parent', () => {
-    const original = process.env.GBRAIN_DISABLE_DIRECT_POOL;
+    const original = process.env.VOLTMIND_DISABLE_DIRECT_POOL;
     try {
-      process.env.GBRAIN_DISABLE_DIRECT_POOL = '1';
+      process.env.VOLTMIND_DISABLE_DIRECT_POOL = '1';
       const parent = new ConnectionManager({
         url: 'postgresql://postgres.abc:p@aws.pooler.supabase.com:6543/db',
       });
       // Child constructed AFTER env reset — parent's snapshot is what matters.
-      delete process.env.GBRAIN_DISABLE_DIRECT_POOL;
+      delete process.env.VOLTMIND_DISABLE_DIRECT_POOL;
       const child = new ConnectionManager({
         url: 'postgresql://postgres.abc:p@aws.pooler.supabase.com:6543/db',
         parent,
@@ -216,25 +216,25 @@ describe('ConnectionManager — parent inheritance (A2)', () => {
       expect(child.isKillSwitchActive()).toBe(true);
       expect(child.isDualPoolActive()).toBe(false);
     } finally {
-      if (original === undefined) delete process.env.GBRAIN_DISABLE_DIRECT_POOL;
-      else process.env.GBRAIN_DISABLE_DIRECT_POOL = original;
+      if (original === undefined) delete process.env.VOLTMIND_DISABLE_DIRECT_POOL;
+      else process.env.VOLTMIND_DISABLE_DIRECT_POOL = original;
     }
   });
 
   test('child without parent reads env at construction', () => {
-    const original = process.env.GBRAIN_DISABLE_DIRECT_POOL;
+    const original = process.env.VOLTMIND_DISABLE_DIRECT_POOL;
     try {
-      delete process.env.GBRAIN_DISABLE_DIRECT_POOL;
+      delete process.env.VOLTMIND_DISABLE_DIRECT_POOL;
       const cm = new ConnectionManager({
         url: 'postgresql://postgres.abc:p@aws.pooler.supabase.com:6543/db',
       });
       expect(cm.isKillSwitchActive()).toBe(false);
       // Mutating env after construction does NOT change the manager's state.
-      process.env.GBRAIN_DISABLE_DIRECT_POOL = '1';
+      process.env.VOLTMIND_DISABLE_DIRECT_POOL = '1';
       expect(cm.isKillSwitchActive()).toBe(false); // snapshot semantics
     } finally {
-      if (original === undefined) delete process.env.GBRAIN_DISABLE_DIRECT_POOL;
-      else process.env.GBRAIN_DISABLE_DIRECT_POOL = original;
+      if (original === undefined) delete process.env.VOLTMIND_DISABLE_DIRECT_POOL;
+      else process.env.VOLTMIND_DISABLE_DIRECT_POOL = original;
     }
   });
 });

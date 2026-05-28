@@ -85,7 +85,7 @@ describe('v0.39 T22a — custom-pack across consumers', () => {
     const result = await runReviewCandidates(engine, { sourceId: 'default' });
     expect(result.candidates.length).toBeGreaterThan(0);
     expect(result.applied).toBeNull();
-    // Active pack derives from gbrain-base which doesn't have `newkind` → in_active_pack: false
+    // Active pack derives from voltmind-base which doesn't have `newkind` → in_active_pack: false
     for (const c of result.candidates) expect(c.in_active_pack).toBe(false);
   });
 });
@@ -122,14 +122,14 @@ describe('v0.39 T22c — T18-replacement: schema show --as-filing-rules', () => 
 
 describe('v0.39 T22d — artifact-type routing', () => {
   test('detectArtifactKind dispatches by extension', () => {
-    expect(detectArtifactKind('/tmp/foo.gbrain-schema')).toBe('schemapack');
-    expect(detectArtifactKind('/tmp/foo.gbrain-skillpack')).toBe('skillpack');
+    expect(detectArtifactKind('/tmp/foo.voltmind-schema')).toBe('schemapack');
+    expect(detectArtifactKind('/tmp/foo.voltmind-skillpack')).toBe('skillpack');
     expect(detectArtifactKind('/tmp/foo.tar.gz')).toBe(null);
   });
 
   test('validateManifestByKind rejects cross-kind manifests', () => {
-    expect(() => validateManifestByKind('schemapack', { api_version: 'gbrain-skillpack-v1' })).toThrow();
-    expect(() => validateManifestByKind('skillpack', { api_version: 'gbrain-schema-pack-v1' })).toThrow();
+    expect(() => validateManifestByKind('schemapack', { api_version: 'voltmind-skillpack-v1' })).toThrow();
+    expect(() => validateManifestByKind('skillpack', { api_version: 'voltmind-schema-pack-v1' })).toThrow();
   });
 });
 

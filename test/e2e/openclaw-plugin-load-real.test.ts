@@ -21,7 +21,7 @@
  *   3. `openclaw plugins inspect <id> --json` reads our default-export shape
  *      back from the runtime registry (`status: 'loaded'`, `imported: true`,
  *      id/name/description match).
- *   4. `openclaw config set plugins.slots.contextEngine gbrain-context` →
+ *   4. `openclaw config set plugins.slots.contextEngine voltmind-context` →
  *      `openclaw config validate` confirms the slot binding is accepted.
  *   5. `openclaw plugins doctor` surfaces zero error-level diagnostics for
  *      our id.
@@ -54,11 +54,11 @@ function which(bin: string): string | null {
 }
 
 // Hardcoded plugin id matches src/openclaw-context-engine.ts default export.
-const PLUGIN_ID = 'gbrain-context-engine';
-const ENGINE_ID = 'gbrain-context';
+const PLUGIN_ID = 'voltmind-context-engine';
+const ENGINE_ID = 'voltmind-context';
 // Use a process-unique profile name so two concurrent test runs (e.g.,
 // Conductor sibling workspaces) don't collide on `~/.openclaw-<profile>`.
-const PROFILE = `gbrain-ctx-e2e-${process.pid}`;
+const PROFILE = `voltmind-ctx-e2e-${process.pid}`;
 const PROFILE_DIR = join(homedir(), `.openclaw-${PROFILE}`);
 
 let fixtureDir = '';
@@ -107,7 +107,7 @@ describe('openclaw-plugin-load-real (Tier 2 e2e)', () => {
       .stdout.trim();
     if (!repoRoot) throw new Error('not in a git repo — cannot resolve plugin source path');
 
-    fixtureDir = mkdtempSync(join(tmpdir(), 'gbrain-ctx-plugin-real-'));
+    fixtureDir = mkdtempSync(join(tmpdir(), 'voltmind-ctx-plugin-real-'));
 
     // Write the fixture's package.json + openclaw.plugin.json from templates.
     const fixtureTemplate = join(repoRoot, 'test', 'fixtures', 'openclaw-plugin-real');
@@ -143,7 +143,7 @@ describe('openclaw-plugin-load-real (Tier 2 e2e)', () => {
 
     // Install via openclaw plugins install --link into the isolated profile.
     // `--dangerously-force-unsafe-install` is required because openclaw's
-    // dangerous-code scanner flags the surrounding gbrain repo (tests use
+    // dangerous-code scanner flags the surrounding voltmind repo (tests use
     // child_process etc.); the test fixture is dev-trusted, same provenance
     // as the test runner.
     const install = runOpenclaw([
@@ -190,7 +190,7 @@ describe('openclaw-plugin-load-real (Tier 2 e2e)', () => {
       // Openclaw reads these directly from the default export of our entry.
       // If we rename a field in src/openclaw-context-engine.ts, this fails.
       expect(inspect.plugin.id).toBe(PLUGIN_ID);
-      expect(inspect.plugin.name).toBe('GBrain Context Engine');
+      expect(inspect.plugin.name).toBe('VoltMind Context Engine');
       expect(inspect.plugin.description).toContain('Deterministic temporal/spatial context injection');
     },
   );
@@ -218,7 +218,7 @@ describe('openclaw-plugin-load-real (Tier 2 e2e)', () => {
   );
 
   it.skipIf(SKIP)(
-    'plugins.slots.contextEngine binding to gbrain-context validates cleanly',
+    'plugins.slots.contextEngine binding to voltmind-context validates cleanly',
     () => {
       // Wiring our id into the slot is the runtime hand-off — when
       // openclaw initializes an agent, it reads this slot and resolves the
@@ -317,9 +317,9 @@ describe('openclaw-plugin-load-real (Tier 2 e2e)', () => {
       }
       expect(typeof registerContextEngine).toBe('function');
 
-      const { createGBrainContextEngine } = await import('../../src/core/context-engine.ts');
+      const { createVoltMindContextEngine } = await import('../../src/core/context-engine.ts');
 
-      const tmp = mkdtempSync(join(tmpdir(), 'gbrain-ctx-sdk-rt-'));
+      const tmp = mkdtempSync(join(tmpdir(), 'voltmind-ctx-sdk-rt-'));
       try {
         mkdirSync(join(tmp, 'memory'), { recursive: true });
         writeFileSync(join(tmp, 'memory', 'heartbeat-state.json'), '{}');
@@ -333,13 +333,13 @@ describe('openclaw-plugin-load-real (Tier 2 e2e)', () => {
         // additional args, returns Promise instead of void), this fails.
         registerContextEngine!(
           dynamicId,
-          () => createGBrainContextEngine({ workspaceDir: tmp }),
+          () => createVoltMindContextEngine({ workspaceDir: tmp }),
         );
 
         // Also verify the engine the factory produces still has the
         // expected ContextEngine interface shape (info, ingest, assemble,
         // compact) — these are the methods openclaw will call.
-        const engine = createGBrainContextEngine({ workspaceDir: tmp });
+        const engine = createVoltMindContextEngine({ workspaceDir: tmp });
         expect(engine.info.id).toBe(ENGINE_ID);
         expect(typeof engine.ingest).toBe('function');
         expect(typeof engine.assemble).toBe('function');

@@ -124,7 +124,7 @@ describe('writeFactsAbsorbLog — ingest_log row shape', () => {
 
 // v0.39.3.0 WARN-4 + CQ1 + CV13 — disconnected-engine suppression.
 // Pre-fix: '[facts:absorb] failed to log gateway_error for inbox/...: No
-// database connection' fired loudly after every gbrain capture. Per CQ1
+// database connection' fired loudly after every voltmind capture. Per CQ1
 // suppress via typed access (instanceof GBrainError && .problem) NOT
 // string-match on .message. CV13 prints ONE first-occurrence stack
 // trace so the next user report can diagnose the wiring bug in v0.38.4.
@@ -146,7 +146,7 @@ describe('writeFactsAbsorbLog — WARN-4 disconnected-engine suppression (CQ1 + 
           throw new GBrainError(
             'No database connection',
             'connect() has not been called',
-            'Run gbrain init --supabase or gbrain init --url <connection_string>',
+            'Run voltmind init --supabase or voltmind init --url <connection_string>',
           );
         },
       } as unknown as import('../src/core/engine.ts').BrainEngine,

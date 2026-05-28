@@ -19,7 +19,7 @@ import {
   __resetHotMemoryCacheForTests,
 } from '../src/core/facts/meta-hook.ts';
 import type { OperationContext } from '../src/core/operations.ts';
-import type { GBrainConfig } from '../src/core/config.ts';
+import type { VoltMindConfig } from '../src/core/config.ts';
 
 let engine: PGLiteEngine;
 
@@ -40,7 +40,7 @@ beforeEach(() => {
 function ctx(overrides: Partial<OperationContext> = {}): OperationContext {
   return {
     engine,
-    config: {} as GBrainConfig,
+    config: {} as VoltMindConfig,
     logger: { info: () => {}, warn: () => {}, error: () => {} },
     dryRun: false,
     remote: false,

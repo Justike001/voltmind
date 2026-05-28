@@ -8,7 +8,7 @@
  *   - two concurrent tryAcquireDbLock calls against the SAME source: second returns null
  *
  * Without this guard, a future drift in the constant value would silently change
- * semantics (e.g. someone hardcoding 'gbrain-sync' elsewhere would no longer match
+ * semantics (e.g. someone hardcoding 'voltmind-sync' elsewhere would no longer match
  * the same row, breaking the writer-window exclusion that performSync relies on).
  */
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
@@ -33,18 +33,18 @@ beforeEach(async () => {
 });
 
 describe('syncLockId (per-source lock helper)', () => {
-  test('default source returns gbrain-sync:default', () => {
-    expect(syncLockId('default')).toBe('gbrain-sync:default');
+  test('default source returns voltmind-sync:default', () => {
+    expect(syncLockId('default')).toBe('voltmind-sync:default');
   });
 
-  test('non-default source returns gbrain-sync:<id>', () => {
-    expect(syncLockId('zion-brain')).toBe('gbrain-sync:zion-brain');
-    expect(syncLockId('media-corpus')).toBe('gbrain-sync:media-corpus');
+  test('non-default source returns voltmind-sync:<id>', () => {
+    expect(syncLockId('zion-brain')).toBe('voltmind-sync:zion-brain');
+    expect(syncLockId('media-corpus')).toBe('voltmind-sync:media-corpus');
   });
 
   test('IRON-RULE: SYNC_LOCK_ID back-compat alias resolves to syncLockId(default)', () => {
     expect(SYNC_LOCK_ID).toBe(syncLockId('default'));
-    expect(SYNC_LOCK_ID).toBe('gbrain-sync:default');
+    expect(SYNC_LOCK_ID).toBe('voltmind-sync:default');
   });
 
   test('different sources produce distinct lock keys', () => {

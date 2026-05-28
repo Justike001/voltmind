@@ -16,7 +16,7 @@ import {
   deriveEnvKey,
   resolveInheritValue,
 } from '../src/core/minions/handlers/shell-inherit.ts';
-import type { GBrainConfig } from '../src/core/config.ts';
+import type { VoltMindConfig } from '../src/core/config.ts';
 
 describe('INHERIT_NAME_RE', () => {
   test.each([
@@ -52,8 +52,8 @@ describe('INHERIT_NAME_RE', () => {
 });
 
 describe('deriveEnvKey', () => {
-  test('database_url → GBRAIN_DATABASE_URL (override, less ambiguous)', () => {
-    expect(deriveEnvKey('database_url')).toBe('GBRAIN_DATABASE_URL');
+  test('database_url → VOLTMIND_DATABASE_URL (override, less ambiguous)', () => {
+    expect(deriveEnvKey('database_url')).toBe('VOLTMIND_DATABASE_URL');
   });
   test('anthropic_api_key → ANTHROPIC_API_KEY (provider-standard uppercase)', () => {
     expect(deriveEnvKey('anthropic_api_key')).toBe('ANTHROPIC_API_KEY');
@@ -74,21 +74,21 @@ describe('deriveEnvKey', () => {
 
 describe('resolveInheritValue', () => {
   test('returns string when field exists and is a non-empty string', () => {
-    const cfg: GBrainConfig = { engine: 'postgres', database_url: 'postgresql://x' };
+    const cfg: VoltMindConfig = { engine: 'postgres', database_url: 'postgresql://x' };
     expect(resolveInheritValue(cfg, 'database_url')).toBe('postgresql://x');
   });
   test('returns undefined when field is unset', () => {
     expect(resolveInheritValue({ engine: 'postgres' }, 'database_url')).toBeUndefined();
   });
   test('returns undefined when field is empty string', () => {
-    const cfg: GBrainConfig = { engine: 'postgres', database_url: '' };
+    const cfg: VoltMindConfig = { engine: 'postgres', database_url: '' };
     expect(resolveInheritValue(cfg, 'database_url')).toBeUndefined();
   });
   test('returns undefined for null config', () => {
     expect(resolveInheritValue(null, 'database_url')).toBeUndefined();
   });
   test('returns undefined when field is non-string (e.g. object)', () => {
-    const cfg = { engine: 'postgres', remote_mcp: { issuer_url: 'x' } } as unknown as GBrainConfig;
+    const cfg = { engine: 'postgres', remote_mcp: { issuer_url: 'x' } } as unknown as VoltMindConfig;
     expect(resolveInheritValue(cfg, 'remote_mcp')).toBeUndefined();
   });
   test('prototype-pollution defense: __proto__ returns undefined even though Object.prototype has the property', () => {
@@ -103,14 +103,14 @@ describe('resolveInheritValue', () => {
 });
 
 describe('integration: deriveEnvKey + resolveInheritValue work together', () => {
-  const cfg: GBrainConfig = {
+  const cfg: VoltMindConfig = {
     engine: 'postgres',
     database_url: 'postgresql://x',
     anthropic_api_key: 'sk-ant-x',
     openai_api_key: 'sk-x',
   };
   test.each([
-    ['database_url', 'GBRAIN_DATABASE_URL', 'postgresql://x'],
+    ['database_url', 'VOLTMIND_DATABASE_URL', 'postgresql://x'],
     ['anthropic_api_key', 'ANTHROPIC_API_KEY', 'sk-ant-x'],
     ['openai_api_key', 'OPENAI_API_KEY', 'sk-x'],
   ])('name %s resolves to envKey %s with value %s', (name, expectedEnvKey, expectedValue) => {

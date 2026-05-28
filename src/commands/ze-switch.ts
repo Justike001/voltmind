@@ -1,20 +1,20 @@
 /**
- * v0.36.0.0 — `gbrain ze-switch` CLI lever for the ZeroEntropy default switch.
+ * v0.36.0.0 — `voltmind ze-switch` CLI lever for the ZeroEntropy default switch.
  *
  * Subcommands / flags:
- *   gbrain ze-switch                        Run the interactive prompt
- *   gbrain ze-switch --dry-run              Plan only; change nothing
- *   gbrain ze-switch --json                 Machine-readable envelope
- *   gbrain ze-switch --non-interactive      Switch without prompting
+ *   voltmind ze-switch                        Run the interactive prompt
+ *   voltmind ze-switch --dry-run              Plan only; change nothing
+ *   voltmind ze-switch --json                 Machine-readable envelope
+ *   voltmind ze-switch --non-interactive      Switch without prompting
  *                                           (errors if ZEROENTROPY_API_KEY missing
  *                                            unless --ignore-missing-key is also set)
- *   gbrain ze-switch --resume               Finish a half-applied switch (recovery)
- *   gbrain ze-switch --force                Bypass the `prompt_shown` gate
+ *   voltmind ze-switch --resume               Finish a half-applied switch (recovery)
+ *   voltmind ze-switch --force                Bypass the `prompt_shown` gate
  *                                           (use after `n` / never-ask-again)
- *   gbrain ze-switch --undo                 Reverse: restore prior model + dim
+ *   voltmind ze-switch --undo                 Reverse: restore prior model + dim
  *                                           + reranker state. Cost-warning prompt
  *                                           appears before any change.
- *   gbrain ze-switch --undo --non-interactive --confirm-reembed
+ *   voltmind ze-switch --undo --non-interactive --confirm-reembed
  *                                           Scripted undo path (also pays for re-embed)
  */
 
@@ -55,13 +55,13 @@ function parseFlags(args: string[]): Flags {
     confirmReembed: args.includes('--confirm-reembed'),
     ignoreMissingKey: args.includes('--ignore-missing-key'),
     // v0.41.2.1: escape hatch for power users running parallel experiments
-    // with GBRAIN_EMBEDDING_MODEL set. Loud stderr line when used.
+    // with VOLTMIND_EMBEDDING_MODEL set. Loud stderr line when used.
     ignoreEnvOverride: args.includes('--ignore-env-override'),
   };
 }
 
 function printHelp() {
-  process.stdout.write(`Usage: gbrain ze-switch [flags]
+  process.stdout.write(`Usage: voltmind ze-switch [flags]
 
 Switch the brain's embedding + reranker defaults to ZeroEntropy.
 
@@ -74,7 +74,7 @@ Flags:
   --undo                 Reverse the switch: restore prior model + dim + reranker.
   --confirm-reembed      Required with --undo --non-interactive (re-embed pays cost).
   --ignore-missing-key   Allow --non-interactive without ZEROENTROPY_API_KEY set.
-  --ignore-env-override  Apply even when GBRAIN_EMBEDDING_* env vars would
+  --ignore-env-override  Apply even when VOLTMIND_EMBEDDING_* env vars would
                          override the target at runtime (use if you know why).
   --help                 Show this help.
 `);

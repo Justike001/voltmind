@@ -1,5 +1,5 @@
 /**
- * T8 — `gbrain config set` strict unknown-key rejection + --force + Levenshtein.
+ * T8 — `voltmind config set` strict unknown-key rejection + --force + Levenshtein.
  *
  * These tests probe the pure helpers (KNOWN_CONFIG_KEYS list, prefix list,
  * Levenshtein suggestion against the list). The full `runConfig` CLI

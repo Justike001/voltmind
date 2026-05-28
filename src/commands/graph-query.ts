@@ -1,17 +1,17 @@
 /**
- * gbrain graph-query — relationship traversal with type and direction filters.
+ * voltmind graph-query — relationship traversal with type and direction filters.
  *
  * Wraps engine.traversePaths(). Returns an indented tree of edges. Maps to the
  * `traverse_graph` MCP operation when called with link_type or direction params
  * (otherwise traverse_graph still returns the legacy GraphNode[] shape).
  *
  * Usage:
- *   gbrain graph-query <slug> [--type T] [--depth N] [--direction in|out|both]
+ *   voltmind graph-query <slug> [--type T] [--depth N] [--direction in|out|both]
  *
  * Examples:
- *   gbrain graph-query people/alice --type attended --depth 2
- *   gbrain graph-query companies/acme --type works_at --direction in
- *   gbrain graph-query people/bob --depth 1
+ *   voltmind graph-query people/alice --type attended --depth 2
+ *   voltmind graph-query companies/acme --type works_at --direction in
+ *   voltmind graph-query people/bob --depth 1
  */
 
 import type { BrainEngine } from '../core/engine.ts';
@@ -46,7 +46,7 @@ function parseArgs(args: string[]): Args {
 }
 
 function printHelp() {
-  console.log(`Usage: gbrain graph-query <slug> [options]
+  console.log(`Usage: voltmind graph-query <slug> [options]
 
 Traverse the link graph from a page. Returns an indented tree of edges.
 Per-edge type filter: traversal only follows matching links.
@@ -63,13 +63,13 @@ Options:
   -h, --help             Show this message.
 
 Examples:
-  gbrain graph-query people/alice --type attended --depth 2
+  voltmind graph-query people/alice --type attended --depth 2
     -> who attended meetings with Alice (multi-hop)
-  gbrain graph-query companies/acme --type works_at --direction in
+  voltmind graph-query companies/acme --type works_at --direction in
     -> who works at Acme
-  gbrain graph-query people/bob --depth 1
+  voltmind graph-query people/bob --depth 1
     -> Bob's direct connections
-  gbrain graph-query people/bob --include-foreign
+  voltmind graph-query people/bob --include-foreign
     -> include edges to pages in other sources
 `);
 }

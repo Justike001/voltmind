@@ -9,7 +9,7 @@
  *
  * Fork-friendliness: `rawBaseUrl` reads from `LLMS_REPO_BASE` so forks can
  * regenerate without manual URL rewrites:
- *   LLMS_REPO_BASE=https://raw.githubusercontent.com/fork-org/gbrain/main bun run build:llms
+ *   LLMS_REPO_BASE=https://raw.githubusercontent.com/fork-org/voltmind/main bun run build:llms
  */
 
 export type DocEntry = {
@@ -26,13 +26,13 @@ export type DocSection = {
 };
 
 export const PROJECT = {
-  name: "GBrain",
+  name: "VoltMind",
   summary:
-    "GBrain is a personal knowledge brain and GStack mod for agent platforms. Pluggable engines (PGLite default, Postgres+pgvector for scale), contract-first operations, 26 fat-markdown skills. Teaches agents brain ops, ingestion, enrichment, scheduling, identity, and access control.",
-  repoUrl: "https://github.com/garrytan/gbrain",
+    "VoltMind is a personal knowledge brain and GStack mod for agent platforms. Pluggable engines (PGLite default, Postgres+pgvector for scale), contract-first operations, 26 fat-markdown skills. Teaches agents brain ops, ingestion, enrichment, scheduling, identity, and access control.",
+  repoUrl: "https://github.com/garrytan/voltmind",
   rawBaseUrl:
     process.env.LLMS_REPO_BASE ??
-    "https://raw.githubusercontent.com/garrytan/gbrain/master",
+    "https://raw.githubusercontent.com/garrytan/voltmind/master",
 };
 
 export const SECTIONS: DocSection[] = [
@@ -77,10 +77,10 @@ export const SECTIONS: DocSection[] = [
         path: "docs/ENGINES.md",
       },
       {
-        title: "docs/GBRAIN_RECOMMENDED_SCHEMA.md",
+        title: "docs/VOLTMIND_RECOMMENDED_SCHEMA.md",
         description:
           "MECE directory structure (people/, companies/, concepts/).",
-        path: "docs/GBRAIN_RECOMMENDED_SCHEMA.md",
+        path: "docs/VOLTMIND_RECOMMENDED_SCHEMA.md",
         // v0.40.6.0: 64KB reference doc. Web index entry stays; the single-fetch
         // bundle gets the README + setup guides instead. Keeps llms-full.txt
         // under the 600KB budget as CLAUDE.md grows with each release.
@@ -95,7 +95,7 @@ export const SECTIONS: DocSection[] = [
       {
         title: "docs/schema-author-tutorial.md",
         description:
-          "5-minute walkthrough: fork the bundled pack, add a custom `researcher` type, backfill existing pages via `gbrain schema sync --apply`, prove the T1.5 wiring via `gbrain whoknows` (v0.40.7.0).",
+          "5-minute walkthrough: fork the bundled pack, add a custom `researcher` type, backfill existing pages via `voltmind schema sync --apply`, prove the T1.5 wiring via `voltmind whoknows` (v0.40.7.0).",
         path: "docs/schema-author-tutorial.md",
       },
       {
@@ -111,7 +111,7 @@ export const SECTIONS: DocSection[] = [
       {
         title: "docs/guides/minions-deployment.md",
         description:
-          "Deploying the gbrain jobs worker: crontab + watchdog, inline --follow, systemd/Procfile/fly.toml, upgrade checklist.",
+          "Deploying the voltmind jobs worker: crontab + watchdog, inline --follow, systemd/Procfile/fly.toml, upgrade checklist.",
         path: "docs/guides/minions-deployment.md",
         // v0.41.8.0: 13KB deployment runbook. Web index entry stays;
         // single-fetch bundle drops it to keep under FULL_SIZE_BUDGET
@@ -128,7 +128,7 @@ export const SECTIONS: DocSection[] = [
       {
         title: "docs/guides/scaling-skills.md",
         description:
-          "Three-tier architecture for agents with 300+ skills: always-loaded, resolver-routed, and dormant. Per-turn token math, the v0.41.7.0 compact list-format resolver, and the `gbrain doctor` safety net. 306 skills, ~21K tokens freed per turn, zero capability loss.",
+          "Three-tier architecture for agents with 300+ skills: always-loaded, resolver-routed, and dormant. Per-turn token math, the v0.41.7.0 compact list-format resolver, and the `voltmind doctor` safety net. 306 skills, ~21K tokens freed per turn, zero capability loss.",
         path: "docs/guides/scaling-skills.md",
       },
       {
@@ -153,7 +153,7 @@ export const SECTIONS: DocSection[] = [
       {
         title: "docs/ai-providers/llama-server-reranker.md",
         description:
-          "Local reranker via llama.cpp --reranking: Qwen3-Reranker or self-hosted ZE weights, --alias setup, gbrain config keys, cold-start timeout, budget-cap interaction.",
+          "Local reranker via llama.cpp --reranking: Qwen3-Reranker or self-hosted ZE weights, --alias setup, voltmind config keys, cold-start timeout, budget-cap interaction.",
         path: "docs/ai-providers/llama-server-reranker.md",
         includeInFull: false,
       },
@@ -163,10 +163,10 @@ export const SECTIONS: DocSection[] = [
     heading: "Debugging",
     entries: [
       {
-        title: "docs/GBRAIN_VERIFY.md",
+        title: "docs/VOLTMIND_VERIFY.md",
         description:
           "7-check post-setup verification. Start here when something feels off.",
-        path: "docs/GBRAIN_VERIFY.md",
+        path: "docs/VOLTMIND_VERIFY.md",
       },
       {
         title: "docs/guides/minions-fix.md",
@@ -249,10 +249,10 @@ export const SECTIONS: DocSection[] = [
 ];
 
 export const INLINE_TIPS = [
-  "`gbrain doctor [--json] [--fast] [--fix]` - built-in health checks.",
-  "`gbrain orphans [--json]` - pages with zero inbound wikilinks.",
-  "`gbrain repair-jsonb [--dry-run]` - repair v0.12.0 double-encoded JSONB rows.",
-  "`gbrain upgrade` runs post-upgrade + apply-migrations.",
+  "`voltmind doctor [--json] [--fast] [--fix]` - built-in health checks.",
+  "`voltmind orphans [--json]` - pages with zero inbound wikilinks.",
+  "`voltmind repair-jsonb [--dry-run]` - repair v0.12.0 double-encoded JSONB rows.",
+  "`voltmind upgrade` runs post-upgrade + apply-migrations.",
 ];
 
 // Target ~700KB so llms-full.txt fits in ~175k-token contexts with room to spare.

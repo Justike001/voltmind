@@ -35,7 +35,7 @@ beforeEach(async () => {
   await resetPgliteState(engine);
   _resetPackCacheForTests();
   _resetPackLocatorForTests();
-  tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-stats-test-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-stats-test-'));
 });
 
 function ctxOf(remote = false): OperationContext {
@@ -73,7 +73,7 @@ function seedTinyPack(packName: string, types: Array<{ name: string; prefix: str
   const dir = join(tmpDir, packName);
   mkdirSync(dir, { recursive: true });
   const path = join(dir, 'pack.yaml');
-  let body = `api_version: gbrain-schema-pack-v1\nname: ${packName}\nversion: 1.0.0\ndescription: ""\ngbrain_min_version: 0.38.0\nextends: null\nborrow_from: []\npage_types:\n`;
+  let body = `api_version: voltmind-schema-pack-v1\nname: ${packName}\nversion: 1.0.0\ndescription: ""\nvoltmind_min_version: 0.38.0\nextends: null\nborrow_from: []\npage_types:\n`;
   for (const t of types) {
     body += `  - name: ${t.name}\n    primitive: entity\n    path_prefixes:\n      - ${t.prefix}\n    aliases: []\n    extractable: false\n    expert_routing: false\n`;
   }
@@ -84,7 +84,7 @@ function seedTinyPack(packName: string, types: Array<{ name: string; prefix: str
 
 describe('runStatsCore — empty brain', () => {
   it('reports coverage:1.0 (vacuous truth)', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       const result = await runStatsCore(ctxOf());
       expect(result.aggregate.total_pages).toBe(0);
       expect(result.aggregate.coverage).toBe(1.0);
@@ -95,7 +95,7 @@ describe('runStatsCore — empty brain', () => {
 
 describe('runStatsCore — single source', () => {
   it('counts typed + untyped pages and computes coverage', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       await seedPage('a', { type: 'person' });
       await seedPage('b', { type: 'person' });
       await seedPage('c', { type: 'company' });
@@ -113,7 +113,7 @@ describe('runStatsCore — single source', () => {
   });
 
   it('excludes soft-deleted pages', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       await seedPage('a', { type: 'person' });
       await seedPage('b', { type: 'person', deleted: true });
       const result = await runStatsCore(ctxOf());
@@ -122,7 +122,7 @@ describe('runStatsCore — single source', () => {
   });
 
   it('respects sourceId scoping', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       await seedPage('a', { type: 'person', sourceId: 'src-a' });
       await seedPage('b', { type: 'person', sourceId: 'src-b' });
       const result = await runStatsCore(ctxOf(), { sourceId: 'src-a' });
@@ -135,7 +135,7 @@ describe('runStatsCore — single source', () => {
 
 describe('runStatsCore — federated', () => {
   it('aggregates across sourceIds array', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       await seedPage('a', { type: 'person', sourceId: 'src-a' });
       await seedPage('b', { type: 'person', sourceId: 'src-b' });
       await seedPage('c', { type: 'person', sourceId: 'src-c' });
@@ -148,7 +148,7 @@ describe('runStatsCore — federated', () => {
   });
 
   it('per-source breakdown sorted alphabetically', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       await seedPage('a', { type: 'person', sourceId: 'src-zzz' });
       await seedPage('b', { type: 'person', sourceId: 'src-aaa' });
       const result = await runStatsCore(ctxOf());
@@ -159,7 +159,7 @@ describe('runStatsCore — federated', () => {
 
 describe('runStatsCore — dead-prefix detection', () => {
   it('flags pack-declared prefixes with zero matching pages', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_SCHEMA_PACK: 'tiny' }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_SCHEMA_PACK: 'tiny' }, async () => {
       seedTinyPack('tiny', [
         { name: 'person', prefix: 'people/' },
         { name: 'company', prefix: 'companies/' },
@@ -173,7 +173,7 @@ describe('runStatsCore — dead-prefix detection', () => {
   });
 
   it('no dead-prefix hints when every declared prefix has pages', async () => {
-    await withEnv({ GBRAIN_HOME: tmpDir, GBRAIN_SCHEMA_PACK: 'tiny' }, async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_SCHEMA_PACK: 'tiny' }, async () => {
       seedTinyPack('tiny', [{ name: 'person', prefix: 'people/' }]);
       await seedPage('people/alice', { type: 'person', sourcePath: 'people/alice.md' });
       const result = await runStatsCore(ctxOf());
@@ -182,7 +182,7 @@ describe('runStatsCore — dead-prefix detection', () => {
   });
 
   it('returns empty dead_prefixes when pack load fails', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: 'never-installed' }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: 'never-installed' }, async () => {
       __setPackLocatorForTests(() => null);
       const result = await runStatsCore(ctxOf());
       expect(result.pack_identity).toBeNull();
@@ -193,14 +193,14 @@ describe('runStatsCore — dead-prefix detection', () => {
 
 describe('runStatsCore — JSON envelope shape', () => {
   it('schema_version stays 1 (stable contract)', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       const result = await runStatsCore(ctxOf());
       expect(result.schema_version).toBe(1);
     });
   });
 
   it('aggregate fields match the per-source merge', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       await seedPage('a', { type: 'person', sourceId: 'src-a' });
       await seedPage('b', { sourceId: 'src-b' });  // untyped
       const result = await runStatsCore(ctxOf());
@@ -210,7 +210,7 @@ describe('runStatsCore — JSON envelope shape', () => {
   });
 
   it('by_type sorted by count desc, ties by name asc', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       await seedPage('a', { type: 'company' });
       await seedPage('b', { type: 'person' });
       await seedPage('c', { type: 'person' });
@@ -224,7 +224,7 @@ describe('runStatsCore — JSON envelope shape', () => {
 
 describe('runStatsCore — type/untyped split', () => {
   it('treats empty-string type as untyped (not its own bucket)', async () => {
-    await withEnv({ GBRAIN_SCHEMA_PACK: undefined }, async () => {
+    await withEnv({ VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       // Some legacy rows might have type='' rather than NULL.
       await engine.executeRaw(
         `INSERT INTO pages (slug, source_id, source_path, type, title, compiled_truth, timeline, content_hash)

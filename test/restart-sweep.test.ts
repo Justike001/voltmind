@@ -9,8 +9,8 @@
  *
  * Test isolation: every env mutation routes through `withEnv` from
  * `test/helpers/with-env.ts` per the project's R1 lint rule. State-
- * file tests scope `GBRAIN_HOME` to a per-test tmpdir so they don't
- * touch the developer's real `~/.gbrain/`.
+ * file tests scope `VOLTMIND_HOME` to a per-test tmpdir so they don't
+ * touch the developer's real `~/.voltmind/`.
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -349,7 +349,7 @@ describe('bootstrap log timestamp regex', () => {
 describe('loadAlerted', () => {
   test('returns empty Map when alerted.json does not exist', async () => {
     const stateRoot = makeStateDir();
-    await withEnv({ GBRAIN_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
+    await withEnv({ VOLTMIND_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
       const Detector = await loadDetector();
       const d = new Detector();
       const map = await d.loadAlerted();
@@ -362,7 +362,7 @@ describe('loadAlerted', () => {
     const stateDir = join(stateRoot, 'integrations', 'restart-sweep');
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(join(stateDir, 'alerted.json'), '{ this is not valid json');
-    await withEnv({ GBRAIN_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
+    await withEnv({ VOLTMIND_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
       const Detector = await loadDetector();
       const d = new Detector();
       // Capture stderr warning
@@ -393,7 +393,7 @@ describe('loadAlerted', () => {
         'fresh-session': { lastAlertedAt: oneDayAgo, restartTime: oneDayAgo },
       }),
     );
-    await withEnv({ GBRAIN_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
+    await withEnv({ VOLTMIND_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
       const Detector = await loadDetector();
       const d = new Detector();
       const map = await d.loadAlerted();
@@ -408,7 +408,7 @@ describe('loadAlerted', () => {
 
 test('saveAlerted writes via tmp+rename (atomic, no leftover .tmp)', async () => {
   const stateRoot = makeStateDir();
-  await withEnv({ GBRAIN_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
+  await withEnv({ VOLTMIND_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
     const Detector = await loadDetector();
     const d = new Detector();
     const stateDir = join(stateRoot, 'integrations', 'restart-sweep');
@@ -442,7 +442,7 @@ describe('cooldown layer (C1)', () => {
 
   test('cooldown suppresses re-alert within 6h even when restartTime is unstable (the C1 bug)', async () => {
     const stateRoot = makeStateDir();
-    await withEnv({ GBRAIN_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
+    await withEnv({ VOLTMIND_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
       const Detector = await loadDetector();
       const d = new Detector();
       const sessionKey = 'agent:main:telegram:group:-100:topic:42';
@@ -476,7 +476,7 @@ describe('cooldown layer (C1)', () => {
 
 test('round-trip: second invocation skips already-alerted session within cooldown', async () => {
   const stateRoot = makeStateDir();
-  await withEnv({ GBRAIN_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
+  await withEnv({ VOLTMIND_HOME: stateRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
     const Detector = await loadDetector();
 
     // First "invocation": alert + record state
@@ -554,11 +554,11 @@ test('sendTelegramAlert calls execFile with argv array (no shell, no metachar in
   );
 });
 
-// ─── GBRAIN_HOME state path override (NEW, D2 verification) ────────────
+// ─── VOLTMIND_HOME state path override (NEW, D2 verification) ────────────
 
-test('GBRAIN_HOME env override redirects state file to env-pointed dir', async () => {
+test('VOLTMIND_HOME env override redirects state file to env-pointed dir', async () => {
   const customRoot = makeStateDir();
-  await withEnv({ GBRAIN_HOME: customRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
+  await withEnv({ VOLTMIND_HOME: customRoot, OPENCLAW_TELEGRAM_GROUP: '-100' }, async () => {
     const Detector = await loadDetector();
     const d = new Detector();
     expect(d.STATE_DIR).toBe(join(customRoot, 'integrations', 'restart-sweep'));

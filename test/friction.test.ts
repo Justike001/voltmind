@@ -2,7 +2,7 @@
  * Friction core: writer + reader + renderer + redactor.
  *
  * These tests are pure local-fs (no DB, no subprocess). They run under
- * GBRAIN_HOME=<tmp> for hermeticity — see test/gbrain-home-isolation.test.ts
+ * VOLTMIND_HOME=<tmp> for hermeticity — see test/voltmind-home-isolation.test.ts
  * for the regression gate proving every consumer honors that env.
  */
 
@@ -16,19 +16,19 @@ import {
   type FrictionEntry,
 } from '../src/core/friction.ts';
 
-const ORIG_HOME = process.env.GBRAIN_HOME;
-const ORIG_RUN_ID = process.env.GBRAIN_FRICTION_RUN_ID;
+const ORIG_HOME = process.env.VOLTMIND_HOME;
+const ORIG_RUN_ID = process.env.VOLTMIND_FRICTION_RUN_ID;
 let tmp: string;
 
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), 'friction-test-'));
-  process.env.GBRAIN_HOME = tmp;
-  delete process.env.GBRAIN_FRICTION_RUN_ID;
+  process.env.VOLTMIND_HOME = tmp;
+  delete process.env.VOLTMIND_FRICTION_RUN_ID;
 });
 
 afterEach(() => {
-  process.env.GBRAIN_HOME = ORIG_HOME;
-  if (ORIG_RUN_ID !== undefined) process.env.GBRAIN_FRICTION_RUN_ID = ORIG_RUN_ID;
+  process.env.VOLTMIND_HOME = ORIG_HOME;
+  if (ORIG_RUN_ID !== undefined) process.env.VOLTMIND_FRICTION_RUN_ID = ORIG_RUN_ID;
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -97,16 +97,16 @@ describe('writer', () => {
 
 describe('activeRunId', () => {
   test('falls back to standalone when env unset (D19)', () => {
-    delete process.env.GBRAIN_FRICTION_RUN_ID;
+    delete process.env.VOLTMIND_FRICTION_RUN_ID;
     expect(activeRunId()).toBe('standalone');
   });
 
-  test('reads GBRAIN_FRICTION_RUN_ID', () => {
-    process.env.GBRAIN_FRICTION_RUN_ID = 'my-run';
+  test('reads VOLTMIND_FRICTION_RUN_ID', () => {
+    process.env.VOLTMIND_FRICTION_RUN_ID = 'my-run';
     try {
       expect(activeRunId()).toBe('my-run');
     } finally {
-      delete process.env.GBRAIN_FRICTION_RUN_ID;
+      delete process.env.VOLTMIND_FRICTION_RUN_ID;
     }
   });
 });
@@ -184,10 +184,10 @@ describe('renderer', () => {
     logFriction({
       runId: 'run-red',
       phase: 'p',
-      message: `error at ${home}/.gbrain/foo and ${fakeCwd}/bar.ts`,
+      message: `error at ${home}/.voltmind/foo and ${fakeCwd}/bar.ts`,
     });
     const md = renderReport('run-red', { format: 'md', redact: true });
-    expect(md).not.toContain(home + '/.gbrain');
+    expect(md).not.toContain(home + '/.voltmind');
     expect(md).toContain('<HOME>');
     expect(md).toContain('<CWD>');
   });
@@ -223,7 +223,7 @@ describe('redactEntry pure function', () => {
     const home = process.env.HOME ?? '/x';
     const e: FrictionEntry = {
       schema_version: '1', ts: 'now', run_id: 'r', phase: 'p', kind: 'friction',
-      message: `${home}/secret/file.txt`, source: 'claw', cwd: '/cwd', gbrain_version: 'test',
+      message: `${home}/secret/file.txt`, source: 'claw', cwd: '/cwd', voltmind_version: 'test',
     };
     const r = redactEntry(e);
     expect(r.message).toContain('<HOME>');

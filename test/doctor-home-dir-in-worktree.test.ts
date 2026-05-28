@@ -1,7 +1,7 @@
 /**
  * Tests for the `home_dir_in_worktree` doctor check (v0.35.8.0).
  *
- * Hermetic — drives the file system + GBRAIN_HOME + HOME envs directly via
+ * Hermetic — drives the file system + VOLTMIND_HOME + HOME envs directly via
  * `withEnv`, then invokes `runDoctor(null, ['--fast', '--json'])` and parses
  * the resulting JSON `checks` array. Skips the DB phase (engine=null + --fast).
  *
@@ -9,7 +9,7 @@
  *   - .git as DIRECTORY (main repo)            — warns
  *   - .git as FILE (linked worktree)           — warns
  *   - walk terminates at $HOME                 — no false positive past it
- *   - GBRAIN_HOME override outside any worktree — ok
+ *   - VOLTMIND_HOME override outside any worktree — ok
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
@@ -22,7 +22,7 @@ import { runDoctor } from '../src/commands/doctor.ts';
 let scratch: string;
 
 beforeEach(() => {
-  scratch = join(tmpdir(), `gbrain-doctor-hw-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  scratch = join(tmpdir(), `voltmind-doctor-hw-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(scratch, { recursive: true });
 });
 
@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 /** Run the local doctor (no DB; null engine + --fast) under a stubbed HOME +
- *  GBRAIN_HOME, capture stdout AND prevent runDoctor's `process.exit(N)` from
+ *  VOLTMIND_HOME, capture stdout AND prevent runDoctor's `process.exit(N)` from
  *  killing the test runner. Returns the check matching `name`. */
 async function getCheck(name: string, env: Record<string, string | undefined>) {
   const captured: string[] = [];
@@ -88,35 +88,35 @@ async function getCheck(name: string, env: Record<string, string | undefined>) {
 }
 
 describe('home_dir_in_worktree doctor check', () => {
-  test('gbrain home outside any worktree → ok', async () => {
-    // scratch/.gbrain — no parent has a .git, scratch IS our fake $HOME
+  test('voltmind home outside any worktree → ok', async () => {
+    // scratch/.voltmind — no parent has a .git, scratch IS our fake $HOME
     const home = scratch;
     const gbrainParent = home;
     const check = await getCheck('home_dir_in_worktree', {
       HOME: home,
-      GBRAIN_HOME: gbrainParent,
+      VOLTMIND_HOME: gbrainParent,
     });
     expect(check).toBeDefined();
     expect(check!.status).toBe('ok');
   });
 
-  test('gbrain home inside dir-style .git worktree → warn', async () => {
+  test('voltmind home inside dir-style .git worktree → warn', async () => {
     // scratch/home/myrepo/.git/    (directory)
-    // scratch/home/myrepo/.gbrain/ ← gbrain home is inside the worktree
+    // scratch/home/myrepo/.voltmind/ ← voltmind home is inside the worktree
     const home = join(scratch, 'home');
     const repo = join(home, 'myrepo');
     mkdirSync(join(repo, '.git'), { recursive: true });
     mkdirSync(repo, { recursive: true });
     const check = await getCheck('home_dir_in_worktree', {
       HOME: home,
-      GBRAIN_HOME: repo,
+      VOLTMIND_HOME: repo,
     });
     expect(check).toBeDefined();
     expect(check!.status).toBe('warn');
     expect(check!.message).toContain('myrepo');
   });
 
-  test('gbrain home inside .git-AS-FILE linked worktree → warn (F4)', async () => {
+  test('voltmind home inside .git-AS-FILE linked worktree → warn (F4)', async () => {
     // Linked worktrees use a `.git` FILE (not a directory) containing
     // `gitdir: /path/to/main/.git/worktrees/<name>`. Doctor MUST recognize
     // both shapes — this is the Conductor + git-worktrees topology our
@@ -127,7 +127,7 @@ describe('home_dir_in_worktree doctor check', () => {
     writeFileSync(join(repo, '.git'), 'gitdir: /some/other/path/.git/worktrees/linked-wt\n');
     const check = await getCheck('home_dir_in_worktree', {
       HOME: home,
-      GBRAIN_HOME: repo,
+      VOLTMIND_HOME: repo,
     });
     expect(check).toBeDefined();
     expect(check!.status).toBe('warn');
@@ -137,28 +137,28 @@ describe('home_dir_in_worktree doctor check', () => {
   test('walk terminates at $HOME — .git ABOVE $HOME does NOT trigger warn (F4)', async () => {
     // scratch/.git/  (ABOVE the fake $HOME — should be ignored)
     // scratch/home/  (fake $HOME)
-    // scratch/home/.gbrain/  (no worktree below $HOME)
+    // scratch/home/.voltmind/  (no worktree below $HOME)
     mkdirSync(join(scratch, '.git'), { recursive: true });
     const home = join(scratch, 'home');
     mkdirSync(home, { recursive: true });
     const check = await getCheck('home_dir_in_worktree', {
       HOME: home,
-      GBRAIN_HOME: home,
+      VOLTMIND_HOME: home,
     });
     expect(check).toBeDefined();
     // OK because the .git is above $HOME, outside our walk scope.
     expect(check!.status).toBe('ok');
   });
 
-  test('GBRAIN_HOME override pointing outside any worktree → ok', async () => {
+  test('VOLTMIND_HOME override pointing outside any worktree → ok', async () => {
     // Real $HOME might be inside a worktree, but the user pointed
-    // GBRAIN_HOME at a clean location. Doctor should report ok.
+    // VOLTMIND_HOME at a clean location. Doctor should report ok.
     const home = scratch;
     const safe = join(scratch, 'safe-elsewhere');
     mkdirSync(safe, { recursive: true });
     const check = await getCheck('home_dir_in_worktree', {
       HOME: home,
-      GBRAIN_HOME: safe,
+      VOLTMIND_HOME: safe,
     });
     expect(check).toBeDefined();
     expect(check!.status).toBe('ok');

@@ -151,14 +151,14 @@ describe('resolveSource — tarball', () => {
     writeFileSync(
       join(src, 'skillpack.json'),
       JSON.stringify({
-        api_version: 'gbrain-skillpack-v1',
+        api_version: 'voltmind-skillpack-v1',
         name: 'mypack',
         version: '0.1.0',
         description: 'd',
         author: 'a',
         license: 'MIT',
         homepage: 'https://example.com',
-        gbrain_min_version: '0.36.0',
+        voltmind_min_version: '0.36.0',
         skills: ['skills/foo'],
       }),
     );

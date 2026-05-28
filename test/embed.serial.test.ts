@@ -72,8 +72,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.GBRAIN_EMBED_CONCURRENCY;
-  delete process.env.GBRAIN_EMBED_TIME_BUDGET_MS;
+  delete process.env.VOLTMIND_EMBED_CONCURRENCY;
+  delete process.env.VOLTMIND_EMBED_TIME_BUDGET_MS;
 });
 
 describe('runEmbed --all (parallel)', () => {
@@ -94,7 +94,7 @@ describe('runEmbed --all (parallel)', () => {
       upsertChunks: async () => {},
     });
 
-    process.env.GBRAIN_EMBED_CONCURRENCY = '10';
+    process.env.VOLTMIND_EMBED_CONCURRENCY = '10';
 
     await runEmbed(engine, ['--all']);
 
@@ -105,7 +105,7 @@ describe('runEmbed --all (parallel)', () => {
     expect(maxConcurrentEmbedCalls).toBeLessThanOrEqual(10);
   });
 
-  test('respects GBRAIN_EMBED_CONCURRENCY=1 (serial)', async () => {
+  test('respects VOLTMIND_EMBED_CONCURRENCY=1 (serial)', async () => {
     const pages = Array.from({ length: 5 }, (_, i) => ({ slug: `page-${i}` }));
     const chunksBySlug = new Map(
       pages.map(p => [
@@ -120,7 +120,7 @@ describe('runEmbed --all (parallel)', () => {
       upsertChunks: async () => {},
     });
 
-    process.env.GBRAIN_EMBED_CONCURRENCY = '1';
+    process.env.VOLTMIND_EMBED_CONCURRENCY = '1';
 
     await runEmbed(engine, ['--all']);
 
@@ -146,7 +146,7 @@ describe('runEmbed --all (parallel)', () => {
       upsertChunks: async () => {},
     });
 
-    process.env.GBRAIN_EMBED_CONCURRENCY = '5';
+    process.env.VOLTMIND_EMBED_CONCURRENCY = '5';
 
     await runEmbed(engine, ['--stale']);
 
@@ -286,7 +286,7 @@ describe('runEmbedCore --dry-run never calls the embedding model', () => {
       upsertChunks: async () => {},
     });
 
-    process.env.GBRAIN_EMBED_CONCURRENCY = '2';
+    process.env.VOLTMIND_EMBED_CONCURRENCY = '2';
 
     const result = await runEmbedCore(engine, { stale: true });
 
@@ -628,13 +628,13 @@ describe('runEmbed CLI flag wiring (--stale --source)', () => {
 });
 
 describe('embedAllStale wall-clock budget end-to-end (D3 + D3a)', () => {
-  test('GBRAIN_EMBED_TIME_BUDGET_MS=N cuts the outer loop short on stuck workers', async () => {
+  test('VOLTMIND_EMBED_TIME_BUDGET_MS=N cuts the outer loop short on stuck workers', async () => {
     const { runEmbedCore } = await import('../src/commands/embed.ts');
     // Tiny budget: 100ms. Each embed call sleeps 50ms; with budget + multiple
     // small batches, the second listStaleChunks call should see the abort
     // signal AND the worker loop should not claim further keys.
-    process.env.GBRAIN_EMBED_TIME_BUDGET_MS = '100';
-    process.env.GBRAIN_EMBED_CONCURRENCY = '1';
+    process.env.VOLTMIND_EMBED_TIME_BUDGET_MS = '100';
+    process.env.VOLTMIND_EMBED_CONCURRENCY = '1';
 
     let listCallCount = 0;
     let totalRowsReturned = 0;

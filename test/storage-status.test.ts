@@ -36,7 +36,7 @@ describe('formatStorageStatusJson', () => {
     expect(parsed.config.db_tracked).toEqual(['people/', 'companies/']);
   });
 
-  test('handles null config (no gbrain.yml present)', () => {
+  test('handles null config (no voltmind.yml present)', () => {
     const out = formatStorageStatusJson({ ...baseResult, config: null, totalPages: 5 });
     const parsed = JSON.parse(out);
     expect(parsed.config).toBeNull();
@@ -64,7 +64,7 @@ describe('formatStorageStatusHuman', () => {
 
   test('shows fallback message when config is null', () => {
     const out = formatStorageStatusHuman({ ...baseResult, config: null });
-    expect(out).toContain('No gbrain.yml configuration found.');
+    expect(out).toContain('No voltmind.yml configuration found.');
     expect(out).toContain('All pages are stored in git by default.');
   });
 
@@ -79,7 +79,7 @@ describe('formatStorageStatusHuman', () => {
     expect(out).toContain('media/x/tweet-9'); // 10th
     expect(out).not.toContain('media/x/tweet-10'); // 11th truncated
     expect(out).toContain('and 15 more');
-    expect(out).toContain('gbrain export --restore-only --repo "/data/brain"');
+    expect(out).toContain('voltmind export --restore-only --repo "/data/brain"');
   });
 
   test('shows configuration listing for both tiers', () => {

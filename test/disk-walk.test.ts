@@ -14,7 +14,7 @@ import { walkBrainRepo } from '../src/core/disk-walk.ts';
 let tmp: string;
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-walk-test-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-walk-test-'));
 });
 
 afterEach(() => {
@@ -53,9 +53,9 @@ describe('walkBrainRepo', () => {
     );
   });
 
-  test('skips dot-directories (.git, .gbrain, .vscode)', () => {
+  test('skips dot-directories (.git, .voltmind, .vscode)', () => {
     write('.git/HEAD', 'ref: refs/heads/main');
-    write('.gbrain/config.json', '{}');
+    write('.voltmind/config.json', '{}');
     write('.vscode/settings.json', '{}');
     write('people/alice.md', '# Alice');
     const result = walkBrainRepo(tmp);

@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 function scratchGbrain(): string {
-  const root = mkdtempSync(join(tmpdir(), 'fms-gbrain-'));
+  const root = mkdtempSync(join(tmpdir(), 'fms-voltmind-'));
   created.push(root);
   mkdirSync(join(root, 'src', 'commands'), { recursive: true });
   mkdirSync(join(root, 'skills', 'sample'), { recursive: true });

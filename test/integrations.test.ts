@@ -644,7 +644,7 @@ describe('getRecipeDirs (B1 trust boundary)', () => {
     // when it is not the package-bundled one. This test asserts the tier ordering at minimum.)
     // The trust flag is the only source of truth — never assume by path name.
     for (const d of dirs) {
-      if (d.dir === process.env.GBRAIN_RECIPES_DIR) {
+      if (d.dir === process.env.VOLTMIND_RECIPES_DIR) {
         expect(d.trusted).toBe(false);
       }
     }

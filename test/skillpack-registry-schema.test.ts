@@ -29,7 +29,7 @@ const VALID_ENTRY: RegistryEntry = {
     pinned_commit: 'abc1234567890abcdef1234567890abcdef12345',
   },
   tarball_sha256: 'deadbeef'.repeat(8),
-  gbrain_min_version: '0.36.0',
+  voltmind_min_version: '0.36.0',
   default_tier: 'community',
   tags: ['evaluation', 'yc'],
   validated_at: '2026-05-18T20:00:00Z',
@@ -60,7 +60,7 @@ describe('validateRegistryCatalog', () => {
     try {
       validateRegistryCatalog({
         ...VALID_CATALOG,
-        schema_version: 'gbrain-registry-v99',
+        schema_version: 'voltmind-registry-v99',
       });
       throw new Error('should have thrown');
     } catch (err) {
@@ -113,7 +113,7 @@ describe('validateRegistryEntry', () => {
       'homepage',
       'source',
       'tarball_sha256',
-      'gbrain_min_version',
+      'voltmind_min_version',
       'default_tier',
       'tags',
       'validated_at',

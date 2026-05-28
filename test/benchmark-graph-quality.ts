@@ -1,6 +1,6 @@
 /**
  * Graph Quality Benchmark — A/B/C comparison proving the v0.10.1 graph layer
- * makes gbrain measurably better for real-world questions.
+ * makes voltmind measurably better for real-world questions.
  *
  * 80 fictional pages (25 people, 25 companies, 15 meetings, 15 concepts).
  * 200+ typed links. 300+ timeline entries.
@@ -720,7 +720,7 @@ async function measureRanking(
   engine: PGLiteEngine,
   seeds: SeededPage[],
 ): Promise<RankingResult> {
-  // searchKeyword joins content_chunks (a normal `gbrain import` populates
+  // searchKeyword joins content_chunks (a normal `voltmind import` populates
   // these). The benchmark seeded via putPage() which skips chunking, so we
   // upsert one chunk per page now to make ranking measurable.
   for (const s of seeds) {

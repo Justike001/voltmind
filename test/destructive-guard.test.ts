@@ -30,7 +30,7 @@ import {
 
 // Tier 3 opt-out — these tests need the cold-init schema path so the v33
 // migration columns exist on the brain under test.
-delete process.env.GBRAIN_PGLITE_SNAPSHOT;
+delete process.env.VOLTMIND_PGLITE_SNAPSHOT;
 
 async function setupBrain(): Promise<PGLiteEngine> {
   const engine = new PGLiteEngine();

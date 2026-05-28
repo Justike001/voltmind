@@ -1,4 +1,4 @@
-# gbrain-engineer — engineer / code-author lens pack
+# voltmind-engineer — engineer / code-author lens pack
 #
 # v0.41 lens packs wave. Bridge-only pack (D8-C — locked at plan time
 # after assessing what already exists in gstack):
@@ -7,15 +7,15 @@
 #     qa, retro, learn, cso skills with a typed JSONL learnings system
 #     at ~/.gstack/projects/{repo}/learnings.jsonl (pattern, pitfall,
 #     preference, architecture, tool, operational, investigation).
-#   - gbrain already ships `type: code` + code-def/code-refs/code-callers.
-#   - gbrain already ships `type: project` + brain/projects/ directory.
+#   - voltmind already ships `type: code` + code-def/code-refs/code-callers.
+#   - voltmind already ships `type: project` + brain/projects/ directory.
 #
-# What's missing: the gstack learnings JSONL never reaches gbrain. T8
+# What's missing: the gstack learnings JSONL never reaches voltmind. T8
 # fixes that with an IngestionSource bridge that watches the JSONL files
 # and emits IngestionEvent per line typed as `learning` page.
 #
 # Scope deliberately small: declares the `learning` page type (NEW) and
-# reuses `code` from gbrain-base. Drops the speculative ADR / postmortem /
+# reuses `code` from voltmind-base. Drops the speculative ADR / postmortem /
 # refactor_thesis / tech_debt types from the original plan because:
 #   (a) gstack's investigation + retro skills already capture postmortems
 #       and architecture decisions inline (no dedicated type needed)
@@ -32,18 +32,18 @@
 # loop, augmented by the gstack-learnings IngestionSource (T8) running in
 # the v0.38 daemon when this pack is active.
 
-api_version: gbrain-schema-pack-v1
-name: gbrain-engineer
+api_version: voltmind-schema-pack-v1
+name: voltmind-engineer
 version: 1.0.0
-description: "Engineer / code-author lens. Bridges gstack's typed JSONL learnings system (pattern, pitfall, architecture, tool, operational, investigation) into gbrain as first-class `learning` pages. Declares architecture_calls, effort_estimates, risk_assessment calibration domains. Reuses gbrain-base's `code` page type unchanged."
-gbrain_min_version: 0.41.0
-extends: gbrain-base
+description: "Engineer / code-author lens. Bridges gstack's typed JSONL learnings system (pattern, pitfall, architecture, tool, operational, investigation) into voltmind as first-class `learning` pages. Declares architecture_calls, effort_estimates, risk_assessment calibration domains. Reuses voltmind-base's `code` page type unchanged."
+voltmind_min_version: 0.41.0
+extends: voltmind-base
 
 # Reuse `code` + `project` from base. The gstack-learnings bridge writes
 # `learning` pages cross-referenced to code:// URIs via link_types, but
 # we don't introduce new code-related page types here.
 borrow_from:
-  - pack: gbrain-base
+  - pack: voltmind-base
     types:
       - code
       - project

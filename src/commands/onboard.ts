@@ -2,7 +2,7 @@
 // sourcescope:file-brain-wide — the --history surface reads
 // migration_impact_log brain-wide. Per A26 lint opt-out.
 //
-// v0.41.18.0 (A1, T13). CLI shell for `gbrain onboard`. Thin wrapper over:
+// v0.41.18.0 (A1, T13). CLI shell for `voltmind onboard`. Thin wrapper over:
 //   - T2 library: computeRemediationPlan + runRemediation
 //   - T4 onboard checks: runAllOnboardChecks (extra remediations)
 //   - T12 render: buildOnboardReport + renderHuman
@@ -89,9 +89,9 @@ export async function runOnboard(engine: BrainEngine, args: string[]): Promise<v
   // --auto refuses without --max-usd (cron-safety per A12 + A20).
   if (auto && maxUsd === undefined) {
     process.stderr.write(
-      `gbrain onboard --auto refuses without --max-usd N.\n` +
+      `voltmind onboard --auto refuses without --max-usd N.\n` +
       `Set a cap to avoid surprise spend:\n` +
-      `  gbrain onboard --auto --max-usd 5\n`,
+      `  voltmind onboard --auto --max-usd 5\n`,
     );
     process.exit(2);
   }
@@ -131,7 +131,7 @@ export async function runOnboard(engine: BrainEngine, args: string[]): Promise<v
       onTargetUnreachable: (target, ceiling) => {
         process.stderr.write(
           `[onboard] target ${target}/100 unreachable; max autonomous = ${ceiling}/100. ` +
-          `Configure missing prereqs (run gbrain doctor --remediation-plan) or lower --target-score.\n`,
+          `Configure missing prereqs (run voltmind doctor --remediation-plan) or lower --target-score.\n`,
         );
       },
       onNothingToDo: (score, target) => {
@@ -153,7 +153,7 @@ export async function runOnboard(engine: BrainEngine, args: string[]): Promise<v
       onBudgetExhausted: (planHash, snapshot) => {
         process.stderr.write(
           `\n[onboard] BudgetExhausted (${snapshot.reason}): spent $${snapshot.spent.toFixed(4)} > cap $${snapshot.cap.toFixed(2)}.\n` +
-          `Checkpoint saved. Resume with:\n  gbrain doctor --remediate --resume ${planHash}\n`,
+          `Checkpoint saved. Resume with:\n  voltmind doctor --remediate --resume ${planHash}\n`,
         );
       },
     },

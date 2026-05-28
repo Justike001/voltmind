@@ -24,7 +24,7 @@ interface Harness {
 }
 
 function makeHarness(name: string, body: string): Harness {
-  const root = join(tmpdir(), `gbrain-cws-test-${name}-${process.pid}-${Date.now()}`);
+  const root = join(tmpdir(), `voltmind-cws-test-${name}-${process.pid}-${Date.now()}`);
   mkdirSync(root, { recursive: true });
   const workerScript = join(root, 'worker.sh');
   writeFileSync(workerScript, `#!/bin/sh\n${body}\n`, 'utf8');

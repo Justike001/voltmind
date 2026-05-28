@@ -1,7 +1,7 @@
 // v0.27.1 follow-up: searchVector column routing — `embedding_image`
 // path returns image rows only, default `embedding` path returns text/code
 // rows only. Verifies the modality-filter contract that backs the
-// `gbrain query --image <path>` flag.
+// `voltmind query --image <path>` flag.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
@@ -12,7 +12,7 @@ let engine: PGLiteEngine;
 /**
  * Actual `content_chunks.embedding` column width at runtime. Probed
  * after initSchema, NOT hardcoded — the brain inherits from
- * `~/.gbrain/config.json` (locally) or `DEFAULT_EMBEDDING_DIMENSIONS`
+ * `~/.voltmind/config.json` (locally) or `DEFAULT_EMBEDDING_DIMENSIONS`
  * (CI fresh-install). Hardcoding 1536 or 1280 makes the test green
  * on one and red on the other; the default model has flipped twice
  * already (OpenAI 3-large=1536 → ZE zembed-1=1280 in v0.36+).
@@ -42,7 +42,7 @@ beforeEach(async () => {
  * Build a fake text-column vector at the column's runtime dim. Reads
  * `TEXT_DIM` populated in `beforeAll` from the actual column. Works
  * on any default — 1280 (CI fresh-install) and 1536 (local dev with
- * gbrain config from older default) both pass.
+ * voltmind config from older default) both pass.
  */
 function fakeTextDefault(seed: number): Float32Array {
   const n = TEXT_DIM;

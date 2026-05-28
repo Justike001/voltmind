@@ -23,7 +23,7 @@ import { createProgress, startHeartbeat, type ProgressReporter } from '../core/p
 import { categorizeCheck, type CheckCategory } from '../core/doctor-categories.ts';
 import { getCliOptions, cliOptsToProgressOptions } from '../core/cli-options.ts';
 import type { DbUrlSource } from '../core/config.ts';
-import { gbrainPath } from '../core/config.ts';
+import { voltmindPath } from '../core/config.ts';
 import { dirname, isAbsolute, join, resolve as resolvePath } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
@@ -45,7 +45,7 @@ export interface Check {
    * v0.36+ brain-health-100: structured remediation jobs per check.
    * Populated by the recommendation generator + (v0.40.3.0 T8b) individual
    * checks (lint, integrity, sync_failures). Consumed by
-   * `gbrain doctor --remediation-plan` / `--remediate`. Optional and
+   * `voltmind doctor --remediation-plan` / `--remediate`. Optional and
    * additive — schema_version stays at 2 (D4).
    *
    * v0.40.3.0 (D6): typed to RemediationStep[] from the canonical
@@ -65,9 +65,9 @@ export interface Check {
 
 /**
  * Structured doctor report. Stable shape consumed by:
- *   - gbrain doctor --json (CLI)
+ *   - voltmind doctor --json (CLI)
  *   - run_doctor MCP op (remote callers)
- *   - gbrain remote doctor (renders this from the MCP op response)
+ *   - voltmind remote doctor (renders this from the MCP op response)
  *
  * schema_version=2 was set when --json output stabilized; bump only for
  * breaking field changes.
@@ -78,8 +78,8 @@ export interface DoctorReport {
   /**
    * Legacy all-checks aggregate. `100 − 20×fails − 5×warns`, floor 0.
    *
-   * Preserved verbatim from pre-v0.41.19.0 for back-compat with `gbrain
-   * doctor --remediate`, `gbrain remote doctor`, the MCP `run_doctor` op,
+   * Preserved verbatim from pre-v0.41.19.0 for back-compat with `voltmind
+   * doctor --remediate`, `voltmind remote doctor`, the MCP `run_doctor` op,
    * and any external monitor / CI gate that reads this field. NO behavior
    * change: a fixed check set produces a byte-identical `health_score`
    * before and after the v0.41.19.0 wave.
@@ -164,7 +164,7 @@ export function computeDoctorReport(checks: Check[]): DoctorReport {
 }
 
 /**
- * Focused doctor for `run_doctor` MCP op + `gbrain remote doctor` CLI.
+ * Focused doctor for `run_doctor` MCP op + `voltmind remote doctor` CLI.
  *
  * Runs five checks scoped to "what does a remote operator need to know about
  * this brain right now?":
@@ -209,10 +209,10 @@ export function resolveWhoknowsFixturePath(
   env: NodeJS.ProcessEnv = process.env,
   moduleUrl: string = import.meta.url,
 ): string | null {
-  if (env.GBRAIN_WHOKNOWS_FIXTURE_PATH) {
-    return isAbsolute(env.GBRAIN_WHOKNOWS_FIXTURE_PATH)
-      ? env.GBRAIN_WHOKNOWS_FIXTURE_PATH
-      : resolvePath(process.cwd(), env.GBRAIN_WHOKNOWS_FIXTURE_PATH);
+  if (env.VOLTMIND_WHOKNOWS_FIXTURE_PATH) {
+    return isAbsolute(env.VOLTMIND_WHOKNOWS_FIXTURE_PATH)
+      ? env.VOLTMIND_WHOKNOWS_FIXTURE_PATH
+      : resolvePath(process.cwd(), env.VOLTMIND_WHOKNOWS_FIXTURE_PATH);
   }
 
   try {
@@ -234,11 +234,11 @@ export function resolveWhoknowsFixturePath(
 /**
  * v0.33: whoknows_health — verify the eval fixture is present at the
  * documented path. Lightweight; just checks file existence and row count,
- * not the eval gate outcome (that runs via `gbrain eval whoknows`).
+ * not the eval gate outcome (that runs via `voltmind eval whoknows`).
  *
  * Surface is intentionally narrow: a missing fixture means the eval
  * cannot run at all, which is the highest-leverage signal. Hit-rate
- * regression detection lives in `gbrain eval whoknows --json` and is
+ * regression detection lives in `voltmind eval whoknows --json` and is
  * the job of the eval command, not the doctor sweep.
  */
 export async function whoknowsHealthCheck(_engine: BrainEngine): Promise<Check> {
@@ -248,7 +248,7 @@ export async function whoknowsHealthCheck(_engine: BrainEngine): Promise<Check> 
       return {
         name: 'whoknows_health',
         status: 'warn',
-        message: 'whoknows eval fixture path could not be resolved. Set GBRAIN_WHOKNOWS_FIXTURE_PATH to the absolute path for test/fixtures/whoknows-eval.jsonl.',
+        message: 'whoknows eval fixture path could not be resolved. Set VOLTMIND_WHOKNOWS_FIXTURE_PATH to the absolute path for test/fixtures/whoknows-eval.jsonl.',
       };
     }
     if (!existsSync(fixturePath)) {
@@ -283,7 +283,7 @@ export async function whoknowsHealthCheck(_engine: BrainEngine): Promise<Check> 
     return {
       name: 'whoknows_health',
       status: 'ok',
-      message: `whoknows eval fixture present (${rows.length} queries). Run \`gbrain eval whoknows test/fixtures/whoknows-eval.jsonl\` to grade.`,
+      message: `whoknows eval fixture present (${rows.length} queries). Run \`voltmind eval whoknows test/fixtures/whoknows-eval.jsonl\` to grade.`,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -314,14 +314,14 @@ export async function takesWeightGridCheck(engine: BrainEngine): Promise<Check> 
       return {
         name: 'takes_weight_grid',
         status: 'fail',
-        message: `${offGrid}/${total} takes off the 0.05 grid (${(ratio * 100).toFixed(1)}%). Fix: gbrain apply-migrations --yes`,
+        message: `${offGrid}/${total} takes off the 0.05 grid (${(ratio * 100).toFixed(1)}%). Fix: voltmind apply-migrations --yes`,
       };
     }
     if (ratio > 0.01) {
       return {
         name: 'takes_weight_grid',
         status: 'warn',
-        message: `${offGrid}/${total} takes off the 0.05 grid (${(ratio * 100).toFixed(1)}%). Fix: gbrain apply-migrations --yes`,
+        message: `${offGrid}/${total} takes off the 0.05 grid (${(ratio * 100).toFixed(1)}%). Fix: voltmind apply-migrations --yes`,
       };
     }
     return {
@@ -467,13 +467,13 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
       checks.push({
         name: 'schema_version',
         status: 'fail',
-        message: `No schema version recorded. Migrations never ran. Run \`gbrain apply-migrations --yes\` on the host.`,
+        message: `No schema version recorded. Migrations never ran. Run \`voltmind apply-migrations --yes\` on the host.`,
       });
     } else {
       checks.push({
         name: 'schema_version',
         status: 'warn',
-        message: `Version ${version}, latest is ${LATEST_VERSION}. Run \`gbrain apply-migrations --yes\` on the host.`,
+        message: `Version ${version}, latest is ${LATEST_VERSION}. Run \`voltmind apply-migrations --yes\` on the host.`,
       });
     }
   } catch {
@@ -524,7 +524,7 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
       if (partialCount >= 3) wedged.push(v);
     }
     if (wedged.length > 0) {
-      const cmd = wedged.map(v => `gbrain apply-migrations --force-retry ${v}`).join(' && ');
+      const cmd = wedged.map(v => `voltmind apply-migrations --force-retry ${v}`).join(' && ');
       checks.push({
         name: 'minions_migration',
         status: 'fail',
@@ -534,7 +534,7 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
       checks.push({
         name: 'minions_migration',
         status: 'fail',
-        message: `MINIONS HALF-INSTALLED on brain host: ${stuck.join(', ')}. Run on the host: gbrain apply-migrations --yes`,
+        message: `MINIONS HALF-INSTALLED on brain host: ${stuck.join(', ')}. Run on the host: voltmind apply-migrations --yes`,
       });
     }
   } catch {
@@ -546,8 +546,8 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
   // Read the JSONL file directly at the canonical path; cheap and engine-agnostic.
   try {
     const { readFileSync, existsSync } = await import('fs');
-    const { gbrainPath } = await import('../core/config.ts');
-    const path = gbrainPath('sync-failures.jsonl');
+    const { voltmindPath } = await import('../core/config.ts');
+    const path = voltmindPath('sync-failures.jsonl');
     let unacked = 0;
     if (existsSync(path)) {
       const lines = readFileSync(path, 'utf-8').split('\n').filter(l => l.trim());
@@ -563,7 +563,7 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
       status: unacked === 0 ? 'ok' : 'warn',
       message: unacked === 0
         ? 'No unacked failures'
-        : `${unacked} unacked failure(s) — run \`gbrain sync --skip-failed\` on the host to acknowledge`,
+        : `${unacked} unacked failure(s) — run \`voltmind sync --skip-failed\` on the host to acknowledge`,
     });
   } catch {
     checks.push({ name: 'sync_failures', status: 'ok', message: 'No failures recorded' });
@@ -597,7 +597,7 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
           message:
             `${result.count} page slug(s) appear at 'default' but NOT at the intended source ` +
             `(e.g., ${sampleStr}). Likely pre-v0.30.3 misroutes OR an incomplete initial sync. ` +
-            `Verify on the brain host: \`gbrain sources status\` then \`gbrain sync --source <id> --full\`.`,
+            `Verify on the brain host: \`voltmind sources status\` then \`voltmind sync --source <id> --full\`.`,
         });
       } else {
         checks.push({
@@ -627,7 +627,7 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
         status: stalled === 0 ? 'ok' : 'warn',
         message: stalled === 0
           ? 'No stalled active jobs'
-          : `${stalled} active job(s) stalled > 1h — \`gbrain jobs cancel <id>\` or \`gbrain jobs retry <id>\` on the host`,
+          : `${stalled} active job(s) stalled > 1h — \`voltmind jobs cancel <id>\` or \`voltmind jobs retry <id>\` on the host`,
       });
     } catch {
       checks.push({ name: 'queue_health', status: 'ok', message: 'No queue activity' });
@@ -645,7 +645,7 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
   checks.push(await checkBatchRetryHealth(engine));
 
   // v0.41.2.1 — embedding_env_override (cross-surface parity with
-  // buildChecks). Surfaces when GBRAIN_EMBEDDING_* env vars disagree
+  // buildChecks). Surfaces when VOLTMIND_EMBEDDING_* env vars disagree
   // with DB config; closes the silent-override class that caused the
   // 716K-chunk damage incident from PR #1421's description.
   checks.push(await checkEmbeddingEnvOverride(engine));
@@ -653,7 +653,7 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
   // v0.31.12 subagent runtime enforcement (Layer 3 of 3 — Codex F13).
   // The subagent loop is Anthropic-only. If models.tier.subagent or
   // models.default is explicitly set to a non-Anthropic provider, warn here
-  // so the user sees it at the next `gbrain doctor` run instead of at the
+  // so the user sees it at the next `voltmind doctor` run instead of at the
   // next subagent job submission. (Layers 1+2 also enforce — this is the
   // surfacing layer.)
   checks.push(await checkSubagentCapability(engine));
@@ -677,7 +677,7 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
   checks.push(await checkEvalDrift(engine));
 
   // 9. v0.35.0.0+ reranker_health: surfaces rerank-audit failures from
-  // ~/.gbrain/audit/rerank-failures-*.jsonl. Failure-only (no success
+  // ~/.voltmind/audit/rerank-failures-*.jsonl. Failure-only (no success
   // logging on the search hot path per CDX2-F22). Reads
   // search.reranker.enabled FIRST so absence-of-failures means different
   // things when reranker is on vs off.
@@ -737,14 +737,14 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
  *
  *   1. Pages with chunker_version < current — pre-v40 pages that need
  *      to be re-embedded for the wrapper to apply. Paste-ready fix:
- *      `gbrain reindex --markdown`.
+ *      `voltmind reindex --markdown`.
  *   2. Pages with contextual_retrieval_mode IS NULL — never evaluated
  *      against the CR ladder. Same fix as (1).
  *   3. Synopsis-failure events in the audit JSONL over the last 7 days
  *      — surfaces refusals + page-level fallbacks. >5% refusal rate
  *      warns; otherwise reported as informational.
  *
- * Reads `~/.gbrain/audit/synopsis-failures-YYYY-Www.jsonl` via
+ * Reads `~/.voltmind/audit/synopsis-failures-YYYY-Www.jsonl` via
  * readRecentSynopsisFailures + summarizeSynopsisFailures from
  * `src/core/audit-synopsis.ts`. Failure-only audit means low write
  * volume on healthy brains.
@@ -797,7 +797,7 @@ export async function checkContextualRetrievalCoverage(engine: BrainEngine): Pro
     }
     const fixHint =
       chunkerDrift > 0 || modeNull > 0
-        ? ` Run \`gbrain reindex --markdown\` to align.`
+        ? ` Run \`voltmind reindex --markdown\` to align.`
         : '';
     return {
       name: 'contextual_retrieval_coverage',
@@ -835,7 +835,7 @@ export async function checkAbandonedThreads(engine: BrainEngine): Promise<Check>
     return {
       name: 'abandoned_threads',
       status: 'ok',
-      message: `${count} high-conviction take(s) older than 12 months and never revisited — see \`gbrain calibration\` for details`,
+      message: `${count} high-conviction take(s) older than 12 months and never revisited — see \`voltmind calibration\` for details`,
     };
   } catch (e) {
     return {
@@ -872,7 +872,7 @@ export async function checkCalibrationFreshness(engine: BrainEngine): Promise<Ch
       return {
         name: 'calibration_freshness',
         status: 'warn',
-        message: `Calibration profile is ${ageDays} days old (stale at >${staleDays}d). Run \`gbrain calibration --regenerate\``,
+        message: `Calibration profile is ${ageDays} days old (stale at >${staleDays}d). Run \`voltmind calibration --regenerate\``,
       };
     }
     return {
@@ -974,7 +974,7 @@ export async function checkSubagentHealth(engine: BrainEngine): Promise<Check> {
       return {
         name: 'subagent_health',
         status: 'fail',
-        message: `${bounces} lease-pressure bounces in last 24h — this is blocking real work. Raise the cap: \`export GBRAIN_ANTHROPIC_MAX_INFLIGHT=64\` (or \`unlimited\` for Azure / Bedrock / self-hosted upstreams with no provider-side rate limit). After raising, restart \`gbrain jobs work\`.`,
+        message: `${bounces} lease-pressure bounces in last 24h — this is blocking real work. Raise the cap: \`export VOLTMIND_ANTHROPIC_MAX_INFLIGHT=64\` (or \`unlimited\` for Azure / Bedrock / self-hosted upstreams with no provider-side rate limit). After raising, restart \`voltmind jobs work\`.`,
       };
     }
     // 1-999 bounces: cross-check forward progress.
@@ -989,7 +989,7 @@ export async function checkSubagentHealth(engine: BrainEngine): Promise<Check> {
       return {
         name: 'subagent_health',
         status: 'warn',
-        message: `${bounces} lease-pressure bounces in last 24h with no completed subagent jobs — cap is too tight. Raise via \`export GBRAIN_ANTHROPIC_MAX_INFLIGHT=64\` (or \`unlimited\` for upstreams with no provider-side cap).`,
+        message: `${bounces} lease-pressure bounces in last 24h with no completed subagent jobs — cap is too tight. Raise via \`export VOLTMIND_ANTHROPIC_MAX_INFLIGHT=64\` (or \`unlimited\` for upstreams with no provider-side cap).`,
       };
     }
     return {
@@ -999,7 +999,7 @@ export async function checkSubagentHealth(engine: BrainEngine): Promise<Check> {
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (process.env.GBRAIN_DEBUG === '1') {
+    if (process.env.VOLTMIND_DEBUG === '1') {
       process.stderr.write(`[doctor] subagent_health skipped: ${msg}\n`);
     }
     return {
@@ -1056,7 +1056,7 @@ export async function checkVoiceGateHealth(engine: BrainEngine): Promise<Check> 
  *   1) Read `search.reranker.enabled` first. When disabled and no
  *      failures in window → 'ok: reranker disabled'. Avoids interpreting
  *      "no events" as "broken" when reranker is simply not in use.
- *   2) Walk last 7 days of `~/.gbrain/audit/rerank-failures-*.jsonl`.
+ *   2) Walk last 7 days of `~/.voltmind/audit/rerank-failures-*.jsonl`.
  *   3) Auth failures: ANY single one warns (config-time problem doctor's
  *      own probe should have caught — surface it).
  *   4) Transient (network/timeout/rate_limit): warn at >=5 in window.
@@ -1088,7 +1088,7 @@ export async function checkRerankerHealth(engine: BrainEngine): Promise<Check> {
       return {
         name: 'reranker_health',
         status: 'warn',
-        message: `${authFails.length} reranker auth failure(s) in last 7 days. Fix: verify ZEROENTROPY_API_KEY and run \`gbrain models doctor\`.`,
+        message: `${authFails.length} reranker auth failure(s) in last 7 days. Fix: verify ZEROENTROPY_API_KEY and run \`voltmind models doctor\`.`,
       };
     }
 
@@ -1132,7 +1132,7 @@ export async function checkRerankerHealth(engine: BrainEngine): Promise<Check> {
  *
  * Surfaces sustained Supavisor circuit-breaker incidents from the
  * engine-level batch retry wrap. Reads the last 24h of audit events from
- * `~/.gbrain/audit/batch-retry-YYYY-Www.jsonl`.
+ * `~/.voltmind/audit/batch-retry-YYYY-Www.jsonl`.
  *
  * Threshold ladder (codex H-9 — avoid permanent noise from one historical blip):
  *   ok    — zero exhausted events in 24h, OR <3 exhausted from a single site
@@ -1144,7 +1144,7 @@ export async function checkRerankerHealth(engine: BrainEngine): Promise<Check> {
  *   - files_unreadable count for permission errors (NOT ENOENT which is normal)
  *
  * Also surfaces (codex M-10): runs resolveBulkRetryOpts(process.env) at
- * startup so bad GBRAIN_BULK_* config fails at doctor time, not first-retry.
+ * startup so bad VOLTMIND_BULK_* config fails at doctor time, not first-retry.
  */
 export async function checkBatchRetryHealth(_engine: BrainEngine): Promise<Check> {
   try {
@@ -1156,7 +1156,7 @@ export async function checkBatchRetryHealth(_engine: BrainEngine): Promise<Check
       return {
         name: 'batch_retry_health',
         status: 'warn',
-        message: `GBRAIN_BULK_* env override invalid: ${e instanceof Error ? e.message : String(e)}`,
+        message: `VOLTMIND_BULK_* env override invalid: ${e instanceof Error ? e.message : String(e)}`,
       };
     }
 
@@ -1168,7 +1168,7 @@ export async function checkBatchRetryHealth(_engine: BrainEngine): Promise<Check
       return {
         name: 'batch_retry_health',
         status: 'warn',
-        message: `${result.files_unreadable} audit file(s) unreadable (permission / IO). Fix: check ~/.gbrain/audit/ (or $GBRAIN_AUDIT_DIR if set).`,
+        message: `${result.files_unreadable} audit file(s) unreadable (permission / IO). Fix: check ~/.voltmind/audit/ (or $VOLTMIND_AUDIT_DIR if set).`,
       };
     }
 
@@ -1199,7 +1199,7 @@ export async function checkBatchRetryHealth(_engine: BrainEngine): Promise<Check
       return {
         name: 'batch_retry_health',
         status: 'fail',
-        message: `${exhausted.length} exhausted batch retries in last 24h (worst: ${worstSite[0]} = ${worstSite[1]}). Sustained circuit-breaker incident. Fix: check pooler status; consider raising GBRAIN_BULK_MAX_RETRIES or moving to direct-connection.`,
+        message: `${exhausted.length} exhausted batch retries in last 24h (worst: ${worstSite[0]} = ${worstSite[1]}). Sustained circuit-breaker incident. Fix: check pooler status; consider raising VOLTMIND_BULK_MAX_RETRIES or moving to direct-connection.`,
       };
     }
 
@@ -1208,7 +1208,7 @@ export async function checkBatchRetryHealth(_engine: BrainEngine): Promise<Check
       return {
         name: 'batch_retry_health',
         status: 'warn',
-        message: `${exhausted.length} exhausted batch retries in last 24h (worst: ${worstSite[0]} = ${worstSite[1]}). Tune via GBRAIN_BULK_MAX_RETRIES / GBRAIN_BULK_RETRY_MAX_MS.`,
+        message: `${exhausted.length} exhausted batch retries in last 24h (worst: ${worstSite[0]} = ${worstSite[1]}). Tune via VOLTMIND_BULK_MAX_RETRIES / VOLTMIND_BULK_RETRY_MAX_MS.`,
       };
     }
 
@@ -1247,7 +1247,7 @@ export async function checkBatchRetryHealth(_engine: BrainEngine): Promise<Check
  *
  *   3. >=30% → ok with the percentage.
  *      <10%  → warn (mismatch: signal enabled but link graph is too
- *              sparse to fire often; fix: `gbrain extract all` to
+ *              sparse to fire often; fix: `voltmind extract all` to
  *              populate the link graph from frontmatter + markdown).
  *      10-29% → ok with note (signal will fire occasionally).
  *
@@ -1263,7 +1263,7 @@ export async function checkGraphSignalsCoverage(engine: BrainEngine): Promise<Ch
     if (cfgVal !== null && cfgVal !== undefined) {
       // v0.40.4 codex F1 — case-insensitive + trim, parity with
       // loadOverridesFromConfig in src/core/search/mode.ts. Without
-      // this, `gbrain config set search.graph_signals TRUE` enables
+      // this, `voltmind config set search.graph_signals TRUE` enables
       // the feature in production but doctor reports "disabled".
       const v = cfgVal.trim().toLowerCase();
       enabled = v === 'true' || v === '1';
@@ -1313,7 +1313,7 @@ export async function checkGraphSignalsCoverage(engine: BrainEngine): Promise<Ch
       return {
         name: 'graph_signals_coverage',
         status: 'warn',
-        message: `graph_signals enabled but only ${pctStr}% of pages have inbound links (<10%). Signal will rarely fire. Fix: \`gbrain extract all\` to populate the link graph from frontmatter + markdown.`,
+        message: `graph_signals enabled but only ${pctStr}% of pages have inbound links (<10%). Signal will rarely fire. Fix: \`voltmind extract all\` to populate the link graph from frontmatter + markdown.`,
       };
     }
 
@@ -1337,21 +1337,21 @@ export async function checkGraphSignalsCoverage(engine: BrainEngine): Promise<Ch
 /**
  * v0.37.0 brainstorm_health doctor check.
  *
- * Surfaces three readiness signals for `gbrain brainstorm` / `gbrain lsd`:
+ * Surfaces three readiness signals for `voltmind brainstorm` / `voltmind lsd`:
  *
  *   1. Migration v79 applied — the `pages.last_retrieved_at` column exists.
  *      If missing, LSD's stale-page signal degrades silently (corpus-sampling
- *      fallback only). Fix: `gbrain apply-migrations --yes`.
+ *      fallback only). Fix: `voltmind apply-migrations --yes`.
  *
  *   2. search.track_retrieval — when explicitly off, LSD never accumulates
  *      stale signal (every page stays at NULL last_retrieved_at). Default-on
  *      is fine; explicit-off is a warning so the user notices the setting.
- *      Fix: `gbrain config set search.track_retrieval true`.
+ *      Fix: `voltmind config set search.track_retrieval true`.
  *
  *   3. Calibration cold-start — the latest calibration profile has empty
  *      `active_bias_tags`. brainstorm + LSD judge fall back to no-anti-bias
  *      mode with a stderr warning at run time; this surfaces it earlier.
- *      Fix: `gbrain calibration --regenerate` once enough takes are resolved.
+ *      Fix: `voltmind calibration --regenerate` once enough takes are resolved.
  *
  * Returns the FIRST non-ok signal as the status — column-missing dominates,
  * then disabled-tracking, then cold-start. All three are non-blocking warnings;
@@ -1372,7 +1372,7 @@ export async function checkBrainstormHealth(engine: BrainEngine): Promise<Check>
       return {
         name: 'brainstorm_health',
         status: 'warn',
-        message: `pages.last_retrieved_at column missing. LSD stale-bias degraded to corpus-sampling. Fix: \`gbrain apply-migrations --yes\``,
+        message: `pages.last_retrieved_at column missing. LSD stale-bias degraded to corpus-sampling. Fix: \`voltmind apply-migrations --yes\``,
       };
     }
   } catch (e) {
@@ -1393,7 +1393,7 @@ export async function checkBrainstormHealth(engine: BrainEngine): Promise<Check>
       return {
         name: 'brainstorm_health',
         status: 'warn',
-        message: `search.track_retrieval is explicitly off — LSD's stale-page signal never accumulates. Fix: \`gbrain config set search.track_retrieval true\` (or accept and use brainstorm only).`,
+        message: `search.track_retrieval is explicitly off — LSD's stale-page signal never accumulates. Fix: \`voltmind config set search.track_retrieval true\` (or accept and use brainstorm only).`,
       };
     }
   } catch {
@@ -1421,7 +1421,7 @@ export async function checkBrainstormHealth(engine: BrainEngine): Promise<Check>
       return {
         name: 'brainstorm_health',
         status: 'ok',
-        message: `Migration v79 applied; tracking enabled. Calibration cold-start (no active_bias_tags) — judge runs unbiased. Fix when ready: \`gbrain calibration --regenerate\`.`,
+        message: `Migration v79 applied; tracking enabled. Calibration cold-start (no active_bias_tags) — judge runs unbiased. Fix when ready: \`voltmind calibration --regenerate\`.`,
       };
     }
     return {
@@ -1445,8 +1445,8 @@ export async function checkBrainstormHealth(engine: BrainEngine): Promise<Check>
  *
  * When the configured embedding_model starts with `zeroentropyai:`, verify
  * the API key is set. Doesn't make a network call by default — the existing
- * `gbrain models doctor` probe covers that, and we don't want every
- * `gbrain doctor` run to spend tokens. Surfaces a paste-ready fix when the
+ * `voltmind models doctor` probe covers that, and we don't want every
+ * `voltmind doctor` run to spend tokens. Surfaces a paste-ready fix when the
  * key is missing.
  */
 export async function checkZeEmbeddingHealth(engine: BrainEngine): Promise<Check> {
@@ -1467,7 +1467,7 @@ export async function checkZeEmbeddingHealth(engine: BrainEngine): Promise<Check
       };
     }
     const envKey = process.env.ZEROENTROPY_API_KEY;
-    // File plane: zeroentropy_api_key on GBrainConfig (added by C.3).
+    // File plane: zeroentropy_api_key on VoltMindConfig (added by C.3).
     const fileKey = loadConfigFileOnly()?.zeroentropy_api_key;
     if (!envKey && !fileKey) {
       return {
@@ -1476,8 +1476,8 @@ export async function checkZeEmbeddingHealth(engine: BrainEngine): Promise<Check
         message:
           `embedding_model="${model}" but ZEROENTROPY_API_KEY is not set. ` +
           `Fix: get a key at https://dashboard.zeroentropy.dev and either ` +
-          `\`export ZEROENTROPY_API_KEY=...\` or edit ~/.gbrain/config.json ` +
-          `to add "zeroentropy_api_key": "...". (gbrain config set writes the DB plane, which the embed pipeline ignores.)`,
+          `\`export ZEROENTROPY_API_KEY=...\` or edit ~/.voltmind/config.json ` +
+          `to add "zeroentropy_api_key": "...". (voltmind config set writes the DB plane, which the embed pipeline ignores.)`,
       };
     }
     return {
@@ -1501,7 +1501,7 @@ export async function checkZeEmbeddingHealth(engine: BrainEngine): Promise<Check
  * Cross-checks that `config.embedding_dimensions` matches the actual
  * `vector(N)` width on `content_chunks.embedding`. Drift here means the
  * ze-switch was interrupted mid-flight (schema changed but config write
- * crashed, or vice versa). Surfaces a paste-ready `gbrain ze-switch
+ * crashed, or vice versa). Surfaces a paste-ready `voltmind ze-switch
  * --resume` hint.
  */
 export async function checkEmbeddingWidthConsistency(engine: BrainEngine): Promise<Check> {
@@ -1540,7 +1540,7 @@ export async function checkEmbeddingWidthConsistency(engine: BrainEngine): Promi
       return {
         name: 'embedding_width_consistency',
         status: 'warn',
-        message: 'content_chunks.embedding column not found. Fix: run `gbrain init --migrate-only` or check schema.',
+        message: 'content_chunks.embedding column not found. Fix: run `voltmind init --migrate-only` or check schema.',
       };
     }
     if (existing.dims === null) {
@@ -1552,7 +1552,7 @@ export async function checkEmbeddingWidthConsistency(engine: BrainEngine): Promi
     }
     if (existing.dims !== configDim) {
       // E.2: use the engine-kind-branched recipe instead of pointing at
-      // the no-op `gbrain config set` path. The recipe is paste-ready
+      // the no-op `voltmind config set` path. The recipe is paste-ready
       // for the brain's actual engine.
       const databasePath = (engine as { _savedConfig?: { database_path?: string } })._savedConfig?.database_path;
       const recipe = embeddingMismatchMessage({
@@ -1694,7 +1694,7 @@ export async function checkFactsEmbeddingWidthConsistency(engine: BrainEngine): 
  * Status stays `ok` (never warns; never docks health score). If
  * search.mode is unset → suggest picking one. If overrides contradict
  * the mode (e.g. mode=conservative but cache.enabled=false), say so in
- * the message and paste a `gbrain search modes --reset` fix command.
+ * the message and paste a `voltmind search modes --reset` fix command.
  */
 
 /**
@@ -1737,9 +1737,9 @@ export async function checkSourceRoutingHealth(engine: BrainEngine): Promise<Che
         status: 'warn',
         message:
           `${emptySources.length} non-default source(s) have zero pages: ${emptySources.join(', ')}. ` +
-          `If you've recently run \`gbrain import --source-id <id>\` against these, the writes may have ` +
+          `If you've recently run \`voltmind import --source-id <id>\` against these, the writes may have ` +
           `silently fallen to the default source pre-v0.37.7.0. Re-run with --source-id; verify via ` +
-          `\`gbrain sources current --json\`.`,
+          `\`voltmind sources current --json\`.`,
       };
     }
     return {
@@ -1787,22 +1787,22 @@ export async function checkFederationHealth(engine: BrainEngine): Promise<Check>
     for (const m of metrics) {
       // Fail thresholds first (most severe)
       if (m.lag_seconds !== null && m.lag_seconds > 24 * 3600) {
-        fails.push(`${m.source_id}: stale ${Math.floor(m.lag_seconds / 3600)}h — run \`gbrain sync trigger --source ${m.source_id}\``);
+        fails.push(`${m.source_id}: stale ${Math.floor(m.lag_seconds / 3600)}h — run \`voltmind sync trigger --source ${m.source_id}\``);
         continue;
       }
       if (m.embed_coverage_pct < 50 && m.total_chunks > 1000) {
-        fails.push(`${m.source_id}: ${m.embed_coverage_pct.toFixed(1)}% embed coverage (${m.total_chunks.toLocaleString()} chunks) — run \`gbrain jobs submit embed-backfill --params '{"sourceId":"${m.source_id}"}'\``);
+        fails.push(`${m.source_id}: ${m.embed_coverage_pct.toFixed(1)}% embed coverage (${m.total_chunks.toLocaleString()} chunks) — run \`voltmind jobs submit embed-backfill --params '{"sourceId":"${m.source_id}"}'\``);
         continue;
       }
       // Warns
       if (m.federated && m.lag_seconds !== null && m.lag_seconds > 3600) {
-        warns.push(`${m.source_id}: federated source ${Math.floor(m.lag_seconds / 3600)}h+ stale — run \`gbrain sync trigger --source ${m.source_id}\``);
+        warns.push(`${m.source_id}: federated source ${Math.floor(m.lag_seconds / 3600)}h+ stale — run \`voltmind sync trigger --source ${m.source_id}\``);
       }
       if (m.embed_coverage_pct < 95 && m.total_chunks > 100) {
-        warns.push(`${m.source_id}: ${m.embed_coverage_pct.toFixed(1)}% embed coverage — run \`gbrain jobs submit embed-backfill --params '{"sourceId":"${m.source_id}"}'\``);
+        warns.push(`${m.source_id}: ${m.embed_coverage_pct.toFixed(1)}% embed coverage — run \`voltmind jobs submit embed-backfill --params '{"sourceId":"${m.source_id}"}'\``);
       }
       if (m.failed_jobs_24h >= 3) {
-        warns.push(`${m.source_id}: ${m.failed_jobs_24h} failures in 24h — check \`gbrain jobs list --status failed\``);
+        warns.push(`${m.source_id}: ${m.failed_jobs_24h} failures in 24h — check \`voltmind jobs list --status failed\``);
       }
     }
 
@@ -1862,7 +1862,7 @@ export async function checkOauthConfidentialHealth(engine: BrainEngine): Promise
         message:
           `${broken.length} confidential OAuth client(s) have NULL/empty secret hash: ${broken.map(b => b.client_id).slice(0, 5).join(', ')}` +
           (broken.length > 5 ? ` (+${broken.length - 5} more)` : '') +
-          `. Fix: \`gbrain auth revoke-client <id> && gbrain auth register-client …\` for each, OR \`gbrain upgrade\` if pre-v0.37.7.0.`,
+          `. Fix: \`voltmind auth revoke-client <id> && voltmind auth register-client …\` for each, OR \`voltmind upgrade\` if pre-v0.37.7.0.`,
       };
     }
     return {
@@ -1883,23 +1883,23 @@ export async function checkOauthConfidentialHealth(engine: BrainEngine): Promise
 /**
  * v0.37.7.0 — Tier 5M autopilot_lock_scope (PID-safe hint per codex CF11).
  *
- * Detects stale autopilot lockfiles. When `GBRAIN_HOME` is set, the
- * canonical lock path lives under `gbrainPath('autopilot.lock')`.
- * If a hardcoded `~/.gbrain/autopilot.lock` ALSO exists outside the
- * current `GBRAIN_HOME`, that's a pre-v0.37.7.0 leftover or a
+ * Detects stale autopilot lockfiles. When `VOLTMIND_HOME` is set, the
+ * canonical lock path lives under `voltmindPath('autopilot.lock')`.
+ * If a hardcoded `~/.voltmind/autopilot.lock` ALSO exists outside the
+ * current `VOLTMIND_HOME`, that's a pre-v0.37.7.0 leftover or a
  * different brain's lock. Hint includes PID + a `ps -p` check so
  * the user verifies before deleting.
  */
 export function checkAutopilotLockScope(): Check {
   try {
-    const canonical = gbrainPath('autopilot.lock');
+    const canonical = voltmindPath('autopilot.lock');
     const home = process.env.HOME || '';
-    const legacy = home ? `${home}/.gbrain/autopilot.lock` : '';
+    const legacy = home ? `${home}/.voltmind/autopilot.lock` : '';
     // Same path → nothing to surface.
     if (canonical === legacy || !legacy || !existsSync(legacy)) {
       return { name: 'autopilot_lock_scope', status: 'ok', message: `Lock path: ${canonical}` };
     }
-    // legacy lock exists outside GBRAIN_HOME. Read its PID for a safe hint.
+    // legacy lock exists outside VOLTMIND_HOME. Read its PID for a safe hint.
     let owningPid: string = 'unknown';
     try {
       const raw = readFileSync(legacy, 'utf8').trim();
@@ -1909,7 +1909,7 @@ export function checkAutopilotLockScope(): Check {
       name: 'autopilot_lock_scope',
       status: 'warn',
       message:
-        `Stale lockfile outside GBRAIN_HOME: ${legacy} (owning PID: ${owningPid}). ` +
+        `Stale lockfile outside VOLTMIND_HOME: ${legacy} (owning PID: ${owningPid}). ` +
         `Verify with \`ps -p ${owningPid}\` — if the process is dead, \`rm ${legacy}\`. ` +
         `If alive, identify it (\`ps -fp ${owningPid}\`) and stop before deleting.`,
     };
@@ -1930,7 +1930,7 @@ export function checkAutopilotLockScope(): Check {
  * "Another sync is in progress" with no fix hint.
  *
  * Paste-ready hint per stale lock: names the source-id from the
- * `gbrain-sync:<source>` lock-key shape so users can copy-paste the
+ * `voltmind-sync:<source>` lock-key shape so users can copy-paste the
  * exact recovery command.
  *
  * Out of scope (filed as v0.41+ follow-up TODO): detection of
@@ -1947,8 +1947,8 @@ export async function checkStaleLocks(engine: BrainEngine): Promise<Check> {
     }
     const lines = stale.slice(0, 10).map(s => {
       const ageH = Math.floor(s.age_ms / 3600_000);
-      const source = s.id.startsWith('gbrain-sync:') ? s.id.slice('gbrain-sync:'.length) : null;
-      const breakHint = source ? `gbrain sync --break-lock --source ${source}` : `gbrain sync --break-lock`;
+      const source = s.id.startsWith('voltmind-sync:') ? s.id.slice('voltmind-sync:'.length) : null;
+      const breakHint = source ? `voltmind sync --break-lock --source ${source}` : `voltmind sync --break-lock`;
       return `  ${s.id} (pid ${s.holder_pid} on ${s.holder_host}, age ${ageH}h) → ${breakHint}`;
     });
     const tail = stale.length > 10 ? `  ... and ${stale.length - 10} more.` : null;
@@ -2030,7 +2030,7 @@ export async function checkSearchMode(engine: BrainEngine): Promise<Check> {
       return {
         name: 'search_mode',
         status: 'ok',
-        message: 'search.mode is unset (using balanced fallback). Run `gbrain search modes` to see what is running and pick a mode explicitly.',
+        message: 'search.mode is unset (using balanced fallback). Run `voltmind search modes` to see what is running and pick a mode explicitly.',
       };
     }
 
@@ -2045,7 +2045,7 @@ export async function checkSearchMode(engine: BrainEngine): Promise<Check> {
     return {
       name: 'search_mode',
       status: 'ok',
-      message: `Mode: ${mode} with ${overrideKeys.length} per-key override(s) (${overrideKeys.join(', ')}). To consolidate to the pure mode bundle: gbrain search modes --reset`,
+      message: `Mode: ${mode} with ${overrideKeys.length} per-key override(s) (${overrideKeys.join(', ')}). To consolidate to the pure mode bundle: voltmind search modes --reset`,
     };
   } catch (e) {
     return {
@@ -2084,7 +2084,7 @@ export async function checkEvalDrift(engine: BrainEngine): Promise<Check> {
     return {
       name: 'eval_drift',
       status: 'ok',
-      message: `${drifted.length} retrieval-affecting file(s) changed since HEAD: ${summary}. Re-run \`gbrain eval run-all\` after committing these changes.`,
+      message: `${drifted.length} retrieval-affecting file(s) changed since HEAD: ${summary}. Re-run \`voltmind eval run-all\` after committing these changes.`,
     };
   } catch (e) {
     return {
@@ -2109,7 +2109,7 @@ export async function checkEvalDrift(engine: BrainEngine): Promise<Check> {
  * ze-switch env-override class (the 716K-chunk damage incident from
  * PR #1421's description).
  *
- * GBRAIN_EMBEDDING_MODEL / GBRAIN_EMBEDDING_DIMENSIONS win over DB+file
+ * VOLTMIND_EMBEDDING_MODEL / VOLTMIND_EMBEDDING_DIMENSIONS win over DB+file
  * config in loadConfig(). When env disagrees with DB, the gateway embeds
  * with the env-selected model — even after ze-switch wrote a different
  * value to DB. This check surfaces that disagreement on every hourly
@@ -2126,8 +2126,8 @@ export async function checkEvalDrift(engine: BrainEngine): Promise<Check> {
  * for the embed pipeline running there.
  */
 async function checkEmbeddingEnvOverride(engine: BrainEngine): Promise<Check> {
-  const envModel = process.env.GBRAIN_EMBEDDING_MODEL?.trim();
-  const envDim = process.env.GBRAIN_EMBEDDING_DIMENSIONS?.trim();
+  const envModel = process.env.VOLTMIND_EMBEDDING_MODEL?.trim();
+  const envDim = process.env.VOLTMIND_EMBEDDING_DIMENSIONS?.trim();
   if (!envModel && !envDim) {
     return {
       name: 'embedding_env_override',
@@ -2149,10 +2149,10 @@ async function checkEmbeddingEnvOverride(engine: BrainEngine): Promise<Check> {
   }
   const mismatches: Array<{ key: string; env: string; db: string }> = [];
   if (envModel && dbModel && envModel !== dbModel) {
-    mismatches.push({ key: 'GBRAIN_EMBEDDING_MODEL', env: envModel, db: dbModel });
+    mismatches.push({ key: 'VOLTMIND_EMBEDDING_MODEL', env: envModel, db: dbModel });
   }
   if (envDim && dbDim && envDim !== dbDim) {
-    mismatches.push({ key: 'GBRAIN_EMBEDDING_DIMENSIONS', env: envDim, db: dbDim });
+    mismatches.push({ key: 'VOLTMIND_EMBEDDING_DIMENSIONS', env: envDim, db: dbDim });
   }
   if (mismatches.length === 0) {
     return {
@@ -2188,7 +2188,7 @@ async function checkSubagentCapability(engine: BrainEngine): Promise<Check> {
           message:
             `${source} is "${resolved}" but that provider/model lacks native tool calling. ` +
             `The subagent loop cannot run on this model — runtime will fall back to claude-sonnet-4-6. ` +
-            `Fix: \`gbrain config set ${source} <provider>:<model-with-tools>\` (e.g. anthropic:claude-sonnet-4-6 or openai:gpt-5.2).`,
+            `Fix: \`voltmind config set ${source} <provider>:<model-with-tools>\` (e.g. anthropic:claude-sonnet-4-6 or openai:gpt-5.2).`,
         };
       }
       if (verdict === 'unknown') {
@@ -2198,7 +2198,7 @@ async function checkSubagentCapability(engine: BrainEngine): Promise<Check> {
           message:
             `${source} is "${resolved}" which references an unknown provider. ` +
             `Use a recipe-declared provider. ` +
-            `Fix: \`gbrain config set ${source} anthropic:claude-sonnet-4-6\` or pick another known provider.`,
+            `Fix: \`voltmind config set ${source} anthropic:claude-sonnet-4-6\` or pick another known provider.`,
         };
       }
       if (verdict === 'degraded:no_caching') {
@@ -2209,7 +2209,7 @@ async function checkSubagentCapability(engine: BrainEngine): Promise<Check> {
             `${source} is "${resolved}" — provider does not support prompt caching. ` +
             `The subagent loop runs hot (cost scales linearly with conversation length). ` +
             `For lower cost on long loops, use an Anthropic model: ` +
-            `\`gbrain config set models.tier.subagent anthropic:claude-sonnet-4-6\`.`,
+            `\`voltmind config set models.tier.subagent anthropic:claude-sonnet-4-6\`.`,
         };
       }
       return null;
@@ -2225,8 +2225,8 @@ async function checkSubagentCapability(engine: BrainEngine): Promise<Check> {
     // v0.37 (T10 / D7) + v0.38 (D7 capability rename): warn when the configured
     // chat_model is non-Anthropic AND ANTHROPIC_API_KEY isn't set. With
     // agent.use_gateway_loop=false (the v0.38 default), subagent jobs still
-    // require Anthropic at runtime; without the key, gbrain dream / gbrain
-    // agent run / gbrain autopilot will all fail at job submission. Catches
+    // require Anthropic at runtime; without the key, voltmind dream / voltmind
+    // agent run / voltmind autopilot will all fail at job submission. Catches
     // the post-init drift case the init-time caveat would have shown if init
     // had been re-run.
     try {
@@ -2240,9 +2240,9 @@ async function checkSubagentCapability(engine: BrainEngine): Promise<Check> {
           status: 'warn',
           message:
             `chat_model is "${chatModel}" (non-Anthropic) and ANTHROPIC_API_KEY is not set. ` +
-            `Subagent features (gbrain dream, gbrain agent run, gbrain autopilot) will fail at job submission ` +
-            `unless agent.use_gateway_loop=true. Chat alone (gbrain think) still works. ` +
-            `Either set ANTHROPIC_API_KEY or enable: \`gbrain config set agent.use_gateway_loop true\`.`,
+            `Subagent features (voltmind dream, voltmind agent run, voltmind autopilot) will fail at job submission ` +
+            `unless agent.use_gateway_loop=true. Chat alone (voltmind think) still works. ` +
+            `Either set ANTHROPIC_API_KEY or enable: \`voltmind config set agent.use_gateway_loop true\`.`,
         };
       }
     } catch { /* loadConfig may throw; fall through */ }
@@ -2279,7 +2279,7 @@ function _resolveSyncFreshnessHours(varName: string, fallback: number): number {
     if (!_syncFreshnessEnvWarned) {
       _syncFreshnessEnvWarned = true;
       console.warn(
-        `[gbrain doctor] Ignoring invalid ${varName}=${raw}; using default ${fallback}h.`,
+        `[voltmind doctor] Ignoring invalid ${varName}=${raw}; using default ${fallback}h.`,
       );
     }
     return fallback;
@@ -2289,7 +2289,7 @@ function _resolveSyncFreshnessHours(varName: string, fallback: number): number {
 
 /**
  * Sync freshness check (v0.32.4) — verify that sources with local_path have
- * been synced recently. Detects the silent failure mode where `gbrain sync`
+ * been synced recently. Detects the silent failure mode where `voltmind sync`
  * stopped running and brain search now misses recent pages.
  *
  * Pure staleness check. Reads `sources.last_sync_at` only — no filesystem
@@ -2298,11 +2298,11 @@ function _resolveSyncFreshnessHours(varName: string, fallback: number): number {
  *     walking arbitrary DB-supplied paths from a remote-callable endpoint
  *     crosses a trust boundary (OAuth write scope could mutate local_path).
  *   - Drift detection belongs in `multi_source_drift` which already has
- *     GBRAIN_DRIFT_LIMIT + GBRAIN_DRIFT_TIMEOUT_MS guards.
+ *     VOLTMIND_DRIFT_LIMIT + VOLTMIND_DRIFT_TIMEOUT_MS guards.
  *
  * Thresholds (env-overridable, default = 24h warn / 72h fail):
- *   - GBRAIN_SYNC_FRESHNESS_WARN_HOURS
- *   - GBRAIN_SYNC_FRESHNESS_FAIL_HOURS
+ *   - VOLTMIND_SYNC_FRESHNESS_WARN_HOURS
+ *   - VOLTMIND_SYNC_FRESHNESS_FAIL_HOURS
  * Invalid values (NaN, ≤0) fall back to defaults with a once-per-process warn.
  *
  * Edge cases handled:
@@ -2312,7 +2312,7 @@ function _resolveSyncFreshnessHours(varName: string, fallback: number): number {
  *   - executeRaw throws → outer-catch warn so doctor keeps running
  *
  * Failure messages embed `source.id` so the fix command
- * `gbrain sync --source <id>` matches what the user copy-pastes.
+ * `voltmind sync --source <id>` matches what the user copy-pastes.
  */
 /**
  * v0.40.1.0 Track D / T7 — pure function form of the nightly_quality_probe_health
@@ -2330,7 +2330,7 @@ export function computeNightlyQualityProbeHealthCheck(
     return {
       name,
       status: 'ok',
-      message: `disabled (opt-in). Enable with: gbrain config set autopilot.nightly_quality_probe.enabled true`,
+      message: `disabled (opt-in). Enable with: voltmind config set autopilot.nightly_quality_probe.enabled true`,
     };
   }
   if (events.length === 0) {
@@ -2408,7 +2408,7 @@ export async function computeConversationFactsBacklogCheck(
         name,
         status: 'ok',
         message:
-          'disabled (opt-in). Enable with: gbrain config set cycle.conversation_facts_backfill.enabled true',
+          'disabled (opt-in). Enable with: voltmind config set cycle.conversation_facts_backfill.enabled true',
       };
     }
 
@@ -2466,7 +2466,7 @@ export async function computeConversationFactsBacklogCheck(
 
     if (backlog > 10) {
       const fixHint =
-        'gbrain extract-conversation-facts --background --max-cost-usd 5';
+        'voltmind extract-conversation-facts --background --max-cost-usd 5';
       return {
         name,
         status: 'warn',
@@ -2518,8 +2518,8 @@ export async function checkSyncFreshness(
       };
     }
 
-    const warnHours = _resolveSyncFreshnessHours('GBRAIN_SYNC_FRESHNESS_WARN_HOURS', 24);
-    const failHours = _resolveSyncFreshnessHours('GBRAIN_SYNC_FRESHNESS_FAIL_HOURS', 72);
+    const warnHours = _resolveSyncFreshnessHours('VOLTMIND_SYNC_FRESHNESS_WARN_HOURS', 24);
+    const failHours = _resolveSyncFreshnessHours('VOLTMIND_SYNC_FRESHNESS_FAIL_HOURS', 72);
     const warnMs = warnHours * 60 * 60 * 1000;
     const failMs = failHours * 60 * 60 * 1000;
 
@@ -2535,7 +2535,7 @@ export async function checkSyncFreshness(
     let hasFailures = false;
 
     for (const source of sources) {
-      // Embed source.id in user-visible messages so `gbrain sync --source <id>`
+      // Embed source.id in user-visible messages so `voltmind sync --source <id>`
       // matches what the user copy-pastes. Show display name in parens when set.
       const display = source.name && source.name !== source.id
         ? `'${source.id}' (${source.name})`
@@ -2574,14 +2574,14 @@ export async function checkSyncFreshness(
       return {
         name: 'sync_freshness',
         status: 'fail',
-        message: `${issues.join('; ')}. Run \`gbrain sync --source <id>\` for each stale source`,
+        message: `${issues.join('; ')}. Run \`voltmind sync --source <id>\` for each stale source`,
       };
     }
     if (hasWarnings) {
       return {
         name: 'sync_freshness',
         status: 'warn',
-        message: `${issues.join('; ')}. Run \`gbrain sync --source <id>\` to refresh`,
+        message: `${issues.join('; ')}. Run \`voltmind sync --source <id>\` to refresh`,
       };
     }
     return {
@@ -2611,8 +2611,8 @@ export async function checkSyncFreshness(
  * Default thresholds: warn at 6h, fail at 24h. Tighter than sync_freshness
  * because full-cycle staleness compounds (sync stale → extract stale →
  * embed stale → search stale). Env overrides:
- *   - GBRAIN_CYCLE_FRESHNESS_WARN_HOURS (default 6)
- *   - GBRAIN_CYCLE_FRESHNESS_FAIL_HOURS (default 24)
+ *   - VOLTMIND_CYCLE_FRESHNESS_WARN_HOURS (default 6)
+ *   - VOLTMIND_CYCLE_FRESHNESS_FAIL_HOURS (default 24)
  */
 export async function checkCycleFreshness(
   engine: BrainEngine,
@@ -2628,8 +2628,8 @@ export async function checkCycleFreshness(
       };
     }
 
-    const warnHours = _resolveSyncFreshnessHours('GBRAIN_CYCLE_FRESHNESS_WARN_HOURS', 6);
-    const failHours = _resolveSyncFreshnessHours('GBRAIN_CYCLE_FRESHNESS_FAIL_HOURS', 24);
+    const warnHours = _resolveSyncFreshnessHours('VOLTMIND_CYCLE_FRESHNESS_WARN_HOURS', 6);
+    const failHours = _resolveSyncFreshnessHours('VOLTMIND_CYCLE_FRESHNESS_FAIL_HOURS', 24);
     const warnMs = warnHours * 60 * 60 * 1000;
     const failMs = failHours * 60 * 60 * 1000;
     const now = opts?.nowMs ?? Date.now();
@@ -2674,7 +2674,7 @@ export async function checkCycleFreshness(
       return {
         name: 'cycle_freshness',
         status: 'fail',
-        message: `${issues.join('; ')}. Run \`gbrain dream --source <id>\` for each stale source, or start \`gbrain autopilot\`.`,
+        message: `${issues.join('; ')}. Run \`voltmind dream --source <id>\` for each stale source, or start \`voltmind autopilot\`.`,
       };
     }
     if (hasWarnings) {
@@ -2709,7 +2709,7 @@ export async function checkCycleFreshness(
  * we failed to connect despite a configured URL.
  */
 /**
- * Build the full check list for `gbrain doctor` against an engine + arg vector.
+ * Build the full check list for `voltmind doctor` against an engine + arg vector.
  *
  * The check-building seam: takes the same args as `runDoctor` minus the
  * --locks shortcut (locks-mode is a focused diagnostic the CLI wrapper
@@ -2772,7 +2772,7 @@ export async function buildChecks(
   // reachable via $OPENCLAW_WORKSPACE or ~/.openclaw/workspace, not just a
   // `skills/` walked up from cwd. Read-only variant adds the install-path
   // fallback so a hosted-CLI install run from `~` (e.g., `bun install -g
-  // github:garrytan/gbrain && cd ~ && gbrain doctor`) can still find the
+  // github:garrytan/voltmind && cd ~ && voltmind doctor`) can still find the
   // bundled skills/ dir without warning.
   const detected = scope === 'all' ? autoDetectSkillsDirReadOnly() : { dir: null, source: 'none' as const };
   const skillsDir = detected.dir;
@@ -2784,16 +2784,16 @@ export async function buildChecks(
     //
     // SAFETY GATE (v0.31.7 follow-up to D5): refuse --fix when the skills
     // dir came from the install-path fallback. autoFixDryViolations writes
-    // to SKILL.md files; a user running `cd ~ && gbrain doctor --fix`
+    // to SKILL.md files; a user running `cd ~ && voltmind doctor --fix`
     // without an explicit signal would have install_path resolve to the
-    // bundled gbrain repo and silently rewrite the install-tree skills.
+    // bundled voltmind repo and silently rewrite the install-tree skills.
     // Codex caught this leak in the v0.31.7 ship review (D6 lock).
     if (doFix) {
       if (detected.source === 'install_path') {
         process.stderr.write(
-          'gbrain doctor --fix refused: skills dir resolved via install-path fallback (read-only).\n' +
+          'voltmind doctor --fix refused: skills dir resolved via install-path fallback (read-only).\n' +
           'The --fix flag writes to SKILL.md files; running it against the bundled install\n' +
-          'tree would silently mutate gbrain itself. Set $GBRAIN_SKILLS_DIR, $OPENCLAW_WORKSPACE,\n' +
+          'tree would silently mutate voltmind itself. Set $VOLTMIND_SKILLS_DIR, $OPENCLAW_WORKSPACE,\n' +
           'or pass --skills-dir <path> to point at the workspace you actually want to fix.\n',
         );
       } else {
@@ -2842,7 +2842,7 @@ export async function buildChecks(
   // callout / Phase 1 brain heading / position-relative brain-first
   // reference. Motivated by the 2026-05-19 tweet-shield incident.
   //
-  // Audit trail: snapshot+diff at ~/.gbrain/audit/skill-brain-first-
+  // Audit trail: snapshot+diff at ~/.voltmind/audit/skill-brain-first-
   // snapshot.json. Writes one detected/resolved JSONL line per state
   // transition + one fixed line per applied --fix. Stable brain → zero
   // audit writes per doctor run.
@@ -2856,8 +2856,8 @@ export async function buildChecks(
   // If completed.jsonl has any status:"partial" entry with no later
   // status:"complete" for the same version, the install is mid-migration.
   // Typical cause: v0.11.0 stopgap wrote a partial record but nobody ran
-  // `gbrain apply-migrations --yes` afterward. This check fires on every
-  // `gbrain doctor` invocation so your OpenClaw's health skill catches it.
+  // `voltmind apply-migrations --yes` afterward. This check fires on every
+  // `voltmind doctor` invocation so your OpenClaw's health skill catches it.
   //
   // Forward-progress override: a partial entry for vX.Y.Z is treated as
   // stale (not stuck) if there is a `complete` entry for any vA.B.C >= vX.Y.Z
@@ -2893,7 +2893,7 @@ export async function buildChecks(
     // wedge condition). The `stuck` filter above already excludes
     // forward-progress-superseded versions, so we only count actual unresolved
     // partials per version. A version with >=3 trailing partials needs
-    // `gbrain apply-migrations --force-retry <v>` once before plain --yes
+    // `voltmind apply-migrations --force-retry <v>` once before plain --yes
     // will succeed (the 3-consecutive-partials guard in apply-migrations.ts
     // is still active). Without this hint, operators wedged on v0.29.1 (and
     // any future migration that hits the same guard) get "run --yes" advice
@@ -2911,7 +2911,7 @@ export async function buildChecks(
       // version is also stuck. Surface the force-retry hint instead of the
       // generic --yes hint; chained with `&&` when multiple versions are
       // wedged so the operator can copy-paste a single line.
-      const cmd = wedged.map(v => `gbrain apply-migrations --force-retry ${v}`).join(' && ');
+      const cmd = wedged.map(v => `voltmind apply-migrations --force-retry ${v}`).join(' && ');
       checks.push({
         name: 'minions_migration',
         status: 'fail',
@@ -2921,7 +2921,7 @@ export async function buildChecks(
       checks.push({
         name: 'minions_migration',
         status: 'fail',
-        message: `MINIONS HALF-INSTALLED (partial migration: ${stuck.join(', ')}). Run: gbrain apply-migrations --yes`,
+        message: `MINIONS HALF-INSTALLED (partial migration: ${stuck.join(', ')}). Run: voltmind apply-migrations --yes`,
       });
     }
     // Note: the "no preferences.json but schema is v7+" case is detected
@@ -2932,14 +2932,14 @@ export async function buildChecks(
     // handles the "schema v7+ but no prefs" case.
   }
 
-  // 3b. Upgrade-error trail (v0.13+). `gbrain upgrade` silently swallows
-  // best-effort failures in `gbrain post-upgrade`; the failure record is
-  // appended to ~/.gbrain/upgrade-errors.jsonl so we can surface it here
+  // 3b. Upgrade-error trail (v0.13+). `voltmind upgrade` silently swallows
+  // best-effort failures in `voltmind post-upgrade`; the failure record is
+  // appended to ~/.voltmind/upgrade-errors.jsonl so we can surface it here
   // with a paste-ready recovery hint. Without this, users end up with
   // half-upgraded brains and no signal.
   try {
     const home = process.env.HOME || '';
-    const errPath = join(home, '.gbrain', 'upgrade-errors.jsonl');
+    const errPath = join(home, '.voltmind', 'upgrade-errors.jsonl');
     if (existsSync(errPath)) {
       const lines = readFileSync(errPath, 'utf-8').split('\n').filter(l => l.trim());
       if (lines.length > 0) {
@@ -2959,8 +2959,8 @@ export async function buildChecks(
   }
 
   // 3b-bis. Supervisor health (filesystem-only: PID liveness + audit log).
-  // Reads the default PID file (`~/.gbrain/supervisor.pid` unless the user
-  // overrode with GBRAIN_SUPERVISOR_PID_FILE) and the latest audit file
+  // Reads the default PID file (`~/.voltmind/supervisor.pid` unless the user
+  // overrode with VOLTMIND_SUPERVISOR_PID_FILE) and the latest audit file
   // written by src/core/minions/handlers/supervisor-audit.ts. Surfaces
   // supervisor_running / last_start / crashes_24h / max_crashes_exceeded.
   // Does NOT run the supervisor itself — this is a read-only health check.
@@ -2983,7 +2983,7 @@ export async function buildChecks(
 
     const events = readSupervisorEvents({ sinceMs: 24 * 60 * 60 * 1000 });
     const lastStart = events.filter(e => e.event === 'started').pop()?.ts ?? null;
-    // Shared classifier — same code path runs in `gbrain jobs supervisor
+    // Shared classifier — same code path runs in `voltmind jobs supervisor
     // status` (src/commands/jobs.ts). Counts only events whose `likely_cause`
     // is NOT in the clean denylist (clean_exit, graceful_shutdown). Pre-v0.34
     // entries lacking `likely_cause` fall back to `code !== 0`. Supersedes
@@ -3006,13 +3006,13 @@ export async function buildChecks(
         checks.push({
           name: 'supervisor',
           status: 'fail',
-          message: `Supervisor gave up at ${maxCrashesEvent.ts} (max_crashes_exceeded). Restart with: gbrain jobs supervisor start --detach`,
+          message: `Supervisor gave up at ${maxCrashesEvent.ts} (max_crashes_exceeded). Restart with: voltmind jobs supervisor start --detach`,
         });
       } else if (!running && events.length > 0) {
         checks.push({
           name: 'supervisor',
           status: 'warn',
-          message: `Supervisor not running (last_start=${lastStart ?? 'unknown'}). Restart with: gbrain jobs supervisor start --detach`,
+          message: `Supervisor not running (last_start=${lastStart ?? 'unknown'}). Restart with: voltmind jobs supervisor start --detach`,
         });
       } else if (crashes24h >= 1) {
         // Threshold dropped from `>3` (pre-fix, inflated by clean exits being
@@ -3021,7 +3021,7 @@ export async function buildChecks(
         checks.push({
           name: 'supervisor',
           status: 'warn',
-          message: `Worker crashed ${crashes24h}x in last 24h (${causeStr}). Check ~/.gbrain/audit/supervisor-*.jsonl for context.`,
+          message: `Worker crashed ${crashes24h}x in last 24h (${causeStr}). Check ~/.voltmind/audit/supervisor-*.jsonl for context.`,
         });
       } else {
         checks.push({
@@ -3038,7 +3038,7 @@ export async function buildChecks(
   // 3b-tris. Stub-guard fire count (last 24h). The v0.34.5 stub guard in
   // fence-write.ts refuses to spawn unprefixed entity pages (e.g. bare
   // `alice.md` at brain root). Each fire is appended to
-  // ~/.gbrain/audit/stub-guard-YYYY-Www.jsonl. This check is the operator
+  // ~/.voltmind/audit/stub-guard-YYYY-Www.jsonl. This check is the operator
   // visibility surface for the guard's v0.36 sunset criterion: when the
   // 24h count is consistently low, the prefix-expansion in
   // resolveEntitySlug is doing its job and the guard can be removed.
@@ -3065,7 +3065,7 @@ export async function buildChecks(
         message:
           `Stub guard fired ${events.length}x in last 24h (top: ${topSlugs}). ` +
           `If this stays elevated, the prefix-expansion in resolveEntitySlug is ` +
-          `missing a case. Check ~/.gbrain/audit/stub-guard-*.jsonl for the slugs ` +
+          `missing a case. Check ~/.voltmind/audit/stub-guard-*.jsonl for the slugs ` +
           `that hit it.`,
       });
     } else if (events.length > 0) {
@@ -3082,7 +3082,7 @@ export async function buildChecks(
 
   // 3c. Sync failure trail (Bug 9). sync.ts gates the `sync.last_commit`
   // bookmark when per-file parse errors happen, and appends each failure
-  // to ~/.gbrain/sync-failures.jsonl with the commit hash + exact error.
+  // to ~/.voltmind/sync-failures.jsonl with the commit hash + exact error.
   // Without this doctor check, users see "sync blocked" and have no
   // surface showing which files to fix.
   try {
@@ -3096,7 +3096,7 @@ export async function buildChecks(
       // v0.40.3.0 T8b (D8 + D12 Bug 3): emit a single sync-retry-failed
       // step. sync-skip-failed is DELIBERATELY NOT emitted as a remediation
       // — auto-skipping failed syncs hides data loss. Operators can still
-      // run `gbrain sync --skip-failed` manually.
+      // run `voltmind sync --skip-failed` manually.
       const { makeRemediationStep } = await import('../core/remediation-step.ts');
       const oldestTs = unacked.reduce(
         (acc, f) => (acc === '' || f.ts < acc ? f.ts : acc),
@@ -3119,7 +3119,7 @@ export async function buildChecks(
         message:
           `${unacked.length} unacknowledged sync failure(s) [${codeBreakdown}]. ${preview}` +
           `${unacked.length > 3 ? `, and ${unacked.length - 3} more` : ''}. ` +
-          `Fix the file(s) and re-run 'gbrain sync', or use 'gbrain sync --skip-failed' to acknowledge.`,
+          `Fix the file(s) and re-run 'voltmind sync', or use 'voltmind sync --skip-failed' to acknowledge.`,
         remediation: [retryStep],
         remediation_status: 'remediable',
       });
@@ -3184,7 +3184,7 @@ export async function buildChecks(
   if (engine) {
     try {
       const check = await computeConversationFactsBacklogCheck(engine);
-      // Wire a remediation step on WARN so `gbrain doctor --remediate`
+      // Wire a remediation step on WARN so `voltmind doctor --remediate`
       // picks it up. The CLI command honors --max-cost-usd; the
       // remediation step caps at $5 default (matches doctor's max_usd
       // default for the remediate flow).
@@ -3217,7 +3217,7 @@ export async function buildChecks(
   // most-recent conversation-type pages, runs parseConversation in
   // dry mode, reports per-pattern hit counts + unmatched count. Warn
   // at >10% unmatched with paste-ready hint pointing at
-  // `gbrain conversation-parser scan <slug>` so the operator can
+  // `voltmind conversation-parser scan <slug>` so the operator can
   // triage the misses interactively.
   if (engine) {
     try {
@@ -3258,8 +3258,8 @@ export async function buildChecks(
             message:
               `${unmatched}/${sample.length} conversation pages (${unmatchedPct.toFixed(1)}%) match NO built-in pattern. ` +
               `Breakdown: ${breakdown}. ` +
-              `Investigate: gbrain conversation-parser scan <slug> | ` +
-              `Enable LLM fallback (opt-in): gbrain config set conversation_parser.llm_fallback_enabled true`,
+              `Investigate: voltmind conversation-parser scan <slug> | ` +
+              `Enable LLM fallback (opt-in): voltmind config set conversation_parser.llm_fallback_enabled true`,
           });
         } else {
           checks.push({
@@ -3279,7 +3279,7 @@ export async function buildChecks(
   }
 
   // 3d.4 v0.41.13.0 — progressive_batch_audit_health. Reads last 7
-  // days of `~/.gbrain/audit/progressive-batch-YYYY-Www.jsonl` and
+  // days of `~/.voltmind/audit/progressive-batch-YYYY-Www.jsonl` and
   // surfaces operations that aborted with `abort_*` verdicts so
   // operators see what went wrong without grep'ing the JSONL by hand.
   try {
@@ -3312,7 +3312,7 @@ export async function buildChecks(
         message:
           `${aborts.length}/${events.length} progressive-batch events aborted in last 7d. ` +
           `Breakdown: ${breakdown}. ` +
-          `Inspect: cat ~/.gbrain/audit/progressive-batch-*.jsonl | jq 'select(.verdict != "proceed")'`,
+          `Inspect: cat ~/.voltmind/audit/progressive-batch-*.jsonl | jq 'select(.verdict != "proceed")'`,
       });
     }
   } catch (err) {
@@ -3336,30 +3336,30 @@ export async function buildChecks(
     status: 'ok',
     message:
       'Skipped (nightly probe is opt-in; enable with ' +
-      '`gbrain config set autopilot.conversation_parser_probe.enabled true`)',
+      '`voltmind config set autopilot.conversation_parser_probe.enabled true`)',
   });
 
-  // 3e. home_dir_in_worktree (v0.35.8.0). Walks up from `gbrainPath()`
-  // looking for a `.git` directory OR file. If found, warns: `~/.gbrain/`
+  // 3e. home_dir_in_worktree (v0.35.8.0). Walks up from `voltmindPath()`
+  // looking for a `.git` directory OR file. If found, warns: `~/.voltmind/`
   // lives inside a git worktree, so an accidental `git add` from the
   // worktree root could stage the brain. Pairs with the retroactive
-  // `~/.gbrain/.gitignore` (single-line `*`) laid down by saveConfig +
+  // `~/.voltmind/.gitignore` (single-line `*`) laid down by saveConfig +
   // post-upgrade. Honest scope: the .gitignore covers casual `git add`
   // but NOT already-tracked files, screenshots, backups, or `git add -f`.
   //
   // Walk termination: stops at $HOME (don't keep walking into / on a user
-  // who set GBRAIN_HOME=/tmp/something). Handles `.git` as both a directory
+  // who set VOLTMIND_HOME=/tmp/something). Handles `.git` as both a directory
   // (main repo) and a file (linked worktree pointing at parent's worktrees/).
-  // Honors GBRAIN_HOME via gbrainPath().
+  // Honors VOLTMIND_HOME via voltmindPath().
   try {
-    const gbrainHome = gbrainPath();
+    const voltmindHome = voltmindPath();
     const home = process.env.HOME || '';
     let worktreeRoot: string | null = null;
-    if (gbrainHome && home && gbrainHome.startsWith(home + '/')) {
-      // Walk up from gbrainHome's parent toward $HOME, stopping at $HOME.
-      // We don't check gbrainHome itself: a `.git` directly inside ~/.gbrain
+    if (voltmindHome && home && voltmindHome.startsWith(home + '/')) {
+      // Walk up from voltmindHome's parent toward $HOME, stopping at $HOME.
+      // We don't check voltmindHome itself: a `.git` directly inside ~/.voltmind
       // isn't a containing-worktree, it would be a brain repo cloned there.
-      let cur = dirname(gbrainHome);
+      let cur = dirname(voltmindHome);
       while (cur && cur.length >= home.length) {
         const gitPath = join(cur, '.git');
         try {
@@ -3379,23 +3379,23 @@ export async function buildChecks(
       }
     }
     if (worktreeRoot) {
-      const homeEnvHint = process.env.GBRAIN_HOME
-        ? `# Or move \`~/.gbrain\` outside the worktree by setting GBRAIN_HOME elsewhere.`
-        : `# Fix: \`export GBRAIN_HOME=/some/path/outside/the/worktree\` (gbrain appends \`.gbrain\`).`;
+      const homeEnvHint = process.env.VOLTMIND_HOME
+        ? `# Or move \`~/.voltmind\` outside the worktree by setting VOLTMIND_HOME elsewhere.`
+        : `# Fix: \`export VOLTMIND_HOME=/some/path/outside/the/worktree\` (voltmind appends \`.voltmind\`).`;
       checks.push({
         name: 'home_dir_in_worktree',
         status: 'warn',
         message:
-          `~/.gbrain lives inside git worktree at ${worktreeRoot}. ` +
+          `~/.voltmind lives inside git worktree at ${worktreeRoot}. ` +
           `Config + brain DB could be committed by accident. ` +
-          `A retroactive ~/.gbrain/.gitignore blocks casual \`git add\`, but does NOT cover ` +
+          `A retroactive ~/.voltmind/.gitignore blocks casual \`git add\`, but does NOT cover ` +
           `already-tracked files, screenshots, backups, or \`git add -f\`. ${homeEnvHint}`,
       });
     } else {
       checks.push({
         name: 'home_dir_in_worktree',
         status: 'ok',
-        message: 'gbrain home is outside any enclosing git worktree.',
+        message: 'voltmind home is outside any enclosing git worktree.',
       });
     }
   } catch {
@@ -3426,7 +3426,7 @@ export async function buildChecks(
           status: 'warn',
           message:
             `Multi-source drift check skipped — FS walk hit limit/timeout. ` +
-            `Re-run on a quieter brain or shorter walk via GBRAIN_DRIFT_LIMIT/GBRAIN_DRIFT_TIMEOUT_MS.`,
+            `Re-run on a quieter brain or shorter walk via VOLTMIND_DRIFT_LIMIT/VOLTMIND_DRIFT_TIMEOUT_MS.`,
         });
       } else if (result.count > 0) {
         const sampleStr = result.sample.map(s => `${s.slug} (intended=${s.intended_source})`).join(', ');
@@ -3437,9 +3437,9 @@ export async function buildChecks(
             `${result.count} page slug(s) appear at 'default' but NOT at the intended source ` +
             `(e.g., ${sampleStr}). Two possible causes: (1) pre-v0.30.3 putPage misroutes; ` +
             `(2) source X never completed initial sync and the default page is unrelated. ` +
-            `Verify with 'gbrain sources status', then either re-sync with ` +
-            `'gbrain sync --source <id> --full' or 'gbrain delete <slug>' if the default-source ` +
-            `row is the misroute. (A 'gbrain sources rehome' cleanup command is tracked for v0.32.0.)`,
+            `Verify with 'voltmind sources status', then either re-sync with ` +
+            `'voltmind sync --source <id> --full' or 'voltmind delete <slug>' if the default-source ` +
+            `row is the misroute. (A 'voltmind sources rehome' cleanup command is tracked for v0.32.0.)`,
         });
       } else {
         checks.push({
@@ -3455,8 +3455,8 @@ export async function buildChecks(
     // outer try covers the executeRaw path.
   }
 
-  // 3c. Orphan clone temp dirs (v0.28 P1). `gbrain sources add --url` clones
-  // into $GBRAIN_HOME/clones/.tmp/<id>-<rand>/ and renames atomically; if the
+  // 3c. Orphan clone temp dirs (v0.28 P1). `voltmind sources add --url` clones
+  // into $VOLTMIND_HOME/clones/.tmp/<id>-<rand>/ and renames atomically; if the
   // process is SIGKILL'd between clone-finish and rename, the temp dir
   // orphans. Surface entries older than 24h so operators notice before the
   // disk fills. The autopilot purge phase nukes these on its cadence; this
@@ -3464,7 +3464,7 @@ export async function buildChecks(
   try {
     const fs = await import('fs');
     const cfg = await import('../core/config.ts');
-    const tmpRoot = cfg.gbrainPath('clones', '.tmp');
+    const tmpRoot = cfg.voltmindPath('clones', '.tmp');
     if (fs.existsSync(tmpRoot)) {
       const STALE_MS = 24 * 3600 * 1000;
       const now = Date.now();
@@ -3494,7 +3494,7 @@ export async function buildChecks(
           message:
             `${stale.length} stale clone temp dir(s) in ${tmpRoot}: ` +
             stale.map(s => `${s.name} (${s.ageHours}h)`).join(', ') +
-            `. Run \`gbrain sources purge-orphan-clones\` or wait for the autopilot purge phase.`,
+            `. Run \`voltmind sources purge-orphan-clones\` or wait for the autopilot purge phase.`,
         });
       }
     }
@@ -3516,7 +3516,7 @@ export async function buildChecks(
       } else if (!fastMode && dbSource) {
         msg = `Could not connect to configured DB (URL from ${dbSource}); filesystem checks only`;
       } else {
-        msg = 'No database configured (filesystem checks only). Set GBRAIN_DATABASE_URL or run `gbrain init`.';
+        msg = 'No database configured (filesystem checks only). Set VOLTMIND_DATABASE_URL or run `voltmind init`.';
       }
       checks.push({ name: 'connection', status: 'warn', message: msg });
     }
@@ -3587,7 +3587,7 @@ export async function buildChecks(
             message:
               'Port 6543 (PgBouncer transaction mode) detected but prepared statements are enabled. ' +
               'This causes "prepared statement does not exist" errors under concurrent load. ' +
-              'Fix: unset GBRAIN_PREPARE (or set =false), or add ?prepare=false to the connection URL.',
+              'Fix: unset VOLTMIND_PREPARE (or set =false), or add ?prepare=false to the connection URL.',
           });
         }
       } catch {
@@ -3598,7 +3598,7 @@ export async function buildChecks(
     // best-effort; never fail doctor on this check
   }
 
-  // 5. RLS — check ALL public tables, not just gbrain's own.
+  // 5. RLS — check ALL public tables, not just voltmind's own.
   // Any table without RLS in the public schema is a security risk:
   // Supabase exposes the public schema via PostgREST, so tables without
   // RLS are readable/writable by anyone with the anon key.
@@ -3612,7 +3612,7 @@ export async function buildChecks(
   //
   // The comment lives in pg_description, survives pg_dump, is visible in
   // schema diffs, and requires raw SQL in psql to set — there is no
-  // `gbrain rls-exempt add` CLI on purpose. Doctor re-enumerates the
+  // `voltmind rls-exempt add` CLI on purpose. Doctor re-enumerates the
   // exemption list on every successful run so exempt tables never go
   // invisible. See docs/guides/rls-and-you.md.
   progress.heartbeat('rls');
@@ -3704,14 +3704,14 @@ export async function buildChecks(
       checks.push({
         name: 'schema_version',
         status: 'fail',
-        message: `No schema version recorded. Migrations never ran. Fix: gbrain apply-migrations --yes. ` +
-                 `If you installed via 'bun install -g github:...', see https://github.com/garrytan/gbrain/issues/218.`,
+        message: `No schema version recorded. Migrations never ran. Fix: voltmind apply-migrations --yes. ` +
+                 `If you installed via 'bun install -g github:...', see https://github.com/garrytan/voltmind/issues/218.`,
       });
     } else {
       checks.push({
         name: 'schema_version',
         status: 'warn',
-        message: `Version ${schemaVersion}, latest is ${LATEST_VERSION}. Fix: gbrain apply-migrations --yes`,
+        message: `Version ${schemaVersion}, latest is ${LATEST_VERSION}. Fix: voltmind apply-migrations --yes`,
       });
     }
   } catch {
@@ -3719,7 +3719,7 @@ export async function buildChecks(
   }
 
   // Note: we intentionally DO NOT fail on "schema v7+ but no preferences.json".
-  // That's a valid fresh-install state after `gbrain init` — the migration
+  // That's a valid fresh-install state after `voltmind init` — the migration
   // orchestrator writes preferences, but `init` alone doesn't run it. The
   // partial-completed.jsonl check in the filesystem section (step 3) is
   // the canonical half-migration signal and fires when the stopgap ran
@@ -3754,8 +3754,8 @@ export async function buildChecks(
           name: 'rls_event_trigger',
           status: 'warn',
           message:
-            'Auto-RLS event trigger missing. New tables created outside gbrain may not get RLS. ' +
-            'Fix: gbrain apply-migrations --force-retry 35',
+            'Auto-RLS event trigger missing. New tables created outside voltmind may not get RLS. ' +
+            'Fix: voltmind apply-migrations --force-retry 35',
         });
       } else if (rows[0].evtenabled !== 'O' && rows[0].evtenabled !== 'A') {
         checks.push({
@@ -3790,9 +3790,9 @@ export async function buildChecks(
     if (health.embed_coverage >= 0.9) {
       checks.push({ name: 'embeddings', status: 'ok', message: `${pct}% coverage, ${health.missing_embeddings} missing` });
     } else if (health.embed_coverage > 0) {
-      checks.push({ name: 'embeddings', status: 'warn', message: `${pct}% coverage, ${health.missing_embeddings} missing. Run: gbrain embed --stale` });
+      checks.push({ name: 'embeddings', status: 'warn', message: `${pct}% coverage, ${health.missing_embeddings} missing. Run: voltmind embed --stale` });
     } else {
-      checks.push({ name: 'embeddings', status: 'warn', message: 'No embeddings yet. Run: gbrain embed --stale' });
+      checks.push({ name: 'embeddings', status: 'warn', message: 'No embeddings yet. Run: voltmind embed --stale' });
     }
   } catch {
     checks.push({ name: 'embeddings', status: 'warn', message: 'Could not check embedding health' });
@@ -3817,9 +3817,9 @@ export async function buildChecks(
     // config has no embedding_model but the schema column exists at a dim
     // that doesn't match the gateway's resolved default. Empty-brain vs
     // non-empty-brain branching determines the repair hint:
-    //   - empty brain (no embedded chunks) → `gbrain init --force --embedding-model …`
-    //   - non-empty brain → `gbrain retrieval-upgrade --to … --reindex`
-    // The bug-reporter's `rm -rf ~/.gbrain` recovery is never the right answer.
+    //   - empty brain (no embedded chunks) → `voltmind init --force --embedding-model …`
+    //   - non-empty brain → `voltmind retrieval-upgrade --to … --reindex`
+    // The bug-reporter's `rm -rf ~/.voltmind` recovery is never the right answer.
     let surfacedUnconfiguredDrift = false;
     try {
       const { loadConfig } = await import('../core/config.ts');
@@ -3848,15 +3848,15 @@ export async function buildChecks(
 
           if (totalChunks > 0) {
             const fix = embeddedCount === 0
-              ? `No embeddings yet — drop the empty schema and re-init at the right dim:\n        gbrain init --force --pglite --embedding-model ${configuredModel} --embedding-dimensions ${configuredDims}`
-              : `Non-empty brain (${embeddedCount} embedded chunks). Migrate cleanly:\n        gbrain retrieval-upgrade --to ${configuredModel} --reindex`;
+              ? `No embeddings yet — drop the empty schema and re-init at the right dim:\n        voltmind init --force --pglite --embedding-model ${configuredModel} --embedding-dimensions ${configuredDims}`
+              : `Non-empty brain (${embeddedCount} embedded chunks). Migrate cleanly:\n        voltmind retrieval-upgrade --to ${configuredModel} --reindex`;
 
             checks.push({
               name: 'embedding_provider',
               status: 'warn',
               message:
                 `Schema column is vector(${colDim.dims}) but gateway default resolves to ${configuredModel} (${configuredDims}d). ` +
-                `Persist your provider choice with \`gbrain config set embedding_model ${configuredModel}\` AND fix the schema:\n      ${fix}`,
+                `Persist your provider choice with \`voltmind config set embedding_model ${configuredModel}\` AND fix the schema:\n      ${fix}`,
             });
             surfacedUnconfiguredDrift = true;
           }
@@ -3882,7 +3882,7 @@ export async function buildChecks(
     } else {
       // Live embed test
       const start = Date.now();
-      const vec = await embedOne('gbrain doctor embedding smoke test');
+      const vec = await embedOne('voltmind doctor embedding smoke test');
       const ms = Date.now() - start;
       const actualDims = vec.length;
 
@@ -3956,7 +3956,7 @@ export async function buildChecks(
       checks.push({
         name: 'alternative_providers',
         status: 'ok',
-        message: `Detected ${alternatives.length} alternative embedding provider${alternatives.length > 1 ? 's' : ''} ready to use: ${alternatives.join(', ')}. Run \`gbrain providers list\` to switch.`,
+        message: `Detected ${alternatives.length} alternative embedding provider${alternatives.length > 1 ? 's' : ''} ready to use: ${alternatives.join(', ')}. Run \`voltmind providers list\` to switch.`,
       });
     }
   } catch { /* listRecipes / gateway not available — silent */ }
@@ -4039,7 +4039,7 @@ export async function buildChecks(
         if (actualType !== entry.type) {
           issues.push(
             `${colName}: declared type=${entry.type} but actual is ${actual}. ` +
-              `Fix: gbrain config set embedding_columns '<JSON>' OR ` +
+              `Fix: voltmind config set embedding_columns '<JSON>' OR ` +
               `ALTER TABLE content_chunks ALTER COLUMN ${colName} TYPE ${entry.type}(${entry.dimensions});`,
           );
           continue;
@@ -4085,8 +4085,8 @@ export async function buildChecks(
           coverageWarn =
             `Active column '${activeCol}' is ${pct.toFixed(1)}% populated. ` +
             `Search quality silently degraded on un-embedded chunks. ` +
-            `Fix: gbrain embed --column ${activeCol} --stale (write-side support v2) ` +
-            `OR gbrain config set search_embedding_column embedding`;
+            `Fix: voltmind embed --column ${activeCol} --stale (write-side support v2) ` +
+            `OR voltmind config set search_embedding_column embedding`;
         }
       }
 
@@ -4157,7 +4157,7 @@ export async function buildChecks(
       checks.push({
         name: 'graph_coverage',
         status: 'warn',
-        message: `Entity link coverage ${linkPct}%, timeline ${timelinePct}% (${entityCount} entity pages). Run: gbrain extract all`,
+        message: `Entity link coverage ${linkPct}%, timeline ${timelinePct}% (${entityCount} entity pages). Run: voltmind extract all`,
       });
     }
 
@@ -4189,12 +4189,12 @@ export async function buildChecks(
   //
   // Surfaces the fraction of linkable pages with no inbound links.
   // Consumes the same canonical getOrphansData() pure fn as
-  // `gbrain orphans --count` (D1), so the two surfaces cannot disagree.
+  // `voltmind orphans --count` (D1), so the two surfaces cannot disagree.
   //
   // Skip when entity count < 100 (vacuous — small brains naturally
   // show high orphan ratio; not actionable signal).
   // Warn at >0.5; fail at >0.8. Both states recommend
-  // `gbrain extract links --by-mention` as the fix.
+  // `voltmind extract links --by-mention` as the fix.
   progress.heartbeat('orphan_ratio');
   try {
     const { getOrphansData } = await import('./orphans.ts');
@@ -4212,8 +4212,8 @@ export async function buildChecks(
       const ratio = data.total_linkable > 0 ? data.total_orphans / data.total_linkable : 0;
       const pct = (ratio * 100).toFixed(0);
       const hint =
-        'Run: gbrain extract links --by-mention   (auto-links entity mentions in body text). ' +
-        'Run gbrain orphans for the list.';
+        'Run: voltmind extract links --by-mention   (auto-links entity mentions in body text). ' +
+        'Run voltmind orphans for the list.';
       if (ratio > 0.8) {
         checks.push({
           name: 'orphan_ratio',
@@ -4241,7 +4241,7 @@ export async function buildChecks(
   // 10. Integrity sample scan (v0.13 knowledge runtime).
   // Read-only — no network, no writes, no resolver calls. Samples the first
   // 500 pages by slug order and surfaces bare-tweet + dead-link counts as a
-  // warning. Full-brain scan: `gbrain integrity check`.
+  // warning. Full-brain scan: `voltmind integrity check`.
   progress.heartbeat('integrity_sample');
   const integrityHb = startHeartbeat(progress, 'scanning 500-page integrity sample…');
   try {
@@ -4256,7 +4256,7 @@ export async function buildChecks(
       });
     } else if (res.bareHits.length > 0) {
       // v0.40.3.0 T8b (D8): emit integrity-auto RemediationStep.
-      // Three-bucket repair handled by `gbrain integrity auto` (the
+      // Three-bucket repair handled by `voltmind integrity auto` (the
       // existing CLI). Deterministic — no LLM cost.
       const { makeRemediationStep } = await import('../core/remediation-step.ts');
       const integrityStep = makeRemediationStep({
@@ -4275,7 +4275,7 @@ export async function buildChecks(
       checks.push({
         name: 'integrity',
         status: 'warn',
-        message: `Sampled ${res.pagesScanned} pages; ${res.bareHits.length} bare-tweet phrase(s), ${res.externalHits.length} external link(s). Run: gbrain integrity check (or integrity auto to repair).`,
+        message: `Sampled ${res.pagesScanned} pages; ${res.bareHits.length} bare-tweet phrase(s), ${res.externalHits.length} external link(s). Run: voltmind integrity check (or integrity auto to repair).`,
         remediation: [integrityStep],
         remediation_status: 'remediable',
       });
@@ -4325,7 +4325,7 @@ export async function buildChecks(
       checks.push({
         name: 'jsonb_integrity',
         status: 'warn',
-        message: `${totalBad} row(s) double-encoded (${breakdown.join(', ')}). Fix: gbrain repair-jsonb`,
+        message: `${totalBad} row(s) double-encoded (${breakdown.join(', ')}). Fix: voltmind repair-jsonb`,
       });
     }
   } catch {
@@ -4356,7 +4356,7 @@ export async function buildChecks(
   checks.push(await childTableOrphansCheck(engine));
 
   // v0.33: whoknows_health — fixture presence + row count. The eval
-  // gate itself runs via `gbrain eval whoknows`; this check is the
+  // gate itself runs via `voltmind eval whoknows`; this check is the
   // "did you do the assignment?" signal.
   // SKILL group — gated behind --scope=all (v0.41.19.0).
   if (scope === 'all') {
@@ -4370,7 +4370,7 @@ export async function buildChecks(
   // `modality='image'` default-set may have image chunks where
   // embedding_image is populated but modality wasn't tagged. The cross-modal
   // search routing in v0.36 depends on `modality` for keyword filtering;
-  // surface the gap so operators can run `gbrain backfill modality`.
+  // surface the gap so operators can run `voltmind backfill modality`.
   progress.heartbeat('cross_modal_modality_backfill');
   try {
     const mismatchRows = await engine.executeRaw<{ count: string | number }>(
@@ -4392,7 +4392,7 @@ export async function buildChecks(
         status: 'warn',
         message:
           `${mismatch} image-asset chunk(s) have embedding_image populated but modality != 'image'. ` +
-          `Fix: \`gbrain backfill modality\``,
+          `Fix: \`voltmind backfill modality\``,
       });
     }
   } catch {
@@ -4455,7 +4455,7 @@ export async function buildChecks(
           status: 'fail',
           message:
             `unified_multimodal_only is ON but lowest source coverage is ${(lowestCoverage * 100).toFixed(1)}% (${summary}). ` +
-            `Run \`gbrain reindex --multimodal\` to bring coverage to 99%+ or disable strict mode.`,
+            `Run \`voltmind reindex --multimodal\` to bring coverage to 99%+ or disable strict mode.`,
         });
       } else if (lowestCoverage < 0.95) {
         checks.push({
@@ -4463,7 +4463,7 @@ export async function buildChecks(
           status: 'warn',
           message:
             `unified_multimodal is on but lowest source coverage is ${(lowestCoverage * 100).toFixed(1)}% (${summary}). ` +
-            `Run \`gbrain reindex --multimodal\` to fill the gap.`,
+            `Run \`voltmind reindex --multimodal\` to fill the gap.`,
         });
       } else {
         checks.push({
@@ -4513,7 +4513,7 @@ export async function buildChecks(
       checks.push({
         name: 'markdown_body_completeness',
         status: 'warn',
-        message: `${rows.length} page(s) appear truncated (sample: ${sample}). Re-import with: gbrain sync --force`,
+        message: `${rows.length} page(s) appear truncated (sample: ${sample}). Re-import with: voltmind sync --force`,
       });
     }
   } catch {
@@ -4536,10 +4536,10 @@ export async function buildChecks(
   // - scraper_junk_pages: capped 1000-most-recent default + --content-audit
   //   opt-in for full scan (D10 mirrors --index-audit precedent). Applies
   //   the assessor per-page on title + 2KB head-slice + frontmatter.
-  // - content_sanity_audit_recent: reads ~/.gbrain/audit/content-sanity-*.jsonl
+  // - content_sanity_audit_recent: reads ~/.voltmind/audit/content-sanity-*.jsonl
   //   over the last 7 days, aggregates by event type + source. Caveat
   //   (Codex r1 #14): JSONL is local-only — multi-host operators should
-  //   share GBRAIN_AUDIT_DIR. Message names this so the limitation is
+  //   share VOLTMIND_AUDIT_DIR. Message names this so the limitation is
   //   visible at the doctor surface.
   const fullContentAudit = args.includes('--content-audit');
   progress.heartbeat('oversized_pages');
@@ -4666,7 +4666,7 @@ export async function buildChecks(
       checks.push({
         name: 'content_sanity_audit_recent',
         status: 'ok',
-        message: 'No content-sanity events in last 7 days (audit JSONL is local to this host; share GBRAIN_AUDIT_DIR for multi-host visibility)',
+        message: 'No content-sanity events in last 7 days (audit JSONL is local to this host; share VOLTMIND_AUDIT_DIR for multi-host visibility)',
       });
     } else {
       const summary = summarizeContentSanityEvents(events);
@@ -4681,7 +4681,7 @@ export async function buildChecks(
       checks.push({
         name: 'content_sanity_audit_recent',
         status,
-        message: `${events.length} events (hard=${summary.by_type.hard_block} soft=${summary.by_type.soft_block} warn=${summary.by_type.warn})${topPatterns ? ', patterns: ' + topPatterns : ''}${topSources ? ', sources: ' + topSources : ''}. (Local audit only — multi-host operators set GBRAIN_AUDIT_DIR.)`,
+        message: `${events.length} events (hard=${summary.by_type.hard_block} soft=${summary.by_type.soft_block} warn=${summary.by_type.warn})${topPatterns ? ', patterns: ' + topPatterns : ''}${topSources ? ', sources: ' + topSources : ''}. (Local audit only — multi-host operators set VOLTMIND_AUDIT_DIR.)`,
       });
     }
   } catch (err) {
@@ -4697,7 +4697,7 @@ export async function buildChecks(
   // scanBrainSources walks every registered source's local_path on disk
   // (not from the DB), invoking parseMarkdown(..., {validate:true}) per
   // file. Reports per-source counts grouped by error code. The fix path is
-  // `gbrain frontmatter validate <source-path> --fix`, which writes .bak
+  // `voltmind frontmatter validate <source-path> --fix`, which writes .bak
   // backups so it works for both git and non-git brain repos.
   //
   // v0.38.2.0 wave (this PR supersedes PR #1287):
@@ -4715,11 +4715,11 @@ export async function buildChecks(
   //    (source has ~M pages in DB)" message when the deadline fires. The
   //    `partial` and `aborted_at_source` fields on AuditReport feed the
   //    JSON consumer.
-  //  - Configurable via GBRAIN_DOCTOR_FM_TIMEOUT_MS (default 30000ms).
+  //  - Configurable via VOLTMIND_DOCTOR_FM_TIMEOUT_MS (default 30000ms).
   progress.heartbeat('frontmatter_integrity');
   const fmHb = startHeartbeat(progress, 'scanning frontmatter…');
   const fmTimeoutMs = (() => {
-    const raw = process.env.GBRAIN_DOCTOR_FM_TIMEOUT_MS;
+    const raw = process.env.VOLTMIND_DOCTOR_FM_TIMEOUT_MS;
     const n = raw ? parseInt(raw, 10) : NaN;
     return Number.isFinite(n) && n > 0 ? n : 30000;
   })();
@@ -4766,12 +4766,12 @@ export async function buildChecks(
       const sourceMessages: string[] = [];
       for (const src of report.per_source) {
         if (src.status === 'skipped') {
-          // Codex adversarial #1: `gbrain frontmatter validate` takes a
+          // Codex adversarial #1: `voltmind frontmatter validate` takes a
           // filesystem PATH, not a source id. Pre-fix the hint pointed users
           // at a command that would fail with "no such directory" — breaking
           // the very remediation path this PR ships to give them.
           sourceMessages.push(
-            `${src.source_id}: NOT SCANNED (timeout — run \`gbrain frontmatter validate ${src.source_path}\`)`,
+            `${src.source_id}: NOT SCANNED (timeout — run \`voltmind frontmatter validate ${src.source_path}\`)`,
           );
           continue;
         }
@@ -4793,8 +4793,8 @@ export async function buildChecks(
         sourceMessages.push(`${src.source_id}: ${src.total} (${codes})`);
       }
       const fixHint = report.partial
-        ? `Raise GBRAIN_DOCTOR_FM_TIMEOUT_MS or run \`gbrain frontmatter validate <source>\` directly. Fix issues: \`gbrain frontmatter validate <source> --fix\``
-        : `Fix: gbrain frontmatter validate <source-path> --fix`;
+        ? `Raise VOLTMIND_DOCTOR_FM_TIMEOUT_MS or run \`voltmind frontmatter validate <source>\` directly. Fix issues: \`voltmind frontmatter validate <source> --fix\``
+        : `Fix: voltmind frontmatter validate <source-path> --fix`;
       checks.push({
         name: 'frontmatter_integrity',
         status: 'warn',
@@ -4821,7 +4821,7 @@ export async function buildChecks(
 
   // 11a-bis. Eval-capture health (v0.25.0). Capture is a fire-and-forget
   // side-effect that logs failures to a persistent table so this check
-  // can see drops cross-process (the MCP server captures; `gbrain doctor`
+  // can see drops cross-process (the MCP server captures; `voltmind doctor`
   // runs in a separate process). Counts failures in the last 24h and
   // warns when non-zero. Pre-v31 brains: the table doesn't exist yet;
   // swallow the error and report skipped.
@@ -4845,7 +4845,7 @@ export async function buildChecks(
         status: 'warn',
         message: `${failures.length} capture failure(s) in the last 24h (${breakdown}). ` +
           `If you care about replay fidelity, investigate. If not, set eval.capture: false ` +
-          `in ~/.gbrain/config.json to silence.`,
+          `in ~/.voltmind/config.json to silence.`,
       });
     }
   } catch (err) {
@@ -4886,7 +4886,7 @@ export async function buildChecks(
       checks.push({
         name: 'contradictions',
         status: 'ok',
-        message: 'No probe runs in the last 7 days. Run `gbrain eval suspected-contradictions --query "..." --top-k 5` to populate.',
+        message: 'No probe runs in the last 7 days. Run `voltmind eval suspected-contradictions --query "..." --top-k 5` to populate.',
       });
     } else {
       const latest = recent[0];
@@ -4929,7 +4929,7 @@ export async function buildChecks(
           lines.push(`    → ${f.cmd}`);
         }
         if (highFindings.length > 3) {
-          lines.push(`  …and ${highFindings.length - 3} more — see \`gbrain eval suspected-contradictions review\``);
+          lines.push(`  …and ${highFindings.length - 3} more — see \`voltmind eval suspected-contradictions review\``);
         }
         checks.push({
           name: 'contradictions',
@@ -5014,8 +5014,8 @@ export async function buildChecks(
         status: anyOverThreshold ? 'warn' : 'ok',
         message: anyOverThreshold
           ? `Facts:absorb failures over the threshold (${threshold}) in the last 24h: ${summary}. ` +
-            `Run \`gbrain recall --since 24h --json\` to inspect what landed; ` +
-            `tune the gate via \`gbrain config set facts.absorb_warn_threshold N\`.`
+            `Run \`voltmind recall --since 24h --json\` to inspect what landed; ` +
+            `tune the gate via \`voltmind config set facts.absorb_warn_threshold N\`.`
           : `Facts:absorb activity in last 24h (under threshold ${threshold}): ${summary}.`,
       });
     }
@@ -5027,7 +5027,7 @@ export async function buildChecks(
       checks.push({
         name: 'facts_extraction_health',
         status: 'ok',
-        message: 'Skipped (ingest_log.source_id unavailable — run `gbrain apply-migrations --yes`).',
+        message: 'Skipped (ingest_log.source_id unavailable — run `voltmind apply-migrations --yes`).',
       });
     } else if (code === '42501') {
       checks.push({
@@ -5087,7 +5087,7 @@ export async function buildChecks(
       checks.push({
         name: 'effective_date_health',
         status: 'warn',
-        message: `${parts.join('; ')} (sample of last 1000 pages). Run \`gbrain reindex-frontmatter\` to recompute.`,
+        message: `${parts.join('; ')} (sample of last 1000 pages). Run \`voltmind reindex-frontmatter\` to recompute.`,
       });
     } else {
       checks.push({
@@ -5100,7 +5100,7 @@ export async function buildChecks(
     const code = (err as { code?: string } | null)?.code;
     if (code === '42703') {
       // column doesn't exist — pre-v0.29.1 brain
-      checks.push({ name: 'effective_date_health', status: 'ok', message: 'Skipped (effective_date column unavailable — run gbrain apply-migrations)' });
+      checks.push({ name: 'effective_date_health', status: 'ok', message: 'Skipped (effective_date column unavailable — run voltmind apply-migrations)' });
     } else {
       checks.push({ name: 'effective_date_health', status: 'warn', message: `Could not read pages: ${(err as Error)?.message ?? String(err)}` });
     }
@@ -5128,7 +5128,7 @@ export async function buildChecks(
       checks.push({
         name: 'salience_health',
         status: 'warn',
-        message: `${zeroWithTakes} pages with active takes have emotional_weight=0. Run \`gbrain dream --phase recompute_emotional_weight\` to populate. Brain has ${nonzero} pages with non-zero emotional_weight.`,
+        message: `${zeroWithTakes} pages with active takes have emotional_weight=0. Run \`voltmind dream --phase recompute_emotional_weight\` to populate. Brain has ${nonzero} pages with non-zero emotional_weight.`,
       });
     } else if (nonzero === 0) {
       checks.push({
@@ -5158,11 +5158,11 @@ export async function buildChecks(
   //
   //   1. stalled-forever: any active job whose started_at is > 1h old. The
   //      incident that motivated this release ran 90+ min before surfacing.
-  //      Surface the ID so the operator can `gbrain jobs get <id>` to inspect
-  //      or `gbrain jobs cancel <id>` to force-kill.
+  //      Surface the ID so the operator can `voltmind jobs get <id>` to inspect
+  //      or `voltmind jobs cancel <id>` to force-kill.
   //
   //   2. backpressure-missed: per-name waiting depth exceeds the threshold
-  //      (default 10, override via GBRAIN_QUEUE_WAITING_THRESHOLD env). Signal
+  //      (default 10, override via VOLTMIND_QUEUE_WAITING_THRESHOLD env). Signal
   //      that a submitter probably needs maxWaiting set. Bounded by per-name
   //      aggregation so a single name's pile shows up clearly instead of
   //      getting lost in the total.
@@ -5193,7 +5193,7 @@ export async function buildChecks(
          LIMIT 5
       `;
       // Subcheck 2: per-name waiting depth exceeds threshold.
-      const rawThreshold = process.env.GBRAIN_QUEUE_WAITING_THRESHOLD;
+      const rawThreshold = process.env.VOLTMIND_QUEUE_WAITING_THRESHOLD;
       const parsedThreshold = rawThreshold ? parseInt(rawThreshold, 10) : 10;
       const threshold = Number.isFinite(parsedThreshold) && parsedThreshold >= 1
         ? parsedThreshold
@@ -5254,7 +5254,7 @@ export async function buildChecks(
           .join(', ');
         problems.push(
           `${stalledRows.length} stalled-forever job(s): ${sample}. ` +
-          `Fix: gbrain jobs get <id> to inspect; gbrain jobs cancel <id> to force-kill.`
+          `Fix: voltmind jobs get <id> to inspect; voltmind jobs cancel <id> to force-kill.`
         );
       }
       if (depthRows.length > 0) {
@@ -5263,14 +5263,14 @@ export async function buildChecks(
           .join(', ');
         problems.push(
           `waiting-queue depth exceeds ${threshold} for: ${sample}. ` +
-          `Fix: set maxWaiting on the submitter (or raise GBRAIN_QUEUE_WAITING_THRESHOLD).`
+          `Fix: set maxWaiting on the submitter (or raise VOLTMIND_QUEUE_WAITING_THRESHOLD).`
         );
       }
       if (rssKillCount > 0) {
         problems.push(
           `${rssKillCount} job(s) dead-lettered for RSS-watchdog memory-limit kills in last 24h. ` +
           `v0.22.14 changed the bare-worker --max-rss default from 0 (off) to 2048 MB. ` +
-          `Fix: raise the limit (e.g. \`gbrain jobs work --max-rss 4096\`) or opt out (\`--max-rss 0\`). ` +
+          `Fix: raise the limit (e.g. \`voltmind jobs work --max-rss 4096\`) or opt out (\`--max-rss 0\`). ` +
           `See skills/migrations/v0.22.14.md.`
         );
       }
@@ -5278,7 +5278,7 @@ export async function buildChecks(
         problems.push(
           `${promptTooLongCount} subagent job(s) dead-lettered with prompt_too_long in last 24h. ` +
           `Dream/synthesize transcripts exceeded the model's input context. ` +
-          `Fix: \`gbrain dream --phase synthesize --dry-run --json\` to identify fat transcripts; ` +
+          `Fix: \`voltmind dream --phase synthesize --dry-run --json\` to identify fat transcripts; ` +
           `set \`dream.synthesize.max_prompt_tokens\` to bound the per-chunk budget, or use a ` +
           `larger-context model (Opus 4.7 = 1M tokens vs Sonnet 4.6 = 200K).`
         );
@@ -5432,7 +5432,7 @@ export async function buildChecks(
           name: 'image_assets',
           status: 'warn',
           message: `${vanished} of ${rows.length} image(s) missing from disk (e.g. ${vanishedPaths.join(', ')}). ` +
-                   `Fix: restore from git, or \`gbrain sync --skip-failed\` to acknowledge.`,
+                   `Fix: restore from git, or \`voltmind sync --skip-failed\` to acknowledge.`,
         });
       }
     } catch {
@@ -5545,7 +5545,7 @@ export async function buildChecks(
 }
 
 /**
- * CLI entry point for `gbrain doctor`. Thin wrapper around buildChecks +
+ * CLI entry point for `voltmind doctor`. Thin wrapper around buildChecks +
  * computeDoctorReport + render + process.exit.
  *
  * Concerns kept here (not pushed into buildChecks):
@@ -5749,7 +5749,7 @@ export function skillBrainFirstCheck(skillsDir: string): Check {
     writeSnapshotAtomically(violatorSlugs);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[gbrain] skill_brain_first audit step failed (${msg}); check continues\n`);
+    process.stderr.write(`[voltmind] skill_brain_first audit step failed (${msg}); check continues\n`);
   }
 
   // --- Build the check result ---------------------------------------------
@@ -5771,13 +5771,13 @@ export function skillBrainFirstCheck(skillsDir: string): Check {
   const summary: string[] = [];
   summary.push(
     `${violators.length} skill(s) do external lookups without a brain-first compliance signal. ` +
-    `Fix via 'gbrain doctor --fix' (adds canonical Convention callout) ` +
+    `Fix via 'voltmind doctor --fix' (adds canonical Convention callout) ` +
     `or set 'brain_first: exempt' in skill frontmatter for genuine infra skills.`,
   );
   if (formerlyExempt.length > 0) {
     summary.push(
       `Of these, ${formerlyExempt.length} were hardcoded-exempt in PR #1206 (${formerlyExempt.map(v => v.skill).slice(0, 6).join(', ')}${formerlyExempt.length > 6 ? ', ...' : ''}). ` +
-      `These need explicit opt-out now: run 'gbrain doctor --fix' to add the canonical callout, ` +
+      `These need explicit opt-out now: run 'voltmind doctor --fix' to add the canonical callout, ` +
       `or add 'brain_first: exempt' to frontmatter for skills that genuinely shouldn't consult the brain.`,
     );
   }
@@ -5823,7 +5823,7 @@ function outputResults(checks: Check[], json: boolean): boolean {
     return hasFail;
   }
 
-  console.log('\nGBrain Health Check');
+  console.log('\nVoltMind Health Check');
   console.log('===================');
   for (const c of report.checks) {
     const icon = c.status === 'ok' ? 'OK' : c.status === 'warn' ? 'WARN' : 'FAIL';
@@ -5865,7 +5865,7 @@ function outputResults(checks: Check[], json: boolean): boolean {
 }
 
 /**
- * `gbrain doctor --locks` — list idle-in-transaction backends older
+ * `voltmind doctor --locks` — list idle-in-transaction backends older
  * than 5 minutes that could block DDL. Exits 0 on clean, 1 on blockers.
  *
  * Agents hitting a statement_timeout (SQLSTATE 57014) during migration
@@ -5880,7 +5880,7 @@ async function runLocksCheck(engine: BrainEngine | null, jsonOutput: boolean): P
     if (jsonOutput) {
       console.log(JSON.stringify({ status: 'unavailable', reason: 'no_engine' }));
     } else {
-      console.log('gbrain doctor --locks requires a database connection. Configure a URL and retry.');
+      console.log('voltmind doctor --locks requires a database connection. Configure a URL and retry.');
     }
     process.exit(1);
   }
@@ -5889,7 +5889,7 @@ async function runLocksCheck(engine: BrainEngine | null, jsonOutput: boolean): P
     if (jsonOutput) {
       console.log(JSON.stringify({ status: 'not_applicable', engine: engine.kind }));
     } else {
-      console.log(`gbrain doctor --locks is Postgres-only. Current engine: ${engine.kind}. No blockers possible (no connection pool).`);
+      console.log(`voltmind doctor --locks is Postgres-only. Current engine: ${engine.kind}. No blockers possible (no connection pool).`);
     }
     return;
   }
@@ -5915,7 +5915,7 @@ async function runLocksCheck(engine: BrainEngine | null, jsonOutput: boolean): P
     console.log('');
   }
   console.log('These connections may block ALTER TABLE DDL during migration.');
-  console.log('After terminating, retry: gbrain apply-migrations --yes');
+  console.log('After terminating, retry: voltmind apply-migrations --yes');
   process.exit(1);
 }
 
@@ -6092,7 +6092,7 @@ export async function runRemediate(
         console.error(
           `\n[remediate] BudgetExhausted (${snapshot.reason}): spent $${snapshot.spent.toFixed(4)} > cap $${snapshot.cap.toFixed(2)}.\n` +
           `Checkpoint saved. Resume with:\n` +
-          `  gbrain doctor --remediate --resume ${planHash}\n`,
+          `  voltmind doctor --remediate --resume ${planHash}\n`,
         );
       },
     },
@@ -6164,7 +6164,7 @@ async function checkSchemaPackActive(engine: BrainEngine): Promise<Check> {
     return {
       name: 'schema_pack_active',
       status: 'warn',
-      message: `Active pack failed to resolve: ${(e as Error).message}. Run \`gbrain schema active\` to debug.`,
+      message: `Active pack failed to resolve: ${(e as Error).message}. Run \`voltmind schema active\` to debug.`,
     };
   }
 }
@@ -6208,7 +6208,7 @@ async function checkSchemaPackConsistency(engine: BrainEngine): Promise<Check> {
       return {
         name: 'schema_pack_consistency',
         status: 'warn',
-        message: `Source \`${worstSrc}\`: ${worstUntyped} of ${worstTotal} pages (${pctStr}%) have no type matching the active pack. Run \`gbrain schema detect --source ${worstSrc}\` to propose a pack matching your content shape.`,
+        message: `Source \`${worstSrc}\`: ${worstUntyped} of ${worstTotal} pages (${pctStr}%) have no type matching the active pack. Run \`voltmind schema detect --source ${worstSrc}\` to propose a pack matching your content shape.`,
       };
     }
     return {
@@ -6242,7 +6242,7 @@ async function checkSchemaPackSourceDrift(engine: BrainEngine): Promise<Check> {
     return {
       name: 'schema_pack_source_drift',
       status: 'warn',
-      message: `Per-source pack divergence detected: ${distinctPacks.size} distinct packs across ${rows.length} sources. Run \`gbrain sources list\` then \`gbrain schema active --source <id>\` per source to audit.`,
+      message: `Per-source pack divergence detected: ${distinctPacks.size} distinct packs across ${rows.length} sources. Run \`voltmind sources list\` then \`voltmind schema active --source <id>\` per source to audit.`,
     };
   } catch (e) {
     return {

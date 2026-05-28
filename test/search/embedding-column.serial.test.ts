@@ -32,10 +32,10 @@ import {
   isCacheSafe,
   isBuiltinColumn,
 } from '../../src/core/search/embedding-column.ts';
-import type { GBrainConfig } from '../../src/core/config.ts';
+import type { VoltMindConfig } from '../../src/core/config.ts';
 import type { ResolvedColumn } from '../../src/core/types.ts';
 
-function cfg(overrides: Partial<GBrainConfig> = {}): GBrainConfig {
+function cfg(overrides: Partial<VoltMindConfig> = {}): VoltMindConfig {
   return { engine: 'pglite', ...overrides };
 }
 
@@ -84,7 +84,7 @@ describe('resolveEmbeddingColumn — resolution chain', () => {
     expect(err?.columnName).toBe('nonexistent');
     expect(err?.validColumns).toEqual(['embedding', 'embedding_image']);
     expect(err?.message).toContain('Declared columns:');
-    expect(err?.message).toContain('gbrain config set');
+    expect(err?.message).toContain('voltmind config set');
   });
 
   test('SQL-injection-shaped name rejected before registry lookup', () => {

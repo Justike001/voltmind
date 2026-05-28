@@ -6,7 +6,7 @@
 //   - hybridSearch routes through unified column when search.unified_multimodal=true
 //   - D8 fail-open: unified-only=false + empty unified column → falls back to text
 //   - D8 strict: unified-only=true + empty column → does not fall back
-//   - reindex --multimodal cost estimate + dry-run + GBRAIN_NO_REEMBED bypass
+//   - reindex --multimodal cost estimate + dry-run + VOLTMIND_NO_REEMBED bypass
 //   - D7 lock acquired during reindex; second reindex receives LOCK_HELD
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
@@ -81,8 +81,8 @@ describe('reindex --multimodal command (Phase 3)', () => {
     expect(result.reembedded).toBe(0);
   });
 
-  test('GBRAIN_NO_REEMBED=1 honored on zero-pending brain (skip path is no-op-clean)', async () => {
-    await withEnv({ GBRAIN_NO_REEMBED: '1' }, async () => {
+  test('VOLTMIND_NO_REEMBED=1 honored on zero-pending brain (skip path is no-op-clean)', async () => {
+    await withEnv({ VOLTMIND_NO_REEMBED: '1' }, async () => {
       const result = await runReindexMultimodal(engine, {});
       // Zero pending → reindex short-circuits before the env-var check; both
       // paths produce dry_run=false + reembedded=0 + pending=0.

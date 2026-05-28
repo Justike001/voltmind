@@ -15,7 +15,7 @@
  * the lead (CHANGELOG.md owns version history; README is current docs).
  * The original "ZeroEntropy default story" anchor was deliberately rotated
  * out of the hero. The new load-bearing anchor is the search-vs-answer
- * framing ("Search gives you raw pages. GBrain gives you the answer.")
+ * framing ("Search gives you raw pages. VoltMind gives you the answer.")
  * which is the headline differentiator of the post-rewrite hero.
  * ZeroEntropy still appears further down the README; the guard just no
  * longer pins it to the hero specifically.
@@ -39,11 +39,11 @@ describe('README hero anchors (D9 regression guard)', () => {
   });
 
   test('leads with the search-vs-answer differentiator (v0.40.8.1+)', () => {
-    // The post-rewrite headline. "Search gives you raw pages. GBrain gives
+    // The post-rewrite headline. "Search gives you raw pages. VoltMind gives
     // you the answer." is the load-bearing framing that distinguishes
-    // GBrain from MemPalace-shape retrieval tools. If a cleanup PR
+    // VoltMind from MemPalace-shape retrieval tools. If a cleanup PR
     // accidentally rewords this, the brand-level differentiator is lost.
-    expect(hero).toMatch(/Search gives you raw pages\. GBrain gives you the answer/);
+    expect(hero).toMatch(/Search gives you raw pages\. VoltMind gives you the answer/);
   });
 
   test('includes at least one production number (pages/people/companies)', () => {

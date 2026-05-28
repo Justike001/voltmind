@@ -52,7 +52,7 @@ function writePlugin(
       ...(opts.subagents_field ? { subagents: opts.subagents_field } : {}),
     };
     fs.writeFileSync(
-      path.join(dir, 'gbrain.plugin.json'),
+      path.join(dir, 'voltmind.plugin.json'),
       opts.bad_manifest_json ? '{not valid json' : JSON.stringify(manifest, null, 2),
     );
   }
@@ -107,7 +107,7 @@ describe('loadSinglePlugin', () => {
     const dir = writePlugin('empty', { omit_manifest: true });
     const res = loadSinglePlugin(dir);
     expect('error' in res).toBe(true);
-    if ('error' in res) expect(res.error).toMatch(/missing gbrain\.plugin\.json/);
+    if ('error' in res) expect(res.error).toMatch(/missing voltmind\.plugin\.json/);
   });
 
   test('invalid manifest JSON returns error', () => {
@@ -118,7 +118,7 @@ describe('loadSinglePlugin', () => {
   });
 
   test('unsupported plugin_version rejected', () => {
-    const dir = writePlugin('future', { plugin_version: 'gbrain-plugin-v999' });
+    const dir = writePlugin('future', { plugin_version: 'voltmind-plugin-v999' });
     const res = loadSinglePlugin(dir);
     expect('error' in res).toBe(true);
     if ('error' in res) expect(res.error).toMatch(/unsupported plugin_version/);
@@ -245,7 +245,7 @@ describe('loadPluginsFromEnv', () => {
   });
 
   test('manifest rejection shows up as a warning (not a throw)', () => {
-    const bad = writePlugin('futurep', { plugin_version: 'gbrain-plugin-v999' });
+    const bad = writePlugin('futurep', { plugin_version: 'voltmind-plugin-v999' });
     const r = loadPluginsFromEnv({ envPath: bad });
     expect(r.plugins.length).toBe(0);
     expect(r.warnings.some(w => /unsupported plugin_version/.test(w))).toBe(true);

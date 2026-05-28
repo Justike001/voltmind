@@ -7,7 +7,7 @@
  *     (rejects 0, negatives, non-integers).
  *   - parseArgs accepts the alias `--concurrency N`.
  *   - buildJobParams threads `workers` into the Minion job envelope
- *     (round-trip via `gbrain extract-conversation-facts --background
+ *     (round-trip via `voltmind extract-conversation-facts --background
  *     --workers 20`).
  *   - The exported helpers (`extractConversationFactsLockId`,
  *     `cpMapToEntries`-shape via the public API) match the load-bearing

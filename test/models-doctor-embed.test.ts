@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * v0.40.x — `gbrain models doctor` embedding reachability probe.
+ * v0.40.x — `voltmind models doctor` embedding reachability probe.
  *
  * `probeEmbeddingReachability` is an internal (non-exported) function with a
  * network side effect, mirroring the existing `probeRerankerReachability`

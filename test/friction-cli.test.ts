@@ -10,8 +10,8 @@ import { join } from 'path';
 import { runFriction } from '../src/commands/friction.ts';
 import { frictionFile, frictionDir } from '../src/core/friction.ts';
 
-const ORIG_HOME = process.env.GBRAIN_HOME;
-const ORIG_RUN_ID = process.env.GBRAIN_FRICTION_RUN_ID;
+const ORIG_HOME = process.env.VOLTMIND_HOME;
+const ORIG_RUN_ID = process.env.VOLTMIND_FRICTION_RUN_ID;
 let tmp: string;
 let stdoutLines: string[];
 let stderrLines: string[];
@@ -21,8 +21,8 @@ let origConsoleError: typeof console.error;
 
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), 'friction-cli-'));
-  process.env.GBRAIN_HOME = tmp;
-  delete process.env.GBRAIN_FRICTION_RUN_ID;
+  process.env.VOLTMIND_HOME = tmp;
+  delete process.env.VOLTMIND_FRICTION_RUN_ID;
   stdoutLines = [];
   stderrLines = [];
   origStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -34,8 +34,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  process.env.GBRAIN_HOME = ORIG_HOME;
-  if (ORIG_RUN_ID !== undefined) process.env.GBRAIN_FRICTION_RUN_ID = ORIG_RUN_ID;
+  process.env.VOLTMIND_HOME = ORIG_HOME;
+  if (ORIG_RUN_ID !== undefined) process.env.VOLTMIND_FRICTION_RUN_ID = ORIG_RUN_ID;
   rmSync(tmp, { recursive: true, force: true });
   process.stdout.write = origStdoutWrite;
   console.log = origConsoleLog;
@@ -61,7 +61,7 @@ describe('dispatch', () => {
 });
 
 describe('log subcommand', () => {
-  test('writes a friction entry under GBRAIN_HOME', () => {
+  test('writes a friction entry under VOLTMIND_HOME', () => {
     const code = runFriction(['log', '--run-id', 'cli-1', '--phase', 'install', '--message', 'something broke', '--severity', 'error']);
     expect(code).toBe(0);
     const path = frictionFile('cli-1');
@@ -175,7 +175,7 @@ describe('summary subcommand', () => {
   });
 });
 
-describe('GBRAIN_FRICTION_RUN_ID fallback (D19)', () => {
+describe('VOLTMIND_FRICTION_RUN_ID fallback (D19)', () => {
   test('log without --run-id uses standalone', () => {
     const code = runFriction(['log', '--phase', 'p', '--message', 'fallback']);
     expect(code).toBe(0);
@@ -184,13 +184,13 @@ describe('GBRAIN_FRICTION_RUN_ID fallback (D19)', () => {
     expect(readFileSync(path, 'utf-8')).toContain('fallback');
   });
 
-  test('log honors $GBRAIN_FRICTION_RUN_ID', () => {
-    process.env.GBRAIN_FRICTION_RUN_ID = 'env-run';
+  test('log honors $VOLTMIND_FRICTION_RUN_ID', () => {
+    process.env.VOLTMIND_FRICTION_RUN_ID = 'env-run';
     try {
       runFriction(['log', '--phase', 'p', '--message', 'env']);
       expect(existsSync(frictionFile('env-run'))).toBe(true);
     } finally {
-      delete process.env.GBRAIN_FRICTION_RUN_ID;
+      delete process.env.VOLTMIND_FRICTION_RUN_ID;
     }
   });
 });

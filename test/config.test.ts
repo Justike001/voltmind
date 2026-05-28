@@ -117,14 +117,14 @@ describe('loadConfig — legacy provider+model migration (v0.36.1.x #1086)', () 
     const { join } = await import('path');
     const { tmpdir } = await import('os');
     const { withEnv } = await import('./helpers/with-env.ts');
-    const tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-cfg-test-'));
+    const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-cfg-test-'));
     try {
-      mkdirSync(join(tmpHome, '.gbrain'), { recursive: true });
+      mkdirSync(join(tmpHome, '.voltmind'), { recursive: true });
       writeFileSync(
-        join(tmpHome, '.gbrain', 'config.json'),
+        join(tmpHome, '.voltmind', 'config.json'),
         JSON.stringify({ engine: 'pglite', database_path: '/tmp/x', provider: 'voyage', model: 'voyage-4-large' }),
       );
-      await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+      await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
         const { loadConfig } = await import('../src/core/config.ts');
         const cfg = loadConfig();
         expect(cfg).not.toBeNull();
@@ -142,11 +142,11 @@ describe('loadConfig — legacy provider+model migration (v0.36.1.x #1086)', () 
     const { join } = await import('path');
     const { tmpdir } = await import('os');
     const { withEnv } = await import('./helpers/with-env.ts');
-    const tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-cfg-test-'));
+    const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-cfg-test-'));
     try {
-      mkdirSync(join(tmpHome, '.gbrain'), { recursive: true });
+      mkdirSync(join(tmpHome, '.voltmind'), { recursive: true });
       writeFileSync(
-        join(tmpHome, '.gbrain', 'config.json'),
+        join(tmpHome, '.voltmind', 'config.json'),
         JSON.stringify({
           engine: 'pglite',
           database_path: '/tmp/x',
@@ -155,7 +155,7 @@ describe('loadConfig — legacy provider+model migration (v0.36.1.x #1086)', () 
           model: 'voyage-4-large',
         }),
       );
-      await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+      await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
         const { loadConfig } = await import('../src/core/config.ts');
         const cfg = loadConfig();
         expect(cfg!.embedding_model).toBe('openai:text-embedding-3-large');
@@ -170,14 +170,14 @@ describe('loadConfig — legacy provider+model migration (v0.36.1.x #1086)', () 
     const { join } = await import('path');
     const { tmpdir } = await import('os');
     const { withEnv } = await import('./helpers/with-env.ts');
-    const tmpHome = mkdtempSync(join(tmpdir(), 'gbrain-cfg-test-'));
+    const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-cfg-test-'));
     try {
-      mkdirSync(join(tmpHome, '.gbrain'), { recursive: true });
+      mkdirSync(join(tmpHome, '.voltmind'), { recursive: true });
       writeFileSync(
-        join(tmpHome, '.gbrain', 'config.json'),
+        join(tmpHome, '.voltmind', 'config.json'),
         JSON.stringify({ engine: 'pglite', database_path: '/tmp/x', embedding_model: 'voyage:voyage-3-large' }),
       );
-      await withEnv({ GBRAIN_HOME: tmpHome }, async () => {
+      await withEnv({ VOLTMIND_HOME: tmpHome }, async () => {
         const { loadConfig } = await import('../src/core/config.ts');
         const cfg = loadConfig();
         expect(cfg!.embedding_model).toBe('voyage:voyage-3-large');
@@ -190,10 +190,10 @@ describe('loadConfig — legacy provider+model migration (v0.36.1.x #1086)', () 
 
 // v0.36.1.x #1019 (cherry-pick #1083): configDir uses path.isAbsolute and
 // dual-separator '..' rejection so Windows paths are accepted.
-describe('configDir — GBRAIN_HOME Windows path acceptance (v0.36.1.x #1019)', () => {
+describe('configDir — VOLTMIND_HOME Windows path acceptance (v0.36.1.x #1019)', () => {
   test('relative paths are rejected with an absolute-path error', async () => {
     const { withEnv } = await import('./helpers/with-env.ts');
-    await withEnv({ GBRAIN_HOME: 'relative/path' }, async () => {
+    await withEnv({ VOLTMIND_HOME: 'relative/path' }, async () => {
       const { configDir } = await import('../src/core/config.ts');
       expect(() => configDir()).toThrow(/absolute/);
     });
@@ -201,7 +201,7 @@ describe('configDir — GBRAIN_HOME Windows path acceptance (v0.36.1.x #1019)', 
 
   test("'..' segments rejected on POSIX-style absolute paths", async () => {
     const { withEnv } = await import('./helpers/with-env.ts');
-    await withEnv({ GBRAIN_HOME: '/tmp/foo/../bar' }, async () => {
+    await withEnv({ VOLTMIND_HOME: '/tmp/foo/../bar' }, async () => {
       const { configDir } = await import('../src/core/config.ts');
       expect(() => configDir()).toThrow(/'..' segments/);
     });
@@ -214,7 +214,7 @@ describe('configDir — GBRAIN_HOME Windows path acceptance (v0.36.1.x #1019)', 
     // backslash '..' segment — that's the case where the pre-fix
     // single-separator split would have let it through.
     const { withEnv } = await import('./helpers/with-env.ts');
-    await withEnv({ GBRAIN_HOME: '/tmp/foo\\..\\bar' }, async () => {
+    await withEnv({ VOLTMIND_HOME: '/tmp/foo\\..\\bar' }, async () => {
       const { configDir } = await import('../src/core/config.ts');
       expect(() => configDir()).toThrow(/'..' segments/);
     });

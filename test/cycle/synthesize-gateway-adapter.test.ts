@@ -51,7 +51,7 @@ describe('makeJudgeClient — construction-time provider probe', () => {
   test('A1: returns null when verdict model is anthropic and no API key is configured', async () => {
     await withEnv({ ANTHROPIC_API_KEY: undefined }, async () => {
       // Use a synthetic config path to avoid surfacing a stored anthropic_api_key.
-      await withEnv({ GBRAIN_HOME: '/tmp/nonexistent-gbrain-home-for-A1' }, async () => {
+      await withEnv({ VOLTMIND_HOME: '/tmp/nonexistent-voltmind-home-for-A1' }, async () => {
         const judge = makeJudgeClient('claude-haiku-4-5-20251001');
         expect(judge).toBeNull();
       });

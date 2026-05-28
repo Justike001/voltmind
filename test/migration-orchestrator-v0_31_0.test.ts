@@ -2,11 +2,11 @@
  * v0.31.2 (B3 ship-blocker fix) — orchestrator gate test.
  *
  * The v0_31_0 orchestrator's phaseASchema is the precondition check
- * `gbrain post-upgrade` runs. It must:
+ * `voltmind post-upgrade` runs. It must:
  *   - Reject brains at schema_version < 45 (facts table not yet created).
  *   - Pass brains at schema_version >= 45 with the facts table present.
  *   - Surface a useful operator-facing message that names the version
- *     and the recovery command (`gbrain apply-migrations --yes`).
+ *     and the recovery command (`voltmind apply-migrations --yes`).
  *
  * Pre-fix, the gate had been demoted to `v < 40` with a misleading
  * "+ notability" claim. v40 brains passed the precondition without
@@ -27,19 +27,19 @@ import type { BrainEngine } from '../src/core/engine.ts';
 
 describe('v0.31.0 orchestrator — phaseASchema gate', () => {
   let tmp: string;
-  let oldGbrainHome: string | undefined;
+  let oldVoltmindHome: string | undefined;
   let engine: BrainEngine;
 
   beforeEach(async () => {
-    oldGbrainHome = process.env.GBRAIN_HOME;
-    tmp = mkdtempSync(join(tmpdir(), 'gbrain-v0310-gate-'));
-    process.env.GBRAIN_HOME = tmp;
+    oldVoltmindHome = process.env.VOLTMIND_HOME;
+    tmp = mkdtempSync(join(tmpdir(), 'voltmind-v0310-gate-'));
+    process.env.VOLTMIND_HOME = tmp;
 
-    const gbrainHome = join(tmp, '.gbrain');
+    const voltmindHome = join(tmp, '.voltmind');
     const dbPath = join(tmp, 'brain-db');
-    mkdirSync(gbrainHome, { recursive: true });
+    mkdirSync(voltmindHome, { recursive: true });
     writeFileSync(
-      join(gbrainHome, 'config.json'),
+      join(voltmindHome, 'config.json'),
       JSON.stringify({ engine: 'pglite', database_path: dbPath }, null, 2) + '\n',
     );
 
@@ -52,8 +52,8 @@ describe('v0.31.0 orchestrator — phaseASchema gate', () => {
   afterEach(async () => {
     __setTestEngineOverride(null);
     await engine.disconnect();
-    if (oldGbrainHome === undefined) delete process.env.GBRAIN_HOME;
-    else process.env.GBRAIN_HOME = oldGbrainHome;
+    if (oldVoltmindHome === undefined) delete process.env.VOLTMIND_HOME;
+    else process.env.VOLTMIND_HOME = oldVoltmindHome;
     rmSync(tmp, { recursive: true, force: true });
   });
 

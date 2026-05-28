@@ -6,7 +6,7 @@ import { tmpdir } from 'os';
 import { readSupervisorEvents, computeSupervisorAuditFilename } from '../src/core/minions/handlers/supervisor-audit.ts';
 import { calculateBackoffMs } from '../src/core/minions/supervisor.ts';
 
-const TEST_PID_FILE = '/tmp/gbrain-supervisor-test.pid';
+const TEST_PID_FILE = '/tmp/voltmind-supervisor-test.pid';
 
 afterEach(() => {
   try { unlinkSync(TEST_PID_FILE); } catch { /* noop */ }
@@ -24,7 +24,7 @@ interface IntegrationHarness {
 
 /** Create per-test temp files + a fake worker shell script. */
 function makeHarness(name: string, workerBody: string): IntegrationHarness {
-  const tmpRoot = join(tmpdir(), `gbrain-sup-test-${name}-${process.pid}-${Date.now()}`);
+  const tmpRoot = join(tmpdir(), `voltmind-sup-test-${name}-${process.pid}-${Date.now()}`);
   mkdirSync(tmpRoot, { recursive: true });
   const pidFile = join(tmpRoot, 'supervisor.pid');
   const auditDir = join(tmpRoot, 'audit');
@@ -83,13 +83,13 @@ function spawnSupervisor(h: IntegrationHarness, overrides: Record<string, string
 
 /** Read the audit JSONL for the current week. */
 function readAudit(auditDir: string) {
-  const origEnv = process.env.GBRAIN_AUDIT_DIR;
-  process.env.GBRAIN_AUDIT_DIR = auditDir;
+  const origEnv = process.env.VOLTMIND_AUDIT_DIR;
+  process.env.VOLTMIND_AUDIT_DIR = auditDir;
   try {
     return readSupervisorEvents();
   } finally {
-    if (origEnv === undefined) delete process.env.GBRAIN_AUDIT_DIR;
-    else process.env.GBRAIN_AUDIT_DIR = origEnv;
+    if (origEnv === undefined) delete process.env.VOLTMIND_AUDIT_DIR;
+    else process.env.VOLTMIND_AUDIT_DIR = origEnv;
   }
 }
 
@@ -278,8 +278,8 @@ describe('MinionSupervisor', () => {
   });
 
   describe('integration: env-var inheritance regression (codex #9 / eng #8)', () => {
-    it('strips inherited GBRAIN_ALLOW_SHELL_JOBS when allowShellJobs=false, even if parent has it set', async () => {
-      const outFile = join(tmpdir(), `gbrain-sup-env-${process.pid}-${Date.now()}.txt`);
+    it('strips inherited VOLTMIND_ALLOW_SHELL_JOBS when allowShellJobs=false, even if parent has it set', async () => {
+      const outFile = join(tmpdir(), `voltmind-sup-env-${process.pid}-${Date.now()}.txt`);
       try { unlinkSync(outFile); } catch { /* may not exist */ }
 
       // Worker writes env to OUT_FILE then exits 1. exit=1 is required (not
@@ -287,12 +287,12 @@ describe('MinionSupervisor', () => {
       // crashCount — the supervisor would respawn forever. The test's
       // assertion is on the OUT_FILE contents (env plumbing), not the
       // exit code, so any non-zero code that trips SUP_MAX_CRASHES=1 works.
-      const h = makeHarness('env-strip-outfile', `printf '%s\\n' "\${GBRAIN_ALLOW_SHELL_JOBS-UNSET}" > "$OUT_FILE" ; exit 1`);
+      const h = makeHarness('env-strip-outfile', `printf '%s\\n' "\${VOLTMIND_ALLOW_SHELL_JOBS-UNSET}" > "$OUT_FILE" ; exit 1`);
 
       try {
         const sup = spawnSupervisor(h, {
           OUT_FILE: outFile,
-          GBRAIN_ALLOW_SHELL_JOBS: '1',  // parent has it
+          VOLTMIND_ALLOW_SHELL_JOBS: '1',  // parent has it
           SUP_ALLOW_SHELL_JOBS: '0',     // supervisor says NO
           SUP_MAX_CRASHES: '1',
         });
@@ -309,13 +309,13 @@ describe('MinionSupervisor', () => {
       }
     }, 15_000);
 
-    it('DOES pass GBRAIN_ALLOW_SHELL_JOBS to child when allowShellJobs is true', async () => {
-      const outFile = join(tmpdir(), `gbrain-sup-env-ok-${process.pid}-${Date.now()}.txt`);
+    it('DOES pass VOLTMIND_ALLOW_SHELL_JOBS to child when allowShellJobs is true', async () => {
+      const outFile = join(tmpdir(), `voltmind-sup-env-ok-${process.pid}-${Date.now()}.txt`);
       try { unlinkSync(outFile); } catch { /* may not exist */ }
 
       // Worker exits 1 (not 0) so SUP_MAX_CRASHES=1 actually trips. See
       // the comment on the env-strip test above for the v0.33 rationale.
-      const h = makeHarness('env-pass-on-opt-in', `printf '%s\\n' "\${GBRAIN_ALLOW_SHELL_JOBS-UNSET}" > "$OUT_FILE" ; exit 1`);
+      const h = makeHarness('env-pass-on-opt-in', `printf '%s\\n' "\${VOLTMIND_ALLOW_SHELL_JOBS-UNSET}" > "$OUT_FILE" ; exit 1`);
 
       try {
         const sup = spawnSupervisor(h, {
@@ -335,14 +335,14 @@ describe('MinionSupervisor', () => {
     }, 15_000);
   });
 
-  describe('integration: GBRAIN_SUPERVISED env var (v0.22.14)', () => {
-    it('sets GBRAIN_SUPERVISED=1 on spawned worker child', async () => {
-      const outFile = join(tmpdir(), `gbrain-sup-supervised-${process.pid}-${Date.now()}.txt`);
+  describe('integration: VOLTMIND_SUPERVISED env var (v0.22.14)', () => {
+    it('sets VOLTMIND_SUPERVISED=1 on spawned worker child', async () => {
+      const outFile = join(tmpdir(), `voltmind-sup-supervised-${process.pid}-${Date.now()}.txt`);
       try { unlinkSync(outFile); } catch { /* may not exist */ }
 
       // exit 1 required post-D1/D2 to trip SUP_MAX_CRASHES=1; clean exits
       // no longer count toward the crash limit.
-      const h = makeHarness('supervised-env', `printf '%s\n' "\${GBRAIN_SUPERVISED-UNSET}" > "$OUT_FILE" ; exit 1`);
+      const h = makeHarness('supervised-env', `printf '%s\n' "\${VOLTMIND_SUPERVISED-UNSET}" > "$OUT_FILE" ; exit 1`);
 
       try {
         const sup = spawnSupervisor(h, {
@@ -416,7 +416,7 @@ describe('MinionSupervisor', () => {
 
   describe('integration: --max-rss spawn args (v0.21)', () => {
     it('passes --max-rss 2048 to spawned worker by default', async () => {
-      const outFile = join(tmpdir(), `gbrain-sup-maxrss-${process.pid}-${Date.now()}.txt`);
+      const outFile = join(tmpdir(), `voltmind-sup-maxrss-${process.pid}-${Date.now()}.txt`);
       try { unlinkSync(outFile); } catch { /* may not exist */ }
 
       // Worker logs its argv to OUT_FILE so the test can assert --max-rss 2048

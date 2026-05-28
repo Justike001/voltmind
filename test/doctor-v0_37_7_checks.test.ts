@@ -7,7 +7,7 @@
  * - checkOauthConfidentialHealth (T13 / 5L) — confidential clients
  *   missing client_secret_hash fail loud.
  * - checkAutopilotLockScope (T14 / 5M) — stale lockfile outside
- *   GBRAIN_HOME surfaces a PID-safe hint.
+ *   VOLTMIND_HOME surfaces a PID-safe hint.
  *
  * Hermetic via PGLite + tmpdir overrides.
  */
@@ -69,7 +69,7 @@ describe('checkSourceRoutingHealth (#1167)', () => {
     expect(r.status).toBe('warn');
     expect(r.message).toMatch(/lonely/);
     expect(r.message).toMatch(/--source-id/);
-    expect(r.message).toMatch(/gbrain sources current/);
+    expect(r.message).toMatch(/voltmind sources current/);
   });
 });
 
@@ -117,7 +117,7 @@ describe('checkOauthConfidentialHealth (#1166)', () => {
 describe('checkAutopilotLockScope (#1226)', () => {
   test('no lockfile → ok', async () => {
     const sandbox = mkdtempSync(join(tmpdir(), 'doctor-lock-scope-'));
-    await withEnv({ GBRAIN_HOME: sandbox, HOME: sandbox }, async () => {
+    await withEnv({ VOLTMIND_HOME: sandbox, HOME: sandbox }, async () => {
       const r = checkAutopilotLockScope();
       expect(r.status).toBe('ok');
       expect(r.message).toMatch(/Lock path:/);
@@ -125,13 +125,13 @@ describe('checkAutopilotLockScope (#1226)', () => {
     rmSync(sandbox, { recursive: true, force: true });
   });
 
-  test('stale lock outside GBRAIN_HOME → warn with PID-safe hint', async () => {
+  test('stale lock outside VOLTMIND_HOME → warn with PID-safe hint', async () => {
     const home = mkdtempSync(join(tmpdir(), 'doctor-lock-home-'));
-    const gbrainHome = mkdtempSync(join(tmpdir(), 'doctor-lock-gbrain-'));
-    mkdirSync(join(home, '.gbrain'), { recursive: true });
-    writeFileSync(join(home, '.gbrain', 'autopilot.lock'), '99999');
+    const voltmindHome = mkdtempSync(join(tmpdir(), 'doctor-lock-voltmind-'));
+    mkdirSync(join(home, '.voltmind'), { recursive: true });
+    writeFileSync(join(home, '.voltmind', 'autopilot.lock'), '99999');
 
-    await withEnv({ HOME: home, GBRAIN_HOME: gbrainHome }, async () => {
+    await withEnv({ HOME: home, VOLTMIND_HOME: voltmindHome }, async () => {
       const r = checkAutopilotLockScope();
       expect(r.status).toBe('warn');
       expect(r.message).toMatch(/Stale lockfile/);
@@ -140,6 +140,6 @@ describe('checkAutopilotLockScope (#1226)', () => {
     });
 
     rmSync(home, { recursive: true, force: true });
-    rmSync(gbrainHome, { recursive: true, force: true });
+    rmSync(voltmindHome, { recursive: true, force: true });
   });
 });

@@ -4,7 +4,7 @@
  *
  * When NO brain_default config is set AND exactly one registered source has
  * local_path set and isn't 'default', auto-route to it. Closes the bug
- * class where `gbrain sync` without --source silently routed to source_id
+ * class where `voltmind sync` without --source silently routed to source_id
  * 'default' even though the user had a single Vault-mounted source.
  *
  * Tier ordering placement codex review forced:
@@ -120,12 +120,12 @@ describe('#1434 — sole_non_default tier', () => {
     expect(result.tier).toBe('flag');
   });
 
-  test('does NOT fire when GBRAIN_SOURCE env is set (tier 2 wins)', async () => {
+  test('does NOT fire when VOLTMIND_SOURCE env is set (tier 2 wins)', async () => {
     const engine = makeStub([
       { id: 'default', local_path: null },
       { id: 'studiovault', local_path: '/Users/india/vault' },
     ]);
-    await withEnv({ GBRAIN_SOURCE: 'default' }, async () => {
+    await withEnv({ VOLTMIND_SOURCE: 'default' }, async () => {
       const result = await resolveSourceWithTier(engine, null, '/tmp');
       expect(result.source_id).toBe('default');
       expect(result.tier).toBe('env');
@@ -174,21 +174,21 @@ describe('SOURCE_TIER_NAMES includes sole_non_default at index 5', () => {
 
 describe('formatSoleNonDefaultNudge', () => {
   test('returns canonical nudge string in default env', async () => {
-    await withEnv({ GBRAIN_NO_SOLE_NON_DEFAULT_NUDGE: undefined }, async () => {
+    await withEnv({ VOLTMIND_NO_SOLE_NON_DEFAULT_NUDGE: undefined }, async () => {
       expect(formatSoleNonDefaultNudge('studiovault')).toBe(
-        "[gbrain] routing to source 'studiovault' (sole non-default source registered; pass --source to override).",
+        "[voltmind] routing to source 'studiovault' (sole non-default source registered; pass --source to override).",
       );
     });
   });
 
-  test('returns null when GBRAIN_NO_SOLE_NON_DEFAULT_NUDGE=1 suppresses', async () => {
-    await withEnv({ GBRAIN_NO_SOLE_NON_DEFAULT_NUDGE: '1' }, async () => {
+  test('returns null when VOLTMIND_NO_SOLE_NON_DEFAULT_NUDGE=1 suppresses', async () => {
+    await withEnv({ VOLTMIND_NO_SOLE_NON_DEFAULT_NUDGE: '1' }, async () => {
       expect(formatSoleNonDefaultNudge('studiovault')).toBeNull();
     });
   });
 
   test('any value other than literal "1" does NOT suppress', async () => {
-    await withEnv({ GBRAIN_NO_SOLE_NON_DEFAULT_NUDGE: 'true' }, async () => {
+    await withEnv({ VOLTMIND_NO_SOLE_NON_DEFAULT_NUDGE: 'true' }, async () => {
       expect(formatSoleNonDefaultNudge('studiovault')).not.toBeNull();
     });
   });

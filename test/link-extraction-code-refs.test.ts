@@ -83,7 +83,7 @@ describe('extractCodeRefs — basic patterns', () => {
   });
 });
 
-describe('extractCodeRefs — integration with gbrain workflow', () => {
+describe('extractCodeRefs — integration with voltmind workflow', () => {
   test('extracts multiple references from real markdown', () => {
     const guide = `# Sync Pipeline
 
@@ -91,7 +91,7 @@ The entry point is \`performSync\` in \`src/commands/sync.ts\`. It delegates
 to \`buildSyncManifest\` in \`src/core/sync.ts\`.
 
 When a parse error lands, \`src/core/sync.ts:380\` records it in
-\`~/.gbrain/sync-failures.jsonl\`. The retry path is covered in
+\`~/.voltmind/sync-failures.jsonl\`. The retry path is covered in
 \`test/sync.test.ts\`.
 
 See also: \`scripts/check-wasm-embedded.sh\` (bash, not scanned).

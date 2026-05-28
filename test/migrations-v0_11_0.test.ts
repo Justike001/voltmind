@@ -32,7 +32,7 @@ let origHome: string | undefined;
 
 beforeEach(() => {
   origHome = process.env.HOME;
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-v0_11_0-test-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-v0_11_0-test-'));
   process.env.HOME = tmp;
 });
 
@@ -139,8 +139,8 @@ describe('AGENTS.md marker injection', () => {
   });
 });
 
-describe('cron manifest rewrite — gbrain builtins only', () => {
-  test('rewrites `agentTurn` entries whose skill is a gbrain builtin', () => {
+describe('cron manifest rewrite — voltmind builtins only', () => {
+  test('rewrites `agentTurn` entries whose skill is a voltmind builtin', () => {
     const dir = join(tmp, '.claude');
     const path = writeCronJson(dir, [
       { schedule: '*/5 * * * *', kind: 'agentTurn', skill: 'extract' },
@@ -153,10 +153,10 @@ describe('cron manifest rewrite — gbrain builtins only', () => {
 
     const after = JSON.parse(readFileSync(path, 'utf-8'));
     expect(after.jobs[0].kind).toBe('shell');
-    expect(after.jobs[0].cmd).toContain('gbrain jobs submit extract');
+    expect(after.jobs[0].cmd).toContain('voltmind jobs submit extract');
     expect(after.jobs[0]._gbrain_migrated_by).toBe('v0.11.0');
     expect(after.jobs[1].kind).toBe('shell');
-    expect(after.jobs[1].cmd).toContain('gbrain jobs submit backlinks');
+    expect(after.jobs[1].cmd).toContain('voltmind jobs submit backlinks');
   });
 
   test('emits JSONL TODO for non-builtin handlers (ea-inbox-sweep etc.)', () => {

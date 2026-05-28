@@ -1,5 +1,5 @@
 /**
- * v0.32.3 — `gbrain search modes/stats/tune` CLI tests.
+ * v0.32.3 — `voltmind search modes/stats/tune` CLI tests.
  *
  * Covers dispatch + JSON output shape + idempotent --reset + recommendation
  * generation. Pure unit-level: bypasses the cli.ts entrypoint and calls
@@ -51,7 +51,7 @@ const makeMeta = (overrides: Partial<HybridSearchMeta> = {}): HybridSearchMeta =
   ...overrides,
 });
 
-describe('gbrain search modes (read-only dashboard)', () => {
+describe('voltmind search modes (read-only dashboard)', () => {
   test('--json emits structured report with all 3 bundles and active mode', async () => {
     await engine.setConfig('search.mode', 'tokenmax');
     const out = await captureRun(() => runSearch(engine, ['modes', '--json']));
@@ -93,7 +93,7 @@ describe('gbrain search modes (read-only dashboard)', () => {
   });
 });
 
-describe('gbrain search modes --reset', () => {
+describe('voltmind search modes --reset', () => {
   test('--source <mode> is a dry-run (no writes)', async () => {
     await engine.setConfig('search.cache.enabled', 'false');
     await engine.setConfig('search.tokenBudget', '4000');
@@ -134,7 +134,7 @@ describe('gbrain search modes --reset', () => {
   });
 });
 
-describe('gbrain search stats', () => {
+describe('voltmind search stats', () => {
   test('empty table → total_calls 0, message about no data', async () => {
     const out = await captureRun(() => runSearch(engine, ['stats']));
     expect(out).toContain('Total searches:');
@@ -167,7 +167,7 @@ describe('gbrain search stats', () => {
   });
 });
 
-describe('gbrain search tune (recommendations)', () => {
+describe('voltmind search tune (recommendations)', () => {
   test('insufficient data → no_recommendations status', async () => {
     const out = await captureRun(() => runSearch(engine, ['tune', '--json']));
     const r = JSON.parse(out);
@@ -232,7 +232,7 @@ describe('gbrain search tune (recommendations)', () => {
   });
 });
 
-describe('gbrain search dispatch', () => {
+describe('voltmind search dispatch', () => {
   test('--help shows usage', async () => {
     const out = await captureRun(() => runSearch(engine, ['--help']));
     expect(out).toContain('Usage:');

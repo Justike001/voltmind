@@ -10,14 +10,14 @@
       "services/voice-agent/code/lib/context-builder.example.mjs",
       "services/voice-agent/code/tools.mjs",
       "services/voice-agent/code/public/call.html",
-      "services/voice-agent/.gbrain-source.json",
+      "services/voice-agent/.voltmind-source.json",
       "services/voice-agent/package.json",
       "skills/voice-persona-mars/SKILL.md",
       "skills/voice-persona-venus/SKILL.md",
       "skills/voice-post-call/SKILL.md"
     ]
   },
-  "gbrain_source_json": {
+  "voltmind_source_json": {
     "recipe": "agent-voice",
     "install_kind": "copy-into-host-repo",
     "must_NOT_have_fields": ["upstream_repo", "imported_from", "source_url"],

@@ -19,9 +19,9 @@ import { resetPgliteState } from './helpers/reset-pglite.ts';
 import { withEnv } from './helpers/with-env.ts';
 
 let engine: PGLiteEngine;
-const FAKE_GIT_DIR = join(tmpdir(), `gbrain-resync-test-${process.pid}`);
-const GBRAIN_HOME = join(FAKE_GIT_DIR, 'gbrain-home');
-const CLONE_ROOT = join(GBRAIN_HOME, '.gbrain', 'clones');
+const FAKE_GIT_DIR = join(tmpdir(), `voltmind-resync-test-${process.pid}`);
+const VOLTMIND_HOME = join(FAKE_GIT_DIR, 'voltmind-home');
+const CLONE_ROOT = join(VOLTMIND_HOME, '.voltmind', 'clones');
 
 function writeFakeGit(): void {
   mkdirSync(FAKE_GIT_DIR, { recursive: true });
@@ -74,8 +74,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
-  rmSync(GBRAIN_HOME, { recursive: true, force: true });
-  mkdirSync(GBRAIN_HOME, { recursive: true });
+  rmSync(VOLTMIND_HOME, { recursive: true, force: true });
+  mkdirSync(VOLTMIND_HOME, { recursive: true });
   writeFileSync(join(FAKE_GIT_DIR, 'mode'), 'ok');
 });
 
@@ -85,7 +85,7 @@ beforeEach(async () => {
 
 describe('validateRepoState — full state matrix (sync re-clone driver)', () => {
   test('healthy: existing .git + matching origin URL', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const row = await addSource(engine, {
         id: 'state-healthy',
         remoteUrl: 'https://github.com/example/repo',
@@ -96,7 +96,7 @@ describe('validateRepoState — full state matrix (sync re-clone driver)', () =>
   });
 
   test('missing: clone dir was rmd', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const row = await addSource(engine, {
         id: 'state-missing',
         remoteUrl: 'https://github.com/example/repo',
@@ -108,7 +108,7 @@ describe('validateRepoState — full state matrix (sync re-clone driver)', () =>
   });
 
   test('not-a-dir: clone path is a file', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const row = await addSource(engine, {
         id: 'state-file',
         remoteUrl: 'https://github.com/example/repo',
@@ -122,7 +122,7 @@ describe('validateRepoState — full state matrix (sync re-clone driver)', () =>
   });
 
   test('no-git: directory exists but no .git/ inside', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const row = await addSource(engine, {
         id: 'state-no-git',
         remoteUrl: 'https://github.com/example/repo',
@@ -134,7 +134,7 @@ describe('validateRepoState — full state matrix (sync re-clone driver)', () =>
   });
 
   test('corrupted: .git exists but git remote get-url fails', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const row = await addSource(engine, {
         id: 'state-corrupted',
         remoteUrl: 'https://github.com/example/repo',
@@ -147,7 +147,7 @@ describe('validateRepoState — full state matrix (sync re-clone driver)', () =>
 
   test('url-drift: remote points elsewhere', async () => {
     await withEnv(
-      { GBRAIN_HOME, PATH: fakePath(), REMOTE_GET_URL_OUTPUT: 'https://github.com/different/repo' },
+      { VOLTMIND_HOME, PATH: fakePath(), REMOTE_GET_URL_OUTPUT: 'https://github.com/different/repo' },
       async () => {
         const row = await addSource(engine, {
           id: 'state-drift',
@@ -166,7 +166,7 @@ describe('validateRepoState — full state matrix (sync re-clone driver)', () =>
 
 describe('recloneIfMissing — recovery from each degraded state', () => {
   test('recovers from "missing" by re-cloning', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const row = await addSource(engine, {
         id: 'rec-missing',
         remoteUrl: 'https://github.com/example/repo',
@@ -179,7 +179,7 @@ describe('recloneIfMissing — recovery from each degraded state', () => {
   });
 
   test('recovers from "no-git" by re-cloning over the empty dir', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const row = await addSource(engine, {
         id: 'rec-nogit',
         remoteUrl: 'https://github.com/example/repo',
@@ -192,7 +192,7 @@ describe('recloneIfMissing — recovery from each degraded state', () => {
   });
 
   test('recovers from "not-a-dir" by replacing the file with a clone', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const row = await addSource(engine, {
         id: 'rec-file',
         remoteUrl: 'https://github.com/example/repo',
@@ -207,7 +207,7 @@ describe('recloneIfMissing — recovery from each degraded state', () => {
   });
 
   test('idempotent on healthy clones (returns false, no clone)', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       await addSource(engine, {
         id: 'rec-healthy',
         remoteUrl: 'https://github.com/example/repo',
@@ -223,7 +223,7 @@ describe('recloneIfMissing — recovery from each degraded state', () => {
 
 describe('performSync re-clone branch (driven by sync.ts:320 logic)', () => {
   test('healthy clone: validateRepoState passes through to existing pull path', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const row = await addSource(engine, {
         id: 'sync-healthy',
         remoteUrl: 'https://github.com/example/repo',
@@ -241,7 +241,7 @@ describe('performSync re-clone branch (driven by sync.ts:320 logic)', () => {
   });
 
   test('missing clone: state becomes "missing", re-clone fires', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const row = await addSource(engine, {
         id: 'sync-missing',
         remoteUrl: 'https://github.com/example/repo',

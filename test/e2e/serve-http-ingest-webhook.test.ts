@@ -1,6 +1,6 @@
 /**
  * v0.38 — E2E HTTP contract tests for POST /ingest, the webhook ingestion
- * source registered inside `gbrain serve --http` per the plan-eng-review E1
+ * source registered inside `voltmind serve --http` per the plan-eng-review E1
  * decision (webhook source lives IN serve --http, NOT in the ingestion
  * daemon; uses Minion queue as the cross-process sync primitive).
  *
@@ -9,7 +9,7 @@
  * in-process simulation; what it explicitly does NOT cover is "the real
  * HTTP route with real OAuth." This file fills that gap.
  *
- * Spawns a real `gbrain serve --http` against real Postgres, mints OAuth
+ * Spawns a real `voltmind serve --http` against real Postgres, mints OAuth
  * tokens with various scopes, and exercises every documented
  * status-code branch of the route:
  *
@@ -27,7 +27,7 @@
  * Mirrors the spawn + mint pattern from test/e2e/serve-http-oauth.test.ts
  * exactly so future maintainers see one pattern, not two.
  *
- * Run: GBRAIN_DATABASE_URL=... bun test test/e2e/serve-http-ingest-webhook.test.ts
+ * Run: VOLTMIND_DATABASE_URL=... bun test test/e2e/serve-http-ingest-webhook.test.ts
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
@@ -57,8 +57,8 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
       'bun run src/cli.ts auth register-client e2e-webhook-test --grant-types client_credentials --scopes "read write"',
       { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env } },
     );
-    const idMatch = regOutput.match(/Client ID:\s+(gbrain_cl_\S+)/);
-    const secretMatch = regOutput.match(/Client Secret:\s+(gbrain_cs_\S+)/);
+    const idMatch = regOutput.match(/Client ID:\s+(voltmind_cl_\S+)/);
+    const secretMatch = regOutput.match(/Client Secret:\s+(voltmind_cs_\S+)/);
     if (!idMatch || !secretMatch) {
       throw new Error('Failed to register webhook test client:\n' + regOutput);
     }

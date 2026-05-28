@@ -3,7 +3,7 @@
  *
  * When every regex pattern matches 0 lines on a page, AND the user
  * has explicitly opted in via
- * `gbrain config set conversation_parser.llm_fallback_enabled true`
+ * `voltmind config set conversation_parser.llm_fallback_enabled true`
  * (D15: opt-IN by default for PRIVACY of chat logs), AND a budget
  * tracker is active, the orchestrator calls this to ask Haiku to
  * parse the body directly.

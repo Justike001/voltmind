@@ -22,8 +22,8 @@ import { resetPgliteState } from './helpers/reset-pglite.ts';
 import { withEnv } from './helpers/with-env.ts';
 
 let engine: PGLiteEngine;
-const FAKE_GIT_DIR = join(tmpdir(), `gbrain-sources-mcp-test-${process.pid}`);
-const GBRAIN_HOME = join(FAKE_GIT_DIR, 'gbrain-home');
+const FAKE_GIT_DIR = join(tmpdir(), `voltmind-sources-mcp-test-${process.pid}`);
+const VOLTMIND_HOME = join(FAKE_GIT_DIR, 'voltmind-home');
 
 function writeFakeGit(): void {
   mkdirSync(FAKE_GIT_DIR, { recursive: true });
@@ -70,8 +70,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
-  rmSync(GBRAIN_HOME, { recursive: true, force: true });
-  mkdirSync(GBRAIN_HOME, { recursive: true });
+  rmSync(VOLTMIND_HOME, { recursive: true, force: true });
+  mkdirSync(VOLTMIND_HOME, { recursive: true });
 });
 
 function findOp(name: string): Operation {
@@ -82,8 +82,8 @@ function findOp(name: string): Operation {
 
 function ctxRemote(scopes: string[]): OperationContext {
   const auth: AuthInfo = {
-    token: 'gbrain_at_xxx',
-    clientId: 'gbrain_cl_test',
+    token: 'voltmind_at_xxx',
+    clientId: 'voltmind_cl_test',
     clientName: 'test-client',
     scopes,
     expiresAt: Math.floor(Date.now() / 1000) + 3600,
@@ -131,7 +131,7 @@ describe('sources_* op metadata', () => {
 
 describe('sources_* handlers — happy path', () => {
   test('sources_add (with --url) clones, INSERTs, returns row', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const op = findOp('sources_add');
       const ctx = ctxRemote(['sources_admin']);
       const row = (await op.handler(ctx, {
@@ -147,7 +147,7 @@ describe('sources_* handlers — happy path', () => {
   });
 
   test('sources_list returns array with remote_url', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const addOp = findOp('sources_add');
       await addOp.handler(ctxRemote(['sources_admin']), {
         id: 'mcp-list-test',
@@ -163,7 +163,7 @@ describe('sources_* handlers — happy path', () => {
   });
 
   test('sources_status returns clone_state', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const addOp = findOp('sources_add');
       await addOp.handler(ctxRemote(['sources_admin']), {
         id: 'mcp-status-test',
@@ -180,7 +180,7 @@ describe('sources_* handlers — happy path', () => {
   });
 
   test('sources_remove deletes row + clone (with confirm_destructive)', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const addOp = findOp('sources_add');
       const row = (await addOp.handler(ctxRemote(['sources_admin']), {
         id: 'mcp-remove-test',
@@ -243,7 +243,7 @@ describe('sources_* scope enforcement (simulates serve-http gate)', () => {
     expect(gate(findOp('sources_status'), granted).allowed).toBe(true);
   });
 
-  test('gstack /setup-gbrain Path 4 token (read + sources_admin) covers everything', () => {
+  test('gstack /setup-voltmind Path 4 token (read + sources_admin) covers everything', () => {
     const granted = ['read', 'sources_admin'];
     expect(gate(findOp('sources_add'), granted).allowed).toBe(true);
     expect(gate(findOp('sources_list'), granted).allowed).toBe(true);
@@ -264,24 +264,24 @@ describe('sources_* scope enforcement (simulates serve-http gate)', () => {
 
 describe('sources_add — remote callers ignore path/clone_dir overrides', () => {
   test('remote sources_admin: clone_dir override is silently ignored', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const op = findOp('sources_add');
       const ctx = ctxRemote(['sources_admin']);
       const row = (await op.handler(ctx, {
         id: 'attack-clone-dir',
         url: 'https://github.com/example/repo',
-        clone_dir: '/etc/gbrain-pwned',  // attacker-supplied
+        clone_dir: '/etc/voltmind-pwned',  // attacker-supplied
       })) as any;
-      // Clone landed at the SAFE default, not /etc/gbrain-pwned.
-      expect(row.local_path).not.toBe('/etc/gbrain-pwned');
+      // Clone landed at the SAFE default, not /etc/voltmind-pwned.
+      expect(row.local_path).not.toBe('/etc/voltmind-pwned');
       expect(row.local_path).toContain('clones/attack-clone-dir');
-      // /etc/gbrain-pwned was never written.
-      expect(existsSync('/etc/gbrain-pwned')).toBe(false);
+      // /etc/voltmind-pwned was never written.
+      expect(existsSync('/etc/voltmind-pwned')).toBe(false);
     });
   });
 
   test('remote sources_admin: path override (without url) gets nulled', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const op = findOp('sources_add');
       const ctx = ctxRemote(['sources_admin']);
       // Without a URL and with a remote-supplied path, the path is dropped.
@@ -297,7 +297,7 @@ describe('sources_add — remote callers ignore path/clone_dir overrides', () =>
   });
 
   test('local CLI caller (ctx.remote=false) keeps clone_dir override', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const op = findOp('sources_add');
       // Simulate trusted local CLI: ctx.remote = false, no auth needed.
       const ctxLocal: OperationContext = {
@@ -308,7 +308,7 @@ describe('sources_add — remote callers ignore path/clone_dir overrides', () =>
         remote: false,
         sourceId: 'default',
       };
-      const customDir = join(GBRAIN_HOME, 'custom-clones', 'local-override');
+      const customDir = join(VOLTMIND_HOME, 'custom-clones', 'local-override');
       const row = (await op.handler(ctxLocal, {
         id: 'local-override',
         url: 'https://github.com/example/repo',
@@ -326,7 +326,7 @@ describe('sources_add — remote callers ignore path/clone_dir overrides', () =>
 
 describe('sources_list — include_archived honored (was silently leaking)', () => {
   test('default: archived sources are NOT returned', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       // Add source then archive it.
       const addOp = findOp('sources_add');
       await addOp.handler(ctxRemote(['sources_admin']), {
@@ -346,7 +346,7 @@ describe('sources_list — include_archived honored (was silently leaking)', () 
   });
 
   test('include_archived: true returns archived sources', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const addOp = findOp('sources_add');
       await addOp.handler(ctxRemote(['sources_admin']), {
         id: 'archived-included',
@@ -369,7 +369,7 @@ describe('sources_list — include_archived honored (was silently leaking)', () 
 
 describe('sources_add SSRF gate (delegated to parseRemoteUrl)', () => {
   test('rejects RFC1918 192.168.x.x with structured error', async () => {
-    await withEnv({ GBRAIN_HOME, PATH: fakePath() }, async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
       const op = findOp('sources_add');
       try {
         await op.handler(ctxRemote(['sources_admin']), {

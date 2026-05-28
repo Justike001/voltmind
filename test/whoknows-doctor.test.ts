@@ -8,7 +8,7 @@ import { withEnv } from './helpers/with-env.ts';
 /**
  * v0.33 whoknows_health doctor check — fixture-only assertion. The
  * check resolves the shipped fixture from the module path unless
- * GBRAIN_WHOKNOWS_FIXTURE_PATH is set. It does NOT need an engine.
+ * VOLTMIND_WHOKNOWS_FIXTURE_PATH is set. It does NOT need an engine.
  * We pass a sentinel object cast to BrainEngine for the type contract
  * since the check intentionally ignores its argument.
  */
@@ -43,7 +43,7 @@ function cleanup() {
 describe('whoknows_health doctor check', () => {
   it('resolves the default fixture when cwd is not the repo', async () => {
     try {
-      await withEnv({ GBRAIN_WHOKNOWS_FIXTURE_PATH: undefined }, async () => {
+      await withEnv({ VOLTMIND_WHOKNOWS_FIXTURE_PATH: undefined }, async () => {
         const check = await whoknowsHealthCheck(stubEngine);
         expect(check.name).toBe('whoknows_health');
         expect(check.status).toBe('ok');
@@ -57,7 +57,7 @@ describe('whoknows_health doctor check', () => {
   it('warns when env override fixture file is missing entirely', async () => {
     try {
       const fixturePath = join(workDir, 'missing-whoknows-eval.jsonl');
-      await withEnv({ GBRAIN_WHOKNOWS_FIXTURE_PATH: fixturePath }, async () => {
+      await withEnv({ VOLTMIND_WHOKNOWS_FIXTURE_PATH: fixturePath }, async () => {
         const check = await whoknowsHealthCheck(stubEngine);
         expect(check.name).toBe('whoknows_health');
         expect(check.status).toBe('warn');
@@ -74,7 +74,7 @@ describe('whoknows_health doctor check', () => {
       const fixturePath = join(workDir, 'test/fixtures/whoknows-eval.jsonl');
       mkdirSync(join(workDir, 'test/fixtures'), { recursive: true });
       writeFileSync(fixturePath, '');
-      await withEnv({ GBRAIN_WHOKNOWS_FIXTURE_PATH: fixturePath }, async () => {
+      await withEnv({ VOLTMIND_WHOKNOWS_FIXTURE_PATH: fixturePath }, async () => {
         const check = await whoknowsHealthCheck(stubEngine);
         expect(check.status).toBe('warn');
         expect(check.message).toContain('empty');
@@ -93,7 +93,7 @@ describe('whoknows_health doctor check', () => {
         '{"query":"a","expected_top_3_slugs":["x"]}\n' +
           '{"query":"b","expected_top_3_slugs":["y"]}\n',
       );
-      await withEnv({ GBRAIN_WHOKNOWS_FIXTURE_PATH: fixturePath }, async () => {
+      await withEnv({ VOLTMIND_WHOKNOWS_FIXTURE_PATH: fixturePath }, async () => {
         const check = await whoknowsHealthCheck(stubEngine);
         expect(check.status).toBe('warn');
         expect(check.message).toContain('2 row');
@@ -111,7 +111,7 @@ describe('whoknows_health doctor check', () => {
         JSON.stringify({ query: `q${i}`, expected_top_3_slugs: [`p${i}`] }),
       ).join('\n');
       writeFileSync(fixturePath, rows + '\n');
-      await withEnv({ GBRAIN_WHOKNOWS_FIXTURE_PATH: fixturePath }, async () => {
+      await withEnv({ VOLTMIND_WHOKNOWS_FIXTURE_PATH: fixturePath }, async () => {
         const check = await whoknowsHealthCheck(stubEngine);
         expect(check.status).toBe('ok');
         expect(check.message).toContain('10 queries');
@@ -136,7 +136,7 @@ describe('whoknows_health doctor check', () => {
         '{"query":"e","expected_top_3_slugs":["v"]}',
       ].join('\n');
       writeFileSync(fixturePath, content + '\n');
-      await withEnv({ GBRAIN_WHOKNOWS_FIXTURE_PATH: fixturePath }, async () => {
+      await withEnv({ VOLTMIND_WHOKNOWS_FIXTURE_PATH: fixturePath }, async () => {
         const check = await whoknowsHealthCheck(stubEngine);
         expect(check.status).toBe('ok');
         expect(check.message).toContain('5 queries');

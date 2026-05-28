@@ -25,7 +25,7 @@ import { walkMarkdownFiles } from '../src/commands/extract.ts';
 describe('pruneDir submodule detection (#1169)', () => {
   let scratch: string;
   beforeAll(() => {
-    scratch = mkdtempSync(join(tmpdir(), 'gbrain-submodule-'));
+    scratch = mkdtempSync(join(tmpdir(), 'voltmind-submodule-'));
     // Create a submodule-like directory: `.git` is a FILE inside it.
     const subDir = join(scratch, 'vendor-submodule');
     mkdirSync(subDir, { recursive: true });

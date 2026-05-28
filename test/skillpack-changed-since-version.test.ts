@@ -1,11 +1,11 @@
 /**
  * Tests for `changedSlugsSinceVersion` in src/core/skillpack/bundle.ts —
- * the git-aware filter that backs `gbrain skillpack reference --all --since
+ * the git-aware filter that backs `voltmind skillpack reference --all --since
  * <version>`. Builds a fixture git repo on the fly and tags it to exercise
  * the version-resolution + commit-walking path.
  *
  * Pins:
- *   - returns null when gbrainRoot is not a git checkout
+ *   - returns null when voltmindRoot is not a git checkout
  *   - returns null when the version tag doesn't resolve
  *   - returns empty array when no skills/ files changed since the tag
  *   - returns the affected slugs (deduped, sorted) when there are changes
@@ -63,7 +63,7 @@ function scratchRepo(): string {
 }
 
 describe('changedSlugsSinceVersion', () => {
-  it('returns null when gbrainRoot is not a git checkout', () => {
+  it('returns null when voltmindRoot is not a git checkout', () => {
     const root = mkdtempSync(join(tmpdir(), 'csv-nogit-'));
     created.push(root);
     expect(changedSlugsSinceVersion(root, '0.1.0.0')).toBeNull();

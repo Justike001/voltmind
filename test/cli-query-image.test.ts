@@ -1,5 +1,5 @@
 // v0.27.1 follow-up: CLI helper that loads + base64-encodes an image path
-// for `gbrain query --image <path>`. Verifies MIME derivation, oversize
+// for `voltmind query --image <path>`. Verifies MIME derivation, oversize
 // rejection, and explicit-MIME override.
 
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
@@ -11,7 +11,7 @@ import { resolveQueryImage } from '../src/cli.ts';
 let tmp: string;
 
 beforeAll(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'gbrain-cli-img-'));
+  tmp = mkdtempSync(join(tmpdir(), 'voltmind-cli-img-'));
 });
 
 afterAll(() => {

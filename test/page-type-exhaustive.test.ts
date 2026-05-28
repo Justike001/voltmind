@@ -6,9 +6,9 @@
 // schema-pack manifests at runtime.
 //
 // What this test still asserts:
-//   1. ALL_PAGE_TYPES (the gbrain-base seed list) is non-empty and well-shaped.
+//   1. ALL_PAGE_TYPES (the voltmind-base seed list) is non-empty and well-shaped.
 //   2. Every base type round-trips through serialize/parse markdown without
-//      loss. This is the "byte-for-byte gbrain-base equivalence" contract
+//      loss. This is the "byte-for-byte voltmind-base equivalence" contract
 //      from the v0.38 plan — schema-pack codegen consumes this list.
 //   3. assertNever still throws when reached (preserved as a generic helper
 //      for switches over the closed `PackPrimitive` enum from
@@ -19,7 +19,7 @@
 //     `string`, so switches cannot be exhaustive at the type level.
 //     Runtime validation against the active schema pack replaces this.
 //   - That ALL_PAGE_TYPES is the only legal page-type set. It is the
-//     seed list for the built-in `gbrain-base` pack; user packs add more.
+//     seed list for the built-in `voltmind-base` pack; user packs add more.
 
 import { describe, expect, test } from 'bun:test';
 import { ALL_PAGE_TYPES, assertNever } from '../src/core/types.ts';

@@ -14,7 +14,7 @@
  * if cumulative > budget. Non-Anthropic models bypass the gate with a
  * `BUDGET_METER_NO_PRICING` warn (once per process).
  *
- * Ledger lives at `~/.gbrain/audit/dream-budget-YYYY-Www.jsonl` (ISO-week
+ * Ledger lives at `~/.voltmind/audit/dream-budget-YYYY-Www.jsonl` (ISO-week
  * rotation, same pattern as shell-audit; filename math now goes through
  * `src/core/audit-week-file.ts` per T4). Each line is one submit's cost
  * estimate + actual usage when reported back.

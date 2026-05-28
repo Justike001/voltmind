@@ -11,7 +11,7 @@ installCleanupSignalHandlers();
 
 import { readFileSync } from 'fs';
 import { loadConfig, loadConfigWithEngine, toEngineConfig, isThinClient } from './core/config.ts';
-import type { GBrainConfig } from './core/config.ts';
+import type { VoltMindConfig } from './core/config.ts';
 import type { AIGatewayConfig } from './core/ai/types.ts';
 import type { BrainEngine } from './core/engine.ts';
 import { operations, OperationError } from './core/operations.ts';
@@ -57,14 +57,14 @@ const CLI_ONLY_SELF_HELP = new Set([
   // v0.37 fix wave (Lane D.4 + CDX2-12): sync's --no-embed flag was
   // unreachable via help because the dispatcher's generic CLI-only
   // short-circuit fired before runSync could print its own usage block.
-  // Adding `sync` here routes `gbrain sync --help` into runSync.
+  // Adding `sync` here routes `voltmind sync --help` into runSync.
   'sync',
   // v0.37 fix wave (deferred TODO, shipped): reinit-pglite has its
   // own --help in runReinitPglite. Routing through SELF_HELP avoids
   // the generic short-circuit so the destructive-action warning text
   // reaches the user.
   'reinit-pglite',
-  // v0.40.6.0 Schema Cathedral v3 — `gbrain schema --help` should hit
+  // v0.40.6.0 Schema Cathedral v3 — `voltmind schema --help` should hit
   // schema.ts printHelp() with the full 22+ verb taxonomy, not the
   // generic short-circuit's one-line stub.
   'schema',
@@ -76,7 +76,7 @@ const CLI_ONLY_SELF_HELP = new Set([
 
 async function main() {
   // Parse global flags (--quiet / --progress-json / --progress-interval)
-  // BEFORE command dispatch, so `gbrain --progress-json doctor` works.
+  // BEFORE command dispatch, so `voltmind --progress-json doctor` works.
   // The stripped argv is what the command sees.
   const rawArgs = process.argv.slice(2);
   const { cliOpts, rest: args } = parseGlobalFlags(rawArgs);
@@ -90,7 +90,7 @@ async function main() {
   }
 
   if (command === '--version' || command === 'version') {
-    console.log(`gbrain ${VERSION}`);
+    console.log(`voltmind ${VERSION}`);
     return;
   }
 
@@ -130,7 +130,7 @@ async function main() {
   const op = cliOps.get(command);
   if (!op) {
     console.error(`Unknown command: ${command}`);
-    console.error('Run gbrain --help for available commands.');
+    console.error('Run voltmind --help for available commands.');
     process.exit(1);
   }
 
@@ -141,7 +141,7 @@ async function main() {
   // them out of the engine try/catch is safe and unlocks routing.
   const params = parseOpArgs(op, subArgs);
 
-  // v0.27.1 (`gbrain query --image <path>`): swap the `image` param from
+  // v0.27.1 (`voltmind query --image <path>`): swap the `image` param from
   // a filesystem path into base64 bytes + mime. The op accepts base64; the
   // CLI accepts a path. Helper is exported so tests can exercise the
   // transform without spawning a subprocess.
@@ -171,7 +171,7 @@ async function main() {
       const cliName = op.cliHints?.name || op.name;
       const positional = op.cliHints?.positional || [];
       const usage = positional.map(p => `<${p}>`).join(' ');
-      console.error(`Usage: gbrain ${cliName} ${usage}`);
+      console.error(`Usage: voltmind ${cliName} ${usage}`);
       process.exit(1);
     }
   }
@@ -272,9 +272,9 @@ function hasHelpFlag(args: string[]): boolean {
 }
 
 function printCliOnlyHelp(command: string) {
-  console.log(`Usage: gbrain ${command}`);
+  console.log(`Usage: voltmind ${command}`);
   console.log('');
-  console.log(`gbrain ${command} - run gbrain --help for the full command list.`);
+  console.log(`voltmind ${command} - run voltmind --help for the full command list.`);
 }
 
 /**
@@ -298,7 +298,7 @@ function printCliOnlyHelp(command: string) {
 async function runThinClientRouted(
   op: Operation,
   params: Record<string, unknown>,
-  cfg: GBrainConfig,
+  cfg: VoltMindConfig,
   cliOpts: CliOptions,
 ): Promise<void> {
   // ENG-4: per-op timeout default; user override wins.
@@ -316,7 +316,7 @@ async function runThinClientRouted(
   // v0.31.1 (Issue #734, cherry-pick B): print identity banner to stderr
   // BEFORE the routed call. Banner failure suppresses the banner only —
   // never the underlying command. Suppression honors --quiet, non-TTY,
-  // and GBRAIN_NO_BANNER=1.
+  // and VOLTMIND_NO_BANNER=1.
   await printIdentityBannerBestEffort(cfg, cliOpts, sigintController.signal);
 
   try {
@@ -336,16 +336,16 @@ async function runThinClientRouted(
           break;
         case 'discovery':
           console.error(`OAuth discovery failed at ${cfg.remote_mcp!.issuer_url}.`);
-          console.error('Run `gbrain remote doctor` for details.');
+          console.error('Run `voltmind remote doctor` for details.');
           break;
         case 'auth':
           console.error('OAuth auth failed.');
           console.error('On the host, re-register your client:');
-          console.error('  gbrain auth register-client <name> --grant-types client_credentials --scopes read,write,admin');
+          console.error('  voltmind auth register-client <name> --grant-types client_credentials --scopes read,write,admin');
           break;
         case 'auth_after_refresh':
           console.error('OAuth auth failed after token refresh. Credentials may have been revoked.');
-          console.error('Run `gbrain remote doctor` to confirm.');
+          console.error('Run `voltmind remote doctor` to confirm.');
           break;
         case 'network':
           if (e.detail?.kind === 'timeout') {
@@ -356,21 +356,21 @@ async function runThinClientRouted(
             process.off('SIGINT', onSigint);
             process.exit(130);
           } else {
-            console.error(`Cannot reach ${url}. Run \`gbrain remote doctor\` for details.`);
+            console.error(`Cannot reach ${url}. Run \`voltmind remote doctor\` for details.`);
           }
           break;
         case 'tool_error':
           if (e.detail?.code === 'missing_scope') {
             console.error('Missing OAuth scope on this client.');
             console.error('On the host, re-register the client with broader scopes:');
-            console.error('  gbrain auth register-client <name> --grant-types client_credentials --scopes read,write,admin');
+            console.error('  voltmind auth register-client <name> --grant-types client_credentials --scopes read,write,admin');
           } else {
             console.error(e.message);
-            console.error('Run `gbrain remote doctor` if this persists.');
+            console.error('Run `voltmind remote doctor` if this persists.');
           }
           break;
         case 'parse':
-          console.error('Server response was malformed. Run `gbrain remote doctor`.');
+          console.error('Server response was malformed. Run `voltmind remote doctor`.');
           break;
         default: {
           // Exhaustive switch sentinel (TS `never` — fails to build if a
@@ -404,7 +404,7 @@ async function runThinClientRouted(
 //
 // Cache: 60s TTL, in-memory Map keyed by mcp_url. Cross-process file cache
 // is deferred (marginal benefit; one mint per CLI process is fine).
-// Suppression: --quiet, non-TTY, GBRAIN_NO_BANNER=1.
+// Suppression: --quiet, non-TTY, VOLTMIND_NO_BANNER=1.
 // Failure mode: any error in fetching identity → suppress banner; underlying
 // command runs normally. Banner is observability, not load-bearing.
 // ============================================================================
@@ -432,9 +432,9 @@ export function _clearIdentityCacheForTest(): void {
 
 export function bannerSuppressed(cliOpts: CliOptions): boolean {
   if (cliOpts.quiet) return true;
-  if (process.env.GBRAIN_NO_BANNER === '1') return true;
+  if (process.env.VOLTMIND_NO_BANNER === '1') return true;
   // Non-TTY default is suppressed (clean pipes); explicit env-flag overrides.
-  if (!process.stderr.isTTY && process.env.GBRAIN_BANNER !== '1') return true;
+  if (!process.stderr.isTTY && process.env.VOLTMIND_BANNER !== '1') return true;
   return false;
 }
 
@@ -453,7 +453,7 @@ function formatBanner(mcpUrl: string, id: BrainIdentity): string {
 }
 
 async function fetchIdentity(
-  cfg: GBrainConfig,
+  cfg: VoltMindConfig,
   signal: AbortSignal,
 ): Promise<BrainIdentity> {
   // 2s timeout for the banner fetch — must not delay the underlying command.
@@ -466,7 +466,7 @@ async function fetchIdentity(
 }
 
 async function printIdentityBannerBestEffort(
-  cfg: GBrainConfig,
+  cfg: VoltMindConfig,
   cliOpts: CliOptions,
   signal: AbortSignal,
 ): Promise<void> {
@@ -474,7 +474,7 @@ async function printIdentityBannerBestEffort(
   const mcpUrl = cfg.remote_mcp?.mcp_url;
   if (!mcpUrl) return;
 
-  // Cache lookup keyed by mcp_url so switching hosts via `gbrain init`
+  // Cache lookup keyed by mcp_url so switching hosts via `voltmind init`
   // invalidates cleanly even within a long-lived process.
   const cached = identityCache.get(mcpUrl);
   if (cached && Date.now() - cached.cached_at_ms < IDENTITY_TTL_MS) {
@@ -501,7 +501,7 @@ async function printIdentityBannerBestEffort(
 }
 
 /**
- * v0.27.1: shared transform for `gbrain query --image <path>` (and any future
+ * v0.27.1: shared transform for `voltmind query --image <path>` (and any future
  * CLI surface that takes an image path). Reads the file, base64-encodes,
  * derives MIME from the extension, enforces the 20MB cap. Exported so tests
  * can verify the transform without spawning a subprocess.
@@ -582,7 +582,7 @@ export function parseOpArgs(op: Operation, args: string[]): Record<string, unkno
 
 async function makeContext(engine: BrainEngine, params: Record<string, unknown>): Promise<OperationContext> {
   // v0.31.8 (D11): resolve sourceId via the canonical 6-tier chain. Honors
-  // --source / GBRAIN_SOURCE / .gbrain-source / path-match / brain default /
+  // --source / VOLTMIND_SOURCE / .voltmind-source / path-match / brain default /
   // 'default'. Wrapped in try/catch so a doctor / single-source brain that
   // never set up sources still returns 'default' silently.
   let sourceId: string | undefined;
@@ -725,11 +725,11 @@ function formatResult(opName: string, result: unknown): string {
 
 /**
  * Multi-topology v1: thin-client refusal set. These commands require a local
- * engine; if `~/.gbrain/config.json` has `remote_mcp` set, the dispatch guard
+ * engine; if `~/.voltmind/config.json` has `remote_mcp` set, the dispatch guard
  * refuses them with a canonical error pointing at the remote host. The check
  * runs before per-command dispatch so the error message is consistent.
  *
- * `serve` is in this set because `gbrain serve` (stdio or http) requires a
+ * `serve` is in this set because `voltmind serve` (stdio or http) requires a
  * local engine to expose. Thin clients don't have one to expose.
  *
  * `doctor` is intentionally NOT in this set — task 4 routes it to
@@ -767,16 +767,16 @@ const THIN_CLIENT_REFUSED_COMMANDS = new Set([
  * place during code review.
  */
 const THIN_CLIENT_REFUSE_HINTS: Record<string, string> = {
-  sync: 'sync runs on the host. Trigger a remote cycle with `gbrain remote ping` (queues an autopilot-cycle job).',
-  embed: 'embed runs on the host as part of the autopilot cycle. `gbrain remote ping` triggers a full cycle including embed.',
-  extract: 'extract runs on the host. Use `gbrain remote ping` to trigger a cycle including extract.',
+  sync: 'sync runs on the host. Trigger a remote cycle with `voltmind remote ping` (queues an autopilot-cycle job).',
+  embed: 'embed runs on the host as part of the autopilot cycle. `voltmind remote ping` triggers a full cycle including embed.',
+  extract: 'extract runs on the host. Use `voltmind remote ping` to trigger a cycle including extract.',
   'extract-conversation-facts': 'extract-conversation-facts runs on the host (requires local engine + chat gateway). Run on the host machine.',
   migrate: "migrate runs on the host's local engine. Run on the host machine.",
   'apply-migrations': 'schema migrations run on the host. SSH and run there.',
   'repair-jsonb': 'repair-jsonb operates on the local DB only.',
   integrity: 'integrity scans local files. Run on the host machine.',
   serve: 'serve starts a server. Run on the host, not the thin client.',
-  dream: 'dream runs the autopilot cycle on the host. `gbrain remote ping` queues one. (Native `gbrain dream` thin-client routing planned for v0.31.2.)',
+  dream: 'dream runs the autopilot cycle on the host. `voltmind remote ping` queues one. (Native `voltmind dream` thin-client routing planned for v0.31.2.)',
   orphans: "orphans needs the host's brain. Run on the host or use the `find_orphans` MCP tool from your agent.",
   transcripts: 'transcripts is server-private (raw chat exports stay on the host). Read transcripts on the host machine.',
   storage: 'storage operates on the local repo on disk. Run on the host.',
@@ -784,8 +784,8 @@ const THIN_CLIENT_REFUSE_HINTS: Record<string, string> = {
   sources: 'sources commands manage local DB + config rows. Per-subcommand thin-client routing lands in v0.31.x. For now: use `sources_list` / `sources_status` MCP tools, or run on the host.',
   // v0.32 audit additions
   pages: '`pages purge-deleted` is admin+localOnly (hard-deletes from the local DB). Run on the host.',
-  files: '`files list` and `files url` MCP ops are localOnly (paths live on the host filesystem). Use `gbrain files` on the host machine.',
-  eval: '`eval` export/prune/replay touch the local engine and have no MCP equivalents. Run `gbrain eval` on the host.',
+  files: '`files list` and `files url` MCP ops are localOnly (paths live on the host filesystem). Use `voltmind files` on the host machine.',
+  eval: '`eval` export/prune/replay touch the local engine and have no MCP equivalents. Run `voltmind eval` on the host.',
   'code-def': '`code-def` needs symbol-aware lookup that has no MCP op yet. Run on the host or use `search` from your agent with a symbol-shaped query.',
   'code-refs': '`code-refs` has no MCP op yet. Run on the host.',
   'code-callers': '`code-callers` has no MCP op yet. Run on the host.',
@@ -801,11 +801,11 @@ const THIN_CLIENT_REFUSE_HINTS: Record<string, string> = {
 function refuseThinClient(command: string, mcpUrl: string): never {
   const hint = THIN_CLIENT_REFUSE_HINTS[command];
   if (hint) {
-    console.error(`\`gbrain ${command}\` is not routable. ${hint}`);
+    console.error(`\`voltmind ${command}\` is not routable. ${hint}`);
     console.error(`(thin-client of ${mcpUrl})`);
   } else {
     console.error(
-      `\`gbrain ${command}\` requires a local engine. This install is a thin client of ${mcpUrl}.\n` +
+      `\`voltmind ${command}\` requires a local engine. This install is a thin client of ${mcpUrl}.\n` +
       `Run \`${command}\` on the remote host, or use the corresponding MCP tool from your agent.`,
     );
   }
@@ -970,7 +970,7 @@ async function handleCliOnly(command: string, args: string[]) {
     // Does not need connectEngine — each phase (schema, smoke, host-rewrite)
     // manages its own subprocess or file-layer access directly. Avoids
     // connecting a second time when the orchestrator shells out to
-    // `gbrain init --migrate-only` and `gbrain jobs smoke`.
+    // `voltmind init --migrate-only` and `voltmind jobs smoke`.
     const { runApplyMigrations } = await import('./commands/apply-migrations.ts');
     await runApplyMigrations(args);
     return;
@@ -988,7 +988,7 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
   if (command === 'doctor') {
-    // Multi-topology v1: thin-client doctor. When `~/.gbrain/config.json`
+    // Multi-topology v1: thin-client doctor. When `~/.voltmind/config.json`
     // has remote_mcp set, every DB-bound check is irrelevant. Route to the
     // outbound-HTTP probe set in `src/core/doctor-remote.ts` and return
     // before any local-engine work.
@@ -1094,7 +1094,7 @@ async function handleCliOnly(command: string, args: string[]) {
   }
 
   // `eval cross-modal` is a pure API-call command — no DB, no brain. Bypass
-  // connectEngine entirely so first-run users (no `gbrain init` yet) can
+  // connectEngine entirely so first-run users (no `voltmind init` yet) can
   // run the quality gate. Mirrors the dream/doctor no-DB pattern but
   // doesn't even attempt the connect (T3=A in plans/radiant-napping-lerdorf.md).
   // The handler self-configures the AI gateway from loadConfig() + process.env.
@@ -1115,21 +1115,21 @@ async function handleCliOnly(command: string, args: string[]) {
   }
 
   // v0.28.8: longmemeval brings its own in-memory PGLite. Bypassing
-  // connectEngine here keeps `gbrain eval longmemeval --help` and benchmark
-  // runs working on machines that have no `~/.gbrain/config.json` configured.
+  // connectEngine here keeps `voltmind eval longmemeval --help` and benchmark
+  // runs working on machines that have no `~/.voltmind/config.json` configured.
   //
   // v0.35.1.1: still need to configureGateway() so the in-memory brain's
   // import + hybridSearch can embed via the configured provider. Reads
-  // ~/.gbrain/config.json when present; falls back to env vars otherwise
-  // (GBRAIN_EMBEDDING_MODEL / GBRAIN_EMBEDDING_DIMENSIONS).
+  // ~/.voltmind/config.json when present; falls back to env vars otherwise
+  // (VOLTMIND_EMBEDDING_MODEL / VOLTMIND_EMBEDDING_DIMENSIONS).
   if (command === 'eval' && args[0] === 'longmemeval') {
     const { runEvalLongMemEval } = await import('./commands/eval-longmemeval.ts');
     if (!(args.length > 1 && (args[1] === '--help' || args[1] === '-h'))) {
       const config = loadConfig() ?? ({
-        embedding_model: process.env.GBRAIN_EMBEDDING_MODEL,
-        embedding_dimensions: process.env.GBRAIN_EMBEDDING_DIMENSIONS
-          ? Number(process.env.GBRAIN_EMBEDDING_DIMENSIONS) : undefined,
-      } as GBrainConfig);
+        embedding_model: process.env.VOLTMIND_EMBEDDING_MODEL,
+        embedding_dimensions: process.env.VOLTMIND_EMBEDDING_DIMENSIONS
+          ? Number(process.env.VOLTMIND_EMBEDDING_DIMENSIONS) : undefined,
+      } as VoltMindConfig);
       const { configureGateway } = await import('./core/ai/gateway.ts');
       configureGateway(buildGatewayConfig(config));
     }
@@ -1137,16 +1137,16 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
-  // v0.41.13.0: `gbrain eval conversation-parser` is pure-function
+  // v0.41.13.0: `voltmind eval conversation-parser` is pure-function
   // (parses fixture JSONL, runs parseConversation, scores results).
   // No DB access; bypass connectEngine entirely so the CI fixture
-  // gate runs on machines with no `~/.gbrain/config.json`.
+  // gate runs on machines with no `~/.voltmind/config.json`.
   if (command === 'eval' && args[0] === 'conversation-parser') {
     const { runEvalConversationParser } = await import('./commands/eval-conversation-parser.ts');
     process.exit(await runEvalConversationParser(args.slice(1)));
   }
 
-  // v0.41.13.0: `gbrain conversation-parser list-builtins | validate
+  // v0.41.13.0: `voltmind conversation-parser list-builtins | validate
   // | --help` are pure (no DB access). Bypass connectEngine so the
   // operator can run them on machines with no brain configured.
   // `scan <slug>` needs a brain and falls through.
@@ -1163,7 +1163,7 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
-  // v0.33.1.3: `gbrain eval whoknows` on thin-client installs bypasses
+  // v0.33.1.3: `voltmind eval whoknows` on thin-client installs bypasses
   // connectEngine entirely — the eval routes per-query through the remote
   // `find_experts` MCP op (the v0.31.1 routing seam). Local mode falls
   // through to the engine-connected path below.
@@ -1175,7 +1175,7 @@ async function handleCliOnly(command: string, args: string[]) {
     }
   }
 
-  // v0.41.19.0: `gbrain status` on thin-client installs bypasses connectEngine
+  // v0.41.19.0: `voltmind status` on thin-client installs bypasses connectEngine
   // entirely — Sync + Cycle route through the `get_status_snapshot` MCP op,
   // and local-only sections render as "N/A on remote brain". Local mode falls
   // through to the engine-connected dispatch path below. (`args` here is the
@@ -1189,7 +1189,7 @@ async function handleCliOnly(command: string, args: string[]) {
     }
   }
 
-  // v0.37 fix wave (Lane D.4 + CDX2-12): short-circuit `gbrain sync --help`
+  // v0.37 fix wave (Lane D.4 + CDX2-12): short-circuit `voltmind sync --help`
   // BEFORE the engine bind. runSync has its own --help branch but can't
   // reach it without an engine — which means a user running `--help` from
   // a fresh tmpdir with no config gets a no-such-config error instead of
@@ -1214,7 +1214,7 @@ async function handleCliOnly(command: string, args: string[]) {
 
   // v0.41.6.0 D3 (per outside-voice F1): connect-time + dispatch-time wallclock
   // timeouts for read-only commands whose hang would otherwise spin at 100% CPU
-  // (the production "10-day zombie gbrain search ping" bug class). The wrap
+  // (the production "10-day zombie voltmind search ping" bug class). The wrap
   // covers connectEngine (so a hung schema probe / PgBouncer freeze actually
   // surfaces a timeout) AND the dispatch body (so a wedged runSearch /
   // runList honors the same deadline).
@@ -1232,7 +1232,7 @@ async function handleCliOnly(command: string, args: string[]) {
 
   if (readOnlyTimeoutMs !== null) {
     const { withTimeout, OperationTimeoutError } = await import('./core/timeout.ts');
-    const label = `gbrain ${command}`;
+    const label = `voltmind ${command}`;
     let engine: BrainEngine;
     try {
       engine = await withTimeout(connectEngine(), readOnlyTimeoutMs, `${label}: connect`);
@@ -1270,7 +1270,7 @@ async function handleCliOnly(command: string, args: string[]) {
         // CLI was discarding the result so the process exited 0 even
         // when files failed (e.g. content-sanity hard-block throws,
         // size-cap throws, parse errors). Surface non-zero on errors > 0
-        // so wrappers (sync, CI scripts, `&& gbrain doctor`) propagate.
+        // so wrappers (sync, CI scripts, `&& voltmind doctor`) propagate.
         const importResult = await runImport(engine, args);
         if (importResult.errors > 0) {
           process.exitCode = 1;
@@ -1388,7 +1388,7 @@ async function handleCliOnly(command: string, args: string[]) {
         break;
       }
       // v0.32.7 CJK wave — post-upgrade markdown re-chunk sweep.
-      // v0.36 Phase 3 wave — `gbrain reindex --multimodal` re-embeds content_chunks
+      // v0.36 Phase 3 wave — `voltmind reindex --multimodal` re-embeds content_chunks
       // into the unified Voyage multimodal-3 column.
       case 'reindex': {
         if (args.includes('--multimodal')) {
@@ -1436,7 +1436,7 @@ async function handleCliOnly(command: string, args: string[]) {
         await runAnomalies(engine, args);
         break;
       }
-      // v0.41.19.0 — `gbrain status`: single-screen brain health dashboard.
+      // v0.41.19.0 — `voltmind status`: single-screen brain health dashboard.
       // CLI-only with own thin-client branch INSIDE runStatus (per D2 + codex
       // MAJOR-4 architecture). Composes existing exports: buildSyncStatusReport,
       // readSupervisorEvents, gbrain_cycle_locks, minion_jobs.
@@ -1514,7 +1514,7 @@ async function handleCliOnly(command: string, args: string[]) {
         break;
       }
       case 'search': {
-        // v0.32.3 search-lite — `gbrain search modes/stats/tune`.
+        // v0.32.3 search-lite — `voltmind search modes/stats/tune`.
         const { runSearch } = await import('./commands/search.ts');
         await runSearch(engine, args);
         break;
@@ -1525,14 +1525,14 @@ async function handleCliOnly(command: string, args: string[]) {
         break;
       }
       case 'onboard': {
-        // v0.41.18.0 (T13) — gbrain onboard. Thin shell over T2 library
+        // v0.41.18.0 (T13) — voltmind onboard. Thin shell over T2 library
         // + T4 onboard checks + T12 render layer.
         const { runOnboard } = await import('./commands/onboard.ts');
         await runOnboard(engine, args);
         break;
       }
       case 'founder': {
-        // v0.35.4 (T7) — founder scorecard. `gbrain founder scorecard <slug>`
+        // v0.35.4 (T7) — founder scorecard. `voltmind founder scorecard <slug>`
         // rolls up Phase 2's typed-claim substrate into the four scorecard
         // metrics (claim accuracy, consistency, growth trajectory, red flags).
         // Thin-client routing handled inside the command file.
@@ -1546,7 +1546,7 @@ async function handleCliOnly(command: string, args: string[]) {
         break;
       }
       case 'recall': {
-        // v0.31: hot memory recall surface — `gbrain recall <entity>`,
+        // v0.31: hot memory recall surface — `voltmind recall <entity>`,
         // `--since DUR`, `--session ID`, `--today`, `--grep TEXT`,
         // `--supersessions`, `--include-expired`, `--as-context`, `--json`.
         const { runRecall } = await import('./commands/recall.ts');
@@ -1554,15 +1554,15 @@ async function handleCliOnly(command: string, args: string[]) {
         break;
       }
       case 'forget': {
-        // v0.31: shorthand for expireFact. `gbrain forget <fact-id>`.
+        // v0.31: shorthand for expireFact. `voltmind forget <fact-id>`.
         const { runForget } = await import('./commands/recall.ts');
         await runForget(engine, args);
         break;
       }
       case 'notability-eval': {
         // v0.31.2: notability gate eval suite. Two subcommands:
-        //   gbrain notability-eval mine    — sample paragraphs, write candidates
-        //   gbrain notability-eval review  — TTY hand-confirm tiers
+        //   voltmind notability-eval mine    — sample paragraphs, write candidates
+        //   voltmind notability-eval review  — TTY hand-confirm tiers
         const { runNotabilityEval } = await import('./commands/notability-eval.ts');
         const subcmd = args[0] || 'help';
         const flags: Record<string, string | boolean> = {};
@@ -1628,7 +1628,7 @@ async function handleCliOnly(command: string, args: string[]) {
         // migration orchestrator uses). The orchestrator runs once on
         // upgrade; this command is for after-the-fact frontmatter edits.
         //
-        // v0.30.1: still works; canonical entrypoint is now `gbrain backfill
+        // v0.30.1: still works; canonical entrypoint is now `voltmind backfill
         // effective_date`. This command stays as a thin alias for back-compat.
         const { reindexFrontmatterCli } = await import('./commands/reindex-frontmatter.ts');
         await reindexFrontmatterCli(args);
@@ -1654,13 +1654,13 @@ async function handleCliOnly(command: string, args: string[]) {
         break;
       }
       case 'repos': {
-        // v0.19.0: `gbrain repos ...` is an alias into the v0.18.0 sources
+        // v0.19.0: `voltmind repos ...` is an alias into the v0.18.0 sources
         // subsystem. The repos abstraction (Garry's OpenClaw baseline) was
         // redundant with sources and carried per-user config state that
         // couldn't participate in federation / RLS / multi-tenancy. We
-        // keep the alias so scripts like `gbrain repos add .` keep
+        // keep the alias so scripts like `voltmind repos add .` keep
         // working, with a nudge toward the canonical command.
-        console.error('[gbrain] Note: "repos" is an alias for "sources" as of v0.19.0. Prefer `gbrain sources <subcommand>`.');
+        console.error('[voltmind] Note: "repos" is an alias for "sources" as of v0.19.0. Prefer `voltmind sources <subcommand>`.');
         const { runSources } = await import('./commands/sources.ts');
         await runSources(engine, args);
         break;
@@ -1673,7 +1673,7 @@ async function handleCliOnly(command: string, args: string[]) {
 
 /**
  * v0.41.6.0 D3: dispatch helper for the read-only commands that take a
- * default wallclock timeout (`gbrain search`, `gbrain sources list`).
+ * default wallclock timeout (`voltmind search`, `voltmind sources list`).
  * Keeps the timeout-wrap site in main() small and the per-command
  * dispatch logic colocated for easy extension. Pure dispatcher; no engine
  * lifecycle (caller owns connect/disconnect).
@@ -1695,15 +1695,15 @@ async function dispatchReadOnlyCommand(engine: BrainEngine, command: string, arg
   }
 }
 
-// Build the AIGatewayConfig payload from a GBrainConfig. Both configureGateway
+// Build the AIGatewayConfig payload from a VoltMindConfig. Both configureGateway
 // sites in connectEngine() pass through this helper so adding a new field
 // touches one place. Adding a field to one site but not the other previously
 // required remembering to mirror the change; the helper makes that structural.
 // v0.37.6.0: exported so `test/ai/build-gateway-config.test.ts` can pin the
 // env-baseURL passthrough contract for every `_BASE_URL` env var the CLI
 // reads (LLAMA_SERVER, OLLAMA, LMSTUDIO, LITELLM, OPENROUTER).
-export function buildGatewayConfig(c: GBrainConfig): AIGatewayConfig {
-  // v0.32 (#121 reworked): when ~/.gbrain/config.json declares
+export function buildGatewayConfig(c: VoltMindConfig): AIGatewayConfig {
+  // v0.32 (#121 reworked): when ~/.voltmind/config.json declares
   // openai_api_key / anthropic_api_key, fold them into the gateway env so
   // recipes that read OPENAI_API_KEY / ANTHROPIC_API_KEY find them. Process
   // env still wins (it's loaded last) — this is a fallback for daemons /
@@ -1712,10 +1712,10 @@ export function buildGatewayConfig(c: GBrainConfig): AIGatewayConfig {
   if (c.openai_api_key) envFromConfig.OPENAI_API_KEY = c.openai_api_key;
   if (c.anthropic_api_key) envFromConfig.ANTHROPIC_API_KEY = c.anthropic_api_key;
   // v0.37 fix wave (CDX2-5+6): ZE became the default provider in v0.36 but
-  // the env-mapping at this seam never picked it up. `gbrain config set
+  // the env-mapping at this seam never picked it up. `voltmind config set
   // zeroentropy_api_key X` wrote DB plane (ignored by gateway). The file-
-  // plane field now exists (GBrainConfig type) and gets mapped here, so
-  // setting it via `~/.gbrain/config.json` propagates into the gateway.
+  // plane field now exists (VoltMindConfig type) and gets mapped here, so
+  // setting it via `~/.voltmind/config.json` propagates into the gateway.
   if (c.zeroentropy_api_key) envFromConfig.ZEROENTROPY_API_KEY = c.zeroentropy_api_key;
 
   // v0.32 codex finding #4+#5 fix: thread local-server _BASE_URL env vars
@@ -1751,7 +1751,7 @@ export function buildGatewayConfig(c: GBrainConfig): AIGatewayConfig {
 async function connectEngine(opts?: { probeOnly?: boolean }): Promise<BrainEngine> {
   const config = loadConfig();
   if (!config) {
-    console.error('No brain configured. Run: gbrain init');
+    console.error('No brain configured. Run: voltmind init');
     process.exit(1);
   }
 
@@ -1763,12 +1763,12 @@ async function connectEngine(opts?: { probeOnly?: boolean }): Promise<BrainEngin
   const { createEngine } = await import('./core/engine-factory.ts');
   const engine = await createEngine(toEngineConfig(config));
   const noRetry = process.argv.includes('--no-retry-connect') ||
-                  process.env.GBRAIN_NO_RETRY_CONNECT === '1';
+                  process.env.VOLTMIND_NO_RETRY_CONNECT === '1';
   const { connectWithRetry } = await import('./core/db.ts');
   await connectWithRetry(engine, toEngineConfig(config), { noRetry });
 
   // v0.30.1 (Codex X1 / C2): probeOnly skips both hasPendingMigrations() probe
-  // AND initSchema(). Used by `get_health` MCP op + `gbrain upgrade --status`
+  // AND initSchema(). Used by `get_health` MCP op + `voltmind upgrade --status`
   // + doctor's migration_wedge check — these surfaces report wedge state and
   // must NEVER themselves start or block on migrations.
   if (opts?.probeOnly === true) {
@@ -1791,24 +1791,24 @@ async function connectEngine(opts?: { probeOnly?: boolean }): Promise<BrainEngin
         'but the migration didn\'t complete within the retry window. This is usually transient.',
       );
       console.warn('  If it persists:');
-      console.warn('    1. Check `gbrain doctor` for stale locks or stuck advisory locks.');
-      console.warn('    2. Check `gbrain jobs supervisor status` for crashed migration workers.');
-      console.warn('    3. Re-run: `gbrain apply-migrations --yes`');
+      console.warn('    1. Check `voltmind doctor` for stale locks or stuck advisory locks.');
+      console.warn('    2. Check `voltmind jobs supervisor status` for crashed migration workers.');
+      console.warn('    3. Re-run: `voltmind apply-migrations --yes`');
     } else if (result.status === 'error') {
       // Non-deadlock error during initSchema. Surface the message and continue;
       // subsequent operations will resurface the real schema error in context.
       console.warn(`  Schema probe failed: ${result.error.message}`);
-      console.warn('  Re-run: `gbrain apply-migrations --yes`');
+      console.warn('  Re-run: `voltmind apply-migrations --yes`');
     }
     // 'ok', 'not_needed', 'race_resolved' → silent (the common-case outcomes).
   } catch (err) {
     // Last-resort defense in case the helper itself throws unexpectedly.
     console.warn(`  Schema probe failed (unexpected): ${(err as Error).message}`);
-    console.warn('  Re-run: `gbrain apply-migrations --yes`');
+    console.warn('  Re-run: `voltmind apply-migrations --yes`');
   }
 
   // v0.27.1 (F3 fix): re-merge DB-plane config now that the engine is up.
-  // Flags like `embedding_multimodal` are user-mutable via `gbrain config set`
+  // Flags like `embedding_multimodal` are user-mutable via `voltmind config set`
   // (DB plane) and need to flow into the gateway after connect. Schema-sizing
   // fields (embedding_dimensions etc.) keep their pre-connect file/env values
   // — those drove initSchema and the merged config respects file/env first.
@@ -1816,17 +1816,17 @@ async function connectEngine(opts?: { probeOnly?: boolean }): Promise<BrainEngin
     const merged = await loadConfigWithEngine(engine, config);
     if (merged) {
       // Stash gate flags on process.env for downstream readers (import-file.ts
-      // dispatches on GBRAIN_EMBEDDING_MULTIMODAL, OCR consumer reads
-      // GBRAIN_EMBEDDING_IMAGE_OCR_*). The gateway itself doesn't read these
+      // dispatches on VOLTMIND_EMBEDDING_MULTIMODAL, OCR consumer reads
+      // VOLTMIND_EMBEDDING_IMAGE_OCR_*). The gateway itself doesn't read these
       // flags; this preserves the contract without changing the gateway shape.
       if (merged.embedding_multimodal !== undefined) {
-        process.env.GBRAIN_EMBEDDING_MULTIMODAL = String(merged.embedding_multimodal);
+        process.env.VOLTMIND_EMBEDDING_MULTIMODAL = String(merged.embedding_multimodal);
       }
       if (merged.embedding_image_ocr !== undefined) {
-        process.env.GBRAIN_EMBEDDING_IMAGE_OCR = String(merged.embedding_image_ocr);
+        process.env.VOLTMIND_EMBEDDING_IMAGE_OCR = String(merged.embedding_image_ocr);
       }
       if (merged.embedding_image_ocr_model !== undefined) {
-        process.env.GBRAIN_EMBEDDING_IMAGE_OCR_MODEL = merged.embedding_image_ocr_model;
+        process.env.VOLTMIND_EMBEDDING_IMAGE_OCR_MODEL = merged.embedding_image_ocr_model;
       }
       // Always re-configure with merged values when DB merge succeeded. The
       // trigger used to be field-name-gated (only when embedding_multimodal_model
@@ -1851,7 +1851,7 @@ async function connectEngine(opts?: { probeOnly?: boolean }): Promise<BrainEngin
 function printOpHelp(op: Operation) {
   const positional = (op.cliHints?.positional || []).map(p => `<${p}>`).join(' ');
   const name = op.cliHints?.name || op.name;
-  console.log(`Usage: gbrain ${name} ${positional} [options]\n`);
+  console.log(`Usage: voltmind ${name} ${positional} [options]\n`);
   console.log(op.description + '\n');
   const entries = Object.entries(op.params);
   if (entries.length > 0) {
@@ -1870,10 +1870,10 @@ function printHelp() {
   const cliNames = Array.from(cliOps.entries())
     .map(([name, op]) => ({ name, desc: op.description }));
 
-  console.log(`gbrain ${VERSION} -- personal knowledge brain
+  console.log(`voltmind ${VERSION} -- personal knowledge brain
 
 USAGE
-  gbrain <command> [options]
+  voltmind <command> [options]
 
 SETUP
   init [--pglite|--supabase|--url]   Create brain (PGLite default, no server)
@@ -2006,7 +2006,7 @@ ADMIN
   version                            Version info
   --tools-json                       Tool discovery (JSON)
 
-Run gbrain <command> --help for command-specific help.
+Run voltmind <command> --help for command-specific help.
 `);
 }
 

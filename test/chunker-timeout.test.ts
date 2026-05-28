@@ -84,11 +84,11 @@ describe('chunkCodeTextFull — integration with real parser', () => {
     expect(result.chunks.length).toBeGreaterThan(0);
   });
 
-  test('6. GBRAIN_CHUNKER_TIMEOUT_MS=1 reliably forces fallback', async () => {
+  test('6. VOLTMIND_CHUNKER_TIMEOUT_MS=1 reliably forces fallback', async () => {
     // 1ms is below any plausible real-parser wall-clock. The parser
     // returns null; chunkCodeTextFull catches the ChunkerTimeoutError
     // and falls back to fallbackChunks (recursive text chunker).
-    await withEnv({ GBRAIN_CHUNKER_TIMEOUT_MS: '1' }, async () => {
+    await withEnv({ VOLTMIND_CHUNKER_TIMEOUT_MS: '1' }, async () => {
       const result = await chunkCodeTextFull(REAL_TS, 'sample.ts');
       // Recursive fallback still produces chunks; assertion is that the
       // call returned cleanly instead of hanging.
@@ -114,7 +114,7 @@ describe('cleanup contract under exception', () => {
     // few times must not leak (smoke test — Bun GC won't catch a real
     // WASM leak but if cleanup were missing on the throw path, repeated
     // calls would visibly degrade).
-    await withEnv({ GBRAIN_CHUNKER_TIMEOUT_MS: '1' }, async () => {
+    await withEnv({ VOLTMIND_CHUNKER_TIMEOUT_MS: '1' }, async () => {
       for (let i = 0; i < 5; i++) {
         const result = await chunkCodeTextFull(REAL_TS, `sample-${i}.ts`);
         expect(Array.isArray(result.chunks)).toBe(true);

@@ -2,7 +2,7 @@
  * v0.32.7 CJK wave — post-upgrade chunker-bump cost prompt tests.
  *
  * Asserts the prompt fires with real-data estimates, honors the non-TTY
- * skip-wait + GBRAIN_NO_REEMBED env overrides, and falls back to an
+ * skip-wait + VOLTMIND_NO_REEMBED env overrides, and falls back to an
  * "estimate unavailable" message for unknown embedding providers.
  */
 
@@ -125,27 +125,27 @@ describe('runPostUpgradeReembedPrompt (v0.32.7)', () => {
     expect(writes[0]).toContain('Ctrl-C');
   });
 
-  test('GBRAIN_NO_REEMBED=1 bails out with doctor-warning marker', async () => {
+  test('VOLTMIND_NO_REEMBED=1 bails out with doctor-warning marker', async () => {
     await seedPage('a', 'body');
     const writes: string[] = [];
     const result = await runPostUpgradeReembedPrompt(engine, 'openai:text-embedding-3-large', {
       isTTY: true,
-      env: { GBRAIN_NO_REEMBED: '1' },
+      env: { VOLTMIND_NO_REEMBED: '1' },
       write: (l) => writes.push(l),
       graceSeconds: 99,
     });
     expect(result.proceeded).toBe(false);
     expect(result.reason).toBe('bypassed_no_reembed');
-    expect(writes.some(w => w.includes('GBRAIN_NO_REEMBED=1'))).toBe(true);
+    expect(writes.some(w => w.includes('VOLTMIND_NO_REEMBED=1'))).toBe(true);
   });
 
-  test('GBRAIN_REEMBED_GRACE_SECONDS=0 skips wait on TTY', async () => {
+  test('VOLTMIND_REEMBED_GRACE_SECONDS=0 skips wait on TTY', async () => {
     await seedPage('a', 'body');
     const writes: string[] = [];
     const t0 = Date.now();
     const result = await runPostUpgradeReembedPrompt(engine, 'openai:text-embedding-3-large', {
       isTTY: true,
-      env: { GBRAIN_REEMBED_GRACE_SECONDS: '0' },
+      env: { VOLTMIND_REEMBED_GRACE_SECONDS: '0' },
       write: (l) => writes.push(l),
     });
     expect(result.proceeded).toBe(true);

@@ -37,8 +37,8 @@ import {
 
 const created: string[] = [];
 
-function scratchGbrain(): { gbrainRoot: string; skillsDir: string } {
-  const root = mkdtempSync(join(tmpdir(), 'skillpack-gbrain-'));
+function scratchGbrain(): { voltmindRoot: string; skillsDir: string } {
+  const root = mkdtempSync(join(tmpdir(), 'skillpack-voltmind-'));
   created.push(root);
   mkdirSync(join(root, 'src'), { recursive: true });
   writeFileSync(join(root, 'src', 'cli.ts'), '// stub');
@@ -82,7 +82,7 @@ function scratchGbrain(): { gbrainRoot: string; skillsDir: string } {
     join(root, 'openclaw.plugin.json'),
     JSON.stringify(
       {
-        name: 'gbrain-test',
+        name: 'voltmind-test',
         version: '0.17.0-test',
         skills: ['skills/alpha', 'skills/beta'],
         shared_deps: ['skills/conventions', 'skills/_output-rules.md'],
@@ -92,7 +92,7 @@ function scratchGbrain(): { gbrainRoot: string; skillsDir: string } {
     ),
   );
 
-  return { gbrainRoot: root, skillsDir };
+  return { voltmindRoot: root, skillsDir };
 }
 
 function scratchTarget(): { workspace: string; skillsDir: string } {
@@ -117,20 +117,20 @@ afterEach(() => {
 
 describe('findGbrainRoot', () => {
   it('walks up to find openclaw.plugin.json + src/cli.ts', () => {
-    const { gbrainRoot } = scratchGbrain();
-    const nested = join(gbrainRoot, 'a', 'b', 'c');
+    const { voltmindRoot } = scratchGbrain();
+    const nested = join(voltmindRoot, 'a', 'b', 'c');
     mkdirSync(nested, { recursive: true });
-    expect(findGbrainRoot(nested)).toBe(gbrainRoot);
+    expect(findGbrainRoot(nested)).toBe(voltmindRoot);
   });
-  it('returns null when no gbrain root above', () => {
-    expect(findGbrainRoot('/tmp/definitely-not-a-gbrain-repo-XYZ')).toBeNull();
+  it('returns null when no voltmind root above', () => {
+    expect(findGbrainRoot('/tmp/definitely-not-a-voltmind-repo-XYZ')).toBeNull();
   });
 });
 
 describe('loadBundleManifest', () => {
   it('loads + validates a valid manifest', () => {
-    const { gbrainRoot } = scratchGbrain();
-    const m = loadBundleManifest(gbrainRoot);
+    const { voltmindRoot } = scratchGbrain();
+    const m = loadBundleManifest(voltmindRoot);
     expect(m.skills).toEqual(['skills/alpha', 'skills/beta']);
     expect(m.shared_deps.length).toBe(2);
   });
@@ -140,17 +140,17 @@ describe('loadBundleManifest', () => {
     expect(() => loadBundleManifest(root)).toThrow(BundleError);
   });
   it('throws BundleError on malformed JSON', () => {
-    const { gbrainRoot } = scratchGbrain();
-    writeFileSync(join(gbrainRoot, 'openclaw.plugin.json'), '{ nope');
-    expect(() => loadBundleManifest(gbrainRoot)).toThrow(BundleError);
+    const { voltmindRoot } = scratchGbrain();
+    writeFileSync(join(voltmindRoot, 'openclaw.plugin.json'), '{ nope');
+    expect(() => loadBundleManifest(voltmindRoot)).toThrow(BundleError);
   });
 });
 
 describe('enumerateBundle (D-CX-10 dependency closure)', () => {
   it('includes skill files AND shared_deps for a single-skill install', () => {
-    const { gbrainRoot } = scratchGbrain();
-    const m = loadBundleManifest(gbrainRoot);
-    const entries = enumerateBundle({ gbrainRoot, skillSlug: 'alpha', manifest: m });
+    const { voltmindRoot } = scratchGbrain();
+    const m = loadBundleManifest(voltmindRoot);
+    const entries = enumerateBundle({ voltmindRoot, skillSlug: 'alpha', manifest: m });
     const targets = entries.map(e => e.relTarget).sort();
     expect(targets).toContain('alpha/SKILL.md');
     expect(targets).toContain('alpha/scripts/alpha.mjs');
@@ -161,16 +161,16 @@ describe('enumerateBundle (D-CX-10 dependency closure)', () => {
     expect(targets.find(t => t.startsWith('beta/'))).toBeUndefined();
   });
   it('throws BundleError for unknown skill slug', () => {
-    const { gbrainRoot } = scratchGbrain();
-    const m = loadBundleManifest(gbrainRoot);
+    const { voltmindRoot } = scratchGbrain();
+    const m = loadBundleManifest(voltmindRoot);
     expect(() =>
-      enumerateBundle({ gbrainRoot, skillSlug: 'nope', manifest: m }),
+      enumerateBundle({ voltmindRoot, skillSlug: 'nope', manifest: m }),
     ).toThrow(BundleError);
   });
   it('enumerates everything when skillSlug is undefined (--all)', () => {
-    const { gbrainRoot } = scratchGbrain();
-    const m = loadBundleManifest(gbrainRoot);
-    const entries = enumerateBundle({ gbrainRoot, manifest: m });
+    const { voltmindRoot } = scratchGbrain();
+    const m = loadBundleManifest(voltmindRoot);
+    const entries = enumerateBundle({ voltmindRoot, manifest: m });
     const targets = entries.map(e => e.relTarget).sort();
     expect(targets.some(t => t.startsWith('alpha/'))).toBe(true);
     expect(targets.some(t => t.startsWith('beta/'))).toBe(true);
@@ -179,21 +179,21 @@ describe('enumerateBundle (D-CX-10 dependency closure)', () => {
 
 describe('buildManagedBlock + updateManagedBlock', () => {
   it('builds a block with all installed slugs as rows', () => {
-    const m = loadBundleManifest(scratchGbrain().gbrainRoot);
+    const m = loadBundleManifest(scratchGbrain().voltmindRoot);
     const block = buildManagedBlock(m, ['alpha', 'beta']);
-    expect(block).toContain('gbrain:skillpack:begin');
-    expect(block).toContain('gbrain:skillpack:end');
+    expect(block).toContain('voltmind:skillpack:begin');
+    expect(block).toContain('voltmind:skillpack:end');
     expect(block).toContain('`skills/alpha/SKILL.md`');
     expect(block).toContain('`skills/beta/SKILL.md`');
   });
   it('appends block when none exists', () => {
-    const block = buildManagedBlock(loadBundleManifest(scratchGbrain().gbrainRoot), ['alpha']);
+    const block = buildManagedBlock(loadBundleManifest(scratchGbrain().voltmindRoot), ['alpha']);
     const updated = updateManagedBlock('# AGENTS\n\nSome prose.\n', block);
-    expect(updated).toContain('gbrain:skillpack:begin');
+    expect(updated).toContain('voltmind:skillpack:begin');
     expect(updated).toContain('Some prose.');
   });
   it('replaces existing block in place, keeping surrounding content', () => {
-    const m = loadBundleManifest(scratchGbrain().gbrainRoot);
+    const m = loadBundleManifest(scratchGbrain().voltmindRoot);
     const original =
       '# AGENTS\n\nBefore\n\n' +
       buildManagedBlock(m, ['alpha']) +
@@ -204,7 +204,7 @@ describe('buildManagedBlock + updateManagedBlock', () => {
     expect(replaced).toContain('`skills/beta/SKILL.md`');
   });
   it('extractManagedSlugs roundtrips with buildManagedBlock', () => {
-    const m = loadBundleManifest(scratchGbrain().gbrainRoot);
+    const m = loadBundleManifest(scratchGbrain().voltmindRoot);
     const block = buildManagedBlock(m, ['alpha', 'beta']);
     expect(extractManagedSlugs(block).sort()).toEqual(['alpha', 'beta']);
   });
@@ -215,16 +215,16 @@ describe('buildManagedBlock + updateManagedBlock', () => {
 
 describe('planInstall + applyInstall', () => {
   it('dry-run: plans file writes but does not touch target', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
     const plan = planInstall({
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
     });
     const result = applyInstall(plan, {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
@@ -236,16 +236,16 @@ describe('planInstall + applyInstall', () => {
   });
 
   it('installs a fresh skill and its shared deps', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
     const plan = planInstall({
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
     });
     const result = applyInstall(plan, {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
@@ -258,10 +258,10 @@ describe('planInstall + applyInstall', () => {
   });
 
   it('re-install is idempotent (skipped_identical on unchanged files)', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
     const opts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
@@ -273,10 +273,10 @@ describe('planInstall + applyInstall', () => {
   });
 
   it('skips locally-modified files without --overwrite-local', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
     const opts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
@@ -293,10 +293,10 @@ describe('planInstall + applyInstall', () => {
   });
 
   it('--overwrite-local replaces locally-modified files', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
     const opts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
@@ -312,12 +312,12 @@ describe('planInstall + applyInstall', () => {
   });
 
   it('D-CX-11: concurrent install attempt fails with lock_held', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
     // Simulate a peer holding the lock.
-    writeFileSync(join(workspace, '.gbrain-skillpack.lock'), '99999');
+    writeFileSync(join(workspace, '.voltmind-skillpack.lock'), '99999');
     const opts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
@@ -327,14 +327,14 @@ describe('planInstall + applyInstall', () => {
   });
 
   it('D-CX-11: --force-unlock overrides a stale lock', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
     // Stale lock is handled by setting lockStaleMs small and sleeping
     // — simulate by writing the lock and passing lockStaleMs=0 so
     // any age looks stale.
-    writeFileSync(join(workspace, '.gbrain-skillpack.lock'), '99999');
+    writeFileSync(join(workspace, '.voltmind-skillpack.lock'), '99999');
     const opts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
@@ -352,14 +352,14 @@ describe('planInstall + applyInstall', () => {
     // negative age. If acquireLock does not clamp, stale=false and the
     // forceUnlock path is unreachable. Simulate deterministically by pushing
     // the lock's mtime 10ms into the future.
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
-    const lockFile = join(workspace, '.gbrain-skillpack.lock');
+    const lockFile = join(workspace, '.voltmind-skillpack.lock');
     writeFileSync(lockFile, '99999');
     const future = (Date.now() + 10) / 1000;
     utimesSync(lockFile, future, future);
     const opts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
@@ -372,28 +372,28 @@ describe('planInstall + applyInstall', () => {
   });
 
   it('managed block is written atomically (tmp then rename)', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
     const opts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: null,
     };
     applyInstall(planInstall(opts), opts);
     const resolver = readFileSync(join(skillsDir, 'RESOLVER.md'), 'utf-8');
-    expect(resolver).toContain('gbrain:skillpack:begin');
-    expect(resolver).toContain('gbrain:skillpack:end');
+    expect(resolver).toContain('voltmind:skillpack:begin');
+    expect(resolver).toContain('voltmind:skillpack:end');
     expect(resolver).toContain('`skills/alpha/SKILL.md`');
     expect(resolver).toContain('`skills/beta/SKILL.md`');
   });
 
   it('managed block accumulates across separate single-skill installs', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
 
     const alphaOpts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
@@ -401,7 +401,7 @@ describe('planInstall + applyInstall', () => {
     applyInstall(planInstall(alphaOpts), alphaOpts);
 
     const betaOpts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'beta',
@@ -414,7 +414,7 @@ describe('planInstall + applyInstall', () => {
   });
 
   it('works against AGENTS.md-at-workspace-root layout', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const workspace = mkdtempSync(join(tmpdir(), 'skillpack-root-agents-'));
     created.push(workspace);
     const skillsDir = join(workspace, 'skills');
@@ -425,7 +425,7 @@ describe('planInstall + applyInstall', () => {
       '# AGENTS\n\n| Trigger | Skill |\n|---------|-------|\n',
     );
     const opts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
@@ -446,13 +446,13 @@ describe('managed-block receipt + cumulative semantics (v0.19)', () => {
    * design again.
    */
   it('install alpha, then install beta (separately) → both rows survive AND receipt lists both', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
 
-    const alphaOpts = { gbrainRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: 'alpha' };
+    const alphaOpts = { voltmindRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: 'alpha' };
     applyInstall(planInstall(alphaOpts), alphaOpts);
 
-    const betaOpts = { gbrainRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: 'beta' };
+    const betaOpts = { voltmindRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: 'beta' };
     applyInstall(planInstall(betaOpts), betaOpts);
 
     const resolver = readFileSync(join(skillsDir, 'RESOLVER.md'), 'utf-8');
@@ -469,10 +469,10 @@ describe('managed-block receipt + cumulative semantics (v0.19)', () => {
    * bundle and running install --all silently drops the row.
    */
   it('install --all then remove a slug from bundle and re-install --all → removed slug pruned silently', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
 
-    const allOpts = { gbrainRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: null };
+    const allOpts = { voltmindRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: null };
     applyInstall(planInstall(allOpts), allOpts);
     let resolver = readFileSync(join(skillsDir, 'RESOLVER.md'), 'utf-8');
     expect(resolver).toContain('`skills/alpha/SKILL.md`');
@@ -480,11 +480,11 @@ describe('managed-block receipt + cumulative semantics (v0.19)', () => {
 
     // Simulate "alpha removed from bundle" by rewriting the manifest.
     const pluginManifest = JSON.parse(
-      readFileSync(join(gbrainRoot, 'openclaw.plugin.json'), 'utf-8'),
+      readFileSync(join(voltmindRoot, 'openclaw.plugin.json'), 'utf-8'),
     );
     pluginManifest.skills = ['skills/beta'];
     writeFileSync(
-      join(gbrainRoot, 'openclaw.plugin.json'),
+      join(voltmindRoot, 'openclaw.plugin.json'),
       JSON.stringify(pluginManifest, null, 2),
     );
 
@@ -496,7 +496,7 @@ describe('managed-block receipt + cumulative semantics (v0.19)', () => {
       stderrLines.push(args.map(String).join(' '));
     };
     try {
-      const allOpts2 = { gbrainRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: null };
+      const allOpts2 = { voltmindRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: null };
       applyInstall(planInstall(allOpts2), allOpts2);
     } finally {
       console.error = origErr;
@@ -517,18 +517,18 @@ describe('managed-block receipt + cumulative semantics (v0.19)', () => {
    * notices.
    */
   it('user hand-adds an unknown row → preserved on reinstall AND stderr warning fires', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
 
-    const allOpts = { gbrainRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: null };
+    const allOpts = { voltmindRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: null };
     applyInstall(planInstall(allOpts), allOpts);
 
     // Inject a hand-added row inside the fence (between begin/end).
     // We splice right before the fence end marker so the row is
-    // unambiguously within gbrain's managed block.
+    // unambiguously within voltmind's managed block.
     const path = join(skillsDir, 'RESOLVER.md');
     const orig = readFileSync(path, 'utf-8');
-    const endMarker = '<!-- gbrain:skillpack:end -->';
+    const endMarker = '<!-- voltmind:skillpack:end -->';
     const endIdx = orig.indexOf(endMarker);
     expect(endIdx).toBeGreaterThan(-1);
     const splice =
@@ -544,7 +544,7 @@ describe('managed-block receipt + cumulative semantics (v0.19)', () => {
       stderrLines.push(args.map(String).join(' '));
     };
     try {
-      const allOpts2 = { gbrainRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: null };
+      const allOpts2 = { voltmindRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: null };
       applyInstall(planInstall(allOpts2), allOpts2);
     } finally {
       console.error = origErr;
@@ -562,11 +562,11 @@ describe('managed-block receipt + cumulative semantics (v0.19)', () => {
   /**
    * Pre-v0.19 fence (no receipt comment): the first install on it
    * must not destroy data and must not fire warnings (rows were
-   * gbrain-written before the receipt feature existed). Receipt is
+   * voltmind-written before the receipt feature existed). Receipt is
    * present after the rebuild.
    */
   it('pre-v0.19 fence (no receipt) → clean rebuild, receipt now present, no warnings', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
 
     // Hand-write a v0.18-style fence with rows but NO receipt comment.
@@ -576,15 +576,15 @@ describe('managed-block receipt + cumulative semantics (v0.19)', () => {
       [
         '# Target RESOLVER',
         '',
-        '<!-- gbrain:skillpack:begin -->',
+        '<!-- voltmind:skillpack:begin -->',
         '',
-        '<!-- Installed by gbrain 0.18.2 — do not hand-edit between markers. -->',
+        '<!-- Installed by voltmind 0.18.2 — do not hand-edit between markers. -->',
         '',
         '| Trigger | Skill |',
         '|---------|-------|',
         '| "alpha" | `skills/alpha/SKILL.md` |',
         '',
-        '<!-- gbrain:skillpack:end -->',
+        '<!-- voltmind:skillpack:end -->',
         '',
       ].join('\n'),
     );
@@ -596,7 +596,7 @@ describe('managed-block receipt + cumulative semantics (v0.19)', () => {
       stderrLines.push(args.map(String).join(' '));
     };
     try {
-      const opts = { gbrainRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: 'beta' };
+      const opts = { voltmindRoot, targetWorkspace: workspace, targetSkillsDir: skillsDir, skillSlug: 'beta' };
       applyInstall(planInstall(opts), opts);
     } finally {
       console.error = origErr;
@@ -615,36 +615,36 @@ describe('managed-block receipt + cumulative semantics (v0.19)', () => {
 
 describe('diffSkill', () => {
   it('reports missing files', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { skillsDir } = scratchTarget();
-    const diffs = diffSkill(gbrainRoot, 'alpha', skillsDir);
+    const diffs = diffSkill(voltmindRoot, 'alpha', skillsDir);
     expect(diffs.every(d => !d.existing)).toBe(true);
   });
   it('reports identical after install', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
     const opts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
     };
     applyInstall(planInstall(opts), opts);
-    const diffs = diffSkill(gbrainRoot, 'alpha', skillsDir);
+    const diffs = diffSkill(voltmindRoot, 'alpha', skillsDir);
     expect(diffs.every(d => d.existing && d.identical)).toBe(true);
   });
   it('reports differs after local edit', () => {
-    const { gbrainRoot } = scratchGbrain();
+    const { voltmindRoot } = scratchGbrain();
     const { workspace, skillsDir } = scratchTarget();
     const opts = {
-      gbrainRoot,
+      voltmindRoot,
       targetWorkspace: workspace,
       targetSkillsDir: skillsDir,
       skillSlug: 'alpha',
     };
     applyInstall(planInstall(opts), opts);
     writeFileSync(join(skillsDir, 'alpha', 'SKILL.md'), 'edited locally');
-    const diffs = diffSkill(gbrainRoot, 'alpha', skillsDir);
+    const diffs = diffSkill(voltmindRoot, 'alpha', skillsDir);
     expect(diffs.some(d => !d.identical && d.existing)).toBe(true);
   });
 });

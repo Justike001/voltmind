@@ -16,7 +16,7 @@ describe('upgrade command', () => {
     });
     const stdout = await new Response(proc.stdout).text();
     const exitCode = await proc.exited;
-    expect(stdout).toContain('Usage: gbrain upgrade');
+    expect(stdout).toContain('Usage: voltmind upgrade');
     expect(stdout).toContain('Detects install method');
     expect(exitCode).toBe(0);
   });
@@ -29,7 +29,7 @@ describe('upgrade command', () => {
     });
     const stdout = await new Response(proc.stdout).text();
     const exitCode = await proc.exited;
-    expect(stdout).toContain('Usage: gbrain upgrade');
+    expect(stdout).toContain('Usage: voltmind upgrade');
     expect(exitCode).toBe(0);
   });
 });
@@ -44,12 +44,12 @@ describe('detectInstallMethod heuristic (source analysis)', () => {
 
   test('checks node_modules before binary', () => {
     const nodeModulesIdx = source.indexOf('node_modules');
-    const binaryIdx = source.indexOf("endsWith('/gbrain')");
+    const binaryIdx = source.indexOf("endsWith('/voltmind')");
     expect(nodeModulesIdx).toBeLessThan(binaryIdx);
   });
 
   test('checks binary before clawhub', () => {
-    const binaryIdx = source.indexOf("endsWith('/gbrain')");
+    const binaryIdx = source.indexOf("endsWith('/voltmind')");
     const clawhubIdx = source.indexOf("clawhub --version");
     expect(binaryIdx).toBeLessThan(clawhubIdx);
   });
@@ -77,9 +77,9 @@ describe('detectInstallMethod heuristic (source analysis)', () => {
   });
 
   // v0.28.5 cluster D: 3-signal layered detection.
-  test('bun-link signal walks .git/config for garrytan/gbrain match', () => {
+  test('bun-link signal walks .git/config for garrytan/voltmind match', () => {
     expect(source).toContain('function detectBunLink');
-    expect(source).toContain('GBRAIN_GITHUB_REPO');
+    expect(source).toContain('VOLTMIND_GITHUB_REPO');
     expect(source).toContain('toLowerCase()');
   });
 
@@ -110,7 +110,7 @@ describe('detectInstallMethod heuristic (source analysis)', () => {
 
   test('bun global upgrade passes cwd to bun update', () => {
     expect(source).toContain('const bunGlobalRoot = resolveBunGlobalRoot()');
-    expect(source).toContain("execFileSync('bun', ['update', 'gbrain'], { cwd: bunGlobalRoot");
+    expect(source).toContain("execFileSync('bun', ['update', 'voltmind'], { cwd: bunGlobalRoot");
   });
 
   test('classifyBunInstall checks repository.url AND src/cli.ts marker', () => {
@@ -156,7 +156,7 @@ describe('resolveBunGlobalRoot', () => {
   });
 
   test('uses canonical ~/.bun/install/global when present', () => {
-    const home = mkdtempSync(join(tmpdir(), 'gbrain-upgrade-home-'));
+    const home = mkdtempSync(join(tmpdir(), 'voltmind-upgrade-home-'));
     try {
       delete process.env.BUN_INSTALL;
       process.env.HOME = home;
@@ -171,13 +171,13 @@ describe('resolveBunGlobalRoot', () => {
     }
   });
 
-  test('falls back to the package root above node_modules/gbrain', () => {
-    const home = mkdtempSync(join(tmpdir(), 'gbrain-upgrade-home-'));
-    const globalRoot = mkdtempSync(join(tmpdir(), 'gbrain-upgrade-global-'));
+  test('falls back to the package root above node_modules/voltmind', () => {
+    const home = mkdtempSync(join(tmpdir(), 'voltmind-upgrade-home-'));
+    const globalRoot = mkdtempSync(join(tmpdir(), 'voltmind-upgrade-global-'));
     try {
       delete process.env.BUN_INSTALL;
       process.env.HOME = home;
-      const cliPath = join(globalRoot, 'node_modules', 'gbrain', 'src', 'cli.ts');
+      const cliPath = join(globalRoot, 'node_modules', 'voltmind', 'src', 'cli.ts');
       mkdirSync(dirname(cliPath), { recursive: true });
       mkdirSync(join(globalRoot, 'node_modules'), { recursive: true });
       writeFileSync(join(globalRoot, 'package.json'), '{}');
@@ -212,6 +212,6 @@ describe('post-upgrade behavior (post v0.12.0 merge)', () => {
     const stdout = await new Response(proc.stdout).text();
     const exitCode = await proc.exited;
     expect(exitCode).toBe(0);
-    expect(stdout).toContain('Usage: gbrain post-upgrade');
+    expect(stdout).toContain('Usage: voltmind post-upgrade');
   });
 });

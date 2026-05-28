@@ -128,11 +128,11 @@ describe('pruneDir', () => {
     expect(pruneDir('.vscode')).toBe(false);
   });
 
-  test('blocks ops (gbrain operational dir)', () => {
+  test('blocks ops (voltmind operational dir)', () => {
     expect(pruneDir('ops')).toBe(false);
   });
 
-  test('blocks *.raw sidecar dirs (gbrain convention)', () => {
+  test('blocks *.raw sidecar dirs (voltmind convention)', () => {
     expect(pruneDir('.raw')).toBe(false);
     expect(pruneDir('pedro.raw')).toBe(false);
     expect(pruneDir('article.raw')).toBe(false);
@@ -198,7 +198,7 @@ describe('pathToSlug', () => {
   });
 
   test('handles nested paths', () => {
-    expect(pathToSlug('projects/gbrain/spec.md')).toBe('projects/gbrain/spec');
+    expect(pathToSlug('projects/voltmind/spec.md')).toBe('projects/voltmind/spec');
   });
 
   test('adds repo prefix when provided', () => {
@@ -295,7 +295,7 @@ describe('performSync dry-run never writes', () => {
 
   beforeEach(async () => {
     await resetPgliteState(engine);
-    repoPath = mkdtempSync(join(tmpdir(), 'gbrain-sync-dryrun-'));
+    repoPath = mkdtempSync(join(tmpdir(), 'voltmind-sync-dryrun-'));
     execSync('git init', { cwd: repoPath, stdio: 'pipe' });
     execSync('git config user.email "test@test.com"', { cwd: repoPath, stdio: 'pipe' });
     execSync('git config user.name "Test"', { cwd: repoPath, stdio: 'pipe' });

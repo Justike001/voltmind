@@ -89,7 +89,7 @@ export function formatReembedPrompt(est: ReembedEstimate, graceSeconds: number):
   // wrapper (Anthropic's published methodology). Re-embed picks up the
   // title-tier wrapper for balanced-mode users automatically (free at
   // runtime — pure string concat). Tokenmax users can later run
-  // `gbrain config set search.mode tokenmax` to upgrade pages to per-chunk
+  // `voltmind config set search.mode tokenmax` to upgrade pages to per-chunk
   // Haiku synopsis via the contextual_reindex_per_chunk Minion handler.
   // Documented inline so the prompt explains WHY the re-embed is firing.
   const crNote =
@@ -110,21 +110,21 @@ export interface PromptResult {
 
 /**
  * Run the post-upgrade chunker-bump prompt + grace window. Returns whether
- * the caller should proceed to invoke `gbrain reindex --markdown`.
+ * the caller should proceed to invoke `voltmind reindex --markdown`.
  *
  * Env overrides (codex C3 + D3=B):
- *   - GBRAIN_NO_REEMBED=1     → bail out entirely (writes a doctor warning marker).
- *   - GBRAIN_REEMBED_GRACE_SECONDS=0 → skip wait (proceed immediately).
+ *   - VOLTMIND_NO_REEMBED=1     → bail out entirely (writes a doctor warning marker).
+ *   - VOLTMIND_REEMBED_GRACE_SECONDS=0 → skip wait (proceed immediately).
  *   - Non-TTY (CI / cron) → skip wait, proceed.
  *
  * v0.41.13.0 T13 retrofit relationship: this prompt is a pre-flight gate
- * for `gbrain reindex --markdown` (which is a separate site we retrofitted
+ * for `voltmind reindex --markdown` (which is a separate site we retrofitted
  * onto the progressive-batch primitive — see T11 in reindex.ts). The
  * underlying reindex sweep now writes progressive-batch audit JSONL +
  * cost-cap gating; this prompt remains as the operator-facing cost
- * estimate before that work starts. The `GBRAIN_NO_REEMBED=1` env var
+ * estimate before that work starts. The `VOLTMIND_NO_REEMBED=1` env var
  * remains the authoritative bail-out at THIS layer; the
- * `GBRAIN_PROGRESSIVE_BATCH_DISABLED=1` env var at the reindex layer
+ * `VOLTMIND_PROGRESSIVE_BATCH_DISABLED=1` env var at the reindex layer
  * is a different toggle (skips ramp within reindex but doesn't bail
  * out the whole cycle).
  */
@@ -150,15 +150,15 @@ export async function runPostUpgradeReembedPrompt(
     return { proceeded: false, reason: 'no_pending', estimate };
   }
 
-  if (env.GBRAIN_NO_REEMBED === '1') {
-    writeFn(`[chunker-bump] GBRAIN_NO_REEMBED=1 set; skipping re-embed sweep. Pending: ${estimate.pendingCount} pages. Re-run \`gbrain reindex --markdown\` when ready.`);
+  if (env.VOLTMIND_NO_REEMBED === '1') {
+    writeFn(`[chunker-bump] VOLTMIND_NO_REEMBED=1 set; skipping re-embed sweep. Pending: ${estimate.pendingCount} pages. Re-run \`voltmind reindex --markdown\` when ready.`);
     return { proceeded: false, reason: 'bypassed_no_reembed', estimate };
   }
 
   const grace = typeof opts.graceSeconds === 'number'
     ? opts.graceSeconds
     : (() => {
-        const n = parseInt(env.GBRAIN_REEMBED_GRACE_SECONDS ?? '', 10);
+        const n = parseInt(env.VOLTMIND_REEMBED_GRACE_SECONDS ?? '', 10);
         return Number.isFinite(n) && n >= 0 ? n : 10;
       })();
 

@@ -17,7 +17,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../../src/core/pglite-engine.ts';
 import { buildBrainTools } from '../../src/core/minions/tools/brain-allowlist.ts';
-import type { GBrainConfig } from '../../src/core/config.ts';
+import type { VoltMindConfig } from '../../src/core/config.ts';
 
 let engine: PGLiteEngine;
 
@@ -31,7 +31,7 @@ afterAll(async () => {
   if (engine) await engine.disconnect();
 });
 
-const config = {} as unknown as GBrainConfig;
+const config = {} as unknown as VoltMindConfig;
 
 const PUT_PAGE_TOOL = 'brain_put_page';
 const SAMPLE_BODY = '---\ntitle: A reflection\ntype: default\n---\n\nbody text\n';

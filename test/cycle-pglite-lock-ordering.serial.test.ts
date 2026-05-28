@@ -3,11 +3,11 @@
  *
  * PGLite is single-writer at the process layer (PGlite WASM blocks
  * concurrent connects to the same brain dir). Per-source DB lock IDs
- * (`gbrain-cycle:<source_id>`) would by themselves let two PGLite cycles
+ * (`voltmind-cycle:<source_id>`) would by themselves let two PGLite cycles
  * for different sources run concurrently — which would corrupt the
  * single-writer invariant.
  *
- * Defense: cycle.ts acquires the GLOBAL file lock (`~/.gbrain/cycle.lock`,
+ * Defense: cycle.ts acquires the GLOBAL file lock (`~/.voltmind/cycle.lock`,
  * no source suffix) BEFORE the per-source DB lock when engine.kind ===
  * 'pglite'. The DB lock is released if file-lock acquisition fails; both
  * are released in reverse-order on exit.
@@ -30,14 +30,14 @@ import { join } from 'path';
 
 let engine: PGLiteEngine;
 let brainDir: string;
-let gbrainHome: string;
+let voltmindHome: string;
 
 beforeAll(async () => {
-  // GBRAIN_HOME isolation so the file lock at ~/.gbrain/cycle.lock doesn't
-  // collide with the dev's real gbrain. resetPgliteState would wipe the
+  // VOLTMIND_HOME isolation so the file lock at ~/.voltmind/cycle.lock doesn't
+  // collide with the dev's real voltmind. resetPgliteState would wipe the
   // config table so we don't use it here.
-  gbrainHome = mkdtempSync(join(tmpdir(), 'gbrain-pglite-lock-'));
-  process.env.GBRAIN_HOME = gbrainHome;
+  voltmindHome = mkdtempSync(join(tmpdir(), 'voltmind-pglite-lock-'));
+  process.env.VOLTMIND_HOME = voltmindHome;
   engine = new PGLiteEngine();
   await engine.connect({ database_url: '' });
   await engine.initSchema();
@@ -45,7 +45,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await engine.disconnect();
-  delete process.env.GBRAIN_HOME;
+  delete process.env.VOLTMIND_HOME;
 });
 
 beforeEach(async () => {
@@ -53,11 +53,11 @@ beforeEach(async () => {
   await engine.executeRaw(`DELETE FROM sources WHERE id <> 'default'`).catch(() => {});
   // Clean up any leftover file lock from prior test runs (planted-PID
   // tests leave state that the next test must not see).
-  const lockPath = join(gbrainHome, '.gbrain', 'cycle.lock');
+  const lockPath = join(voltmindHome, '.voltmind', 'cycle.lock');
   if (existsSync(lockPath)) {
     try { unlinkSync(lockPath); } catch { /* best-effort */ }
   }
-  brainDir = mkdtempSync(join(tmpdir(), 'gbrain-cycle-pglite-ord-'));
+  brainDir = mkdtempSync(join(tmpdir(), 'voltmind-cycle-pglite-ord-'));
 });
 
 async function seed(id: string): Promise<void> {
@@ -83,13 +83,13 @@ describe('PGLite cycle: file lock + per-source DB lock ordering', () => {
       yieldBetweenPhases: async () => {
         // First yield after first phase: cycle is mid-flight.
         if (!lockFileExisted) {
-          lockFileExisted = existsSync(join(gbrainHome, '.gbrain', 'cycle.lock'));
+          lockFileExisted = existsSync(join(voltmindHome, '.voltmind', 'cycle.lock'));
         }
       },
     });
     expect(lockFileExisted).toBe(true);
     // Lock file released on exit
-    expect(existsSync(join(gbrainHome, '.gbrain', 'cycle.lock'))).toBe(false);
+    expect(existsSync(join(voltmindHome, '.voltmind', 'cycle.lock'))).toBe(false);
   });
 
   test('two PGLite cycles for DIFFERENT sources serialize (P0-D regression)', async () => {
@@ -98,9 +98,9 @@ describe('PGLite cycle: file lock + per-source DB lock ordering', () => {
     // Plant a "live" file lock with our own PID — simulates an in-flight
     // cycle on a different source. The second cycle attempt MUST be
     // blocked by the file lock even though it'd have a distinct DB lock ID.
-    mkdirSync(gbrainHome, { recursive: true });
+    mkdirSync(voltmindHome, { recursive: true });
     writeFileSync(
-      join(gbrainHome, '.gbrain', 'cycle.lock'),
+      join(voltmindHome, '.voltmind', 'cycle.lock'),
       `${process.pid}\n${new Date().toISOString()}\n`,
     );
     // (Our own PID is live; the file-lock check sees `kill(pid, 0)` succeed.
@@ -133,7 +133,7 @@ describe('PGLite cycle: file lock + per-source DB lock ordering', () => {
     // 'skipped' with reason 'cycle_already_running', leaving no stranded
     // state.
     await seed('gamma');
-    const lockId = 'gbrain-cycle:gamma';
+    const lockId = 'voltmind-cycle:gamma';
     await engine.executeRaw(
       `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
        VALUES ($1, $2, 'fake-host', NOW(), NOW() + INTERVAL '30 minutes')`,
@@ -147,7 +147,7 @@ describe('PGLite cycle: file lock + per-source DB lock ordering', () => {
     expect(r.status).toBe('skipped');
     expect(r.reason).toBe('cycle_already_running');
     // File lock must NOT be stranded after the skip
-    expect(existsSync(join(gbrainHome, '.gbrain', 'cycle.lock'))).toBe(false);
+    expect(existsSync(join(voltmindHome, '.voltmind', 'cycle.lock'))).toBe(false);
   });
 
   test('cycle without engine (file-lock-only path) still works', async () => {
@@ -158,7 +158,7 @@ describe('PGLite cycle: file lock + per-source DB lock ordering', () => {
     });
     expect(['ok', 'clean']).toContain(r.status);
     // Lock file released
-    expect(existsSync(join(gbrainHome, '.gbrain', 'cycle.lock'))).toBe(false);
+    expect(existsSync(join(voltmindHome, '.voltmind', 'cycle.lock'))).toBe(false);
   });
 
   test('DB lock row uses per-source ID even though file lock is global', async () => {
@@ -171,13 +171,13 @@ describe('PGLite cycle: file lock + per-source DB lock ordering', () => {
       yieldBetweenPhases: async () => {
         if (dbLockRowSeen) return;
         const rows = await engine.executeRaw<{ id: string }>(
-          `SELECT id FROM gbrain_cycle_locks WHERE id LIKE 'gbrain-cycle%'`,
+          `SELECT id FROM gbrain_cycle_locks WHERE id LIKE 'voltmind-cycle%'`,
         );
         if (rows.length > 0) dbLockRowSeen = rows[0];
       },
     });
     expect(dbLockRowSeen).not.toBeNull();
-    expect(dbLockRowSeen!.id).toBe('gbrain-cycle:epsilon');
+    expect(dbLockRowSeen!.id).toBe('voltmind-cycle:epsilon');
   });
 
   test('subsequent cycle after clean exit can acquire both locks', async () => {
@@ -188,9 +188,9 @@ describe('PGLite cycle: file lock + per-source DB lock ordering', () => {
     expect(['ok', 'clean']).toContain(r1.status);
     expect(['ok', 'clean']).toContain(r2.status);
     // Both locks released after second cycle too
-    expect(existsSync(join(gbrainHome, '.gbrain', 'cycle.lock'))).toBe(false);
+    expect(existsSync(join(voltmindHome, '.voltmind', 'cycle.lock'))).toBe(false);
     const dbRows = await engine.executeRaw<{ id: string }>(
-      `SELECT id FROM gbrain_cycle_locks WHERE id = 'gbrain-cycle:zeta'`,
+      `SELECT id FROM gbrain_cycle_locks WHERE id = 'voltmind-cycle:zeta'`,
     );
     expect(dbRows.length).toBe(0);
   });

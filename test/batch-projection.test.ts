@@ -110,7 +110,7 @@ describe('projectBatch', () => {
       current_lease_cap: 8,
     });
     expect(p.raise_cap_hint).toBeDefined();
-    expect(p.raise_cap_hint).toContain('GBRAIN_ANTHROPIC_MAX_INFLIGHT');
+    expect(p.raise_cap_hint).toContain('VOLTMIND_ANTHROPIC_MAX_INFLIGHT');
   });
 
   test('no raise_cap_hint when not binding', () => {
@@ -187,9 +187,9 @@ describe('formatProjection', () => {
       duration_band_ms: 180_000,
       effective_concurrency: 8,
       cold_start: false,
-      raise_cap_hint: 'raise GBRAIN_ANTHROPIC_MAX_INFLIGHT to 32 to finish in ~3min',
+      raise_cap_hint: 'raise VOLTMIND_ANTHROPIC_MAX_INFLIGHT to 32 to finish in ~3min',
     });
-    expect(s).toContain('raise GBRAIN_ANTHROPIC_MAX_INFLIGHT to 32');
+    expect(s).toContain('raise VOLTMIND_ANTHROPIC_MAX_INFLIGHT to 32');
   });
 });
 
@@ -233,8 +233,8 @@ describe('shouldPromptAtThreshold', () => {
     ).toBe(false);
   });
 
-  test('env var GBRAIN_BATCH_PROMPT_THRESHOLD_USD lowers the prompt floor', async () => {
-    await withEnv({ GBRAIN_BATCH_PROMPT_THRESHOLD_USD: '1' }, async () => {
+  test('env var VOLTMIND_BATCH_PROMPT_THRESHOLD_USD lowers the prompt floor', async () => {
+    await withEnv({ VOLTMIND_BATCH_PROMPT_THRESHOLD_USD: '1' }, async () => {
       expect(
         shouldPromptAtThreshold({
           total_duration_ms: 60_000,

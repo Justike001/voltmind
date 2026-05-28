@@ -62,7 +62,7 @@ describe('logContentSanityAssessment (E2E via tempdir)', () => {
   test('writes hard-block event', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cs-audit-hard-'));
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
         const result = makeResult({ hard: true, pattern: 'cloudflare_attention_required', bytes: 287 });
         logContentSanityAssessment('media/articles/foo', 'straylight-brain', result);
         const events = readRecentContentSanityEvents(7);
@@ -81,7 +81,7 @@ describe('logContentSanityAssessment (E2E via tempdir)', () => {
   test('writes soft-block event', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cs-audit-soft-'));
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
         const result = makeResult({ soft: true, bytes: 890_000 });
         logContentSanityAssessment('media/big-transcript', 'default', result);
         const events = readRecentContentSanityEvents(7);
@@ -97,7 +97,7 @@ describe('logContentSanityAssessment (E2E via tempdir)', () => {
   test('writes warn event', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cs-audit-warn-'));
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
         const result = makeResult({ warn: true, bytes: 100_000 });
         logContentSanityAssessment('notes/long', 'default', result);
         const events = readRecentContentSanityEvents(7);
@@ -112,7 +112,7 @@ describe('logContentSanityAssessment (E2E via tempdir)', () => {
   test('skips no-op rows (no reasons + no bypass)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cs-audit-noop-'));
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
         const result = makeResult({}); // no reasons fire
         logContentSanityAssessment('normal-page', 'default', result);
         const events = readRecentContentSanityEvents(7);
@@ -126,7 +126,7 @@ describe('logContentSanityAssessment (E2E via tempdir)', () => {
   test('bypass active overrides hard/soft → records as warn with bypass_active flag', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cs-audit-bypass-'));
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
         const result = makeResult({ hard: true, pattern: 'access_denied' });
         logContentSanityAssessment('bypassed', 'default', result, { bypass: true });
         const events = readRecentContentSanityEvents(7);
@@ -142,7 +142,7 @@ describe('logContentSanityAssessment (E2E via tempdir)', () => {
   test('multiple events accumulate in one file', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cs-audit-multi-'));
     try {
-      await withEnv({ GBRAIN_AUDIT_DIR: dir }, async () => {
+      await withEnv({ VOLTMIND_AUDIT_DIR: dir }, async () => {
         logContentSanityAssessment('a', 'src', makeResult({ hard: true, pattern: 'access_denied' }));
         logContentSanityAssessment('b', 'src', makeResult({ soft: true, bytes: 600000 }));
         logContentSanityAssessment('c', 'src', makeResult({ warn: true, bytes: 70000 }));

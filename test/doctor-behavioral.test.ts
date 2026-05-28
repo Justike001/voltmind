@@ -1,5 +1,5 @@
 /**
- * v0.39 behavioral coverage for `gbrain doctor`'s check orchestrator.
+ * v0.39 behavioral coverage for `voltmind doctor`'s check orchestrator.
  *
  * Drives the exported `buildChecks(engine, args, dbSource): Promise<Check[]>`
  * seam directly (added in v0.39 — extracted from runDoctor's body so the
@@ -154,7 +154,7 @@ describe('buildChecks — orchestrator against PGLite', () => {
     ];
     // NOTE: sync_failures and slug_fallback_audit are deliberately NOT in
     // the load-bearing set — they're only pushed when the corresponding
-    // JSONL file exists. Tests run on isolated tmpdir GBRAIN_HOMEs where
+    // JSONL file exists. Tests run on isolated tmpdir VOLTMIND_HOMEs where
     // those files may or may not exist depending on which sibling tests
     // already wrote audit lines.
     const missing = loadBearing.filter(n => !names.has(n));

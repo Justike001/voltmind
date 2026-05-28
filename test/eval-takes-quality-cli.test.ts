@@ -38,7 +38,7 @@ describe('parseSubcmd — sub-subcommand dispatch', () => {
 
 describe('runReplayNoBrain — codex review #10 brain-routing', () => {
   let tmpDir: string;
-  beforeAll(() => { tmpDir = mkdtempSync(join(tmpdir(), 'gbrain-cli-test-')); });
+  beforeAll(() => { tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-cli-test-')); });
   afterAll(() => { rmSync(tmpDir, { recursive: true, force: true }); });
 
   test('exits 2 with usage when no path given', async () => {

@@ -7,7 +7,7 @@
  *   - Layer B (get_page privacy trigger): stripFactsFence + stripTakesFence
  *     fire when ctx.remote === true (Codex R2-#5 closes the subagent hole)
  *   - Forget-as-fence: forgetFactInFence rewrites the fence row instead of
- *     the DB-only expire path so forgets survive gbrain rebuild (Codex R2-#3)
+ *     the DB-only expire path so forgets survive voltmind rebuild (Codex R2-#3)
  *
  * Real PGLite + tempdir filesystem.
  */
@@ -95,11 +95,11 @@ describe('Layer A — chunker strips private fact rows (Codex R2-#1)', () => {
   test('private takes fence ALSO stripped (regression — v0.28 behavior preserved)', () => {
     const body = `# Page
 
-<!--- gbrain:takes:begin -->
+<!--- voltmind:takes:begin -->
 | # | claim | kind | who | weight | since | source |
 |---|-------|------|-----|--------|-------|--------|
 | 1 | PRIVATE_TAKE | take | brain | 0.9 | 2026-01-01 |  |
-<!--- gbrain:takes:end -->
+<!--- voltmind:takes:end -->
 
 Body text.`;
     const chunks = chunkText(body);

@@ -21,7 +21,7 @@ import {
 } from '../src/core/schema-pack/manifest-v1.ts';
 
 const baseManifest = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
-  api_version: 'gbrain-schema-pack-v1',
+  api_version: 'voltmind-schema-pack-v1',
   name: 'test-pack',
   version: '1.0.0',
   description: 'unit test pack for v0.41 schema extensions',
