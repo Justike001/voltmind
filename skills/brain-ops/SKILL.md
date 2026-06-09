@@ -7,6 +7,15 @@ description: |
   retrieval.
 triggers:
   - any VoltMind read/write/lookup/citation
+  - "build the graph"
+  - "link these entities"
+  - "create relationship"
+  - "connect pages"
+  - "整理实体关系"
+  - "建链"
+  - "where should this page go"
+  - "filing rules"
+  - "source selection"
 tools:
   - search
   - query

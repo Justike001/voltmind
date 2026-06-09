@@ -18,6 +18,7 @@ triggers:
   - "connections"
   - "backlinks"
   - "timeline"
+  - "tags"
 tools:
   - search
   - query
