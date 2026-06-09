@@ -22,7 +22,7 @@
     {
       "name": "enrich",
       "path": "enrich/SKILL.md",
-      "description": "Enrich pages with tiered enrichment protocol, person/company page templates, and validation rules"
+      "description": "Enrich VoltMind person/company pages from local context plus user-approved evidence, preserving citations, raw provenance, timeline entries, and graph links"
     },
     {
       "name": "briefing",
@@ -102,7 +102,7 @@
     {
       "name": "citation-fixer",
       "path": "citation-fixer/SKILL.md",
-      "description": "Audit and fix citation formatting across brain pages."
+      "description": "Audit and fix citation formatting across VoltMind pages, preserving unresolved evidence gaps for review."
     },
     {
       "name": "repo-architecture",
@@ -142,7 +142,7 @@
     {
       "name": "testing",
       "path": "testing/SKILL.md",
-      "description": "Skill validation framework: frontmatter, sections, manifest coverage, MECE checks."
+      "description": "VoltMind MVP validation framework for skill conformance, focused runtime gates, project tests, and failure classification."
     },
     {
       "name": "soul-audit",
