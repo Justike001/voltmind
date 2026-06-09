@@ -1942,6 +1942,7 @@ MCP
   serve                              MCP server (stdio)
   serve --http [--port N]            HTTP MCP server
   call <tool> '<json>'               Raw MVP tool invocation
+        tools: get_links, put_raw_data, get_raw_data
 
 ADMIN
   stats                              Brain statistics

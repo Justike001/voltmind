@@ -41,6 +41,8 @@ describe('VoltMind MVP surface', () => {
     expect(names).toContain('query');
     expect(names).toContain('sources_list');
     expect(names).toContain('list_jobs');
+    expect(names).toContain('put_raw_data');
+    expect(names).toContain('get_raw_data');
     expect(names).not.toContain('submit_job');
     expect(names).not.toContain('think');
     expect(names).not.toContain('recall');
@@ -64,6 +66,8 @@ describe('VoltMind MVP surface', () => {
     const names = tools.map(t => t.name);
     expect(names).toContain('get_page');
     expect(names).toContain('query');
+    expect(names).toContain('put_raw_data');
+    expect(names).toContain('get_raw_data');
     expect(names).not.toContain('think');
     expect(names).not.toContain('run_onboard');
   }, 15_000);

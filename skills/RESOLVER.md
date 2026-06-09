@@ -33,6 +33,9 @@ detection or background enrichment loops automatically.
 | "daily plan", "daily review", "today brief", "每日", "今日计划", "明日计划" | `skills/daily/SKILL.md` |
 | "project update", "update project page", "project context", "open threads", "项目更新", "项目上下文" | `skills/project/SKILL.md` |
 | "review draft", "approve changes", "reject changes", "edit before writing", "确认写入", "审核草稿" | `skills/review/SKILL.md` |
+| "enrich", "create person page", "update company page", "who is this person", "look up this company" | `skills/enrich/SKILL.md` |
+| "fix citations", "fix broken citations", "citation audit", "check citations", "citation fixer" | `skills/citation-fixer/SKILL.md` |
+| "validate skills", "test skills", "skill health check", "run conformance tests", "run the tests", "how are the tests", "what's broken", "daily test run" | `skills/testing/SKILL.md` |
 | "what do we know about", "tell me about", "search for", "who is", "background on", "notes on" | `skills/query/SKILL.md` |
 | "who knows who", "relationship between", "connections", "backlinks", "links", "timeline", "tags" | `skills/query/SKILL.md` |
 | "build the graph", "link these entities", "create relationship", "connect pages", "整理实体关系", "建链" | `skills/brain-ops/SKILL.md` |
@@ -103,6 +106,8 @@ When a frozen route is requested, prefer one of:
   or graph commands.
 - Materialize explicit page relationships with `voltmind link` or MCP
   `add_link` when the relationship is part of an agent-curated page.
+- Preserve raw enrichment evidence with MCP `put_raw_data` through
+  `voltmind call`; retrieve it with `get_raw_data`.
 - Report "not included in VoltMind MVP yet" for anything outside that surface.
 
 ## Disambiguation rules
