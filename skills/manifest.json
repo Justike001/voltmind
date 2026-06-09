@@ -1,8 +1,8 @@
 {
-  "name": "gbrain",
+  "name": "voltmind",
   "version": "0.32.3.0",
   "conformance_version": "1.0.0",
-  "description": "Personal knowledge brain with hybrid RAG search \u2014 GStack mod for agent platforms",
+  "description": "VoltMind local-first Personal Brain skills for hybrid RAG search and human-reviewed workflow loops",
   "skills": [
     {
       "name": "ingest",
@@ -37,7 +37,7 @@
     {
       "name": "setup",
       "path": "setup/SKILL.md",
-      "description": "Set up GBrain: auto-provision Supabase or PGLite, AGENTS.md injection, first import"
+      "description": "Set up VoltMind: local PGLite, Personal Brain scaffold, AGENTS.md guidance, and first import"
     },
     {
       "name": "publish",
@@ -78,6 +78,26 @@
       "name": "meeting-ingestion",
       "path": "meeting-ingestion/SKILL.md",
       "description": "Ingest meeting transcripts with attendee enrichment, entity propagation, and timeline merge."
+    },
+    {
+      "name": "meeting",
+      "path": "meeting/SKILL.md",
+      "description": "Human-reviewed VoltMind Meeting Loop for Personal Brain Phase 1."
+    },
+    {
+      "name": "daily",
+      "path": "daily/SKILL.md",
+      "description": "Personal daily planning, review, briefing, and follow-up workflow."
+    },
+    {
+      "name": "project",
+      "path": "project/SKILL.md",
+      "description": "Maintain project context, open threads, actions, commitments, risks, and timelines."
+    },
+    {
+      "name": "review",
+      "path": "review/SKILL.md",
+      "description": "Human-reviewed approval gate for VoltMind draft page writes."
     },
     {
       "name": "citation-fixer",
@@ -142,32 +162,32 @@
     {
       "name": "minion-orchestrator",
       "path": "minion-orchestrator/SKILL.md",
-      "description": "Unified Minions skill for deterministic shell jobs and LLM subagent orchestration. Submit, monitor, steer, pause/resume, replay. Replaces the older gbrain-jobs routing intent and sessions_spawn for durable observable background work."
+      "description": "Frozen inherited Minions skill for deterministic shell jobs and LLM subagent orchestration. Not part of the VoltMind Phase 1 public route."
     },
     {
       "name": "schema-author",
       "path": "schema-author/SKILL.md",
-      "description": "Evolve the active schema pack. Add page types, propose new types from a corpus scan, backfill page.type via sync. Wraps the 14 gbrain schema CLI verbs + 9 MCP ops shipped in v0.40.7.0."
+      "description": "Frozen inherited schema authoring skill for future schema-pack evolution. Not part of the VoltMind Phase 1 public route."
     },
     {
       "name": "skillify",
       "path": "skillify/SKILL.md",
-      "description": "Meta skill. Turn any raw feature into a properly-skilled, tested, resolvable, evaled unit. Paired with gbrain check-resolvable gives user-controllable auto-skill-creation."
+      "description": "Frozen inherited meta skill for skill creation and validation. Not part of the VoltMind Phase 1 public route."
     },
     {
       "name": "skillpack-check",
       "path": "skillpack-check/SKILL.md",
-      "description": "Agent-readable gbrain health report. Wraps doctor + apply-migrations --list into one JSON blob with exit codes. Cron-friendly for morning-briefing pipelines."
+      "description": "Agent-readable VoltMind health report. Wraps doctor and apply-migrations readouts into one JSON blob with exit codes."
     },
     {
       "name": "skillpack-harvest",
       "path": "skillpack-harvest/SKILL.md",
-      "description": "Editorial workflow for lifting a proven skill from a host repo back into gbrain. Pairs with `gbrain skillpack harvest` CLI. Drives the genericization checklist that scrubs fork-specific names + real entities before files land in gbrain core."
+      "description": "Frozen inherited editorial workflow for skill harvesting. Not part of the VoltMind Phase 1 public route."
     },
     {
       "name": "smoke-test",
       "path": "smoke-test/SKILL.md",
-      "description": "Post-restart smoke tests + auto-fix for gbrain and OpenClaw environments"
+      "description": "Post-restart smoke tests and auto-fix for VoltMind and compatible agent environments"
     },
     {
       "name": "book-mirror",
@@ -197,7 +217,7 @@
     {
       "name": "archive-crawler",
       "path": "archive-crawler/SKILL.md",
-      "description": "Universal archivist for personal file archives (Dropbox/B2/email exports). Filters for high-value content within an explicit gbrain.yml allow-list scan_paths gate."
+      "description": "Frozen inherited archivist for personal file archives. Not part of the VoltMind Phase 1 public route."
     },
     {
       "name": "academic-verify",
@@ -232,7 +252,7 @@
     {
       "name": "brain-taxonomist",
       "path": "brain-taxonomist/SKILL.md",
-      "description": "Filing gate consulted before every brain page write. Reads the active schema pack via `gbrain schema show --json`; emits a recommended filing path with reasoning."
+      "description": "Filing gate consulted before every brain page write. Reads the active schema pack and emits a recommended filing path with reasoning."
     },
     {
       "name": "eiirp",
@@ -242,11 +262,11 @@
   ],
   "dependencies": {
     "runtime": "bun",
-    "package": "gbrain"
+    "package": "voltmind"
   },
   "setup": {
     "skill": "setup",
-    "description": "Auto-provision Supabase or PGLite and configure GBrain (< 2 min)"
+    "description": "Initialize local PGLite and the VoltMind Personal Brain scaffold"
   },
   "recipes_dir": "recipes/",
   "resolver": "RESOLVER.md",

@@ -1,0 +1,5 @@
+{
+  "publish_levels": ["never", "candidate", "user_approved", "team_reviewed", "company_state"],
+  "sensitivity": ["public", "internal", "confidential", "restricted"],
+  "action_risk": ["low", "medium", "high", "restricted"]
+}

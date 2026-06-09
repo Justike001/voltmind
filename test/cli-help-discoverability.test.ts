@@ -60,25 +60,24 @@ describe('WARN-5 — `voltmind capture --help` reaches the detailed HELP constan
   });
 });
 
-describe('WARN-6 — main `voltmind --help` lists capture/brainstorm/lsd', () => {
-  test('output mentions all three commands by name', () => {
+describe('VoltMind MVP main `voltmind --help` surface', () => {
+  test('output mentions core MVP commands by name', () => {
     const { stdout, status } = runCli(['--help']);
     expect(status).toBe(0);
     // Must appear as command names (not just words in prose somewhere)
     expect(stdout).toMatch(/^\s*capture\s/m);
-    expect(stdout).toMatch(/^\s*brainstorm\s/m);
-    expect(stdout).toMatch(/^\s*lsd\s/m);
+    expect(stdout).toMatch(/^\s*sources\s/m);
+    expect(stdout).toMatch(/^\s*jobs list\s/m);
   });
 
-  test('BRAIN section heading is present and groups the three commands', () => {
+  test('advanced inherited commands are hidden from MVP help', () => {
     const { stdout } = runCli(['--help']);
-    expect(stdout).toContain('BRAIN');
-    // The 3 commands should appear AFTER the BRAIN heading in textual order.
-    const brainIdx = stdout.indexOf('BRAIN');
-    expect(brainIdx).toBeGreaterThan(-1);
-    expect(stdout.indexOf('capture', brainIdx)).toBeGreaterThan(brainIdx);
-    expect(stdout.indexOf('brainstorm', brainIdx)).toBeGreaterThan(brainIdx);
-    expect(stdout.indexOf('lsd', brainIdx)).toBeGreaterThan(brainIdx);
+    expect(stdout).not.toMatch(/^\s*brainstorm\s/m);
+    expect(stdout).not.toMatch(/^\s*lsd\s/m);
+    expect(stdout).not.toMatch(/^\s*autopilot\s/m);
+    expect(stdout).not.toMatch(/^\s*think\s/m);
+    expect(stdout).not.toMatch(/^\s*schema\s/m);
+    expect(stdout).not.toMatch(/^\s*code-def\s/m);
   });
 
   test('regression: existing top-level commands still listed', () => {
@@ -92,8 +91,26 @@ describe('WARN-6 — main `voltmind --help` lists capture/brainstorm/lsd', () =>
     expect(stdout).toContain('search');
     expect(stdout).toContain('query');
     expect(stdout).toContain('import');
-    expect(stdout).toContain('export');
-    expect(stdout).toContain('files');
+    expect(stdout).toContain('capture');
+    expect(stdout).toContain('sync');
     expect(stdout).toContain('embed');
+  });
+
+  test('advanced inherited commands return a clear MVP message', () => {
+    const { stderr, status } = runCli(['think', '--help']);
+    expect(status).toBe(1);
+    expect(stderr).toContain('not included in the VoltMind MVP runtime yet');
+  });
+
+  test('jobs help exposes only MVP job subcommands', () => {
+    const { stdout, status } = runCli(['jobs', '--help']);
+    expect(status).toBe(0);
+    expect(stdout).toContain('jobs list');
+    expect(stdout).toContain('jobs get');
+    expect(stdout).toContain('jobs cancel');
+    expect(stdout).toContain('jobs stats');
+    expect(stdout).not.toContain('jobs submit');
+    expect(stdout).not.toContain('jobs work');
+    expect(stdout).not.toContain('jobs supervisor');
   });
 });

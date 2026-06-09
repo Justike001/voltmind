@@ -1,46 +1,61 @@
 # CLAUDE.md
 
-GBrain is a personal knowledge brain and GStack mod for agent platforms. Pluggable
-engines: PGLite (embedded Postgres via WASM, zero-config default) or Postgres + pgvector
-+ hybrid search in a managed Supabase instance. `gbrain init` defaults to PGLite;
-suggests Supabase for 1000+ files. GStack teaches agents how to code. GBrain teaches
-agents everything else: brain ops, signal detection, content ingestion, enrichment,
-cron scheduling, reports, identity, and access control.
+VoltMind is a local-first personal knowledge runtime forked from GBrain.
+The current product shape is an MVP: PGLite is the supported storage path,
+the public CLI/MCP surface is intentionally small, and inherited GBrain
+advanced features stay dormant until a later phase deliberately restores them.
+
+Use `voltmind`, `VOLTMIND_HOME`, `~/.voltmind`, and `voltmind.yml` for runtime
+paths and user-facing instructions. Keep `BrainEngine` as the canonical engine
+contract name.
 
 ## Two organizational axes (read this first)
 
-GBrain knowledge is organized along two orthogonal axes. Users AND agents must
-understand both, or queries misroute silently.
+VoltMind inherits GBrain's two-axis mental model, but the MVP narrows the
+supported path.
 
-- **Brain** — WHICH DATABASE. Your personal brain is `host`. You can mount
-  additional brains (team-published, each with their own DB and access policy)
-  via `gbrain mounts add` (v0.19+). Routing: `--brain`, `GBRAIN_BRAIN_ID`,
-  `.gbrain-mount` dotfile.
-- **Source** — WHICH REPO INSIDE THE DATABASE. A brain can hold many sources
-  (wiki, gstack, openclaw, essays). Slugs scope per source. Routing:
-  `--source`, `GBRAIN_SOURCE`, `.gbrain-source` dotfile.
+- **Brain** — WHICH DATABASE. In the MVP, this is the local PGLite brain under
+  `VOLTMIND_HOME` / `~/.voltmind`. Do not route users into mounted brains,
+  Supabase/Postgres setup, or cross-brain federation unless a later phase
+  re-enables that public surface.
+- **Source** — WHICH REPO INSIDE THE DATABASE. A local brain can still hold many
+  sources. Slugs scope per source. Routing uses `--source`, `VOLTMIND_SOURCE`,
+  and the `.voltmind-source` dotfile.
 
-Both axes follow the same 6-tier resolution pattern. Read
-`docs/architecture/brains-and-sources.md` for topology diagrams (personal, team
-mount, CEO-class with multiple team brains) and
-`skills/conventions/brain-routing.md` for the agent-facing decision table.
+Read `docs/architecture/brains-and-sources.md` for the inherited model and
+`skills/conventions/brain-routing.md` for the agent-facing decision table, then
+apply the MVP limits above.
 
 ## Architecture
 
-Contract-first: `src/core/operations.ts` defines ~47 shared operations (v0.29 adds `get_recent_salience`, `find_anomalies`, `get_recent_transcripts`). CLI and MCP
-server are both generated from this single source. Engine factory (`src/core/engine-factory.ts`)
-dynamically imports the configured engine (`'pglite'` or `'postgres'`). Skills are fat
-markdown files (tool-agnostic, work with both CLI and plugin contexts).
+Contract-first: `src/core/operations.ts` defines the inherited shared operation
+set. The MVP public surface is filtered through `src/core/mvp-surface.ts`, so
+CLI help, `--tools-json`, stdio MCP, HTTP MCP, and direct MCP dispatch expose
+only the small VoltMind MVP allowlist. The engine factory still contains both
+inherited engine implementations, but agents should treat PGLite as the MVP
+storage contract.
 
 **Trust boundary:** `OperationContext.remote` distinguishes trusted local CLI callers
 (`remote: false` set by `src/cli.ts`) from untrusted agent-facing callers
-(`remote: true` set by `src/mcp/server.ts`). Security-sensitive operations like
-`file_upload` tighten filesystem confinement when `remote=true` and default to
-strict behavior when unset.
+(`remote: true` set by `src/mcp/server.ts` and HTTP MCP dispatch). Security-sensitive
+operations tighten filesystem confinement when `remote=true` and default to strict
+behavior when unset.
+
+## MVP public surface
+
+The visible runtime is limited to local setup/config, Page CRUD, import/capture,
+sync/embed, search/query, basic tags/links/timeline graph traversal, MCP serve/call,
+basic jobs read/cancel/status, and health/status readouts. Advanced inherited
+features such as agent/autopilot/dream/eval/skillpack/think/recall/forget/onboard/
+schema/founder/takes/transcripts/code-intelligence/salience/anomalies are frozen
+outside the public CLI/MCP surface for now.
 
 ## Key files
 
 - `src/core/operations.ts` — Contract-first operation definitions (the foundation). Also exports upload validators: `validateUploadPath`, `validatePageSlug`, `validateFilename`, plus `matchesSlugAllowList(slug, prefixes)` (v0.23 glob matcher: `<prefix>/*` matches recursive children; bare `<prefix>` matches exact only). `OperationContext.remote` flags untrusted callers; `OperationContext.allowedSlugPrefixes` (v0.23) is the trusted-workspace allow-list set by the dream cycle. `put_page` enforces: when `viaSubagent` and `allowedSlugPrefixes` is set, slug must match the allow-list; else the legacy `wiki/agents/<id>/...` namespace check applies. Auto-link enabled for trusted-workspace writes (skipped only when `remote=true && !trustedWorkspace`). As of v0.26.0, every `Operation` also carries `scope?: 'read' | 'write' | 'admin'` + `localOnly?: boolean`. All ops are annotated; `sync_brain`, `file_upload`, `file_list`, and `file_url` are `admin + localOnly` (rejected over HTTP). `OperationContext.auth?: AuthInfo` is threaded through HTTP dispatch for scope enforcement in `serve-http.ts` before the op runs. **v0.26.9 (D12 + F7b):** `OperationContext.remote` is now a REQUIRED field in the TypeScript type — the compiler is the first defense against transports that forget to set it. Four trust-boundary call sites (`put_page` allowlist, file_upload trust-narrowing, submit_job protected-name guard, auto-link skip) flipped from falsy-default (`!ctx.remote`) to fail-closed semantics (`ctx.remote === false` for "trusted-only" sites and `ctx.remote !== false` for "untrust unless explicit-false"). Anything that isn't strictly `false` is now treated as remote. Closed an HTTP MCP shell-job RCE: a `read+write`-scoped OAuth token could submit `shell` jobs because the HTTP request handler's literal context skipped `remote: true` and `submit_job`'s protected-name guard saw a falsy undefined. Stdio MCP set the field correctly via dispatch.ts; HTTP inlined a parallel context-builder for several releases and lost it. **v0.34.1.0 (#861 + #876):** new helper `sourceScopeOpts(ctx)` encodes the precedence ladder for source-scoped reads — federated array (`ctx.auth.allowedSources`) wins over scalar (`ctx.sourceId` / `ctx.auth.sourceId`) over nothing. Every read-side op handler routes through it so future ops can't silently drift from the canonical v0.31.8 thread. Closes the source-isolation leak on the read path: a `read+write`-scoped OAuth client bound to `--source dept-x` no longer sees rows from neighboring sources via `search` / `query` / `list_pages` / `get_page` / `find_experts` / `query`'s image path.
+- `src/core/mvp-surface.ts` — VoltMind MVP public-surface allowlist. This is the
+  current source of truth for which CLI names and MCP operation names are public.
+  Update it deliberately when a frozen inherited feature graduates into VoltMind.
 - `src/core/engine.ts` — Pluggable engine interface (BrainEngine). `clampSearchLimit(limit, default, cap)` takes an explicit cap so per-operation caps can be tighter than `MAX_SEARCH_LIMIT`. Exports `LinkBatchInput` / `TimelineBatchInput` for the v0.12.1 bulk-insert API (`addLinksBatch` / `addTimelineEntriesBatch`). As of v0.13.1, `BrainEngine` has a `readonly kind: 'postgres' | 'pglite'` discriminator so migrations (`src/core/migrate.ts`) and other consumers can branch on engine without `instanceof` + dynamic imports. **v0.29:** four new methods — `batchLoadEmotionalInputs(slugs?)` (CTE-shaped read with per-table aggregates so a page × N tags × M takes never produces N×M rows), `setEmotionalWeightBatch(rows)` (`UPDATE FROM unnest($1::text[], $2::text[], $3::real[])` composite-keyed on `(slug, source_id)` for multi-source safety), `getRecentSalience(opts)`, `findAnomalies(opts)`. `PageFilters` extended with `sort?: 'updated_desc' | 'updated_asc' | 'created_desc' | 'slug'` + `PAGE_SORT_SQL` whitelist consumed by both engines (was hardcoded `ORDER BY updated_at DESC`). **v0.32.8 (PR #860):** new `listAllPageRefs(): Promise<Array<{slug, source_id}>>` ordered by `(source_id, slug)`. Cheap cross-source enumeration for hot loops on large brains — replaces the `getAllSlugs()→getPage(slug)` N+1 pattern in extract-takes, extract, integrity, which silently defaulted to `source_id='default'` for non-default-source pages. Implementation parity across postgres-engine.ts + pglite-engine.ts. Pinned by `test/e2e/multi-source-bug-class.test.ts`. **v0.34.1.0 (#861):** `SearchOpts` + `PageFilters` add `sourceIds?: string[]` for the federated read axis; both engines apply `WHERE source_id = ANY($N::text[])` when the array is set and preserve the scalar `sourceId` fast path when unset. `traverseGraph(slug, depth, opts?)` and `traversePaths(slug, opts?)` accept `opts.sourceId` / `opts.sourceIds` so graph walks respect the caller's scope. **T8 wave (pgGraph-inspired CI infra, v0.37.4.0):** `traverseGraph` opts gains `frontierCap?: number` (per-iteration cap on the recursive CTE — approximately per-BFS-layer). Return type stays `Promise<GraphNode[]>` for MCP wire stability. New export `TraverseGraphOpts`. Postgres path uses parenthesized `LIMIT N ORDER BY (slug, id)` inside the recursive term; PGLite mirrors with positional params + the same shape SQL. Pinned by `test/regressions/v0_36_frontier_cap.test.ts` (4 contracts: cap-unset back-compat, cap-hit bounds result to `<= cap+1`, MCP wire-shape preservation, concurrency independence). **`onTruncation` callback designed but stripped pre-merge in /review** — adversarial pass caught false-positive (organic count == cap) + false-negative (LIMIT-before-DISTINCT in diamond graphs) cases in the v1 algorithm. Restoring the signal requires a dedupe-then-cap SQL rewrite + Postgres parity E2E — see TODOS.md → "T8 truncation signal". **v0.35.6.0:** two new methods supporting the phantom-redirect cycle pass — `refreshPageBody(slug, sourceId, compiled_truth, timeline, content_hash)` narrow-UPDATEs three columns + updated_at, skipping soft-deleted rows (codex #7: content_hash refresh is required so `gbrain sync` sees the canonical as unchanged after fence merge); `migrateFactsToCanonical(phantomSlug, canonicalSlug, sourceId)` UPDATEs `entity_slug` + `source_markdown_slug` on every active fact row keyed on the phantom, preserving embedding/validUntil/kind/status/source_session/confidence — codex #3 fix for the writeFactsToFence lossy-migration trap. Both methods have engine parity tests at `test/phantom-redirect-engine-parity.test.ts`. **v0.40.4.0:** new `getAdjacencyBoosts(pageIds): Promise<Map<number, AdjacencyRow>>` method powers the per-query graph-signals stage in hybrid search. Single SQL query returns inbound-link counts among the top-K set plus a cross-source count (links from pages whose `source_id` differs from the target's). `COALESCE(p.source_id, 'default')` for null safety; `HAVING >= 1` matches JSDoc; cross-source CASE-WHEN on the JOINed target row excludes the target's own source. Parity SQL between postgres-engine.ts + pglite-engine.ts. `SearchResult` gains 12 new optional fields (`base_score`, `backlink_boost`, `salience_boost`, `recency_boost`, `exact_match_boost`, `graph_adjacency_boost`, `graph_cross_source_boost`, `session_demote_factor`, `reranker_delta`, plus internal staging fields). Pinned by `test/e2e/graph-signals-engine.test.ts` (7 cases) + cross-engine parity in the same suite.
 - `src/core/search/graph-signals.ts` (v0.40.4.0) — per-query graph-signals helper. `applyGraphSignals(results, engine, opts)` runs as the 4th post-fusion stage (after backlink/salience/recency). Three boosts: `ADJACENCY_BOOST=1.05` (page is linked from 2+ OTHER top-K results — local hub for THIS query), `CROSS_SOURCE_BOOST=1.10` (page is linked from 2+ DIFFERENT sources — corroborated across team brains, dormant in single-source brains), `SESSION_DEMOTE=0.95` (3+ results from same chat session — keep the highest-scoring one at full score, demote the rest). All three inherit the v0.35.6.0 floor-ratio gate that prevents weak pages from getting boosted past strong ones via popularity. `computeScoreDistribution(results)` emits min/p25/p50/p75/p95/max + `reorder_band_width` — instrumentation for the v0.41+ magnitude calibration wave (TODOS T-todo-2). `sessionPrefix(slug)` extracts the chat-session anchor (`chat/2026-05-15-...`). Pure `pairedBootstrapPValue(deltas, resamples, rng)` exported for eval gates. Test seam via `adjacencyFn` DI. Fail-open: any error logs via `logGraphSignalsFailure` (JSONL audit via `audit-writer`) and returns the input array unchanged. Pinned by `test/search/graph-signals.test.ts` (24 cases including the IRON-RULE floor-gate regression).
 - `src/core/search/hybrid.ts` extension (v0.40.4.0) — `runPostFusionStages` extended with a 4th stage (`graphSignalsEnabled`, `onGraphMeta`, `onScoreDistribution`). `base_score` stamped at function entry idempotently (captured ONCE before any boost stage mutates `score`). Every existing post-fusion stage now stamps its multiplier on the result: `applyBacklinkBoost` → `backlink_boost`, `applySalienceBoost` → `salience_boost`, `applyRecencyBoost` → `recency_boost`. `applyReranker` (called earlier in the pipeline) stamps `reranker_delta` as a rank delta (positive = improved). `applyExactMatchBoost` in `src/core/search/intent-weights.ts` stamps `exact_match_boost` when fired. Per-stage attribution is the cathedral that powers `gbrain search --explain` — every boost surface carries its own field, so `formatResultsExplain` reads them all without coupling to internal stage ordering.

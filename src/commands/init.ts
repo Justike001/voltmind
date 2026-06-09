@@ -9,6 +9,7 @@ const __dirname = dirname(__filename);
 import { saveConfig, loadConfig, loadConfigFileOnly, toEngineConfig, voltmindPath, configPath, isThinClient, type VoltMindConfig } from '../core/config.ts';
 import { createEngine } from '../core/engine-factory.ts';
 import { discoverOAuth, mintClientCredentialsToken, smokeTestMcp } from '../core/remote-mcp-probe.ts';
+import { defaultPersonalBrainRoot, installPersonalBrainScaffold } from '../core/personal-brain-scaffold.ts';
 
 export async function runInit(args: string[]) {
   // Help guard: cli.ts only routes --help to printOpHelp() for shared-op
@@ -96,22 +97,9 @@ export async function runInit(args: string[]) {
     nonInteractive: isNonInteractive,
   });
 
-  // Explicit PGLite mode
+  // Phase 1 Personal Brain default: local PGLite. Supabase/Postgres remains
+  // available only when the operator explicitly asks for it.
   if (isPGLite || (!isSupabase && !manualUrl && !isNonInteractive)) {
-    // Smart detection: scan for .md files unless --pglite flag forces it
-    if (!isPGLite && !isSupabase) {
-      const fileCount = countMarkdownFiles(process.cwd());
-      if (fileCount >= 1000) {
-        console.log(`Found ~${fileCount} .md files. For a brain this size, Supabase gives faster`);
-        console.log('search and remote access ($25/mo). PGLite works too but search will be slower at scale.');
-        console.log('');
-        console.log('  voltmind init --supabase   Set up with Supabase (recommended for large brains)');
-        console.log('  voltmind init --pglite     Use local PGLite anyway');
-        console.log('');
-        // Default to PGLite, let the user choose Supabase if they want
-      }
-    }
-
     return initPGLite({ jsonOutput, apiKey, customPath, aiOpts });
   }
 
@@ -951,13 +939,29 @@ async function initPGLite(opts: {
     const { runModePicker } = await import('./init-mode-picker.ts');
     await runModePicker(engine, { jsonOutput: opts.jsonOutput });
 
+    const scaffold = installPersonalBrainScaffold(defaultPersonalBrainRoot(process.cwd()));
+    await engine.setConfig('sync.repo_path', scaffold.root);
+
     const stats = await engine.getStats();
 
     if (opts.jsonOutput) {
-      console.log(JSON.stringify({ status: 'success', engine: 'pglite', path: dbPath, pages: stats.page_count }));
+      console.log(JSON.stringify({
+        status: 'success',
+        engine: 'pglite',
+        path: dbPath,
+        pages: stats.page_count,
+        personal_brain: {
+          path: scaffold.root,
+          created_files: scaffold.createdFiles.length,
+          skipped_files: scaffold.skippedFiles.length,
+          source: scaffold.source,
+        },
+      }));
     } else {
       console.log(`\nBrain ready at ${dbPath}`);
       console.log(`${stats.page_count} pages. Engine: PGLite (local Postgres).`);
+      console.log(`Personal Brain scaffold: ${scaffold.root}`);
+      console.log(`Scaffold files: ${scaffold.createdFiles.length} created, ${scaffold.skippedFiles.length} already present.`);
       if (stats.page_count > 0) {
         console.log('');
         console.log('Existing brain detected. To wire up the v0.10.3 knowledge graph:');
@@ -965,10 +969,14 @@ async function initPGLite(opts: {
         console.log('  voltmind extract timeline --source db     (structured timeline backfill)');
         console.log('  voltmind stats                            (verify links > 0)');
       } else {
-        console.log('Next: voltmind import <dir>');
+        console.log('Next:');
+        console.log('  1. voltmind capture "meeting note..."');
+        console.log('  2. voltmind import brain --no-embed');
+        console.log('  3. voltmind embed --stale');
+        console.log('  4. voltmind search "project or meeting"');
       }
       console.log('');
-      console.log('When you outgrow local: voltmind migrate --to supabase');
+      console.log('Phase 1 stays local-first: Markdown + PGLite. Publish candidates remain local until reviewed.');
       reportModStatus();
       const { printAdvisoryIfRecommended } = await import('../core/skillpack/post-install-advisory.ts');
       const { VERSION } = await import('../version.ts');
@@ -1464,9 +1472,8 @@ EXAMPLES
   voltmind init --mcp-only --url https://...  # Thin-client mode
 
 NOTES
-  - Bare \`voltmind init\` in a directory with 1000+ .md files defaults to Supabase
-    interactive setup. With <1000 files (or with --pglite explicitly), defaults
-    to PGLite at ~/.voltmind/brain.pglite.
+  - Bare \`voltmind init\` defaults to PGLite at ~/.voltmind/brain.pglite and
+    creates a local Personal Brain markdown scaffold at ./brain.
   - Existing config is preserved unless --force is passed.
 `.trim());
 }

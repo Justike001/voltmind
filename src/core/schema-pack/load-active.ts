@@ -104,6 +104,7 @@ function defaultPackLocator(name: string): string | null {
   const BUNDLED: ReadonlyArray<string> = [
     'voltmind-base',
     'voltmind-recommended',
+    'voltmind-company-core',
     'voltmind-creator',
     'voltmind-investor',
     'voltmind-engineer',

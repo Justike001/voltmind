@@ -66,6 +66,135 @@ describe('v0.41 T4: bundled registry includes lens packs', () => {
   });
 });
 
+describe('VoltMind company core manifest shape', () => {
+  const pack = loadPack('voltmind-company-core');
+
+  test('extends voltmind-base and keeps roles as fields rather than orgs/roles pages', () => {
+    expect(pack.extends).toBe('voltmind-base');
+    const org = pack.page_types.find((p) => p.name === 'org');
+    expect(org?.path_prefixes).toEqual(['orgs/']);
+    expect(pack.page_types.some((p) => p.name === 'role')).toBe(false);
+    expect(pack.page_types.some((p) => p.path_prefixes.includes('orgs/roles/'))).toBe(false);
+  });
+
+  test('declares personal/company core work objects', () => {
+    const typeNames = pack.page_types.map((p) => p.name);
+    for (const name of [
+      'ontology',
+      'inbox',
+      'daily',
+      'org',
+      'workstream',
+      'project',
+      'idea',
+      'meeting',
+      'artifact',
+      'decision',
+      'commitment',
+      'action',
+      'risk',
+      'policy',
+      'source',
+      'contribution_candidate',
+      'private',
+    ]) {
+      expect(typeNames).toContain(name);
+    }
+  });
+
+  test('declares Phase 0 policy directory as singular policy/', () => {
+    const policy = pack.page_types.find((p) => p.name === 'policy');
+    expect(policy?.path_prefixes).toEqual(['policy/']);
+    const filing = pack.filing_rules.find((r) => r.kind === 'policy');
+    expect(filing?.directory).toBe('policy/');
+  });
+
+  test('draft scaffold declares Phase 0 policy runtime enums', () => {
+    const raw = readFileSync(
+      join(here, '..', 'docs', 'drafts', 'personal-brain-scaffold', '.system', 'policy-config.json'),
+      'utf-8',
+    );
+    const config = JSON.parse(raw);
+    expect(config.publish_levels).toEqual([
+      'never',
+      'candidate',
+      'user_approved',
+      'team_reviewed',
+      'company_state',
+    ]);
+    expect(config.sensitivity).toEqual(['public', 'internal', 'confidential', 'restricted']);
+    expect(config.action_risk).toEqual(['low', 'medium', 'high', 'restricted']);
+  });
+
+  test('state objects live under state/ rather than root directories', () => {
+    const byName = Object.fromEntries(pack.page_types.map((p) => [p.name, p.path_prefixes]));
+    expect(byName.decision).toEqual(['state/decisions/']);
+    expect(byName.commitment).toEqual(['state/commitments/']);
+    expect(byName.action).toEqual(['state/actions/']);
+    expect(byName.risk).toEqual(['state/risks/']);
+    for (const rootPrefix of ['decisions/', 'commitments/', 'actions/', 'risks/']) {
+      expect(pack.page_types.some((p) => p.path_prefixes.includes(rootPrefix))).toBe(false);
+    }
+  });
+
+  test('declares ideas as raw pre-project thinking with exact-phrasing guidance', () => {
+    const idea = pack.page_types.find((p) => p.name === 'idea');
+    expect(idea?.primitive).toBe('concept');
+    expect(idea?.path_prefixes).toContain('ideas/');
+    expect(idea?.extractable).toBe(true);
+    expect(idea?.aliases).toContain('product-thought');
+    const filing = pack.filing_rules.find((r) => r.kind === 'idea');
+    expect(filing?.directory).toBe('ideas/');
+    expect(filing?.description).toContain('Preserve the user');
+  });
+
+  test('declares relationship verbs for core graph materialization', () => {
+    const linkNames = pack.link_types.map((l) => l.name);
+    for (const name of ['member_of', 'owns', 'accountable_for', 'decided_by', 'commits_to', 'assigned_to', 'blocks', 'mitigates', 'governed_by', 'evidence_for']) {
+      expect(linkNames).toContain(name);
+    }
+  });
+
+  test('declares core frontmatter graph fields for project pages', () => {
+    expect(pack.frontmatter_links).toContainEqual({
+      page_type: 'project',
+      fields: ['source_refs'],
+      link_type: 'evidence_for',
+    });
+    expect(pack.frontmatter_links).toContainEqual({
+      page_type: 'project',
+      fields: ['related_entities'],
+      link_type: 'related_to',
+    });
+  });
+
+  test('declares action orchestration modes and action relation fields', () => {
+    const action = pack.page_types.find((p) => p.name === 'action');
+    expect(action?.aliases).toEqual(expect.arrayContaining([
+      'manual_action',
+      'agent_assisted_action',
+      'agent_executable_action',
+      'agent_scheduled_action',
+      'agent_watch_action',
+    ]));
+    expect(pack.frontmatter_links).toContainEqual({
+      page_type: 'action',
+      fields: ['related_project', 'related_projects'],
+      link_type: 'discussed_in',
+    });
+    expect(pack.frontmatter_links).toContainEqual({
+      page_type: 'action',
+      fields: ['related_workstream'],
+      link_type: 'discussed_in',
+    });
+    expect(pack.frontmatter_links).toContainEqual({
+      page_type: 'action',
+      fields: ['context_refs'],
+      link_type: 'evidence_for',
+    });
+  });
+});
+
 describe('v0.41 T4: voltmind-creator manifest shape', () => {
   const pack = loadPack('voltmind-creator');
 

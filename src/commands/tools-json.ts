@@ -1,7 +1,8 @@
 import { operations } from '../core/operations.ts';
+import { filterVoltMindMvpOperations } from '../core/mvp-surface.ts';
 
 export function printToolsJson() {
-  const tools = operations.map(op => ({
+  const tools = filterVoltMindMvpOperations(operations).map(op => ({
     name: op.name,
     description: op.description,
     parameters: Object.fromEntries(

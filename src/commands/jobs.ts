@@ -10,6 +10,8 @@ import type { MinionJob, MinionJobStatus } from '../core/minions/types.ts';
 import { loadConfig, isThinClient } from '../core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../core/mcp-client.ts';
 
+const MVP_JOB_SUBCOMMANDS = new Set(['list', 'get', 'cancel', 'stats']);
+
 function parseFlag(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);
   return idx >= 0 && idx + 1 < args.length ? args[idx + 1] : undefined;
@@ -117,78 +119,21 @@ export async function runJobs(engine: BrainEngine, args: string[]): Promise<void
   const sub = args[0];
 
   if (!sub || sub === '--help' || sub === '-h') {
-    console.log(`voltmind jobs — Minions job queue
+    console.log(`voltmind jobs - background job queue
 
 USAGE
-  voltmind jobs submit <name> [--params JSON] [--follow] [--priority N]
-                            [--delay Nms] [--max-attempts N] [--max-stalled N]
-                            [--max-waiting N]
-                            [--backoff-type fixed|exponential] [--backoff-delay Nms]
-                            [--backoff-jitter 0..1] [--timeout-ms Nms]
-                            [--idempotency-key K] [--queue Q] [--dry-run]
-                            [--redact-secrets]   (shell only; scrubs inherit
-                                                  values from stdout/stderr)
   voltmind jobs list [--status S] [--queue Q] [--limit N]
   voltmind jobs get <id>
   voltmind jobs cancel <id>
-  voltmind jobs retry <id>
-  voltmind jobs prune [--older-than 30d]
-  voltmind jobs delete <id>
   voltmind jobs stats
-  voltmind jobs smoke
-  voltmind jobs work [--queue Q] [--concurrency N] [--max-rss MB]
-                   [--health-interval MS]
-  voltmind jobs supervisor [start] [--detach] [--json]
-                         [--concurrency N] [--queue Q] [--pid-file PATH]
-                         [--max-crashes N] [--health-interval N]
-                         [--allow-shell-jobs] [--cli-path PATH]
-                         [--max-rss MB]
-  voltmind jobs supervisor status [--json] [--pid-file PATH]
-  voltmind jobs supervisor stop [--json] [--pid-file PATH]
 
-    Auto-restarting wrapper around 'voltmind jobs work'. Spawns the worker
-    as a child process and restarts on crash with exponential backoff
-    (1s -> 60s cap). Writes a PID file to ~/.voltmind/supervisor.pid by
-    default (override via --pid-file or VOLTMIND_SUPERVISOR_PID_FILE env).
-    Lifecycle events are appended to
-      \${VOLTMIND_AUDIT_DIR:-~/.voltmind/audit}/supervisor-YYYY-Www.jsonl
-
-    SUBCOMMANDS
-      start        (default) Launch the supervisor. --detach returns a
-                   JSON {event, supervisor_pid, pid_file} payload on
-                   stdout and forks; omit for foreground.
-      status       Read PID file + audit log, report running / last_start
-                   / crashes_24h / max_crashes_exceeded as JSON or human.
-                   Exits 0 if running, 1 if not.
-      stop         Send SIGTERM to the supervisor, wait up to 40s for
-                   graceful drain, report outcome. Exits 0 on clean stop.
-
-    EXIT CODES (start)
-      0  clean shutdown (SIGTERM/SIGINT received, worker drained)
-      1  max crashes exceeded (worker kept dying)
-      2  another supervisor holds the PID lock
-      3  PID file unwritable (permission / path error)
-
-    EXAMPLES
-      voltmind jobs supervisor --concurrency 4         # foreground (Ctrl-C stops)
-      voltmind jobs supervisor start --detach --json   # agent-friendly: fork + return JSON
-      voltmind jobs supervisor status --json           # machine-readable health check
-      voltmind jobs supervisor stop                    # graceful stop
-      voltmind jobs supervisor --json --allow-shell-jobs  # JSONL events + shell-exec on
-
-HANDLER TYPES (built in)
-  sync              Pull and embed new pages from the repo
-  embed             (Re-)embed pages; --params '{"slug":...}' or '{"all":true}'
-  lint              Run page linter; --params '{"dir":"...","fix":true}'
-  import            Bulk import markdown; --params '{"dir":"..."}'
-  extract           Extract links + timeline entries; '{"mode":"all"}'
-  backlinks         Check or fix back-links; '{"action":"fix"}'
-  autopilot-cycle   One autopilot pass (sync+extract+embed+backlinks)
-  shell             Run a command or argv. Requires VOLTMIND_ALLOW_SHELL_JOBS=1
-                    on the worker. Params: {cmd?, argv?, cwd, env?}.
-                    See: docs/guides/minions-shell-jobs.md
 `);
     return;
+  }
+
+  if (!MVP_JOB_SUBCOMMANDS.has(sub)) {
+    console.error(`voltmind jobs ${sub} is not included in the VoltMind MVP runtime yet.`);
+    process.exit(1);
   }
 
   const queue = new MinionQueue(engine);

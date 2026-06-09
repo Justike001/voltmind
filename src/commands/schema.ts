@@ -171,7 +171,15 @@ async function runActive(_args: string[]): Promise<void> {
 }
 
 function runList(_args: string[]): void {
-  const bundled = ['voltmind-base', 'voltmind-recommended'];
+  const bundled = [
+    'voltmind-base',
+    'voltmind-recommended',
+    'voltmind-company-core',
+    'voltmind-creator',
+    'voltmind-investor',
+    'voltmind-engineer',
+    'voltmind-everything',
+  ];
   const installedDir = voltmindPath('schema-packs');
   const installed: string[] = [];
   if (existsSync(installedDir)) {
@@ -358,12 +366,21 @@ function runUse(args: string[]): void {
 }
 
 function packPathByName(name: string): string | null {
-  if (name === 'voltmind-base') {
+  const bundled = new Set([
+    'voltmind-base',
+    'voltmind-recommended',
+    'voltmind-company-core',
+    'voltmind-creator',
+    'voltmind-investor',
+    'voltmind-engineer',
+    'voltmind-everything',
+  ]);
+  if (bundled.has(name)) {
     // Resolve bundled YAML — try a few locations.
     const here = dirname(new URL(import.meta.url).pathname);
     const candidates = [
-      join(here, '..', 'core', 'schema-pack', 'base', 'voltmind-base.yaml'),
-      join(here, '..', '..', 'src', 'core', 'schema-pack', 'base', 'voltmind-base.yaml'),
+      join(here, '..', 'core', 'schema-pack', 'base', `${name}.yaml`),
+      join(here, '..', '..', 'src', 'core', 'schema-pack', 'base', `${name}.yaml`),
     ];
     for (const c of candidates) {
       if (existsSync(c)) return c;

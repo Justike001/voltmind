@@ -93,7 +93,15 @@ export class SchemaPackMutationError extends Error {
   }
 }
 
-export const BUNDLED_PACK_NAMES = new Set(['voltmind-base', 'voltmind-recommended']);
+export const BUNDLED_PACK_NAMES = new Set([
+  'voltmind-base',
+  'voltmind-recommended',
+  'voltmind-company-core',
+  'voltmind-creator',
+  'voltmind-investor',
+  'voltmind-engineer',
+  'voltmind-everything',
+]);
 
 export interface MutateResult {
   /** Pack name that was mutated. */

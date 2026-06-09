@@ -24,12 +24,17 @@ import type { CliOptions } from './core/cli-options.ts';
 import { callRemoteTool, RemoteMcpError, unpackToolResult } from './core/mcp-client.ts';
 import { maybePromptForUpgrade } from './core/thin-client-upgrade-prompt.ts';
 import { VERSION } from './version.ts';
+import {
+  isVoltMindMvpCliCommand,
+  isVoltMindMvpOperationName,
+  voltMindMvpUnavailableMessage,
+} from './core/mvp-surface.ts';
 
 // Build CLI name -> operation lookup
 const cliOps = new Map<string, Operation>();
 for (const op of operations) {
   const name = op.cliHints?.name;
-  if (name && !op.cliHints?.hidden) {
+  if (name && !op.cliHints?.hidden && isVoltMindMvpCliCommand(name) && isVoltMindMvpOperationName(op.name)) {
     cliOps.set(name, op);
   }
 }
@@ -42,6 +47,7 @@ const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'c
 const CLI_ONLY_SELF_HELP = new Set([
   'upgrade', 'post-upgrade', 'check-update',
   'embed', 'config',
+  'jobs',
   'skillpack', 'skillpack-check',
   'integrations', 'friction',
   'frontmatter', 'check-resolvable',
@@ -105,6 +111,16 @@ async function main() {
   // DX alias: `ask` is a natural-language alias for `query`
   if (command === 'ask') {
     command = 'query';
+  }
+
+  if (!isVoltMindMvpCliCommand(command)) {
+    if (CLI_ONLY.has(command) || operations.some(op => op.cliHints?.name === command)) {
+      console.error(voltMindMvpUnavailableMessage(command));
+    } else {
+      console.error(`Unknown command: ${command}`);
+      console.error('Run voltmind --help for available commands.');
+    }
+    process.exit(1);
   }
 
   // Per-command --help
@@ -1212,6 +1228,12 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
+  if (command === 'jobs' && (args.includes('--help') || args.includes('-h'))) {
+    const { runJobs } = await import('./commands/jobs.ts');
+    await runJobs(null as any, args);
+    return;
+  }
+
   // v0.41.6.0 D3 (per outside-voice F1): connect-time + dispatch-time wallclock
   // timeouts for read-only commands whose hang would otherwise spin at 100% CPU
   // (the production "10-day zombie voltmind search ping" bug class). The wrap
@@ -1866,27 +1888,25 @@ function printOpHelp(op: Operation) {
 }
 
 function printHelp() {
-  // Gather shared operations grouped by category
-  const cliNames = Array.from(cliOps.entries())
-    .map(([name, op]) => ({ name, desc: op.description }));
-
-  console.log(`voltmind ${VERSION} -- personal knowledge brain
+  console.log(`voltmind ${VERSION} -- local-first knowledge runtime
 
 USAGE
   voltmind <command> [options]
 
 SETUP
   init [--pglite|--supabase|--url]   Create brain (PGLite default, no server)
-  migrate --to <supabase|pglite>     Transfer brain between engines
-  upgrade                            Self-update
-  check-update [--json]              Check for new versions
-  doctor [--json] [--fast]            Health check (resolver, skills, pgvector, RLS, embeddings)
-  integrations [subcommand]          Manage integration recipes (senses + reflexes)
+  config [show|get|set] <key> [val]  Brain config
+  storage status [--json]            Storage tier status and health
+  sources list|add|remove|status     Manage local knowledge sources
+  status [--json]                    Runtime status snapshot
+  doctor [--json] [--fast]           Health check
+  apply-migrations --yes             Apply schema migrations
 
 PAGES
   get <slug>                         Read a page
   put <slug> [< file.md]             Write/update a page
   delete <slug>                      Delete a page
+  restore <slug>                     Restore a deleted page
   list [--type T] [--tag T] [-n N]   List pages
 
 SEARCH
@@ -1894,117 +1914,41 @@ SEARCH
   query <question> [--no-expand]     Hybrid search (RRF + expansion)
   ask <question> [--no-expand]       Alias for query
 
-IMPORT/EXPORT
+INGESTION
   import <dir> [--no-embed]          Import markdown directory
+  capture [content] [--file PATH]    Capture content into the brain
+        [--stdin] [--slug s] [--type t]
   sync [--repo <path>] [flags]       Git-to-brain incremental sync
-  sync --watch [--interval N]        Continuous sync (loops until stopped)
-  sync --install-cron                Install persistent sync daemon
-  export [--dir ./out/]              Export to markdown
-  export --restore-only [--repo <p>] Restore missing supabase-only files
-        [--type T] [--slug-prefix S] With optional filters
-
-FILES
-  files list [slug]                  List stored files
-  files upload <file> --page <slug>  Upload file to storage
-  files upload-raw <file> --page <s> Smart upload (size routing + .redirect.yaml)
-  files signed-url <path>            Generate signed URL (1-hour)
-  files sync <dir>                   Bulk upload directory
-  files verify                       Verify all uploads
-
-EMBEDDINGS
   embed [<slug>|--all|--stale]       Generate/refresh embeddings
 
-LINKS
+GRAPH
   link <from> <to> [--type T]        Create typed link
   unlink <from> <to>                 Remove link
   backlinks <slug>                   Incoming links
   graph <slug> [--depth N]           Traverse link graph (returns nodes)
-  graph-query <slug> [--type T]      Edge-based traversal with type/direction filters
-        [--depth N] [--direction in|out|both]
-
-TAGS
   tags <slug>                        List tags
   tag <slug> <tag>                   Add tag
   untag <slug> <tag>                 Remove tag
-
-TIMELINE
   timeline [<slug>]                  View timeline
   timeline-add <slug> <date> <text>  Add timeline entry
 
-TOOLS
-  extract <links|timeline|all>       Extract links/timeline (idempotent)
-        [--source fs|db]             fs (default) walks .md files; db iterates engine pages
-        [--dir <brain>]              brain dir for fs source
-        [--type T] [--since DATE]    filters (db source)
-        [--dry-run] [--json]
-  publish <page.md> [--password]     Shareable HTML (strips private data, optional AES-256)
-  check-backlinks <check|fix> [dir]  Find/fix missing back-links across brain
-  lint <dir|file> [--fix]            Catch LLM artifacts, placeholder dates, bad frontmatter
-  orphans [--json] [--count]         Find pages with no inbound wikilinks
-  salience [--days N] [--kind P]     v0.29: pages ranked by emotional + activity salience
-  anomalies [--since D] [--sigma N]  v0.29: cohort-based statistical anomalies (tag, type)
-  transcripts recent [--days N]      v0.29: recent raw .txt transcripts (local-only)
-  dream [--dry-run] [--json]         Run the overnight maintenance cycle once (cron-friendly).
-                                     See also: autopilot --install (continuous daemon).
-  check-resolvable [--json] [--fix]  Validate skill tree (reachability/MECE/DRY)
-  report --type <name> --content ... Save timestamped report to brain/reports/
+JOBS
+  jobs list [--status S] [--limit N] List jobs
+  jobs get <id>                      Job details + history
+  jobs cancel <id>                   Cancel job
+  jobs stats                         Job health dashboard
 
-BRAIN (capture / ideate / explore — v0.37/v0.38)
-  capture [content] [--file PATH]    Single entrypoint for getting content into the brain
-        [--stdin] [--slug s] [--type t]   Inline content / file / stdin; writes to inbox/ by default
-        [--source ID] [--quiet|--json]    Multi-source brains: route to a non-default source
-  brainstorm <question> [--json]     Bisociation idea generator (hybrid search + far-set + judge)
-        [--save|--no-save] [--limit N]
-  lsd <question> [--json]            Lateral Synaptic Drift: inverted-judge brainstorm
-        [--save|--no-save] [--limit N]    rewarding far-from-obvious + axiomatic inversions
-
-SOURCES (multi-repo / multi-brain)
-  sources list                       Show registered sources
-  sources add <id> --path <p>        Register a source (id = short name, e.g. 'wiki')
-  sources remove <id>                Remove a source + its pages
-  sync --all                         Sync all sources with a local_path
-  sync --source <id>                 Sync one specific source
-  repos ...                          DEPRECATED alias for 'sources' (v0.19.0)
-
-CODE INDEXING (v0.19.0 / v0.20.0 Cathedral II)
-  code-def <symbol> [--lang l]       Find the definition of a symbol across code pages
-  code-refs <symbol> [--lang l]      Find all references to a symbol (JSON-first)
-  code-callers <symbol>              Who calls this symbol? (v0.20.0 A1)
-  code-callees <symbol>              What does this symbol call? (v0.20.0 A1)
-  query <q> --lang <l>               Filter hybrid search to one language (v0.20.0)
-  query <q> --symbol-kind <k>        Filter to symbol type (function|class|method|...) (v0.20.0)
-  reconcile-links [--dry-run]        Batch-recompute doc↔impl edges (v0.20.0)
-  reindex-code [--source id] [--yes] Explicit code-page reindex (v0.20.0)
-  sync --strategy code               Sync code files into the brain
-
-JOBS (Minions)
-  jobs submit <name> [--params JSON]  Submit background job [--follow] [--dry-run]
-  jobs list [--status S] [--limit N]  List jobs
-  jobs get <id>                       Job details + history
-  jobs cancel <id>                    Cancel job
-  jobs retry <id>                     Re-queue failed/dead job
-  jobs prune [--older-than 30d]       Clean old jobs
-  jobs stats                          Job health dashboard
-  jobs work [--queue Q]               Start worker daemon (Postgres only)
+MCP
+  serve                              MCP server (stdio)
+  serve --http [--port N]            HTTP MCP server
+  call <tool> '<json>'               Raw MVP tool invocation
 
 ADMIN
   stats                              Brain statistics
   health                             Brain health dashboard
   history <slug>                     Page version history
-  revert <slug> <version-id>         Revert to version
-  features [--json] [--auto-fix]     Scan usage + recommend unused features
-  autopilot [--repo] [--interval N]  Self-maintaining brain daemon
-  config [show|get|set] <key> [val]  Brain config
-  storage status [--repo <path>]     Storage tier status and health
-        [--json]                     (git-tracked vs supabase-only)
-  serve                              MCP server (stdio)
-  serve --http [--port N]            HTTP MCP server with OAuth 2.1
-    --token-ttl N                    Access token TTL in seconds (default: 3600)
-    --enable-dcr                     Enable Dynamic Client Registration
-    --public-url URL                 Public issuer URL (required behind proxy/tunnel)
-  call <tool> '<json>'               Raw tool invocation
   version                            Version info
-  --tools-json                       Tool discovery (JSON)
+  --tools-json                       MVP tool discovery (JSON)
 
 Run voltmind <command> --help for command-specific help.
 `);

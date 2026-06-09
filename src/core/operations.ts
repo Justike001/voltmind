@@ -3939,7 +3939,15 @@ const list_schema_packs: Operation = {
     const { existsSync, readdirSync } = await import('node:fs');
     const { join } = await import('node:path');
     const { voltmindPath } = await import('./config.ts');
-    const bundled = ['voltmind-base', 'voltmind-recommended'];
+    const bundled = [
+      'voltmind-base',
+      'voltmind-recommended',
+      'voltmind-company-core',
+      'voltmind-creator',
+      'voltmind-investor',
+      'voltmind-engineer',
+      'voltmind-everything',
+    ];
     const installedDir = voltmindPath('schema-packs');
     const installed: string[] = [];
     if (existsSync(installedDir)) {

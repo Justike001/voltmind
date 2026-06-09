@@ -98,10 +98,14 @@ describe('locateMutablePackFile — bundled guard', () => {
     }
   });
 
-  it('BUNDLED_PACK_NAMES export contains both bundled packs', () => {
+  it('BUNDLED_PACK_NAMES export contains bundled packs', () => {
     expect(BUNDLED_PACK_NAMES.has('voltmind-base')).toBe(true);
     expect(BUNDLED_PACK_NAMES.has('voltmind-recommended')).toBe(true);
-    expect(BUNDLED_PACK_NAMES.size).toBe(2);
+    expect(BUNDLED_PACK_NAMES.has('voltmind-company-core')).toBe(true);
+    expect(BUNDLED_PACK_NAMES.has('voltmind-creator')).toBe(true);
+    expect(BUNDLED_PACK_NAMES.has('voltmind-investor')).toBe(true);
+    expect(BUNDLED_PACK_NAMES.has('voltmind-engineer')).toBe(true);
+    expect(BUNDLED_PACK_NAMES.has('voltmind-everything')).toBe(true);
   });
 });
 

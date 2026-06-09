@@ -33,6 +33,7 @@ import { VERSION } from '../version.ts';
 import { dispatchToolCall } from './dispatch.ts';
 import { buildDefaultLimiters, type RateLimiter } from './rate-limit.ts';
 import { sqlQueryForEngine } from '../core/sql-query.ts';
+import { filterVoltMindMvpOperations } from '../core/mvp-surface.ts';
 
 const DEFAULT_BODY_CAP = 1024 * 1024; // 1 MiB
 
@@ -135,7 +136,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
   const limiters = opts.limiters || buildDefaultLimiters();
   const bodyCap = envInt('VOLTMIND_HTTP_MAX_BODY_BYTES', DEFAULT_BODY_CAP);
   const corsAllowlist = parseCorsAllowlist();
-  const tools = buildToolDefs(operations);
+  const tools = buildToolDefs(filterVoltMindMvpOperations(operations));
 
   /**
    * v0.41.3 (T6): single consolidated CORS header builder. Pre-fix there were

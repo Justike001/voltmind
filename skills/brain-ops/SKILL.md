@@ -1,163 +1,155 @@
 ---
 name: brain-ops
-version: 1.0.0
+version: 2.0.0
 description: |
-  Brain knowledge base operations. The core read/write cycle: brain-first lookup,
-  read-enrich-write loop, source attribution, ambient enrichment, back-linking.
-  Read this before any brain interaction.
+  VoltMind MVP knowledge-base operations. The core read/write loop: brain-first
+  lookup, source-aware page CRUD, citations, auto-link context, and basic graph
+  retrieval.
 triggers:
-  - any brain read/write/lookup/citation
+  - any VoltMind read/write/lookup/citation
 tools:
   - search
   - query
   - get_page
   - put_page
+  - list_pages
   - add_link
-  - add_timeline_entry
+  - remove_link
+  - get_links
   - get_backlinks
+  - traverse_graph
+  - add_timeline_entry
+  - get_timeline
   - sync_brain
 mutating: true
 writes_pages: true
-writes_to:
-  - people/
-  - companies/
-  - deals/
-  - concepts/
-  - meetings/
 ---
 
-# Brain Operations — The Ambient Context Layer
+# Brain Operations — VoltMind MVP
 
-The brain is not an archive. It is a live context membrane that every interaction
-flows through in both directions.
+VoltMind is currently a local-first knowledge-base runtime backed by PGLite. This
+skill is the always-on behavior layer for MVP-safe brain reads and writes.
 
-> **Convention:** See `skills/conventions/brain-first.md` for the 5-step lookup protocol.
-> **Convention:** See `skills/conventions/quality.md` for citation and back-link rules.
+## MVP Boundary
+
+Use `voltmind`, not `gbrain`. Use `VOLTMIND_HOME`, `VOLTMIND_SOURCE`,
+`.voltmind-source`, and `voltmind.yml`. Do not use old `GBRAIN_*`, `.gbrain`,
+or `gbrain.yml` paths.
+
+Allowed runtime surface:
+
+- `voltmind search`, `voltmind query`, `voltmind get`, `voltmind list`
+- `voltmind put`, `voltmind delete`, `voltmind restore`
+- `voltmind capture`, `voltmind import`, `voltmind sync`, `voltmind embed`
+- `voltmind link`, `voltmind unlink`, `voltmind backlinks`,
+  `voltmind tags`, `voltmind timeline`, `voltmind timeline-add`,
+  `voltmind graph`
+- MCP `get_links` through `voltmind call` when outgoing-link inspection is
+  required
+- `voltmind sources`, `voltmind status`, `voltmind doctor`
+
+Frozen for MVP: ambient enrichment loops, autonomous agents, dream/autopilot,
+schema evolution, skillpack publishing, cross-brain mounts, raw media storage,
+advanced evaluation, and Minion submit/worker workflows.
 
 ## Contract
 
 This skill guarantees:
-- Brain is checked BEFORE any external API call (brain-first lookup)
-- Every inbound signal triggers the READ → ENRICH → WRITE loop
-- Every outbound response checks brain for relevant context
-- Source attribution on every fact written (inline `[Source: ...]` citations)
-- User's direct statements are highest-authority data
-- Back-links maintained on every brain write (Iron Law)
 
-## Iron Law: Back-Linking (MANDATORY)
+- Check VoltMind before external lookup when answering about known entities or
+  prior notes.
+- Ground claims in page slugs, source ids, or explicit gap statements.
+- Preserve user-provided facts with citations such as `[Source: User, YYYY-MM-DD]`.
+- Use Page CRUD and capture/import paths that are public in the MVP.
+- Materialize entity relationships into the graph through automatic link
+  reconciliation and explicit typed links.
 
-Every mention of a person or company with a brain page MUST create a back-link
-FROM that entity's page TO the page mentioning them. An unlinked mention is a
-broken brain. See `skills/conventions/quality.md` for format.
+## Lookup Protocol
 
-## Phases
+Before answering a question about a person, company, project, concept, or prior
+note:
 
-### Phase 1: Brain-First Lookup (MANDATORY)
+1. `voltmind search "name or keywords"` for fast keyword matches.
+2. `voltmind query "natural question"` for hybrid search.
+3. `voltmind get <slug>` when a specific page is relevant.
+4. Use `voltmind backlinks <slug>`, `voltmind timeline <slug>`, or
+   `voltmind graph <slug>` for relationship questions. Use MCP `get_links`
+   through `voltmind call` only when outgoing edges are specifically required.
 
-Before using ANY external API to research a person, company, or topic:
+If VoltMind has no relevant page, say so plainly instead of filling gaps from
+general knowledge.
 
-1. `gbrain search "name"` — keyword search for existing pages
-2. `gbrain query "natural question about name"` — hybrid search for context
-3. `gbrain get <slug>` — if you know the slug, read the full page
-4. Check backlinks: who references this entity?
-5. Check timeline: recent events involving this entity
+## Write Protocol
 
-The brain almost always has something. External APIs fill gaps, not start from scratch.
+For one-off thoughts or pasted content, prefer:
 
-### Phase 2: On Every Inbound Signal (READ → ENRICH → WRITE)
+```bash
+voltmind capture "content to remember"
+```
 
-Every message, meeting, email, or conversation that references a person or company:
+For explicit page updates, use `voltmind put <slug>` or the MCP `put_page`
+operation. After file-backed edits, keep the index current:
 
-1. **Detect entities** — people, companies, deals mentioned
-2. **Load brain pages** — read existing pages for context before responding
-3. **Identify new information** — what does this signal tell us that the page doesn't know?
-4. **Write it back** — update the brain page with new info + timeline entry + source citation
-5. **Create if missing** — if notable and no page exists, create via enrich skill
+```bash
+voltmind sync --no-pull --no-embed
+voltmind embed --stale
+```
 
-**User's direct statements are the highest-value data source.** Write them to brain
-pages immediately with attribution `[Source: User, YYYY-MM-DD]`.
+Every write should include enough provenance for later retrieval. Do not silently
+create person/company pages as a background enrichment task; in MVP, ask or use a
+direct capture/page update.
 
-### Phase 2.5: Structured Graph Updates (automatic)
+## Entity Graph Write Protocol
 
-Every `put_page` call automatically extracts entity references and writes them
-to the graph (`links` table) with inferred relationship types. Stale links
-(refs no longer in the page text) are removed in the same call. This is
-"auto-link" reconciliation.
+Building a useful page graph is part of VoltMind MVP.
 
-- No manual `add_link` calls needed for ordinary page writes.
-- Inferred link types: `attended` (meeting -> person), `works_at`, `invested_in`,
-  `founded`, `advises`, `source` (frontmatter), `mentions` (default).
-- The `put_page` MCP response includes `auto_links: { created, removed, errors }`
-  so the agent can verify outcomes.
-- To disable: `gbrain config set auto_link false`. Default is on.
-- Timeline entries with specific dates still need explicit `gbrain timeline-add`
-  (or batch via `gbrain extract timeline --source db`).
+When an agent整理后的 page names durable entities or relationships:
 
-### Phase 3: On Every Outbound Response (READ → PULL → RESPOND)
+1. Write the curated page with `voltmind put <slug>` or MCP `put_page`.
+2. Let `put_page` auto-reconcile ordinary markdown/frontmatter links into the
+   graph.
+3. Add explicit typed links when the relationship is known but not safely
+   inferable from text:
 
-Before answering any question about a person, company, or topic:
+   ```bash
+   voltmind link people/alice companies/acme --type works_at
+   voltmind link meetings/2026-05-29-sync people/alice --type attended
+   ```
 
-1. **Check the brain** — read relevant pages
-2. **Pull context** — use compiled truth + recent timeline
-3. **Respond with context** — the brain makes every answer better
+4. Add dated evidence when the relationship is temporal:
 
-Don't answer from general knowledge when a brain page exists.
+   ```bash
+   voltmind timeline-add people/alice 2026-05-29 "Joined the VoltMind runtime review [Source: meeting notes]"
+   ```
 
-### Phase 4: Ambient Enrichment
+5. Verify the graph:
 
-This is not a special mode. This is the default. Everything the user says is an
-ingest event.
+   ```bash
+   voltmind backlinks companies/acme
+   voltmind graph people/alice --depth 2
+   ```
 
-- Person mentioned → check brain, create/enrich if needed (spawn background)
-- Company mentioned → same
-- Link shared → ingest it (delegate to idea-ingest)
-- Data shared → delegate to appropriate skill
+Use explicit links for relationships that matter to retrieval, context assembly,
+or "who/what connects to X" questions. Do not create links for incidental name
+drops.
 
-**Rules:**
-- Never interrupt the conversation to do enrichment
-- Spawn sub-agents for anything that would slow down the response
-- Never announce "I'm enriching the brain" — just do it silently
+## Source-Aware Citations
 
-## Output Format
+Every page payload returned by search/query/get/list may include `source_id`.
+When citing a page, include the source if available:
 
-No separate output. Brain-ops is an always-on behavior layer, not a report generator.
-The output is updated brain pages and enriched responses.
+- Single source: `[default:concepts/example]`
+- Named source: `[notes:projects/voltmind-runtime]`
 
-## Cross-source citation format (v0.18.0+)
-
-When a brain has multiple sources (wiki, gstack, yc-media, etc.), every
-citation MUST include the source id: `[source-id:slug]`. Example:
-
-> You told me about the retry budget approach — see
-> [wiki:topics/resilience] and [gstack:plans/retry-policy] for where
-> this came from.
-
-Rules:
-- The key is `sources.id` (immutable), never `sources.name` (mutable display).
-- Single-source brains still write `[default:slug]` OR may omit the prefix
-  for backward compat.
-- Every page payload returned by `search`, `query`, `get_page`, `list_pages`
-  carries `source_id` — always use it when citing, never guess.
-
-If a search result has `source_id: "gstack"` and `slug: "plans/foo"`,
-the citation is `[gstack:plans/foo]`. That's the whole rule.
+The key is `sources.id`, not display name.
 
 ## Anti-Patterns
 
-- Answering questions about people/companies without checking the brain first
-- Using external APIs before checking the brain
-- Writing facts without inline `[Source: ...]` citations
-- Blocking the response to do enrichment
-- Overwriting user's direct statements with lower-authority sources
-- Creating brain pages for non-notable entities
-
-## Tools Used
-
-- `search` — keyword search
-- `query` — hybrid vector+keyword search
-- `get_page` — read a brain page
-- `put_page` — create/update brain pages
-- `add_link` — cross-reference entities
-- `add_timeline_entry` — record events
-- `get_backlinks` — check who references an entity
-- `sync_brain` — sync changes to the index
+- Calling hidden inherited commands because they still exist in source files.
+- Answering from general knowledge when VoltMind has matching pages.
+- Writing facts without provenance.
+- Running autonomous enrichment, dream, autopilot, or schema-author workflows.
+- Switching storage/topology away from local PGLite during MVP unless the user is
+  explicitly designing a future phase.
+- Leaving curated entity relationships only in prose when they should be graph
+  edges.

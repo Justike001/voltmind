@@ -1,192 +1,98 @@
-# Brain Filing Rules -- MANDATORY for all skills that write to the brain
+# Brain Filing Rules — VoltMind MVP
+
+These rules apply to MVP skills that write pages into VoltMind.
 
 ## The Rule
 
-The PRIMARY SUBJECT of the content determines where it goes. Not the format,
-not the source, not the skill that's running.
+The primary subject determines where a page goes. Not the format, not the
+source, and not the skill that is running.
 
 ## Decision Protocol
 
-1. Identify the primary subject (a person? company? concept? policy issue?)
-2. File in the directory that matches the subject
-3. Cross-link from related directories
-4. When in doubt: what would you search for to find this page again?
+1. Identify the primary subject: person, company, project, concept, meeting, or
+   raw/captured note.
+2. File in the directory that matches that subject.
+3. Add citations and graph links to related pages when relationships are durable.
+4. When unsure, use `inbox/` or ask the user rather than inventing a taxonomy.
 
-## Common Misfiling Patterns -- DO NOT DO THESE
+## MVP Directories
+
+| Directory | Use |
+|-----------|-----|
+| `inbox/` | one-off captures and untriaged notes |
+| `people/` | people the user expects to reference again |
+| `companies/` | companies relevant to the user's work or notes |
+| `projects/` | projects, products, workstreams |
+| `concepts/` | reusable ideas, frameworks, technical concepts |
+| `meetings/` | meeting notes or dated discussion records |
+| `sources/` | raw imported source snapshots that feed multiple pages |
+
+## Common Misfiling Patterns
 
 | Wrong | Right | Why |
 |-------|-------|-----|
-| Analysis of a topic -> `sources/` | -> appropriate subject directory | sources/ is for raw data only |
-| Article about a person -> `sources/` | -> `people/` | Primary subject is a person |
-| Meeting-derived company info -> `meetings/` only | -> ALSO update `companies/` | Entity propagation is mandatory |
-| Research about a company -> `sources/` | -> `companies/` | Primary subject is a company |
-| Reusable framework/thesis -> `sources/` | -> `concepts/` | It's a mental model |
-| Tweet thread about policy -> `media/` | -> `civic/` or `concepts/` | media/ is for content ops |
-
-## Sanctioned exception: synthesis output is sui generis
-
-The "file by primary subject" rule is for raw ingest. Synthesized output that
-is one-of-one to a single source AND a specific reader (a personalized book
-mirror, a strategic-reading playbook tied to one problem) does not fit any
-subject directory cleanly: filing by topic loses the "this is the book"
-dimension; filing by author muddles authorship pages with synthesis pages.
-
-Format-prefixed paths under `media/<format>/<slug>` are the sanctioned
-exception:
-
-- `media/books/<slug>-personalized.md` (book-mirror output)
-- `media/articles/<slug>-personalized.md` (long-form article personalization)
-
-If you find yourself wanting `media/<format>/` for raw ingest, that is still
-the anti-pattern in the table above. The exception is narrow: synthesized,
-one-of-one, sui generis to a single source.
-
-## What `sources/` Is Actually For
-
-`sources/` is ONLY for:
-- Bulk data imports (API dumps, CSV exports, snapshots)
-- Raw data that feeds multiple brain pages (e.g., a guest export, contact sync)
-- Periodic captures (quarterly snapshots, sync exports)
-
-If the content has a clear primary subject (a person, company, concept, policy
-issue), it does NOT go in sources/. Period.
+| Analysis of a topic in `sources/` | `concepts/` or project directory | `sources/` is for raw/source material |
+| Article about a person in `sources/` | `people/` if the person is primary | Primary subject is the person |
+| Meeting-derived company info only in `meetings/` | meeting page plus company link/update | Retrieval should find company context |
+| Original framework in `sources/` | `concepts/` | It is reusable knowledge |
+| Unclear pasted text forced into a taxonomy | `inbox/` | MVP should avoid premature structure |
 
 ## Notability Gate
 
-Not everything deserves a brain page. Before creating a new entity page:
-- **People:** Will you interact with them again? Are they relevant to your work?
-- **Companies:** Are they relevant to your work or interests?
-- **Concepts:** Is this a reusable mental model worth referencing later?
-- **When in doubt, DON'T create.** A missing page can be created later.
-  A junk page wastes attention and degrades search quality.
+Before creating a new entity page:
 
-## Iron Law: Back-Linking (MANDATORY)
+- People: Will the user likely interact with or ask about them again?
+- Companies: Are they relevant to the user's work, projects, or research?
+- Projects: Is this a durable workstream?
+- Concepts: Is this a reusable model or term?
 
-Every mention of a person or company with a brain page MUST create a back-link
-FROM that entity's page TO the page mentioning them. This is bidirectional:
-the new page links to the entity, AND the entity's page links back.
+When in doubt, do not create a new entity page. Capture to `inbox/` and let the
+user or later curation promote it.
 
-Format for back-links (append to Timeline or See Also):
-```
+## Back-Linking
+
+Every mention of a person or company with an existing VoltMind page should link
+back to that page when the relationship is meaningful. Ordinary `voltmind put`
+calls reconcile basic links automatically, so manual link work should be rare.
+
+Format for manual context when needed:
+
+```text
 - **YYYY-MM-DD** | Referenced in [page title](path/to/page.md) -- brief context
 ```
 
-An unlinked mention is a broken brain. The graph is the intelligence.
+For agent-curated relationships that are known but not inferable from prose, add
+typed links explicitly:
 
-## Citation Requirements (MANDATORY)
-
-Every fact written to a brain page must carry an inline `[Source: ...]` citation.
-
-Three formats:
-- **Direct attribution:** `[Source: User, {context}, YYYY-MM-DD]`
-- **API/external:** `[Source: {provider}, YYYY-MM-DD]` or `[Source: {publication}, {URL}]`
-- **Synthesis:** `[Source: compiled from {list of sources}]`
-
-Source precedence (highest to lowest):
-1. User's direct statements (highest authority)
-2. Compiled truth (pre-existing brain synthesis)
-3. Timeline entries (raw evidence)
-4. External sources (API enrichment, web search -- lowest)
-
-When sources conflict, note the contradiction with both citations. Don't
-silently pick one.
-
-## Raw Source Preservation
-
-Every ingested item should have its raw source preserved for provenance.
-
-**Size routing (automatic via `gbrain files upload-raw`):**
-- **< 100 MB text/PDF**: stays in the brain repo (git-tracked) in a `.raw/`
-  sidecar directory alongside the brain page
-- **>= 100 MB OR media files** (video, audio, images): uploaded to cloud
-  storage (Supabase Storage, S3, etc.) with a `.redirect.yaml` pointer left
-  in the brain repo. Files >= 100 MB use TUS resumable upload (6 MB chunks
-  with retry) for reliability.
-
-**Upload command:**
 ```bash
-gbrain files upload-raw <file> --page <page-slug> --type <type>
-```
-Returns JSON: `{storage: "git"}` for small files, `{storage: "supabase", storagePath, reference}` for cloud.
-
-**The `.redirect.yaml` pointer format:**
-```yaml
-target: supabase://brain-files/page-slug/filename.mp4
-bucket: brain-files
-storage_path: page-slug/filename.mp4
-size: 524288000
-size_human: 500 MB
-hash: sha256:abc123...
-mime: video/mp4
-uploaded: 2026-04-11T...
-type: transcript
+voltmind link <from-slug> <to-slug> --type mentions
+voltmind link people/alice companies/acme --type works_at
+voltmind link meetings/2026-05-29-sync people/alice --type attended
 ```
 
-**Accessing stored files:**
-```bash
-gbrain files signed-url <storage-path>    # Generate 1-hour signed URL
-gbrain files restore <dir>                # Download back to local
-```
+This is MVP scope. Broad historical graph backfill is frozen, but per-page
+relationship materialization is not.
 
-This ensures any derived brain page can be traced back to its original source,
-and large files don't bloat the git repo.
+## Citation Requirements
 
-## Dream-cycle synthesize / patterns directories (v0.23)
+Every fact written to a page should carry source context.
 
-The `synthesize` and `patterns` phases of `gbrain dream` write to a
-**fixed allow-list** of paths sourced from `_brain-filing-rules.json`'s
-`dream_synthesize_paths.globs` array. Editing that JSON is the ONLY way
-to add a new directory the synthesis subagent may write to:
+- Direct attribution: `[Source: User, YYYY-MM-DD]`
+- Imported/local file: `[Source: <file or source id>, YYYY-MM-DD]`
+- Web/user-provided URL: `[Source: <publication or URL>, YYYY-MM-DD]`
+- Synthesis: `[Source: compiled from <sources>]`
 
-| Output type | Slug pattern | What goes here |
-|-------------|--------------|----------------|
-| Reflection | `wiki/personal/reflections/YYYY-MM-DD-<topic>-<hash[:6]>` | Self-knowledge, emotional processing, pattern recognition. Verbatim quotes from the user, with analysis. |
-| Original idea | `wiki/originals/ideas/YYYY-MM-DD-<idea>-<hash[:6]>` | New frames, theses, mental models, "conceptive ideologist" outputs. Capture the user's exact phrasing — that's the artifact. |
-| People enrichment | `wiki/people/<existing-slug>` | Timeline entries appended to existing people pages from session mentions. Stub pages for new substantive people. |
-| Pattern | `wiki/personal/patterns/<theme>` | Cross-session theme detected across ≥3 reflections. Highest-leverage output: a pattern can span 25 years if reflections reference dated content. |
-| Cycle summary | `dream-cycle-summaries/YYYY-MM-DD` | Index of every page produced by one dream cycle. Auto-written deterministically by the orchestrator. |
+Source precedence:
 
-**Iron Law for synthesize output:**
-1. Quote the user verbatim. Do not paraphrase memorable phrasings.
-2. Cross-reference compulsively: every new page MUST link to existing brain content.
-3. Slug discipline: lowercase alphanumeric and hyphens only, slash-separated. NO underscores, NO file extensions.
-4. Edited transcripts produce NEW slugs (content-hash suffix changes) — never silently overwrite a prior reflection.
+1. User's direct statements.
+2. Existing VoltMind pages.
+3. Timeline entries.
+4. Imported/captured source excerpts.
+5. External sources.
 
-## Takes attribution (v0.32+)
+## Frozen For MVP
 
-When writing a `<!--- gbrain:takes:begin -->` fence, the **holder** column says
-WHO BELIEVES the claim, not who it's ABOUT. Cross-modal eval over 100K
-production takes scored attribution at 6.5/10 — holder/subject confusion was
-the #1 error. These six rules are the contract. Long form with worked
-examples lives in `docs/takes-vs-facts.md`.
-
-1. **Holder ≠ subject.** The test: did this person SAY or CLEARLY IMPLY this?
-   - YES → `holder = people/<slug>`
-   - NO, it's your analysis OF them → `holder = brain`
-   - Example: "Garry has a hero/rescuer pattern" → `holder=brain` (analysis ABOUT Garry, not stated BY Garry)
-2. **Atomic claims.** Split compound rows into separate rows. One claim per row.
-3. **Amplification ≠ endorsement.** A retweet-only signal caps at `weight 0.55`.
-   The user shared something; they didn't necessarily endorse every clause.
-4. **Self-reported ≠ verified.** "Saif reports 7 figures" → `holder=people/saif`,
-   `weight=0.75`, NOT `holder=world/1.0`. Self-report is a strong individual
-   signal, not consensus fact.
-5. **No false precision.** Use 0.05 increments only (`0.35`, `0.55`, `0.75`).
-   `0.74` and `0.82` imply calibration accuracy that doesn't exist. The engine
-   layer rounds on insert — match the grid in your fence and avoid the warning.
-6. **"So what" test.** Skip metadata-style trivia (Twitter handles, follower
-   counts, obvious bio fields). A take has to be load-bearing for some future
-   query.
-
-**Holder format (enforced as a parser warning in v0.32, error in v0.33+):**
-- `world` (consensus fact, no individual claimant)
-- `brain` (AI-inferred, holder genuinely ambiguous)
-- `people/<slug>` (individual's stated belief)
-- `companies/<slug>` (institutional fact, no individual claimant)
-
-Slugs use the standard grammar (`[a-z0-9._-]+`). `Garry`, `people/Garry-Tan`,
-and `world/garry-tan` all fail validation.
-
-**Founder-describing-own-company rule.** When a founder describes their own
-company, the holder is the FOUNDER, not the company. "We can hit $10M ARR"
-said by Bo Lu → `holder=people/bo-lu`, NOT `holder=companies/clipboard-health`.
-Companies don't speak; their employees do.
+Do not use raw cloud file storage, large media routing, dream-cycle synthesize
+directories, takes/facts fences, schema-author routes, or publishing/export
+rules in MVP agent routing. If the user asks for one, capture the text or explain
+that the specialized pipeline is frozen.
