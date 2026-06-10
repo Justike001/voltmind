@@ -85,6 +85,24 @@ describe('gateway.isAvailable (silent-drop regression surface)', () => {
     expect(isAvailable('embedding')).toBe(true);
   });
 
+  test('embedding AVAILABLE for DashScope when DASHSCOPE_API_KEY set', () => {
+    configureGateway({
+      embedding_model: 'dashscope:text-embedding-v3',
+      embedding_dimensions: 1024,
+      env: { DASHSCOPE_API_KEY: 'fake-dashscope' },
+    });
+    expect(isAvailable('embedding')).toBe(true);
+  });
+
+  test('embedding UNAVAILABLE for DashScope when DASHSCOPE_API_KEY missing', () => {
+    configureGateway({
+      embedding_model: 'dashscope:text-embedding-v3',
+      embedding_dimensions: 1024,
+      env: {},
+    });
+    expect(isAvailable('embedding')).toBe(false);
+  });
+
   test('embedding AVAILABLE for ollama with no API key (local)', () => {
     configureGateway({
       embedding_model: 'ollama:nomic-embed-text',

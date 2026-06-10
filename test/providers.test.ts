@@ -17,6 +17,12 @@ describe('envReady', () => {
     expect(envReady(openai!, { OPENAI_API_KEY: 'sk-test' })).toBe(true);
   });
 
+  test('true for DashScope when DASHSCOPE_API_KEY is set', () => {
+    const dashscope = getRecipe('dashscope');
+    expect(dashscope).toBeDefined();
+    expect(envReady(dashscope!, { DASHSCOPE_API_KEY: 'sk-dashscope-test' })).toBe(true);
+  });
+
   test('false when required env var missing', () => {
     const openai = getRecipe('openai');
     expect(envReady(openai!, {})).toBe(false);
@@ -52,6 +58,13 @@ describe('formatRecipeTable', () => {
     const openaiLine = out.split('\n').find(line => line.startsWith('openai'));
     expect(openaiLine).toBeDefined();
     expect(openaiLine).toContain('✓ ready');
+  });
+
+  test('shows ✓ ready for DashScope when DASHSCOPE_API_KEY is set', () => {
+    const out = formatRecipeTable(listRecipes(), { DASHSCOPE_API_KEY: 'sk-dashscope-test' });
+    const dashscopeLine = out.split('\n').find(line => line.startsWith('dashscope'));
+    expect(dashscopeLine).toBeDefined();
+    expect(dashscopeLine).toContain('✓ ready');
   });
 
   test('shows ✗ missing <ENV> for missing provider', () => {

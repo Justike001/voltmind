@@ -33,6 +33,7 @@ interface ProviderOption {
 
 function configureFromEnv(): void {
   const config = loadConfig();
+  const env = effectiveProviderEnv(config);
   configureGateway({
     embedding_model: config?.embedding_model,
     embedding_dimensions: config?.embedding_dimensions,
@@ -40,8 +41,18 @@ function configureFromEnv(): void {
     chat_model: config?.chat_model,
     chat_fallback_chain: config?.chat_fallback_chain,
     base_urls: config?.provider_base_urls,
-    env: { ...process.env },
+    env,
   });
+}
+
+function effectiveProviderEnv(config = loadConfig()): NodeJS.ProcessEnv {
+  return {
+    ...(config?.openai_api_key ? { OPENAI_API_KEY: config.openai_api_key } : {}),
+    ...(config?.anthropic_api_key ? { ANTHROPIC_API_KEY: config.anthropic_api_key } : {}),
+    ...(config?.dashscope_api_key ? { DASHSCOPE_API_KEY: config.dashscope_api_key } : {}),
+    ...(config?.zeroentropy_api_key ? { ZEROENTROPY_API_KEY: config.zeroentropy_api_key } : {}),
+    ...process.env,
+  };
 }
 
 export function envReady(recipe: Recipe, env: NodeJS.ProcessEnv = process.env): boolean {
@@ -278,14 +289,17 @@ async function runExplain(args: string[]): Promise<void> {
   const asJson = args.includes('--json') || args.includes('-j');
 
   const recipes = listRecipes();
+  const env = effectiveProviderEnv();
   const env_detected = {
-    OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
-    GOOGLE_GENERATIVE_AI_API_KEY: !!process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-    ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
-    VOYAGE_API_KEY: !!process.env.VOYAGE_API_KEY,
-    DEEPSEEK_API_KEY: !!process.env.DEEPSEEK_API_KEY,
-    GROQ_API_KEY: !!process.env.GROQ_API_KEY,
-    TOGETHER_API_KEY: !!process.env.TOGETHER_API_KEY,
+    OPENAI_API_KEY: !!env.OPENAI_API_KEY,
+    GOOGLE_GENERATIVE_AI_API_KEY: !!env.GOOGLE_GENERATIVE_AI_API_KEY,
+    ANTHROPIC_API_KEY: !!env.ANTHROPIC_API_KEY,
+    DASHSCOPE_API_KEY: !!env.DASHSCOPE_API_KEY,
+    VOYAGE_API_KEY: !!env.VOYAGE_API_KEY,
+    ZEROENTROPY_API_KEY: !!env.ZEROENTROPY_API_KEY,
+    DEEPSEEK_API_KEY: !!env.DEEPSEEK_API_KEY,
+    GROQ_API_KEY: !!env.GROQ_API_KEY,
+    TOGETHER_API_KEY: !!env.TOGETHER_API_KEY,
   };
 
   // Parallel probes for local providers (1s timeout each)
@@ -302,7 +316,7 @@ async function runExplain(args: string[]): Promise<void> {
         dims: m.default_dims,
         cost_per_1m_tokens_usd: m.cost_per_1m_tokens_usd,
         price_last_verified: m.price_last_verified,
-        env_ready: envReady(r) || (r.id === 'ollama' && ollama.models_endpoint_valid === true),
+        env_ready: envReady(r, env) || (r.id === 'ollama' && ollama.models_endpoint_valid === true),
         tier: r.tier,
         pros: prosFor(r, 'embedding'),
         cons: consFor(r),
@@ -316,7 +330,7 @@ async function runExplain(args: string[]): Promise<void> {
         model: m.models[0],
         cost_per_1m_tokens_usd: m.cost_per_1m_tokens_usd,
         price_last_verified: m.price_last_verified,
-        env_ready: envReady(r),
+        env_ready: envReady(r, env),
         tier: r.tier,
         pros: prosFor(r, 'expansion'),
         cons: consFor(r),
@@ -331,7 +345,7 @@ async function runExplain(args: string[]): Promise<void> {
         cost_per_1m_input_usd: m.cost_per_1m_input_usd,
         cost_per_1m_output_usd: m.cost_per_1m_output_usd,
         price_last_verified: m.price_last_verified,
-        env_ready: envReady(r),
+        env_ready: envReady(r, env),
         tier: r.tier,
         pros: prosFor(r, 'chat'),
         cons: consFor(r),
@@ -409,6 +423,8 @@ function prosFor(r: Recipe, touchpoint: TouchpointFilter): string[] {
   else if (r.id === 'anthropic') out.push('Default expansion model', 'Best-in-class reasoning');
   else if (r.id === 'ollama') out.push('Local', 'Free', 'Private');
   else if (r.id === 'voyage') out.push('Best rerank pairing');
+  else if (r.id === 'dashscope') out.push('Alibaba Cloud', 'CJK-friendly', 'Matryoshka dim flex');
+  else if (r.id === 'zeroentropyai') out.push('VoltMind default', 'Matryoshka dim flex');
   else if (r.id === 'litellm') out.push('Universal coverage (Bedrock/Vertex/Azure/any)');
   return out;
 }
@@ -435,6 +451,14 @@ function pickRecommended(options: ProviderOption[], env: Record<string, boolean>
   if (env.GOOGLE_GENERATIVE_AI_API_KEY) {
     const google = embOpts.find(o => o.id.startsWith('google:'));
     if (google) return { id: google.id, reason: 'GOOGLE_GENERATIVE_AI_API_KEY set — Gemini embedding at 768 dims.' };
+  }
+  if (env.DASHSCOPE_API_KEY) {
+    const dashscope = embOpts.find(o => o.id.startsWith('dashscope:'));
+    if (dashscope) return { id: dashscope.id, reason: 'DASHSCOPE_API_KEY set — DashScope text-embedding-v3 at 1024 dims.' };
+  }
+  if (env.ZEROENTROPY_API_KEY) {
+    const ze = embOpts.find(o => o.id.startsWith('zeroentropyai:'));
+    if (ze) return { id: ze.id, reason: 'ZEROENTROPY_API_KEY set — ZeroEntropy zembed-1 is VoltMind\'s default embedder.' };
   }
   if (env.VOYAGE_API_KEY) {
     const voyage = embOpts.find(o => o.id.startsWith('voyage:'));

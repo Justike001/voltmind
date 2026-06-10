@@ -16,6 +16,15 @@ tools:
   - add_timeline_entry
 mutating: true
 writes_pages: true
+writes_to:
+  - people/
+  - companies/
+  - concepts/
+  - projects/
+  - meetings/
+  - state/actions/
+  - state/commitments/
+  - state/risks/
 ---
 
 # VoltMind Review Gate

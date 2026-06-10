@@ -2,8 +2,10 @@ import type { Operation } from './operations.ts';
 
 export const VOLTMIND_MVP_CLI_COMMANDS = new Set([
   'init',
+  'reinit-pglite',
   'config',
   'storage',
+  'providers',
   'sources',
   'status',
   'doctor',

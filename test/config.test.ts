@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import { readFileSync } from 'fs';
-import { isSensitiveConfigKey, redactConfigValue } from '../src/commands/config.ts';
+import { isSensitiveConfigKey, redactConfigValue, runConfig } from '../src/commands/config.ts';
 
 // redactUrl is not exported, so we test it by reading the source and
 // reimplementing the regex to verify the pattern, then test via CLI
@@ -105,6 +105,39 @@ describe('redactConfigValue (v0.36.x #892 — set output regression)', () => {
     expect(redactConfigValue('search.mode', 'balanced')).toBe('balanced');
     expect(redactConfigValue('embedding_model', 'voyage:voyage-3-large'))
       .toBe('voyage:voyage-3-large');
+  });
+});
+
+describe('runConfig file-plane provider secrets', () => {
+  test('config set dashscope_api_key writes ~/.voltmind/config.json for gateway load', async () => {
+    const { mkdtempSync, mkdirSync, rmSync, writeFileSync } = await import('fs');
+    const { join } = await import('path');
+    const { tmpdir } = await import('os');
+    const { withEnv } = await import('./helpers/with-env.ts');
+    const tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-dashscope-config-'));
+    try {
+      mkdirSync(join(tmpHome, '.voltmind'), { recursive: true });
+      writeFileSync(
+        join(tmpHome, '.voltmind', 'config.json'),
+        JSON.stringify({ engine: 'pglite', database_path: join(tmpHome, '.voltmind', 'brain.pglite') }),
+      );
+      let dbUnsetKey: string | undefined;
+      const fakeEngine = {
+        unsetConfig: async (key: string) => {
+          dbUnsetKey = key;
+          return 0;
+        },
+      };
+      await withEnv({ VOLTMIND_HOME: tmpHome, DASHSCOPE_API_KEY: undefined }, async () => {
+        await runConfig(fakeEngine as never, ['set', 'dashscope_api_key', 'dashscope-file-key']);
+        const { loadConfigFileOnly, loadConfig } = await import('../src/core/config.ts');
+        expect(loadConfigFileOnly()?.dashscope_api_key).toBe('dashscope-file-key');
+        expect(loadConfig()?.dashscope_api_key).toBe('dashscope-file-key');
+        expect(dbUnsetKey).toBe('dashscope_api_key');
+      });
+    } finally {
+      rmSync(tmpHome, { recursive: true, force: true });
+    }
   });
 });
 

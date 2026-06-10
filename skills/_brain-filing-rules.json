@@ -140,6 +140,30 @@
       "directory": "conversations/",
       "examples": ["conversations/chatgpt/{thread-slug}.md", "conversations/claude/{thread-slug}.md"],
       "description": "Imported chat exports (ChatGPT, Claude, etc.) where the conversation itself is the artifact. Cross-link concepts and people from the conversation; the conversation page is the source-of-truth for the dialog. Distinct from voice-notes/ (which holds raw voice capture)."
+    },
+    {
+      "kind": "state-action",
+      "directory": "state/actions/",
+      "examples": ["state/actions/{action-slug}.md"],
+      "description": "Canonical action items extracted from meetings, daily planning, and project work."
+    },
+    {
+      "kind": "state-commitment",
+      "directory": "state/commitments/",
+      "examples": ["state/commitments/{commitment-slug}.md"],
+      "description": "Canonical commitments or promises that need durable follow-up."
+    },
+    {
+      "kind": "state-risk",
+      "directory": "state/risks/",
+      "examples": ["state/risks/{risk-slug}.md"],
+      "description": "Canonical risks, blockers, and concerns tracked across projects or meetings."
+    },
+    {
+      "kind": "contribution-candidate",
+      "directory": "contribution/candidates/",
+      "examples": ["contribution/candidates/{candidate-slug}.md"],
+      "description": "Potential user contributions or original ideas awaiting review and promotion."
     }
   ],
   "sources_dir": {

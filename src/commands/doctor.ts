@@ -2,6 +2,7 @@ import type { BrainEngine } from '../core/engine.ts';
 import * as db from '../core/db.ts';
 import { LATEST_VERSION, getIdleBlockers } from '../core/migrate.ts';
 import { checkResolvable } from '../core/check-resolvable.ts';
+import type { ResolvableIssue } from '../core/check-resolvable.ts';
 import { autoFixDryViolations, type AutoFixReport, type FixOutcome } from '../core/dry-fix.ts';
 import { autoDetectSkillsDirReadOnly } from '../core/repo-root.ts';
 import { loadOrDeriveManifest } from '../core/skill-manifest.ts';
@@ -61,6 +62,37 @@ export interface Check {
    * Source of truth: `src/core/doctor-categories.ts`.
    */
   category?: CheckCategory;
+}
+
+const VOLTMIND_MVP_SKILL_NAMES = new Set([
+  'ask-user',
+  'brain-ops',
+  'capture',
+  'citation-fixer',
+  'cron-scheduler',
+  'daily',
+  'enrich',
+  'ingest',
+  'maintain',
+  'meeting',
+  'minion-orchestrator',
+  'project',
+  'query',
+  'review',
+  'setup',
+  'testing',
+]);
+
+const DYNAMIC_ENGINE_HEALTH_CHECK_NAMES: Array<Pick<Check, 'name'>> = [
+  { name: 'embed_staleness' },
+  { name: 'entity_link_coverage' },
+  { name: 'timeline_coverage' },
+  { name: 'takes_count' },
+];
+void DYNAMIC_ENGINE_HEALTH_CHECK_NAMES;
+
+function filterMvpResolverIssues(issues: ResolvableIssue[]): ResolvableIssue[] {
+  return issues.filter(issue => VOLTMIND_MVP_SKILL_NAMES.has(issue.skill));
 }
 
 /**
@@ -2803,20 +2835,27 @@ export async function buildChecks(
     }
 
     const report = checkResolvable(skillsDir);
-    if (report.errors.length === 0 && report.warnings.length === 0) {
+    const mvpErrors = filterMvpResolverIssues(report.errors);
+    const mvpWarnings = filterMvpResolverIssues(report.warnings);
+    const frozenIssueCount =
+      report.errors.length + report.warnings.length - mvpErrors.length - mvpWarnings.length;
+    if (mvpErrors.length === 0 && mvpWarnings.length === 0) {
       checks.push({
         name: 'resolver_health',
         status: 'ok',
-        message: `${report.summary.total_skills} skills, all reachable`,
+        message: frozenIssueCount > 0
+          ? `${report.summary.total_skills} skills scanned; MVP-routed skills healthy (${frozenIssueCount} frozen/archive issue(s) ignored)`
+          : `${report.summary.total_skills} skills, all reachable`,
       });
     } else {
-      const status = report.errors.length > 0 ? 'fail' as const : 'warn' as const;
-      const total = report.errors.length + report.warnings.length;
+      const status = mvpErrors.length > 0 ? 'fail' as const : 'warn' as const;
+      const total = mvpErrors.length + mvpWarnings.length;
       const check: Check = {
         name: 'resolver_health',
         status,
-        message: `${total} issue(s): ${report.errors.length} error(s), ${report.warnings.length} warning(s)`,
-        issues: [...report.errors, ...report.warnings].map(i => ({
+        message: `${total} MVP issue(s): ${mvpErrors.length} error(s), ${mvpWarnings.length} warning(s)` +
+          (frozenIssueCount > 0 ? `; ${frozenIssueCount} frozen/archive issue(s) ignored` : ''),
+        issues: [...mvpErrors, ...mvpWarnings].map(i => ({
           type: i.type,
           skill: i.skill,
           action: i.action,
@@ -4301,6 +4340,13 @@ export async function buildChecks(
   // repair target, per #254/Codex review).
   progress.heartbeat('jsonb_integrity');
   try {
+    if (engine.kind !== 'postgres') {
+      checks.push({
+        name: 'jsonb_integrity',
+        status: 'ok',
+        message: 'Skipped (PGLite — JSONB double-encode bug never affected this path)',
+      });
+    } else {
     const sql = db.getConnection();
     const targets: Array<{ table: string; col: string; expected: 'object' | 'array' }> = [
       { table: 'pages',         col: 'frontmatter',    expected: 'object' },
@@ -4327,6 +4373,7 @@ export async function buildChecks(
         status: 'warn',
         message: `${totalBad} row(s) double-encoded (${breakdown.join(', ')}). Fix: voltmind repair-jsonb`,
       });
+    }
     }
   } catch {
     checks.push({ name: 'jsonb_integrity', status: 'warn', message: 'Could not check JSONB integrity' });
@@ -5696,7 +5743,8 @@ export function skillBrainFirstCheck(skillsDir: string): Check {
       message: `Could not load skills manifest from ${skillsDir} (${msg})`,
     };
   }
-  if (manifest.skills.length === 0) {
+  const mvpSkills = manifest.skills.filter(entry => VOLTMIND_MVP_SKILL_NAMES.has(entry.name));
+  if (mvpSkills.length === 0) {
     return {
       name: 'skill_brain_first',
       status: 'ok',
@@ -5707,7 +5755,7 @@ export function skillBrainFirstCheck(skillsDir: string): Check {
   const violators: BrainFirstAnalysis[] = [];
   const typoSkills: BrainFirstAnalysis[] = [];
 
-  for (const entry of manifest.skills) {
+  for (const entry of mvpSkills) {
     const skillPath = join(skillsDir, entry.path);
     if (!existsSync(skillPath)) continue; // resolver_health already reports
     let content: string;
@@ -5760,7 +5808,7 @@ export function skillBrainFirstCheck(skillsDir: string): Check {
     return {
       name: 'skill_brain_first',
       status: 'ok',
-      message: `${manifest.skills.length} skill(s) compliant or exempt${typoNote}`,
+      message: `${mvpSkills.length} MVP skill(s) compliant or exempt${typoNote}`,
     };
   }
 

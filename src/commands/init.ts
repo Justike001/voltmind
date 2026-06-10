@@ -369,6 +369,7 @@ function printNoEmbeddingProviderHint(typos: Array<{ userSet: string; suggested:
   console.error('\nNo embedding provider configured. Set one of:');
   console.error('  export OPENAI_API_KEY=sk-…        # openai:text-embedding-3-large (1536d)');
   console.error('  export ZEROENTROPY_API_KEY=ze-…   # zeroentropyai:zembed-1 (2560d, Matryoshka)');
+  console.error('  export DASHSCOPE_API_KEY=sk-…     # dashscope:text-embedding-v3 (1024d)');
   console.error('  export VOYAGE_API_KEY=pa-…        # voyage:voyage-3-large (1024d)');
   console.error('Then re-run: voltmind init --pglite');
   console.error('');
@@ -766,6 +767,19 @@ function printResolvedAIChoice(
       console.warn('    voltmind init --pglite --embedding-model openai:text-embedding-3-large --embedding-dimensions 1536');
     }
   }
+  if (resolved.embedding_model.startsWith('dashscope:')) {
+    const fileCfg = loadConfigFileOnly();
+    if (!process.env.DASHSCOPE_API_KEY && !fileCfg?.dashscope_api_key) {
+      console.warn('');
+      console.warn('  Heads up: DASHSCOPE_API_KEY is not set.');
+      console.warn('  Set it before first embed:');
+      console.warn('    export DASHSCOPE_API_KEY=...');
+      console.warn('  Or add to ~/.voltmind/config.json:');
+      console.warn('    "dashscope_api_key": "..."');
+      console.warn('  China-region users can override the endpoint with:');
+      console.warn('    "provider_base_urls": { "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1" }');
+    }
+  }
 }
 
 async function initPGLite(opts: {
@@ -839,6 +853,19 @@ async function initPGLite(opts: {
       console.warn('    "zeroentropy_api_key": "..."');
       console.warn('  Or pick a different provider:');
       console.warn('    voltmind init --pglite --embedding-model openai:text-embedding-3-large --embedding-dimensions 1536');
+    }
+  }
+  if (resolvedModel?.startsWith('dashscope:')) {
+    const fileCfg = loadConfigFileOnly();
+    if (!process.env.DASHSCOPE_API_KEY && !fileCfg?.dashscope_api_key) {
+      console.warn('');
+      console.warn('  Heads up: DASHSCOPE_API_KEY is not set.');
+      console.warn('  Set it before first embed:');
+      console.warn('    export DASHSCOPE_API_KEY=...');
+      console.warn('  Or add to ~/.voltmind/config.json:');
+      console.warn('    "dashscope_api_key": "..."');
+      console.warn('  China-region users can override the endpoint with:');
+      console.warn('    "provider_base_urls": { "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1" }');
     }
   }
 
@@ -1056,6 +1083,19 @@ async function initPostgres(opts: {
       console.warn('    "zeroentropy_api_key": "..."');
       console.warn('  Or pick a different provider:');
       console.warn('    voltmind init --pglite --embedding-model openai:text-embedding-3-large --embedding-dimensions 1536');
+    }
+  }
+  if (resolvedModel?.startsWith('dashscope:')) {
+    const fileCfg = loadConfigFileOnly();
+    if (!process.env.DASHSCOPE_API_KEY && !fileCfg?.dashscope_api_key) {
+      console.warn('');
+      console.warn('  Heads up: DASHSCOPE_API_KEY is not set.');
+      console.warn('  Set it before first embed:');
+      console.warn('    export DASHSCOPE_API_KEY=...');
+      console.warn('  Or add to ~/.voltmind/config.json:');
+      console.warn('    "dashscope_api_key": "..."');
+      console.warn('  China-region users can override the endpoint with:');
+      console.warn('    "provider_base_urls": { "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1" }');
     }
   }
 

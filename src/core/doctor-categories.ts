@@ -71,6 +71,8 @@ export const BRAIN_CHECK_NAMES: ReadonlySet<string> = new Set([
   'embedding_env_override',
   'embedding_provider',
   'embedding_width_consistency',
+  'embed_staleness',
+  'entity_link_coverage',
   'embeddings',
   'eval_drift',
   'facts_embedding_width_consistency',
@@ -95,6 +97,8 @@ export const BRAIN_CHECK_NAMES: ReadonlySet<string> = new Set([
   'sync_failures',
   'sync_freshness',
   'takes_weight_grid',
+  'takes_count',
+  'timeline_coverage',
   'unified_multimodal_coverage',
   'voice_gate_health',
 ]);

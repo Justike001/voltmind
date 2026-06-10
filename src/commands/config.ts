@@ -1,5 +1,5 @@
 import type { BrainEngine } from '../core/engine.ts';
-import { loadConfig, loadConfigWithEngine } from '../core/config.ts';
+import { loadConfig, loadConfigFileOnly, loadConfigWithEngine, saveConfig, type VoltMindConfig } from '../core/config.ts';
 import {
   getEmbeddingColumnRegistry,
   validateColumnKey,
@@ -33,6 +33,34 @@ export function redactConfigValue(key: string, value: string): string {
   if (value.includes('postgresql://')) return redactUrl(value);
   if (isSensitiveConfigKey(key)) return '***';
   return value;
+}
+
+const FILE_PLANE_SECRET_KEYS = new Set([
+  'openai_api_key',
+  'anthropic_api_key',
+  'dashscope_api_key',
+  'zeroentropy_api_key',
+]);
+
+function setFilePlaneSecret(key: string, value: string): void {
+  const existing = loadConfigFileOnly() ?? loadConfig();
+  if (!existing) {
+    console.error('No config found. Run: voltmind init');
+    process.exit(1);
+  }
+  saveConfig({
+    ...existing,
+    [key]: value,
+  } as VoltMindConfig);
+}
+
+function unsetFilePlaneSecret(key: string): boolean {
+  const existing = loadConfigFileOnly() ?? loadConfig();
+  if (!existing || !Object.hasOwn(existing, key)) return false;
+  const next = { ...existing } as Record<string, unknown>;
+  delete next[key];
+  saveConfig(next as unknown as VoltMindConfig);
+  return true;
 }
 
 export async function runConfig(engine: BrainEngine, args: string[]) {
@@ -82,6 +110,16 @@ export async function runConfig(engine: BrainEngine, args: string[]) {
     const key = args[1];
     if (!key) {
       console.error('Usage: voltmind config unset <key> | --pattern <prefix>');
+      process.exit(1);
+    }
+    if (FILE_PLANE_SECRET_KEYS.has(key)) {
+      const fileUnset = unsetFilePlaneSecret(key);
+      const dbUnset = await engine.unsetConfig(key).catch(() => 0);
+      if (fileUnset || dbUnset > 0) {
+        console.log(`Unset ${key}`);
+        return;
+      }
+      console.error(`Config key not found: ${key}`);
       process.exit(1);
     }
     const n = await engine.unsetConfig(key);
@@ -139,6 +177,13 @@ export async function runConfig(engine: BrainEngine, args: string[]) {
       console.error(`[config]`);
       console.error(`[config] No --force escape: silently writing a no-op preserves the bug class this rejection closes.`);
       process.exit(1);
+    }
+
+    if (FILE_PLANE_SECRET_KEYS.has(key)) {
+      setFilePlaneSecret(key, value);
+      await engine.unsetConfig(key).catch(() => 0);
+      console.log(`Set ${key}=${redactConfigValue(key, value)}`);
+      return;
     }
 
     // v0.37.10.0 (D6): strict unknown-key rejection with --force escape hatch.

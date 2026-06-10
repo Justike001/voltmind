@@ -201,9 +201,11 @@ describe('v0.37 Lane C.3 — ZE key reaches buildGatewayConfig', () => {
     // process.env wins over config (intentional — operator escape hatch).
     // Unset the env key so the test exercises the config-only path.
     const savedZe = process.env.ZEROENTROPY_API_KEY;
+    const savedDashscope = process.env.DASHSCOPE_API_KEY;
     const savedOai = process.env.OPENAI_API_KEY;
     const savedAnth = process.env.ANTHROPIC_API_KEY;
     delete process.env.ZEROENTROPY_API_KEY;
+    delete process.env.DASHSCOPE_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     try {
@@ -211,16 +213,19 @@ describe('v0.37 Lane C.3 — ZE key reaches buildGatewayConfig', () => {
       const cfg = {
         engine: 'pglite' as const,
         zeroentropy_api_key: 'test-ze-key',
+        dashscope_api_key: 'test-dashscope-key',
         openai_api_key: 'test-oai',
         anthropic_api_key: 'test-anth',
       };
       const gwCfg = buildGatewayConfig(cfg as any);
       expect(gwCfg.env?.ZEROENTROPY_API_KEY).toBe('test-ze-key');
+      expect(gwCfg.env?.DASHSCOPE_API_KEY).toBe('test-dashscope-key');
       // Regression on the existing two keys.
       expect(gwCfg.env?.OPENAI_API_KEY).toBe('test-oai');
       expect(gwCfg.env?.ANTHROPIC_API_KEY).toBe('test-anth');
     } finally {
       if (savedZe !== undefined) process.env.ZEROENTROPY_API_KEY = savedZe;
+      if (savedDashscope !== undefined) process.env.DASHSCOPE_API_KEY = savedDashscope;
       if (savedOai !== undefined) process.env.OPENAI_API_KEY = savedOai;
       if (savedAnth !== undefined) process.env.ANTHROPIC_API_KEY = savedAnth;
     }
@@ -237,6 +242,20 @@ describe('v0.37 Lane C.3 — ZE key reaches buildGatewayConfig', () => {
     } finally {
       if (saved === undefined) delete process.env.ZEROENTROPY_API_KEY;
       else process.env.ZEROENTROPY_API_KEY = saved;
+    }
+  });
+
+  test('DASHSCOPE_API_KEY process env wins over dashscope_api_key config', async () => {
+    const saved = process.env.DASHSCOPE_API_KEY;
+    process.env.DASHSCOPE_API_KEY = 'dashscope-env-wins';
+    try {
+      const { buildGatewayConfig } = await import('../src/cli.ts');
+      const cfg = { engine: 'pglite' as const, dashscope_api_key: 'dashscope-file-key' };
+      const gwCfg = buildGatewayConfig(cfg as any);
+      expect(gwCfg.env?.DASHSCOPE_API_KEY).toBe('dashscope-env-wins');
+    } finally {
+      if (saved === undefined) delete process.env.DASHSCOPE_API_KEY;
+      else process.env.DASHSCOPE_API_KEY = saved;
     }
   });
 

@@ -166,9 +166,9 @@ describe('Lane B — init precedence chain (CLI > env > existing file > default)
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// Lane C.3 — ZEROENTROPY_API_KEY env merge into VoltMindConfig
+// Lane C.3 — hosted embedding API keys env merge into VoltMindConfig
 // ─────────────────────────────────────────────────────────────────────
-describe('Lane C.3 — env ZEROENTROPY_API_KEY merges into loadConfig', () => {
+describe('Lane C.3 — hosted embedding API keys merge into loadConfig', () => {
   let tmpHome: string;
   let origHome: string | undefined;
 
@@ -204,6 +204,22 @@ describe('Lane C.3 — env ZEROENTROPY_API_KEY merges into loadConfig', () => {
       const { loadConfigFileOnly } = await import('../src/core/config.ts');
       const cfg = loadConfigFileOnly();
       expect(cfg?.zeroentropy_api_key).toBeUndefined();
+    });
+  });
+
+  test('process.env.DASHSCOPE_API_KEY → cfg.dashscope_api_key', async () => {
+    await withEnv({ DASHSCOPE_API_KEY: 'dashscope-from-env-key' }, async () => {
+      const { loadConfig } = await import('../src/core/config.ts');
+      const cfg = loadConfig();
+      expect(cfg?.dashscope_api_key).toBe('dashscope-from-env-key');
+    });
+  });
+
+  test('loadConfigFileOnly does NOT merge the env DashScope key', async () => {
+    await withEnv({ DASHSCOPE_API_KEY: 'dashscope-from-env-key' }, async () => {
+      const { loadConfigFileOnly } = await import('../src/core/config.ts');
+      const cfg = loadConfigFileOnly();
+      expect(cfg?.dashscope_api_key).toBeUndefined();
     });
   });
 });

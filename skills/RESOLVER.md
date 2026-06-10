@@ -41,8 +41,11 @@ detection or background enrichment loops automatically.
 | "build the graph", "link these entities", "create relationship", "connect pages", "整理实体关系", "建链" | `skills/brain-ops/SKILL.md` |
 | "capture this", "save this thought", "remember this", "drop this in the inbox", "save to brain" | `skills/capture/SKILL.md` |
 | "ingest this", "import this folder", "sync this source", "embed stale chunks" | `skills/ingest/SKILL.md` |
+| "cold start", "fill my brain", "bootstrap brain", "import my data", "what should I import first", "populate brain", "now what?", "离线导入", "初始化数据" | `skills/cold-start/SKILL.md` |
 | "Set up VoltMind", first boot, Bun install, local init | `skills/setup/SKILL.md` |
 | "brain health", "doctor", "status", "embedding freshness", "job status", "cancel job" | `skills/maintain/SKILL.md` |
+| "minions", "job queue", "background jobs", "what jobs are running", "jobs stats" | `skills/minion-orchestrator/SKILL.md` |
+| "schedule a job", "cron", "recurring job", "autopilot schedule", "daily maintenance" | `skills/cron-scheduler/SKILL.md` |
 | "where should this page go", filing rules, source selection | `skills/brain-ops/SKILL.md` plus `skills/_brain-filing-rules.md` |
 | "present options", "ask before proceeding", "choice gate", "user decision" | `skills/ask-user/SKILL.md` |
 
@@ -60,7 +63,7 @@ Agent-facing skills may use only these public runtime commands unless the user i
 explicitly working on VoltMind internals:
 
 - Setup/runtime: `voltmind init`, `voltmind config`, `voltmind storage`,
-  `voltmind sources`, `voltmind status`, `voltmind doctor`,
+  `voltmind providers`, `voltmind sources`, `voltmind status`, `voltmind doctor`,
   `voltmind apply-migrations`.
 - Page CRUD: `voltmind get`, `voltmind put`, `voltmind list`,
   `voltmind delete`, `voltmind restore`, `voltmind search`,
@@ -92,8 +95,9 @@ Keep these files/modules recoverable, but do not dispatch to them in MVP:
 - Advanced ingestion: media/book/podcast/PDF pipelines, inherited meeting enrichment,
   social/web research enrichers, archive crawler, academic verification,
   publish/export flows.
-- Background orchestration beyond MVP jobs: Minion submit/shell/worker,
-  subagent routing, webhook transforms, cron scheduling, dream maintenance.
+- Background orchestration beyond MVP visibility: Minion submit/shell/worker,
+  subagent routing, webhook transforms, host scheduler installation, autopilot,
+  and dream maintenance. Jobs list/get/cancel/stats remain allowed.
 - Multi-brain/topology flows: mounts, cross-brain federation, thin-client setup,
   remote artifact brains, cloud storage migration.
 

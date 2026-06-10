@@ -10,7 +10,7 @@ import type { MinionJob, MinionJobStatus } from '../core/minions/types.ts';
 import { loadConfig, isThinClient } from '../core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../core/mcp-client.ts';
 
-const MVP_JOB_SUBCOMMANDS = new Set(['list', 'get', 'cancel', 'stats']);
+const MVP_JOB_SUBCOMMANDS = new Set(['list', 'get', 'cancel', 'stats', 'smoke']);
 
 function parseFlag(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);

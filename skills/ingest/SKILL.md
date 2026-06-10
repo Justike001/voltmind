@@ -15,6 +15,13 @@ tools:
   - sync_brain
 mutating: true
 writes_pages: true
+writes_to:
+  - sources/
+  - voice-notes/
+  - conversations/
+  - media/
+  - concepts/
+  - ideas/
 ---
 
 # Ingest Skill — VoltMind MVP

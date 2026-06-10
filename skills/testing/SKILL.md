@@ -61,12 +61,19 @@ Run the focused MVP gate before calling the runtime healthy:
 ```bash
 bun run typecheck
 bun test test/cli-help-discoverability.test.ts test/mvp-surface.test.ts test/mcp-tool-defs.test.ts test/operations-descriptions.test.ts
-voltmind doctor --fast
 voltmind status
+voltmind health
+voltmind doctor --fast
 ```
 
 On Windows, if Bun subprocess tests return `status=-1` but the same CLI command
 works manually, report it as a harness issue and include the manual verification.
+
+MVP note: `doctor --fast` is a diagnostic signal, not the only readiness gate.
+While inherited GBrain skills remain frozen in the repository, doctor may report
+resolver/archive issues even when PGLite storage and the MVP command surface are
+usable. Treat `status`, `health`, `--tools-json`, import/search smoke, and the
+focused MVP tests as the initialization gate.
 
 ## Mode 3: Project Test Health
 

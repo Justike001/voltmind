@@ -435,7 +435,15 @@ export async function runApplyMigrations(args: string[]): Promise<void> {
   for (const m of toRun) {
     console.log(`\n=== Applying migration v${m.version}: ${m.featurePitch.headline} ===`);
     try {
-      const result = await m.orchestrator(orchestratorOptsFrom(cli));
+      const prevInternalMigration = process.env.VOLTMIND_INTERNAL_MIGRATION;
+      process.env.VOLTMIND_INTERNAL_MIGRATION = '1';
+      let result;
+      try {
+        result = await m.orchestrator(orchestratorOptsFrom(cli));
+      } finally {
+        if (prevInternalMigration === undefined) delete process.env.VOLTMIND_INTERNAL_MIGRATION;
+        else process.env.VOLTMIND_INTERNAL_MIGRATION = prevInternalMigration;
+      }
       if (result.status === 'failed') {
         console.error(`Migration v${m.version} reported status=failed.`);
         // Record the attempt as 'partial' (not 'complete') so the cap counts

@@ -41,6 +41,18 @@ for (const op of operations) {
 
 // CLI-only commands that bypass the operation layer
 const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'features', 'autopilot', 'graph-query', 'jobs', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'transcripts', 'models', 'remote', 'recall', 'forget', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status']);
+
+const INTERNAL_MIGRATION_CLI = new Set([
+  'autopilot',
+  'extract',
+  'frontmatter',
+  'integrity',
+  'repair-jsonb',
+  'reindex',
+  'reindex-code',
+  'reindex-frontmatter',
+  'takes',
+]);
 // CLI-only commands whose handlers print their own --help text. These are
 // excluded from the generic short-circuit so detailed per-command and
 // per-subcommand usage stays reachable.
@@ -113,7 +125,11 @@ async function main() {
     command = 'query';
   }
 
-  if (!isVoltMindMvpCliCommand(command)) {
+  const allowInternalMigrationCli =
+    process.env.VOLTMIND_INTERNAL_MIGRATION === '1' &&
+    INTERNAL_MIGRATION_CLI.has(command);
+
+  if (!isVoltMindMvpCliCommand(command) && !allowInternalMigrationCli) {
     if (CLI_ONLY.has(command) || operations.some(op => op.cliHints?.name === command)) {
       console.error(voltMindMvpUnavailableMessage(command));
     } else {
@@ -1733,6 +1749,7 @@ export function buildGatewayConfig(c: VoltMindConfig): AIGatewayConfig {
   const envFromConfig: Record<string, string> = {};
   if (c.openai_api_key) envFromConfig.OPENAI_API_KEY = c.openai_api_key;
   if (c.anthropic_api_key) envFromConfig.ANTHROPIC_API_KEY = c.anthropic_api_key;
+  if (c.dashscope_api_key) envFromConfig.DASHSCOPE_API_KEY = c.dashscope_api_key;
   // v0.37 fix wave (CDX2-5+6): ZE became the default provider in v0.36 but
   // the env-mapping at this seam never picked it up. `voltmind config set
   // zeroentropy_api_key X` wrote DB plane (ignored by gateway). The file-
@@ -1898,6 +1915,7 @@ SETUP
   config [show|get|set] <key> [val]  Brain config
   storage status [--json]            Storage tier status and health
   sources list|add|remove|status     Manage local knowledge sources
+  providers list|test|env|explain    AI provider diagnostics
   status [--json]                    Runtime status snapshot
   doctor [--json] [--fast]           Health check
   apply-migrations --yes             Apply schema migrations

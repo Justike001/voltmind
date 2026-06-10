@@ -132,7 +132,7 @@
     {
       "name": "cron-scheduler",
       "path": "cron-scheduler/SKILL.md",
-      "description": "Schedule management with staggering, quiet hours, and wake-up override."
+      "description": "VoltMind MVP scheduling guidance for Windows/PGLite: manual maintenance cadence, no host scheduler install."
     },
     {
       "name": "reports",
@@ -162,7 +162,7 @@
     {
       "name": "minion-orchestrator",
       "path": "minion-orchestrator/SKILL.md",
-      "description": "Frozen inherited Minions skill for deterministic shell jobs and LLM subagent orchestration. Not part of the VoltMind Phase 1 public route."
+      "description": "VoltMind MVP job visibility for Windows/PGLite: list/get/cancel/stats only, with submit/worker/autopilot flows frozen."
     },
     {
       "name": "schema-author",
@@ -237,7 +237,7 @@
     {
       "name": "cold-start",
       "path": "cold-start/SKILL.md",
-      "description": "Day-one brain bootstrapping: sequence the highest-leverage data sources (contacts, calendar, email, conversations, social, archives) to go from empty brain to useful brain. Uses ClawVisor for safe credential handling — agents never hold raw API keys."
+      "description": "VoltMind MVP day-one bootstrapping: import offline exports and local files into a new local brain. Online API access, ClawVisor, Gmail/Calendar/Twitter live connectors, archive-crawler, and meeting-ingestion are frozen or offline-export only."
     },
     {
       "name": "ask-user",

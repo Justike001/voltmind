@@ -113,6 +113,8 @@ facts or create boilerplate stubs.
 
 Use `put_raw_data` for API responses, verified web snippets, user-provided
 exports, or source payloads that support the enrichment:
+Attach raw data only after the target page exists; `put_raw_data` is page-scoped
+and will not create a missing page by itself.
 
 ```bash
 voltmind call put_raw_data '{"slug":"people/alice-example","source":"user-provided-linkedin-export","data":{"fetched_at":"2026-06-09T00:00:00Z","summary":"..."}}'

@@ -30,6 +30,11 @@ describe('groupReadyByProvider — embedding touchpoint', () => {
     expect(got.map(p => p.recipeId)).toContain('zeroentropyai');
   });
 
+  test('DASHSCOPE_API_KEY alone → dashscope is ready', async () => {
+    const got = await groupReadyByProvider('embedding', { DASHSCOPE_API_KEY: 'dashscope-test' });
+    expect(got.map(p => p.recipeId)).toContain('dashscope');
+  });
+
   test('OPENAI_API_KEY + VOYAGE_API_KEY → both providers in ready list', async () => {
     const got = await groupReadyByProvider('embedding', {
       OPENAI_API_KEY: 'sk-test',
@@ -43,6 +48,7 @@ describe('groupReadyByProvider — embedding touchpoint', () => {
   test('each provider appears at most once (codex finding #2 dedup)', async () => {
     const got = await groupReadyByProvider('embedding', {
       OPENAI_API_KEY: 'sk-test',
+      DASHSCOPE_API_KEY: 'dashscope-test',
       VOYAGE_API_KEY: 'pa-test',
       ZEROENTROPY_API_KEY: 'ze-test',
     });

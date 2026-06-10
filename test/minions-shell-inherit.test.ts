@@ -25,6 +25,7 @@ describe('INHERIT_NAME_RE', () => {
     'openai_api_key',
     'voyage_api_key',
     'groq_api_key',
+    'dashscope_api_key',
     'zeroentropy_api_key',
     'remote_mcp_oauth_client_secret',
     'field2',
@@ -66,6 +67,9 @@ describe('deriveEnvKey', () => {
   });
   test('groq_api_key → GROQ_API_KEY', () => {
     expect(deriveEnvKey('groq_api_key')).toBe('GROQ_API_KEY');
+  });
+  test('dashscope_api_key → DASHSCOPE_API_KEY', () => {
+    expect(deriveEnvKey('dashscope_api_key')).toBe('DASHSCOPE_API_KEY');
   });
   test('arbitrary_field → ARBITRARY_FIELD (default uppercase)', () => {
     expect(deriveEnvKey('arbitrary_field')).toBe('ARBITRARY_FIELD');

@@ -32,6 +32,13 @@ tools:
   - sync_brain
 mutating: true
 writes_pages: true
+writes_to:
+  - people/
+  - companies/
+  - concepts/
+  - projects/
+  - meetings/
+  - analysis/
 ---
 
 # Brain Operations — VoltMind MVP
