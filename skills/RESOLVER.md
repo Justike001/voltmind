@@ -41,7 +41,7 @@ detection or background enrichment loops automatically.
 | "build the graph", "link these entities", "create relationship", "connect pages", "整理实体关系", "建链" | `skills/brain-ops/SKILL.md` |
 | "capture this", "save this thought", "remember this", "drop this in the inbox", "save to brain" | `skills/capture/SKILL.md` |
 | "ingest this", "import this folder", "sync this source", "embed stale chunks" | `skills/ingest/SKILL.md` |
-| "cold start", "fill my brain", "bootstrap brain", "import my data", "what should I import first", "populate brain", "now what?", "离线导入", "初始化数据" | `skills/cold-start/SKILL.md` |
+| "cold start", "fill my brain", "bootstrap brain", "import my data", "what should I import first", "populate brain", "now what?", "离线导入", "初始化数据", "冷启动" | `skills/cold-start/SKILL.md` |
 | "Set up VoltMind", first boot, Bun install, local init | `skills/setup/SKILL.md` |
 | "brain health", "doctor", "status", "embedding freshness", "job status", "cancel job" | `skills/maintain/SKILL.md` |
 | "minions", "job queue", "background jobs", "what jobs are running", "jobs stats" | `skills/minion-orchestrator/SKILL.md` |

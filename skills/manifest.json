@@ -237,7 +237,7 @@
     {
       "name": "cold-start",
       "path": "cold-start/SKILL.md",
-      "description": "VoltMind MVP day-one bootstrapping: import offline exports and local files into a new local brain. Online API access, ClawVisor, Gmail/Calendar/Twitter live connectors, archive-crawler, and meeting-ingestion are frozen or offline-export only."
+      "description": "VoltMind MVP Microsoft cold start: bootstrap a new brain from approved Outlook Calendar, Outlook Email, and Microsoft Teams context, with smart sampling, citations, cross-source reconciliation, and sync-after-write."
     },
     {
       "name": "ask-user",

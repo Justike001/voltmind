@@ -46,27 +46,11 @@ writes_to:
 VoltMind is currently a local-first knowledge-base runtime backed by PGLite. This
 skill is the always-on behavior layer for MVP-safe brain reads and writes.
 
-## MVP Boundary
+## Boundary
 
-Use `voltmind`, not `gbrain`. Use `VOLTMIND_HOME`, `VOLTMIND_SOURCE`,
-`.voltmind-source`, and `voltmind.yml`. Do not use old `GBRAIN_*`, `.gbrain`,
-or `gbrain.yml` paths.
-
-Allowed runtime surface:
-
-- `voltmind search`, `voltmind query`, `voltmind get`, `voltmind list`
-- `voltmind put`, `voltmind delete`, `voltmind restore`
-- `voltmind capture`, `voltmind import`, `voltmind sync`, `voltmind embed`
-- `voltmind link`, `voltmind unlink`, `voltmind backlinks`,
-  `voltmind tags`, `voltmind timeline`, `voltmind timeline-add`,
-  `voltmind graph`
-- MCP `get_links` through `voltmind call` when outgoing-link inspection is
-  required
-- `voltmind sources`, `voltmind status`, `voltmind doctor`
-
-Frozen for MVP: ambient enrichment loops, autonomous agents, dream/autopilot,
-schema evolution, skillpack publishing, cross-brain mounts, raw media storage,
-advanced evaluation, and Minion submit/worker workflows.
+Follow the central MVP boundary in `AGENTS.md` and `skills/RESOLVER.md`.
+This skill adds the always-on read/write discipline for the allowed page,
+retrieval, graph, timeline, source, and sync commands.
 
 ## Contract
 
@@ -80,7 +64,13 @@ This skill guarantees:
 - Materialize entity relationships into the graph through automatic link
   reconciliation and explicit typed links.
 
-## Lookup Protocol
+## Iron Law: Back-Linking (MANDATORY)
+
+Every mention of a person or company with a brain page MUST create a back-link
+FROM that entity's page TO the page mentioning them. An unlinked mention is a
+broken brain. See `skills/conventions/quality.md` for format.
+
+### Phase 1: Brain-First Lookup (MANDATORY)
 
 Before answering a question about a person, company, project, concept, or prior
 note:
@@ -94,6 +84,55 @@ note:
 
 If VoltMind has no relevant page, say so plainly instead of filling gaps from
 general knowledge.
+
+### Phase 2: On Every Inbound Signal (READ → ENRICH → WRITE)
+
+Every message, meeting, email, or conversation that references a person or company:
+
+1. **Detect entities** — people, companies, deals mentioned
+2. **Load brain pages** — read existing pages for context before responding
+3. **Identify new information** — what does this signal tell us that the page doesn't know?
+4. **Write it back** — update the brain page with new info + timeline entry + source citation
+5. **Create if missing** — if notable and no page exists, create via enrich skill
+
+**User's direct statements are the highest-value data source.** Write them to brain
+pages immediately with attribution `[Source: User, YYYY-MM-DD]`.
+
+### Phase 2.5: Structured Graph Updates (automatic)
+
+Every `put_page` call automatically extracts entity references and writes them
+to the graph (`links` table) with inferred relationship types. Stale links
+(refs no longer in the page text) are removed in the same call. This is
+"auto-link" reconciliation.
+
+- No manual `add_link` calls needed for ordinary page writes.
+- Inferred link types: `attended` (meeting -> person), `works_at`, `invested_in`,
+  `founded`, `advises`, `source` (frontmatter), `mentions` (default).
+- The `put_page` MCP response includes `auto_links: { created, removed, errors }`
+  so the agent can verify outcomes.
+- To disable: `voltmind config set auto_link false`. Default is on.
+- Timeline entries with specific dates still need explicit `voltmind timeline-add`
+  (or batch via `voltmind extract timeline --source db`).
+
+### Phase 3: On Every Outbound Response (READ → PULL → RESPOND)
+
+Before answering any question about a person, company, or topic:
+
+1. **Check the brain** — read relevant pages
+2. **Pull context** — use compiled truth + recent timeline
+3. **Respond with context** — the brain makes every answer better
+
+Don't answer from general knowledge when a brain page exists.
+
+### Phase 4: Ambient Enrichment
+
+This is not a special mode. This is the default. Everything the user says is an
+ingest event.
+
+- Person mentioned → check brain, create/enrich if needed (spawn background)
+- Company mentioned → same
+- Link shared → ingest it (delegate to idea-ingest)
+- Data shared → delegate to appropriate skill
 
 ## Write Protocol
 
@@ -169,3 +208,14 @@ The key is `sources.id`, not display name.
   explicitly designing a future phase.
 - Leaving curated entity relationships only in prose when they should be graph
   edges.
+
+  ## Tools Used
+
+- `search` — keyword search
+- `query` — hybrid vector+keyword search
+- `get_page` — read a brain page
+- `put_page` — create/update brain pages
+- `add_link` — cross-reference entities
+- `add_timeline_entry` — record events
+- `get_backlinks` — check who references an entity
+- `sync_brain` — sync changes to the index
