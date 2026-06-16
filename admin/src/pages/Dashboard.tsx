@@ -1,136 +1,129 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 
 interface FeedEvent {
-  agent: string;
+  agent_name?: string;
+  token_name?: string;
   operation: string;
-  scopes: string;
   latency_ms: number;
   status: string;
-  timestamp: string;
+  created_at: string;
+  error_message?: string | null;
+}
+
+function metricValue(value: unknown): string {
+  if (typeof value === 'number') return value.toLocaleString();
+  if (typeof value === 'string') return value;
+  return '—';
+}
+
+function timeAgo(ts: string): string {
+  const diff = Date.now() - new Date(ts).getTime();
+  if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return new Date(ts).toLocaleDateString();
 }
 
 export function DashboardPage() {
-  const [stats, setStats] = useState({ connected_agents: 0, requests_today: 0, active_tokens: 0 });
+  const [stats, setStats] = useState<Record<string, unknown>>({});
+  const [fullStats, setFullStats] = useState<Record<string, unknown>>({});
   const [health, setHealth] = useState({ expiring_soon: 0, error_rate: '0%' });
-  const [events, setEvents] = useState<FeedEvent[]>([]);
-  const [sseStatus, setSseStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [requests, setRequests] = useState<FeedEvent[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const [basic, full, h, recent] = await Promise.all([
+        api.stats(),
+        api.fullStats(),
+        api.health(),
+        api.requests(1, ''),
+      ]);
+      setStats(basic);
+      setFullStats(full);
+      setHealth(h);
+      setRequests(recent.rows || []);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   useEffect(() => {
-    api.stats().then(setStats).catch(() => {});
-    api.health().then(setHealth).catch(() => {});
-
-    const es = new EventSource('/admin/events');
-    eventSourceRef.current = es;
-    es.onopen = () => setSseStatus('connected');
-    es.onmessage = (e) => {
-      try {
-        const event = JSON.parse(e.data) as FeedEvent;
-        setEvents(prev => [event, ...prev].slice(0, 50));
-      } catch {}
-    };
-    es.onerror = () => {
-      setSseStatus('disconnected');
-      setTimeout(() => {
-        setSseStatus('connecting');
-        es.close();
-        // Reconnect handled by browser EventSource auto-retry
-      }, 3000);
-    };
-
-    const interval = setInterval(() => {
-      api.stats().then(setStats).catch(() => {});
-      api.health().then(setHealth).catch(() => {});
-    }, 30000);
-
-    return () => { es.close(); clearInterval(interval); };
+    void load();
+    const timer = setInterval(() => { void load(); }, 30000);
+    return () => clearInterval(timer);
   }, []);
 
-  const timeAgo = (ts: string) => {
-    const diff = Date.now() - new Date(ts).getTime();
-    if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`;
-    return `${Math.floor(diff / 3600000)}h ago`;
-  };
+  const cards = [
+    { label: 'Pages', value: fullStats.page_count ?? fullStats.pages ?? fullStats.pageCount },
+    { label: 'Chunks', value: fullStats.chunk_count ?? fullStats.chunks ?? fullStats.chunkCount },
+    { label: 'Sources', value: fullStats.source_count ?? fullStats.sources ?? fullStats.sourceCount },
+    { label: 'Requests 24h', value: stats.requests_today },
+    { label: 'Active Tokens', value: stats.active_tokens },
+    { label: 'Active API Keys', value: stats.active_api_keys },
+  ];
 
   return (
     <>
-      <h1 className="page-title">Dashboard</h1>
+      <div className="page-header-row">
+        <div>
+          <h1 className="page-title" style={{ marginBottom: 4 }}>Dashboard</h1>
+          <div className="page-subtitle">VoltMind runtime health, brain shape, and recent agent/API activity.</div>
+        </div>
+        <button className="btn btn-secondary" onClick={load}>Refresh</button>
+      </div>
 
-      <div style={{ display: 'flex', gap: 24 }}>
-        <div style={{ flex: 1 }}>
-          <div className="metrics">
-            <div className="metric">
-              <div className="metric-value">{stats.connected_agents}</div>
-              <div className="metric-label">Connected Agents</div>
-            </div>
-            <div className="metric">
-              <div className="metric-value">{stats.requests_today}</div>
-              <div className="metric-label">Requests Today</div>
-            </div>
-            <div className="metric">
-              <div className="metric-value">{stats.active_tokens}</div>
-              <div className="metric-label">Active Tokens</div>
-            </div>
+      {error && <div className="action-error">{error}</div>}
+
+      <div className="dashboard-grid">
+        {cards.map(card => (
+          <div key={card.label} className="metric">
+            <div className="metric-value">{metricValue(card.value)}</div>
+            <div className="metric-label">{card.label}</div>
           </div>
+        ))}
+      </div>
 
-          <h2 className="section-title">
-            Live Activity
-            <span style={{ marginLeft: 8, fontSize: 10, color: sseStatus === 'connected' ? 'var(--success)' : sseStatus === 'connecting' ? 'var(--warning)' : 'var(--error)' }}>
-              {sseStatus === 'connected' ? '● connected' : sseStatus === 'connecting' ? '● connecting...' : '● disconnected'}
-            </span>
-          </h2>
+      <div className="dashboard-split">
+        <section className="ops-panel">
+          <h2 className="section-title">Runtime Health</h2>
+          <div className="health-row"><span>Engine</span><span className="mono">{metricValue(fullStats.engine)}</span></div>
+          <div className="health-row"><span>Status</span><span className="badge badge-success">{metricValue(fullStats.status || 'ok')}</span></div>
+          <div className="health-row"><span>Error rate 24h</span><span style={{ color: health.error_rate === '0%' ? 'var(--success)' : 'var(--error)' }}>{health.error_rate}</span></div>
+          <div className="health-row"><span>Tokens expiring soon</span><span className="mono">{health.expiring_soon}</span></div>
+        </section>
 
-          <div className="feed">
-            {events.length === 0 ? (
-              <div className="feed-empty">
-                {sseStatus === 'connected' ? 'No requests yet. Agents will appear when they connect.' : 'Connecting...'}
-              </div>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Agent</th>
-                    <th>Operation</th>
-                    <th>Scopes</th>
-                    <th>Latency</th>
-                    <th>Status</th>
-                    <th>Time</th>
+        <section className="ops-panel">
+          <h2 className="section-title">Recent API Activity</h2>
+          {requests.length === 0 ? (
+            <div className="feed-empty">No recent MCP/API requests.</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Agent</th>
+                  <th>Operation</th>
+                  <th>Latency</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {requests.slice(0, 8).map((row, index) => (
+                  <tr key={`${row.created_at}:${index}`}>
+                    <td>{timeAgo(row.created_at)}</td>
+                    <td>{row.agent_name || row.token_name || '—'}</td>
+                    <td className="mono">{row.operation}</td>
+                    <td className="mono">{row.latency_ms}ms</td>
+                    <td><span className={`badge badge-${row.status}`}>{row.status}</span></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {events.map((e, i) => (
-                    <tr key={i}>
-                      <td className="mono">{e.agent}</td>
-                      <td className="mono">{e.operation}</td>
-                      <td>{e.scopes.split(',').map(s => (
-                        <span key={s} className={`badge badge-${s.trim()}`} style={{ marginRight: 4 }}>{s.trim()}</span>
-                      ))}</td>
-                      <td className="mono">{e.latency_ms} ms</td>
-                      <td><span className={`badge badge-${e.status}`}>{e.status}</span></td>
-                      <td style={{ color: 'var(--text-secondary)' }}>{timeAgo(e.timestamp)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-
-        <div style={{ width: 220 }}>
-          <h2 className="section-title">Token Health</h2>
-          <div className="health-panel">
-            <div className="health-row">
-              <span style={{ color: 'var(--warning)' }}>Expiring Soon</span>
-              <span className="mono">{health.expiring_soon}</span>
-            </div>
-            <div className="health-row">
-              <span style={{ color: 'var(--error)' }}>Error Rate</span>
-              <span className="mono">{health.error_rate}</span>
-            </div>
-          </div>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
       </div>
     </>
   );

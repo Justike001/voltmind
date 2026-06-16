@@ -37,6 +37,7 @@ export const api = {
   login: (token: string) => apiFetch('/admin/login', { method: 'POST', body: JSON.stringify({ token }) }),
   signOutEverywhere: () => apiFetch('/admin/api/sign-out-everywhere', { method: 'POST' }),
   stats: () => apiFetch('/admin/api/stats'),
+  fullStats: () => apiFetch('/admin/api/full-stats'),
   health: () => apiFetch('/admin/api/health-indicators'),
   agents: () => apiFetch('/admin/api/agents'),
   requests: (page = 1, qs = '') => apiFetch(`/admin/api/requests?page=${page}${qs}`),
@@ -52,6 +53,7 @@ export const api = {
     apiFetchText(`/admin/api/calibration/charts/${encodeURIComponent(type)}${holder ? `?holder=${encodeURIComponent(holder)}` : ''}`),
   // v0.41 D2 — live minion-jobs dashboard snapshot.
   jobsWatch: () => apiFetch('/admin/api/jobs/watch'),
+  archivedActions: () => apiFetch('/admin/api/actions/archive?limit=100'),
   actionsScan: () => apiFetch('/admin/api/actions/scan', { method: 'POST', body: JSON.stringify({}) }),
   actions: (qs = '') => apiFetch(`/admin/api/actions${qs}`),
   actionRuns: (slug: string, sourceId = 'default') =>
@@ -78,10 +80,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ source_id: sourceId, user_prompt: userPrompt }),
     }),
-  updateAction: (slug: string, sourceId = 'default', dueAt?: string, userPrompt?: string) =>
+  regenerateActionPlan: (slug: string, sourceId = 'default', instructions = '', userPrompt = '') =>
+    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/plan`, {
+      method: 'POST',
+      body: JSON.stringify({ source_id: sourceId, instructions, user_prompt: userPrompt }),
+    }),
+  regenerateActionPlanStep: (slug: string, sourceId = 'default', phaseIndex: number, stepIndex: number, instructions = '') =>
+    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/plan/regenerate-step`, {
+      method: 'POST',
+      body: JSON.stringify({ source_id: sourceId, phase_index: phaseIndex, step_index: stepIndex, instructions }),
+    }),
+  updateAction: (slug: string, sourceId = 'default', dueAt?: string, userPrompt?: string, mode?: string, priority?: string) =>
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/update`, {
       method: 'POST',
-      body: JSON.stringify({ source_id: sourceId, due_at: dueAt, user_prompt: userPrompt }),
+      body: JSON.stringify({ source_id: sourceId, due_at: dueAt, user_prompt: userPrompt, mode, priority }),
     }),
   setActionStatus: (slug: string, sourceId: string, status: string) =>
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/status`, {

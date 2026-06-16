@@ -328,6 +328,11 @@ interface GeneratedActionPlan {
   raw: string;
 }
 
+interface GeneratedActionStep {
+  step: string;
+  raw: string;
+}
+
 const ACTION_PLAN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -352,6 +357,15 @@ const ACTION_PLAN_SCHEMA = {
         },
       },
     },
+  },
+} as const;
+
+const ACTION_STEP_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['step'],
+  properties: {
+    step: { type: 'string' },
   },
 } as const;
 
@@ -468,6 +482,102 @@ function normalizeGeneratedPlan(raw: string): Array<{ phase: string; steps: stri
       steps,
     };
   });
+}
+
+async function generateActionStepDirect(prompt: string): Promise<GeneratedActionStep> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error('DEEPSEEK_API_KEY environment variable is not set');
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content: 'You regenerate one checklist step. Return ONLY valid JSON: {"step":"..."} with no markdown fences.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 512,
+      response_format: { type: 'json_object' },
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`DeepSeek API error ${response.status}: ${text.substring(0, 200)}`);
+  }
+  const data = await response.json() as { choices: Array<{ message: { content: string } }> };
+  const raw = data.choices[0]?.message?.content;
+  if (!raw) throw new Error('DeepSeek returned an empty response');
+  return { step: normalizeGeneratedStep(raw), raw };
+}
+
+async function generateActionStepWithCodex(prompt: string): Promise<GeneratedActionStep> {
+  const workDir = await mkdtemp(join(tmpdir(), 'voltmind-action-step-'));
+  const schemaPath = join(workDir, 'schema.json');
+  const outputPath = join(workDir, 'last-message.json');
+  try {
+    await writeFile(schemaPath, JSON.stringify(ACTION_STEP_SCHEMA, null, 2), 'utf-8');
+    const child = spawn('codex', [
+      'exec',
+      '--cd', process.cwd(),
+      '--sandbox', 'read-only',
+      '--output-schema', schemaPath,
+      '--output-last-message', outputPath,
+      '-',
+    ], {
+      cwd: process.cwd(),
+      env: process.env,
+      shell: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', chunk => { stderr += String(chunk); });
+    child.stdout.resume();
+    child.stdin.end(prompt, 'utf8');
+    const exitCode = await new Promise<number>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error('codex exec timed out while regenerating the action step'));
+      }, 180_000);
+      child.on('error', err => {
+        clearTimeout(timer);
+        reject(err);
+      });
+      child.on('close', code => {
+        clearTimeout(timer);
+        resolve(code ?? 1);
+      });
+    });
+    if (exitCode !== 0) {
+      throw new Error(`codex exec exited with ${exitCode}${stderr.trim() ? `: ${stderr.trim()}` : ''}`);
+    }
+    const raw = await readFile(outputPath, 'utf-8');
+    return { step: normalizeGeneratedStep(raw), raw };
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+function normalizeGeneratedStep(raw: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('step response was not valid JSON');
+    parsed = JSON.parse(match[0]);
+  }
+  const step = typeof parsed === 'object' && parsed !== null ? (parsed as { step?: unknown }).step : null;
+  if (typeof step !== 'string' || !step.trim()) throw new Error('step response did not include a step string');
+  return step.trim();
 }
 
 /**
@@ -1195,7 +1305,14 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
 
   app.post('/admin/api/actions/:slug/plan', requireAdmin, express.json(), async (req: Request, res: Response) => {
     try {
-      const { buildActionPlanPrompt, getAction, saveActionPlan } = await import('../core/actions.ts');
+      const {
+        buildActionPlanPromptWithContext,
+        getAction,
+        getActionPlan,
+        loadActionIdentityContext,
+        planFromGeneratedPlan,
+        saveActionPlan,
+      } = await import('../core/actions.ts');
       const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
       const sourceId = typeof req.body?.source_id === 'string' ? req.body.source_id : 'default';
       const action = await getAction(engine, slug, sourceId);
@@ -1204,7 +1321,15 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         return;
       }
       const userPrompt = typeof req.body?.user_prompt === 'string' ? req.body.user_prompt : '';
-      const prompt = buildActionPlanPrompt(action, userPrompt || null);
+      const regenerateInstructions = typeof req.body?.instructions === 'string' ? req.body.instructions : '';
+      const previousPlan = await getActionPlan(engine, slug, sourceId);
+      const identityContext = await loadActionIdentityContext(engine, action);
+      const prompt = buildActionPlanPromptWithContext(action, {
+        userPrompt: userPrompt || null,
+        identityContext,
+        previousPlan,
+        regenerateInstructions: regenerateInstructions || null,
+      });
       let result: GeneratedActionPlan;
       try {
         result = await generateActionPlanDirect(prompt);
@@ -1219,8 +1344,78 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         }
       }
       // Auto-persist the generated plan so it survives page switches and reloads
-      await saveActionPlan(engine, slug, { plan: result.plan, done: {} }, sourceId);
-      res.json({ plan: result.plan, raw: result.raw });
+      const plan = planFromGeneratedPlan(result.plan);
+      await saveActionPlan(engine, slug, plan, sourceId);
+      res.json({ plan: plan.plan, version: plan.version, done: plan.done, raw: result.raw, identity: identityContext });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.get('/admin/api/actions/archive', requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { listArchivedActions } = await import('../core/actions.ts');
+      const rows = await listArchivedActions(engine, {
+        sourceId: typeof req.query.source_id === 'string' ? req.query.source_id : undefined,
+        limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : 100,
+      });
+      res.json(rows);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post('/admin/api/actions/:slug/plan/regenerate-step', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const {
+        buildActionStepRegeneratePrompt,
+        getAction,
+        getActionPlan,
+        loadActionIdentityContext,
+        saveActionPlan,
+      } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const sourceId = typeof req.body?.source_id === 'string' ? req.body.source_id : 'default';
+      const phaseIndex = Number(req.body?.phase_index);
+      const stepIndex = Number(req.body?.step_index);
+      const instructions = typeof req.body?.instructions === 'string' ? req.body.instructions : '';
+      if (!Number.isInteger(phaseIndex) || !Number.isInteger(stepIndex)) {
+        res.status(400).json({ error: 'invalid_step_target' });
+        return;
+      }
+      const action = await getAction(engine, slug, sourceId);
+      if (!action) {
+        res.status(404).json({ error: `Action not found: ${slug}` });
+        return;
+      }
+      const plan = await getActionPlan(engine, slug, sourceId);
+      const target = plan?.plan[phaseIndex]?.steps[stepIndex];
+      if (!plan || !target) {
+        res.status(404).json({ error: 'plan step not found' });
+        return;
+      }
+      const identityContext = await loadActionIdentityContext(engine, action);
+      const prompt = buildActionStepRegeneratePrompt(action, plan, phaseIndex, stepIndex, instructions || null, identityContext);
+      let result: GeneratedActionStep;
+      try {
+        result = await generateActionStepDirect(prompt);
+      } catch (directErr) {
+        try {
+          result = await generateActionStepWithCodex(prompt);
+        } catch (codexErr) {
+          throw new Error(
+            `Step regeneration failed. Direct API: ${directErr instanceof Error ? directErr.message : String(directErr)}. ` +
+            `Codex: ${codexErr instanceof Error ? codexErr.message : String(codexErr)}`
+          );
+        }
+      }
+      plan.plan[phaseIndex].steps[stepIndex] = {
+        ...target,
+        text: result.step,
+        regenerated_at: new Date().toISOString(),
+      };
+      await saveActionPlan(engine, slug, plan, sourceId);
+      res.json({ plan: plan.plan, version: plan.version, done: plan.done, raw: result.raw, identity: identityContext });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
@@ -1310,6 +1505,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         sourceId: typeof req.body?.source_id === 'string' ? req.body.source_id : undefined,
         dueAt: typeof req.body?.due_at === 'string' ? req.body.due_at : undefined,
         userPrompt: typeof req.body?.user_prompt === 'string' ? req.body.user_prompt : undefined,
+        mode: typeof req.body?.mode === 'string' ? req.body.mode : undefined,
+        priority: typeof req.body?.priority === 'string' ? req.body.priority : undefined,
       });
       res.json(action);
     } catch (e) {

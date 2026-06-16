@@ -2,26 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { LoginPage } from './pages/Login';
 import { DashboardPage } from './pages/Dashboard';
 import { AgentsPage } from './pages/Agents';
-import { RequestLogPage } from './pages/RequestLog';
-import { CalibrationPage } from './pages/Calibration';
+import { ArchivePage } from './pages/Archive';
 import { JobsWatchPage } from './pages/JobsWatch';
 import { ActionsPage } from './pages/Actions';
 import { api } from './api';
 
-type Page = 'login' | 'dashboard' | 'agents' | 'log' | 'calibration' | 'jobs' | 'actions';
+type Page = 'login' | 'dashboard' | 'agents' | 'archive' | 'jobs' | 'actions';
 
 const navItems: Array<{ page: Page; label: string; hint: string }> = [
   { page: 'dashboard', label: 'Overview', hint: 'health and activity' },
   { page: 'agents', label: 'MCP Agents', hint: 'clients, tokens, access' },
-  { page: 'log', label: 'Request Log', hint: 'agent/API traffic' },
-  { page: 'calibration', label: 'Quality Lab', hint: 'legacy calibration' },
+  { page: 'archive', label: 'Archive', hint: 'completed actions' },
   { page: 'jobs', label: 'Job Queue', hint: 'background runs' },
   { page: 'actions', label: 'Actions', hint: 'task cockpit' },
 ];
 
 function getPage(): Page {
   const hash = window.location.hash.replace('#', '') || 'dashboard';
-  if (['login', 'dashboard', 'agents', 'log', 'calibration', 'jobs', 'actions'].includes(hash)) return hash as Page;
+  if (hash === 'log') return 'archive';
+  if (['login', 'dashboard', 'agents', 'archive', 'jobs', 'actions'].includes(hash)) return hash as Page;
   return 'dashboard';
 }
 
@@ -96,8 +95,7 @@ export function App() {
       <main className="main">
         {page === 'dashboard' && <DashboardPage />}
         {page === 'agents' && <AgentsPage />}
-        {page === 'log' && <RequestLogPage />}
-        {page === 'calibration' && <CalibrationPage />}
+        {page === 'archive' && <ArchivePage />}
         {page === 'jobs' && <JobsWatchPage />}
         {page === 'actions' && <ActionsPage />}
       </main>
