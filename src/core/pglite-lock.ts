@@ -14,16 +14,42 @@
  *   try { ... } finally { await releaseLock(lock); }
  */
 
-import { mkdirSync, existsSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
+import { registerCleanup } from './process-cleanup.ts';
 
 const LOCK_DIR_NAME = '.voltmind-lock';
 const LOCK_FILE = 'lock';
-const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes — embed jobs can be long
+const DEFAULT_STALE_THRESHOLD_MS = 30_000;
+const DEFAULT_LOCK_WAIT_TIMEOUT_MS = 30_000;
 
 export interface LockHandle {
   lockDir: string;
   acquired: boolean;
+  deregisterCleanup?: () => void;
+  heartbeat?: ReturnType<typeof setInterval>;
+}
+
+export interface PgliteLockInfo {
+  lockDir: string;
+  lockPath: string;
+  exists: boolean;
+  pid: number | null;
+  acquiredAt: number | null;
+  acquiredAtIso: string | null;
+  lastSeenAt: number | null;
+  lastSeenAtIso: string | null;
+  ageMs: number | null;
+  command: string | null;
+  processAlive: boolean | null;
+  stale: boolean;
+  reason: 'missing' | 'dead_pid' | 'expired' | 'corrupt' | 'active';
+  error?: string;
+}
+
+export interface PgliteUnlockResult {
+  removed: boolean;
+  info: PgliteLockInfo;
 }
 
 function getLockDir(dataDir: string | undefined): string {
@@ -41,9 +67,114 @@ function isProcessAlive(pid: number): boolean {
     // Sending signal 0 checks existence without actually sending a signal
     process.kill(pid, 0);
     return true;
-  } catch {
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (code === 'EPERM') return true;
     return false;
   }
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.floor(n);
+}
+
+function debugLog(message: string): void {
+  if (process.env.VOLTMIND_PGLITE_LOCK_DEBUG !== '1') return;
+  try { process.stderr.write(`[voltmind:pglite-lock] ${message}\n`); } catch { /* ignore */ }
+}
+
+export function getPgliteLockStaleThresholdMs(): number {
+  return parsePositiveInt(process.env.VOLTMIND_PGLITE_STALE_MS, DEFAULT_STALE_THRESHOLD_MS);
+}
+
+export function getPgliteLockWaitTimeoutMs(): number {
+  return parsePositiveInt(process.env.VOLTMIND_PGLITE_LOCK_TIMEOUT_MS, DEFAULT_LOCK_WAIT_TIMEOUT_MS);
+}
+
+function formatLockInfo(info: PgliteLockInfo): string {
+  if (!info.exists) return `no lock at ${info.lockDir}`;
+  if (info.reason === 'corrupt') {
+    return `corrupt lock at ${info.lockDir}${info.error ? ` (${info.error})` : ''}`;
+  }
+  const pid = info.pid == null ? 'unknown' : String(info.pid);
+  const since = info.acquiredAtIso ?? 'unknown time';
+  const command = info.command || 'unknown command';
+  const alive = info.processAlive === null ? 'unknown' : info.processAlive ? 'alive' : 'dead';
+  const age = info.ageMs == null ? 'unknown age' : `${Math.round(info.ageMs / 1000)}s`;
+  return `pid=${pid} (${alive}), since=${since}, age=${age}, command="${command}", lock=${info.lockDir}`;
+}
+
+export function inspectPgliteLock(dataDir: string | undefined, opts?: { nowMs?: number; staleMs?: number }): PgliteLockInfo {
+  const lockDir = getLockDir(dataDir);
+  const lockPath = lockDir ? join(lockDir, LOCK_FILE) : '';
+  const base: PgliteLockInfo = {
+    lockDir,
+    lockPath,
+    exists: false,
+    pid: null,
+    acquiredAt: null,
+    acquiredAtIso: null,
+    lastSeenAt: null,
+    lastSeenAtIso: null,
+    ageMs: null,
+    command: null,
+    processAlive: null,
+    stale: false,
+    reason: 'missing',
+  };
+  if (!lockDir || !existsSync(lockDir)) return base;
+
+  try {
+    const raw = readFileSync(lockPath, 'utf-8');
+    const lockData = JSON.parse(raw) as { pid?: unknown; acquired_at?: unknown; last_seen_at?: unknown; command?: unknown };
+    const pid = typeof lockData.pid === 'number' && Number.isFinite(lockData.pid) ? lockData.pid : null;
+    const acquiredAt = typeof lockData.acquired_at === 'number' && Number.isFinite(lockData.acquired_at)
+      ? lockData.acquired_at
+      : null;
+    const lastSeenAt = typeof lockData.last_seen_at === 'number' && Number.isFinite(lockData.last_seen_at)
+      ? lockData.last_seen_at
+      : acquiredAt;
+    const now = opts?.nowMs ?? Date.now();
+    const staleMs = opts?.staleMs ?? getPgliteLockStaleThresholdMs();
+    const ageMs = lastSeenAt == null ? null : Math.max(0, now - lastSeenAt);
+    const processAlive = pid == null ? null : isProcessAlive(pid);
+    const expired = ageMs != null && ageMs > staleMs;
+    const stale = processAlive === false || expired;
+    return {
+      ...base,
+      exists: true,
+      pid,
+      acquiredAt,
+      acquiredAtIso: acquiredAt == null ? null : new Date(acquiredAt).toISOString(),
+      lastSeenAt,
+      lastSeenAtIso: lastSeenAt == null ? null : new Date(lastSeenAt).toISOString(),
+      ageMs,
+      command: typeof lockData.command === 'string' ? lockData.command : null,
+      processAlive,
+      stale,
+      reason: processAlive === false ? 'dead_pid' : expired ? 'expired' : 'active',
+    };
+  } catch (err) {
+    return {
+      ...base,
+      exists: true,
+      stale: true,
+      reason: 'corrupt',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export function clearPgliteLockIfStale(dataDir: string | undefined, opts?: { staleMs?: number }): PgliteUnlockResult {
+  const info = inspectPgliteLock(dataDir, { staleMs: opts?.staleMs });
+  if (!info.exists || !info.stale) {
+    return { removed: false, info };
+  }
+  rmSync(info.lockDir, { recursive: true, force: true });
+  return { removed: true, info };
 }
 
 /**
@@ -63,34 +194,19 @@ export async function acquireLock(dataDir: string | undefined, opts?: { timeoutM
   // can't derive that across helper boundaries.
   mkdirSync(dataDir as string, { recursive: true });
 
-  const timeoutMs = opts?.timeoutMs ?? 30_000; // 30 second default timeout
+  const timeoutMs = opts?.timeoutMs ?? getPgliteLockWaitTimeoutMs();
   const startTime = Date.now();
 
   while (Date.now() - startTime < timeoutMs) {
     // Check for stale lock first
     if (existsSync(lockDir)) {
-      const lockPath = join(lockDir, LOCK_FILE);
-      try {
-        const lockData = JSON.parse(readFileSync(lockPath, 'utf-8'));
-        const lockPid = lockData.pid as number;
-        const lockTime = lockData.acquired_at as number;
-
-        // Is the locking process still alive?
-        if (!isProcessAlive(lockPid)) {
-          // Stale lock — clean it up
-          try { rmSync(lockDir, { recursive: true, force: true }); } catch { /* race condition, try again */ }
-        } else if (Date.now() - lockTime > STALE_THRESHOLD_MS) {
-          // Lock held for too long — assume stale (e.g., process hung)
-          // Still alive but probably stuck — force remove
-          try { rmSync(lockDir, { recursive: true, force: true }); } catch { /* race condition */ }
-        } else {
-          // Lock is held by a live process — wait and retry
-          await new Promise(r => setTimeout(r, 1000));
-          continue;
-        }
-      } catch {
-        // Corrupt lock file — remove it
-        try { rmSync(lockDir, { recursive: true, force: true }); } catch { /* race condition */ }
+      const info = inspectPgliteLock(dataDir);
+      if (info.stale) {
+        try { rmSync(lockDir, { recursive: true, force: true }); } catch { /* race condition, try again */ }
+      } else {
+        // Lock is held by a live process — wait and retry
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
       }
     }
 
@@ -102,28 +218,39 @@ export async function acquireLock(dataDir: string | undefined, opts?: { timeoutM
       writeFileSync(lockPath, JSON.stringify({
         pid: process.pid,
         acquired_at: Date.now(),
+        last_seen_at: Date.now(),
         command: process.argv.slice(1).join(' '),
       }), { mode: 0o644 });
 
-      return { lockDir, acquired: true };
+      const handle: LockHandle = { lockDir, acquired: true };
+      const heartbeatMs = Math.max(5_000, Math.min(10_000, Math.floor(getPgliteLockStaleThresholdMs() / 3)));
+      handle.heartbeat = setInterval(() => {
+        try {
+          const raw = readFileSync(lockPath, 'utf-8');
+          const data = JSON.parse(raw);
+          if (data?.pid !== process.pid) return;
+          data.last_seen_at = Date.now();
+          writeFileSync(lockPath, JSON.stringify(data), { mode: 0o644 });
+        } catch {
+          /* The lock may already be released or stolen as stale. */
+        }
+      }, heartbeatMs);
+      handle.heartbeat.unref?.();
+      handle.deregisterCleanup = registerCleanup(`pglite-lock:${lockDir}`, async () => {
+        try { rmSync(lockDir, { recursive: true, force: true }); } catch { /* best-effort abnormal-exit cleanup */ }
+      });
+      debugLog(`acquired ${lockDir}`);
+      return handle;
     } catch (e: unknown) {
       // mkdir failed — someone else grabbed it between our check and mkdir
       // This is fine, we'll retry
       if (Date.now() - startTime >= timeoutMs) {
         // Timeout — report which process holds the lock
-        const lockPath = join(lockDir, LOCK_FILE);
-        try {
-          const lockData = JSON.parse(readFileSync(lockPath, 'utf-8'));
-          throw new Error(
-            `VoltMind: Timed out waiting for PGLite lock. Process ${lockData.pid} has held it since ${new Date(lockData.acquired_at).toISOString()} (command: ${lockData.command}). ` +
-            `If that process is dead, remove ${lockDir} and try again.`
-          );
-        } catch (readErr) {
-          if (readErr instanceof Error && readErr.message.startsWith('VoltMind')) throw readErr;
-          throw new Error(
-            `VoltMind: Timed out waiting for PGLite lock. Remove ${lockDir} and try again.`
-          );
-        }
+        const info = inspectPgliteLock(dataDir);
+        throw new Error(
+          `VoltMind: Timed out waiting for PGLite lock after ${timeoutMs}ms. Holder: ${formatLockInfo(info)}. ` +
+          `If this is stale, run: voltmind storage unlock-pglite --stale-only`
+        );
       }
       // Brief wait before retry
       await new Promise(r => setTimeout(r, 500));
@@ -131,7 +258,11 @@ export async function acquireLock(dataDir: string | undefined, opts?: { timeoutM
   }
 
   // Should not reach here, but just in case
-  throw new Error(`VoltMind: Timed out waiting for PGLite lock.`);
+  const info = inspectPgliteLock(dataDir);
+  throw new Error(
+    `VoltMind: Timed out waiting for PGLite lock after ${timeoutMs}ms. Holder: ${formatLockInfo(info)}. ` +
+    `If this is stale, run: voltmind storage unlock-pglite --stale-only`
+  );
 }
 
 /**
@@ -141,7 +272,14 @@ export async function releaseLock(lock: LockHandle): Promise<void> {
   if (!lock.lockDir || !lock.acquired) return;
 
   try {
+    lock.deregisterCleanup?.();
+    lock.deregisterCleanup = undefined;
+    if (lock.heartbeat) {
+      clearInterval(lock.heartbeat);
+      lock.heartbeat = undefined;
+    }
     rmSync(lock.lockDir, { recursive: true, force: true });
+    debugLog(`released ${lock.lockDir}`);
   } catch {
     // Lock file already removed (e.g., by stale cleanup) — that's fine
   }

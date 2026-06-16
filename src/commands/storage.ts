@@ -1,9 +1,15 @@
 import { join } from 'path';
 import type { BrainEngine } from '../core/engine.ts';
+import { loadConfig, toEngineConfig } from '../core/config.ts';
 import { loadStorageConfig, validateStorageConfig, getStorageTier } from '../core/storage-config.ts';
 import type { StorageConfig, StorageTier } from '../core/storage-config.ts';
 import { walkBrainRepo, type DiskFileEntry } from '../core/disk-walk.ts';
 import { getDefaultSourcePath } from '../core/source-resolver.ts';
+import {
+  clearPgliteLockIfStale,
+  inspectPgliteLock,
+  getPgliteLockStaleThresholdMs,
+} from '../core/pglite-lock.ts';
 
 /**
  * Distinct nominal types for the two tier-keyed numeric maps. Both shapes
@@ -39,9 +45,103 @@ export async function runStorage(engine: BrainEngine, args: string[]): Promise<v
     await runStorageStatus(engine, args.slice(1));
     return;
   }
+  if (subcommand === 'unlock-pglite') {
+    await runStorageUnlockPglite(args.slice(1));
+    return;
+  }
+  if (subcommand === 'pglite-lock') {
+    await runStorageInspectPgliteLock(args.slice(1));
+    return;
+  }
   console.error(`Unknown storage subcommand: ${subcommand}`);
-  console.error('Available subcommands: status');
+  console.error('Available subcommands: status, pglite-lock, unlock-pglite');
   process.exit(1);
+}
+
+export async function runStorageUnlockPglite(args: string[]): Promise<void> {
+  const staleOnly = args.includes('--stale-only');
+  const json = args.includes('--json');
+  if (!staleOnly) {
+    console.error('Refusing to unlock without --stale-only.');
+    console.error('This command only removes a PGLite lock when the holder PID is dead or the lock is past the stale threshold.');
+    process.exit(2);
+  }
+
+  const cfg = loadConfig();
+  if (!cfg) {
+    console.error('No brain configured. Run: voltmind init');
+    process.exit(1);
+  }
+  const engineConfig = toEngineConfig(cfg);
+  if (engineConfig.engine !== 'pglite') {
+    const result = { engine: engineConfig.engine, removed: false, message: 'Active engine is not PGLite.' };
+    if (json) console.log(JSON.stringify(result, null, 2));
+    else console.log(result.message);
+    return;
+  }
+
+  const dataDir = engineConfig.database_path;
+  const result = clearPgliteLockIfStale(dataDir);
+  if (json) {
+    console.log(JSON.stringify({
+      removed: result.removed,
+      stale_threshold_ms: getPgliteLockStaleThresholdMs(),
+      lock: result.info,
+    }, null, 2));
+    return;
+  }
+
+  if (!result.info.exists) {
+    console.log(`No PGLite lock found at ${result.info.lockDir}.`);
+    return;
+  }
+  if (result.removed) {
+    console.log(`Removed stale PGLite lock at ${result.info.lockDir}.`);
+    console.log(`Reason: ${result.info.reason}`);
+    if (result.info.pid != null) console.log(`PID: ${result.info.pid}`);
+    if (result.info.command) console.log(`Command: ${result.info.command}`);
+    return;
+  }
+  console.log(`PGLite lock is not stale; leaving it in place.`);
+  console.log(`Lock: ${result.info.lockDir}`);
+  if (result.info.pid != null) console.log(`PID: ${result.info.pid}`);
+  if (result.info.acquiredAtIso) console.log(`Acquired: ${result.info.acquiredAtIso}`);
+  if (result.info.command) console.log(`Command: ${result.info.command}`);
+}
+
+export async function runStorageInspectPgliteLock(args: string[] = []): Promise<void> {
+  const json = args.includes('--json');
+  const cfg = loadConfig();
+  if (!cfg) {
+    console.error('No brain configured. Run: voltmind init');
+    process.exit(1);
+  }
+  const engineConfig = toEngineConfig(cfg);
+  if (engineConfig.engine !== 'pglite') {
+    const result = { engine: engineConfig.engine, pglite: false };
+    if (json) console.log(JSON.stringify(result, null, 2));
+    else console.log('Active engine is not PGLite.');
+    return;
+  }
+  const info = inspectPgliteLock(engineConfig.database_path);
+  if (json) {
+    console.log(JSON.stringify({
+      stale_threshold_ms: getPgliteLockStaleThresholdMs(),
+      lock: info,
+    }, null, 2));
+    return;
+  }
+  if (!info.exists) {
+    console.log(`No PGLite lock found at ${info.lockDir}.`);
+    return;
+  }
+  console.log(`PGLite lock: ${info.lockDir}`);
+  console.log(`Status: ${info.stale ? `stale (${info.reason})` : 'active'}`);
+  if (info.pid != null) console.log(`PID: ${info.pid}`);
+  if (info.processAlive != null) console.log(`Process alive: ${info.processAlive}`);
+  if (info.acquiredAtIso) console.log(`Acquired: ${info.acquiredAtIso}`);
+  if (info.ageMs != null) console.log(`Age: ${Math.round(info.ageMs / 1000)}s`);
+  if (info.command) console.log(`Command: ${info.command}`);
 }
 
 async function runStorageStatus(engine: BrainEngine, args: string[]): Promise<void> {

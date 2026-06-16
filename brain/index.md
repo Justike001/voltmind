@@ -17,6 +17,7 @@ This index is a human and agent map for the Personal Brain. It should be generat
 | `artifacts/` | Deliverables, drafts, proposals, reports, prompts, plans, and design docs. |
 | `concepts/` | Reusable methods, concepts, frameworks, and models. |
 | `ideas/` | Raw possibilities not yet active projects. |
+| `ontology/` | Control-plane vocabulary and department lens definitions. |
 | `policy/` | Phase 0 governance protocol: privacy, publishing, sensitivity, source-of-truth, role/scope, action risk, and retention rules. |
 | `sources/` | Raw materials or pointers to raw materials. |
 | `contribution/` | Candidate/review/published/rejected/redacted promotion records. |

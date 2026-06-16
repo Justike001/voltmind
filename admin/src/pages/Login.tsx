@@ -38,7 +38,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="login-page">
       <div className="login-box">
-        <div className="login-logo">GBrain</div>
+        <div className="login-logo">VoltMind</div>
 
         <div style={{
           background: 'rgba(136, 170, 255, 0.08)',
@@ -64,7 +64,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
             color: '#88aaff',
             wordBreak: 'break-all',
           }}>
-            "Give me the GBrain admin login link"
+            "Give me the VoltMind admin login link"
           </div>
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
             Each link is single-use. Your agent generates a fresh one each time.

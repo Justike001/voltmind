@@ -396,22 +396,22 @@ function AgentDrawer({ agent, onClose, onRevoked }: { agent: Agent; onClose: () 
   const configSnippets: Record<string, string> = {
     'claude-code': isOAuth
       ? [
-        `The user wants to connect GBrain MCP to your context. Here's how.`,
+        `The user wants to connect VoltMind MCP to your context. Here's how.`,
         ``,
         `# Step 1 — read the client secret from the operator without putting it in shell history.`,
         `# read -s suppresses the echo; export keeps it scoped to this shell session.`,
-        `read -rs -p "Client Secret: " GBRAIN_CS && echo`,
+        `read -rs -p "Client Secret: " VOLTMIND_CS && echo`,
         ``,
-        `# Step 2 — mint a token and register GBrain in one go.`,
-        `claude mcp add --transport http gbrain ${serverUrl}/mcp \\`,
+        `# Step 2 — mint a token and register VoltMind in one go.`,
+        `claude mcp add --transport http voltmind ${serverUrl}/mcp \\`,
         `  --header "Authorization: Bearer $(curl -s -X POST ${serverUrl}/token \\`,
         `    -d 'grant_type=client_credentials' \\`,
         `    -d 'client_id=${cid}' \\`,
-        `    --data-urlencode "client_secret=$GBRAIN_CS" \\`,
+        `    --data-urlencode "client_secret=$VOLTMIND_CS" \\`,
         `    -d 'scope=${agent.scope || 'read write'}' | jq -r .access_token)"`,
         ``,
         `# Step 3 — clear the secret from this shell.`,
-        `unset GBRAIN_CS`,
+        `unset VOLTMIND_CS`,
         ``,
         `The token will last ${agent.token_ttl ? (agent.token_ttl >= 86400 ? Math.floor(agent.token_ttl / 86400) + ' days' : Math.floor(agent.token_ttl / 3600) + ' hours') : '1 hour (default)'}.`,
         ``,
@@ -425,17 +425,17 @@ function AgentDrawer({ agent, onClose, onRevoked }: { agent: Agent; onClose: () 
         `  -d 'client_secret=PASTE_YOUR_CLIENT_SECRET_HERE' \\`,
         `  -d 'scope=${agent.scope || 'read write'}' | jq -r .access_token`,
         ``,
-        `claude mcp add --transport http gbrain ${serverUrl}/mcp \\`,
+        `claude mcp add --transport http voltmind ${serverUrl}/mcp \\`,
         `  --header "Authorization: Bearer PASTE_TOKEN_FROM_ABOVE"`,
         ``,
         `# Then run: history -d $((HISTCMD-1))   # zsh: print -s -- '' && fc -p`,
       ].join('\n')
       : [
-        `The user wants to connect GBrain MCP to your context. Here's how.`,
+        `The user wants to connect VoltMind MCP to your context. Here's how.`,
         ``,
-        `Run this command in terminal to register GBrain:`,
+        `Run this command in terminal to register VoltMind:`,
         ``,
-        `claude mcp add --transport http gbrain ${serverUrl}/mcp \\`,
+        `claude mcp add --transport http voltmind ${serverUrl}/mcp \\`,
         `  --header "Authorization: Bearer PASTE_YOUR_API_KEY_HERE"`,
         ``,
         `Replace PASTE_YOUR_API_KEY_HERE with the API key shown when "${agentName}" was created.`,
@@ -443,7 +443,7 @@ function AgentDrawer({ agent, onClose, onRevoked }: { agent: Agent; onClose: () 
       ].join('\n'),
 
     'chatgpt': [
-      `The user wants to connect GBrain MCP to ChatGPT.`,
+      `The user wants to connect VoltMind MCP to ChatGPT.`,
       ``,
       `1. Open ChatGPT > Settings > Tools & Integrations > Add MCP Server`,
       `2. Enter this URL — ChatGPT will auto-discover the OAuth configuration:`,
@@ -458,7 +458,7 @@ function AgentDrawer({ agent, onClose, onRevoked }: { agent: Agent; onClose: () 
     ].join('\n'),
 
     'claude-cowork': [
-      `The user wants to connect GBrain MCP to Claude.ai.`,
+      `The user wants to connect VoltMind MCP to Claude.ai.`,
       ``,
       `1. Open claude.ai > Settings > Connected Apps > Add MCP Server`,
       `2. Server URL: ${serverUrl}/mcp`,
@@ -473,13 +473,13 @@ function AgentDrawer({ agent, onClose, onRevoked }: { agent: Agent; onClose: () 
 
     cursor: isOAuth
       ? [
-        `The user wants to connect GBrain MCP to Cursor.`,
+        `The user wants to connect VoltMind MCP to Cursor.`,
         ``,
         `Cursor supports OAuth for remote MCP. Add to .cursor/mcp.json:`,
         ``,
         `{`,
         `  "mcpServers": {`,
-        `    "gbrain": {`,
+        `    "voltmind": {`,
         `      "url": "${serverUrl}/mcp",`,
         `      "transport": "sse"`,
         `    }`,
@@ -492,13 +492,13 @@ function AgentDrawer({ agent, onClose, onRevoked }: { agent: Agent; onClose: () 
         `When prompted: Client ID ${cid}, use the secret from registration.`,
       ].join('\n')
       : [
-        `The user wants to connect GBrain MCP to Cursor.`,
+        `The user wants to connect VoltMind MCP to Cursor.`,
         ``,
         `Add to .cursor/mcp.json:`,
         ``,
         `{`,
         `  "mcpServers": {`,
-        `    "gbrain": {`,
+        `    "voltmind": {`,
         `      "url": "${serverUrl}/mcp",`,
         `      "transport": "sse",`,
         `      "headers": {`,
@@ -512,7 +512,7 @@ function AgentDrawer({ agent, onClose, onRevoked }: { agent: Agent; onClose: () 
       ].join('\n'),
 
     perplexity: [
-      `The user wants to connect GBrain MCP to Perplexity.`,
+      `The user wants to connect VoltMind MCP to Perplexity.`,
       ``,
       `1. Go to Settings > Connectors > Add MCP`,
       `2. Server URL: ${serverUrl}/mcp`,

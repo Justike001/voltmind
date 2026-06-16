@@ -148,6 +148,11 @@ meetings/
 ├── YYYY-MM-DD-{meeting-slug}.md <- only for notable meetings
 ```
 
+Notable meeting pages should follow `skills/meeting-ingestion/SKILL.md` in
+calendar-seeded mode. Calendar metadata can seed the meeting index, attendees,
+timeline, and graph links; it must not invent decisions, action items, risks,
+or project state when no transcript or notes are available.
+
 ### Entity enrichment
 
 For each event with attendees:
@@ -273,6 +278,60 @@ Use the Teams connector only. Recommended starting scope:
 - Include message sender, timestamp, thread/channel, replies, reactions only
   when they carry meaning, and linked meeting context when available.
 
+### Fetch loop for active chats
+
+The Microsoft Teams MCP message listing surface may return at most `top=100`
+messages per call. A single `top=100` response is not enough evidence that a
+busy chat, group chat, or channel is complete.
+
+For every approved chat/group chat/channel:
+
+1. Walk the target history in bounded windows: default `day=5`, `top=100`.
+2. Continue the loop until the requested date range is covered, or until the
+   user-approved stop condition is reached.
+3. If a 5-day window returns exactly or nearly 100 messages, treat that window
+   as saturated. Use connector pagination when available; otherwise shrink the
+   next pass to smaller date windows before declaring the window complete.
+4. Deduplicate by Teams message id, chat/channel id, timestamp, and sender.
+5. Persist per-chat progress in `VOLTMIND_HOME/cold-start-state.json` so an
+   interrupted run resumes from the next unfinished window.
+
+The loop is mandatory for high-frequency chats and group chats, including cold
+start. Do not rely on a single recent-message sample for active rooms.
+
+### Participant profile enrichment
+
+For each approved chat or group chat, use the Teams/Microsoft connector API
+surface, where available, to fetch participant/contact profile metadata before
+writing people pages. Capture only fields actually returned by the connector;
+do not infer missing values from message text.
+
+Preferred `people/` frontmatter fields:
+
+```yaml
+email: alice@example.com
+chat: alice@example.com
+mobile: "+10000000000"
+work_location: Example Office
+job_title: Example Role
+department: Example Department
+teams_id: "optional-teams-id"
+```
+
+Profile fields should be merged into the same person page that Calendar and
+Email identities use. Search first with `voltmind search "<email or display
+name>"`, read the known page with `voltmind get <slug>` when found, and preserve
+existing source-backed values unless the Microsoft profile gives a clearer
+current value. Every durable profile fact needs a source citation such as
+`[Source: Microsoft Teams profile/contact, 2026-06-11]`.
+
+When the connector only returns a subset, write only that subset. For example,
+Teams user resolution may return display name, email/user principal name, and
+AAD user id but not mobile, work location, job title, or department. In that
+case, fill `email`, `chat`, and `teams_id`, leave the unavailable fields null,
+and note the connector limitation in the page body instead of inferring missing
+profile data from message text.
+
 ### Strategy: reconstruct conversations, not message dumps
 
 Do not create one page per message. Group messages into meaningful episodes:
@@ -288,13 +347,17 @@ Do not create one page per message. Group messages into meaningful episodes:
 For each meaningful Teams episode:
 
 1. **Identify the room** — chat, channel, team, project, or meeting context.
-2. **Extract decisions** — decisions are first-class facts.
-3. **Extract actions** — owner, action, deadline, source message.
-4. **Extract entities** — people, companies, projects, concepts.
-5. **Update pages** — people/project/company pages get cited deltas.
-6. **Create conversation pages** only when the thread itself is the durable
+2. **Fetch participant profiles** — enrich `people/` frontmatter with returned
+   email, chat identity, mobile, work location, job title, department, and Teams id
+   when available.
+3. **Extract decisions** — decisions are first-class facts.
+4. **Extract actions** — owner, action, deadline, source message.
+5. **Extract entities** — people, companies, projects, concepts.
+6. **Update pages** — people pages get cited profile and relationship deltas;
+   project/company pages get cited status and decision deltas.
+7. **Create conversation pages** only when the thread itself is the durable
    artifact.
-7. **Back-link entities** — every mentioned entity with a page links back to
+8. **Back-link entities** — every mentioned entity with a page links back to
    the Teams-derived page or update.
 
 ### Filtering rules
@@ -345,6 +408,13 @@ For every person seen across sources:
 3. Summarize the relationship: how the user knows them, how often they interact,
    active projects, and recent notable context.
 4. Add source citations for every durable fact.
+
+For `people/` pages, keep `Ownership And Expertise` narrow. Only write durable
+ownership, expertise, institutional context, or routing knowledge there. Active
+projects/actions belong in `Current Work`; unresolved follow-ups belong in
+`Open Threads`; casual Teams chatter, tool tips, greetings, birthday/social
+messages, one-off admin/OA logistics, and already-answered questions should stay
+out of the person page unless they change durable work context.
 
 ### Reconcile projects
 
@@ -413,7 +483,19 @@ After completing available phases:
      "sources_skipped": [],
      "calendar_window_days": 90,
      "email_strategy": "sent_flagged_active_threads",
-     "teams_window_days": 30,
+     "teams_fetch": {
+       "window_days": 30,
+       "chunk_days": 5,
+       "top": 100,
+       "completed_chats": [],
+       "next_windows": {
+         "chat-or-channel-id": {
+           "next_start": "2026-06-01T00:00:00+08:00",
+           "next_end": "2026-06-06T00:00:00+08:00"
+         }
+       }
+     },
+     "teams_profiles_completed": [],
      "total_pages_created": 0,
      "total_pages_updated": 0,
      "total_entities_linked": 0,
@@ -460,9 +542,11 @@ If the session is interrupted:
 1. Read `VOLTMIND_HOME/cold-start-state.json`.
 2. Skip completed sources and phases.
 3. Resume from `next_phase`.
-4. Re-check user consent before reading any new mailbox, calendar, chat, or
+4. For Teams, resume each approved chat/channel from `teams_fetch.next_windows`
+   and skip participants listed in `teams_profiles_completed`.
+5. Re-check user consent before reading any new mailbox, calendar, chat, or
    channel scope.
-5. Run `voltmind status`, `voltmind health`, and `voltmind stats` before
+6. Run `voltmind status`, `voltmind health`, and `voltmind stats` before
    continuing.
 
 The user should not have to repeat connector setup or re-import completed
@@ -503,8 +587,10 @@ Next: Phase N+1 — [description]. Ready to proceed?
 - Outlook Email connector — search/list sampled messages and threads, inspect
   sender/recipient/time/preview/body snippets, and extract actions from
   approved mailbox scopes.
-- Microsoft Teams connector — inspect approved recent chats/channels, summarize
-  threads, and extract decisions, actions, people, projects, and blockers.
+- Microsoft Teams connector — inspect approved recent chats/channels with
+  bounded `day=5`, `top=100` loops for active rooms; fetch participant/contact
+  profile metadata where available; summarize threads; and extract decisions,
+  actions, people, projects, and blockers.
 - `search` / `voltmind search` — check for existing pages before creating.
 - `query` / `voltmind query` — hybrid search for entity and project
   deduplication after embeddings exist.

@@ -1,33 +1,52 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { acquireLock, releaseLock, type LockHandle } from '../src/core/pglite-lock';
+import {
+  acquireLock,
+  clearPgliteLockIfStale,
+  inspectPgliteLock,
+  releaseLock,
+  getPgliteLockStaleThresholdMs,
+} from '../src/core/pglite-lock.ts';
+import {
+  _registeredCleanupCountForTests,
+  _resetForTests,
+} from '../src/core/process-cleanup.ts';
 
-const TEST_DIR = join(tmpdir(), 'voltmind-lock-test-' + process.pid);
+let root: string;
+let oldStale: string | undefined;
+let oldTimeout: string | undefined;
 
-describe('pglite-lock', () => {
-  beforeEach(() => {
-    // Clean up test directory
-    if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true, force: true });
-    mkdirSync(TEST_DIR, { recursive: true });
-  });
+beforeEach(() => {
+  root = join(tmpdir(), `voltmind-pglite-lock-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  mkdirSync(root, { recursive: true });
+  oldStale = process.env.VOLTMIND_PGLITE_STALE_MS;
+  oldTimeout = process.env.VOLTMIND_PGLITE_LOCK_TIMEOUT_MS;
+  delete process.env.VOLTMIND_PGLITE_STALE_MS;
+  delete process.env.VOLTMIND_PGLITE_LOCK_TIMEOUT_MS;
+  _resetForTests();
+});
 
-  afterEach(() => {
-    if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true, force: true });
-  });
+afterEach(() => {
+  if (oldStale === undefined) delete process.env.VOLTMIND_PGLITE_STALE_MS;
+  else process.env.VOLTMIND_PGLITE_STALE_MS = oldStale;
+  if (oldTimeout === undefined) delete process.env.VOLTMIND_PGLITE_LOCK_TIMEOUT_MS;
+  else process.env.VOLTMIND_PGLITE_LOCK_TIMEOUT_MS = oldTimeout;
+  rmSync(root, { recursive: true, force: true });
+  _resetForTests();
+});
 
-  test('acquires and releases lock', async () => {
-    const lock = await acquireLock(TEST_DIR);
-    expect(lock.acquired).toBe(true);
-    expect(existsSync(join(TEST_DIR, '.voltmind-lock'))).toBe(true);
+function writeLock(dataDir: string, payload: Record<string, unknown>): string {
+  const lockDir = join(dataDir, '.voltmind-lock');
+  mkdirSync(lockDir, { recursive: true });
+  writeFileSync(join(lockDir, 'lock'), JSON.stringify(payload));
+  return lockDir;
+}
 
-    await releaseLock(lock);
-    expect(existsSync(join(TEST_DIR, '.voltmind-lock'))).toBe(false);
-  });
-
+describe('PGLite file lock', () => {
   test('creates missing data directory before acquiring lock', async () => {
-    const missingDataDir = join(TEST_DIR, 'missing-data-dir');
+    const missingDataDir = join(root, 'missing-data-dir');
 
     const lock = await acquireLock(missingDataDir);
     expect(lock.acquired).toBe(true);
@@ -38,45 +57,42 @@ describe('pglite-lock', () => {
     expect(existsSync(join(missingDataDir, '.voltmind-lock'))).toBe(false);
   });
 
-  test('prevents concurrent lock acquisition', async () => {
-    const lock1 = await acquireLock(TEST_DIR, { timeoutMs: 2000 });
-    expect(lock1.acquired).toBe(true);
+  test('registers abnormal-exit cleanup and deregisters on release', async () => {
+    const lock = await acquireLock(root);
+    expect(existsSync(join(root, '.voltmind-lock'))).toBe(true);
+    expect(_registeredCleanupCountForTests()).toBe(1);
 
-    // Second lock attempt should timeout
-    await expect(acquireLock(TEST_DIR, { timeoutMs: 1000 })).rejects.toThrow(/Timed out/);
+    await releaseLock(lock);
 
-    await releaseLock(lock1);
+    expect(existsSync(join(root, '.voltmind-lock'))).toBe(false);
+    expect(_registeredCleanupCountForTests()).toBe(0);
   });
 
-  test('detects and cleans stale lock from dead process', async () => {
-    // Simulate a stale lock from a dead process
-    const lockDir = join(TEST_DIR, '.voltmind-lock');
-    mkdirSync(lockDir);
-    writeFileSync(join(lockDir, 'lock'), JSON.stringify({
-      pid: 999999999, // Non-existent PID
-      acquired_at: Date.now(),
-      command: 'test',
-    }));
+  test('prevents concurrent lock acquisition', async () => {
+    process.env.VOLTMIND_PGLITE_STALE_MS = '60000';
+    const lock = await acquireLock(root);
 
-    // Should clean up the stale lock and acquire
-    const lock = await acquireLock(TEST_DIR);
-    expect(lock.acquired).toBe(true);
+    await expect(acquireLock(root, { timeoutMs: 5 })).rejects.toThrow(/Timed out/);
 
     await releaseLock(lock);
   });
 
-  test('skips lock for in-memory (undefined dataDir)', async () => {
+  test('skips lock for in-memory PGLite', async () => {
     const lock = await acquireLock(undefined);
     expect(lock.acquired).toBe(true);
     expect(lock.lockDir).toBe('');
 
-    // Release should be a no-op
     await releaseLock(lock);
   });
 
+  test('stale threshold is controlled by VOLTMIND_PGLITE_STALE_MS', () => {
+    process.env.VOLTMIND_PGLITE_STALE_MS = '15000';
+    expect(getPgliteLockStaleThresholdMs()).toBe(15000);
+  });
+
   test('lock file contains PID and command', async () => {
-    const lock = await acquireLock(TEST_DIR);
-    const lockData = JSON.parse(readFileSync(join(TEST_DIR, '.voltmind-lock', 'lock'), 'utf-8'));
+    const lock = await acquireLock(root);
+    const lockData = JSON.parse(readFileSync(join(root, '.voltmind-lock', 'lock'), 'utf-8'));
 
     expect(lockData.pid).toBe(process.pid);
     expect(lockData.acquired_at).toBeDefined();
@@ -85,17 +101,81 @@ describe('pglite-lock', () => {
     await releaseLock(lock);
   });
 
-  test('releases lock on disconnect even if DB close fails', async () => {
-    const lock = await acquireLock(TEST_DIR);
-    expect(lock.acquired).toBe(true);
+  test('inspect reports holder PID command path and active state', () => {
+    writeLock(root, {
+      pid: process.pid,
+      acquired_at: Date.now(),
+      command: 'voltmind embed --stale',
+    });
 
-    // Simulate DB already closed
-    await releaseLock(lock);
-    expect(existsSync(join(TEST_DIR, '.voltmind-lock'))).toBe(false);
+    const info = inspectPgliteLock(root);
 
-    // Second acquisition should work
-    const lock2 = await acquireLock(TEST_DIR);
-    expect(lock2.acquired).toBe(true);
-    await releaseLock(lock2);
+    expect(info.exists).toBe(true);
+    expect(info.lockDir).toBe(join(root, '.voltmind-lock'));
+    expect(info.pid).toBe(process.pid);
+    expect(info.processAlive).toBe(true);
+    expect(info.stale).toBe(false);
+    expect(info.command).toBe('voltmind embed --stale');
+  });
+
+  test('unlock stale-only removes dead PID locks', () => {
+    const lockDir = writeLock(root, {
+      pid: 99999999,
+      acquired_at: Date.now(),
+      command: 'voltmind import brain',
+    });
+
+    const result = clearPgliteLockIfStale(root);
+
+    expect(result.removed).toBe(true);
+    expect(result.info.reason).toBe('dead_pid');
+    expect(existsSync(lockDir)).toBe(false);
+  });
+
+  test('unlock stale-only removes expired locks and leaves fresh live locks', () => {
+    process.env.VOLTMIND_PGLITE_STALE_MS = '15000';
+    const lockDir = writeLock(root, {
+      pid: process.pid,
+      acquired_at: Date.now() - 16_000,
+      command: 'voltmind search q',
+    });
+
+    const expired = clearPgliteLockIfStale(root);
+    expect(expired.removed).toBe(true);
+    expect(expired.info.reason).toBe('expired');
+    expect(existsSync(lockDir)).toBe(false);
+
+    writeLock(root, {
+      pid: process.pid,
+      acquired_at: Date.now(),
+      command: 'voltmind search q',
+    });
+    const fresh = clearPgliteLockIfStale(root);
+    expect(fresh.removed).toBe(false);
+    expect(fresh.info.reason).toBe('active');
+    expect(existsSync(join(root, '.voltmind-lock'))).toBe(true);
+  });
+
+  test('timeout error includes holder details and unlock hint', async () => {
+    process.env.VOLTMIND_PGLITE_STALE_MS = '60000';
+    writeLock(root, {
+      pid: process.pid,
+      acquired_at: Date.now(),
+      command: 'voltmind import brain',
+    });
+
+    let message = '';
+    try {
+      await acquireLock(root, { timeoutMs: 5 });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+
+    expect(message).toContain('Timed out waiting for PGLite lock');
+    expect(message).toContain(String(process.pid));
+    expect(message).toContain('voltmind import brain');
+    expect(message).toContain('voltmind storage unlock-pglite --stale-only');
+    const raw = readFileSync(join(root, '.voltmind-lock', 'lock'), 'utf-8');
+    expect(raw).toContain('voltmind import brain');
   });
 });

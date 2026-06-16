@@ -1,3 +1,7 @@
+---
+status: in_progress
+updated: '2026-06-12'
+---
 # Actions
 
 Smallest executable tasks and agent execution contracts.
@@ -33,3 +37,6 @@ Every action should include:
 
 Do not store full background here. Store pointers to context pages.
 
+<!-- timeline -->
+
+- 2026-06-12 | VoltMind - Status set to in_progress.

@@ -2621,6 +2621,97 @@ const list_jobs: Operation = {
   },
 };
 
+const action_scan: Operation = {
+  name: 'action_scan',
+  description: 'Scan state/actions/*.md into the VoltMind action index. Does not execute any agent work.',
+  params: {
+    repo: { type: 'string', description: 'Optional brain repo path. Defaults to the configured source path.' },
+  },
+  mutating: true,
+  scope: 'admin',
+  handler: async (ctx, p) => {
+    const { scanActions } = await import('./actions.ts');
+    return scanActions(ctx.engine, { repo: typeof p.repo === 'string' ? p.repo : undefined, sourceId: ctx.sourceId });
+  },
+};
+
+const action_list: Operation = {
+  name: 'action_list',
+  description: 'List indexed VoltMind actions with risk, due time, approval, and run state.',
+  params: {
+    status: { type: 'string', description: 'Filter by action status.' },
+    risk: { type: 'string', description: 'Filter by risk level.' },
+    due_only: { type: 'boolean', description: 'Only actions due now or earlier.' },
+    limit: { type: 'number', description: 'Maximum actions to return.' },
+  },
+  scope: 'admin',
+  handler: async (ctx, p) => {
+    const { listActions } = await import('./actions.ts');
+    return listActions(ctx.engine, {
+      status: typeof p.status === 'string' ? p.status : undefined,
+      risk: typeof p.risk === 'string' ? p.risk : undefined,
+      dueOnly: p.due_only === true,
+      limit: typeof p.limit === 'number' ? p.limit : undefined,
+      sourceId: ctx.sourceId,
+    });
+  },
+};
+
+const action_get: Operation = {
+  name: 'action_get',
+  description: 'Get one indexed VoltMind action by slug.',
+  params: {
+    slug: { type: 'string', required: true, description: 'Action slug.' },
+  },
+  scope: 'admin',
+  handler: async (ctx, p) => {
+    const { getAction } = await import('./actions.ts');
+    const action = await getAction(ctx.engine, p.slug as string, ctx.sourceId);
+    if (!action) throw new OperationError('invalid_params', `Action not found: ${p.slug}`);
+    return action;
+  },
+};
+
+const action_approve: Operation = {
+  name: 'action_approve',
+  description: 'Approve a gated VoltMind action for draft/prep execution.',
+  params: {
+    slug: { type: 'string', required: true, description: 'Action slug.' },
+    approved_by: { type: 'string', description: 'Approval actor label.' },
+  },
+  mutating: true,
+  scope: 'admin',
+  handler: async (ctx, p) => {
+    const { approveAction } = await import('./actions.ts');
+    return approveAction(ctx.engine, p.slug as string, {
+      sourceId: ctx.sourceId,
+      approvedBy: typeof p.approved_by === 'string' ? p.approved_by : 'mcp-admin',
+    });
+  },
+};
+
+const action_run: Operation = {
+  name: 'action_run',
+  description: 'Prepare a draft-only execution prompt for an approved VoltMind action. Performs no browser, email, or external side effects.',
+  params: {
+    slug: { type: 'string', required: true, description: 'Action slug.' },
+    now: { type: 'boolean', description: 'Ignore future due time and prepare now.' },
+    dry_run: { type: 'boolean', description: 'Record this as a dry-run preparation.' },
+    user_prompt: { type: 'string', description: 'Additional user prompt for this run.' },
+  },
+  mutating: true,
+  scope: 'admin',
+  handler: async (ctx, p) => {
+    const { runAction } = await import('./actions.ts');
+    return runAction(ctx.engine, p.slug as string, {
+      sourceId: ctx.sourceId,
+      now: p.now === true,
+      dryRun: p.dry_run === true,
+      userPrompt: typeof p.user_prompt === 'string' ? p.user_prompt : null,
+    });
+  },
+};
+
 const cancel_job: Operation = {
   name: 'cancel_job',
   description: 'Cancel a waiting, active, or delayed job',
@@ -4387,6 +4478,8 @@ export const operations: Operation[] = [
   // Jobs (Minions)
   submit_job, get_job, list_jobs, cancel_job, retry_job, get_job_progress,
   pause_job, resume_job, replay_job, send_job_message,
+  // Actions
+  action_scan, action_list, action_get, action_approve, action_run,
   // v0.38 Slice 3: remote-callable agent dispatch with OAuth-bound trust boundary
   submit_agent,
   // Orphans

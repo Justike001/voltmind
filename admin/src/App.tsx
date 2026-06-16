@@ -5,13 +5,23 @@ import { AgentsPage } from './pages/Agents';
 import { RequestLogPage } from './pages/RequestLog';
 import { CalibrationPage } from './pages/Calibration';
 import { JobsWatchPage } from './pages/JobsWatch';
+import { ActionsPage } from './pages/Actions';
 import { api } from './api';
 
-type Page = 'login' | 'dashboard' | 'agents' | 'log' | 'calibration' | 'jobs';
+type Page = 'login' | 'dashboard' | 'agents' | 'log' | 'calibration' | 'jobs' | 'actions';
+
+const navItems: Array<{ page: Page; label: string; hint: string }> = [
+  { page: 'dashboard', label: 'Overview', hint: 'health and activity' },
+  { page: 'agents', label: 'MCP Agents', hint: 'clients, tokens, access' },
+  { page: 'log', label: 'Request Log', hint: 'agent/API traffic' },
+  { page: 'calibration', label: 'Quality Lab', hint: 'legacy calibration' },
+  { page: 'jobs', label: 'Job Queue', hint: 'background runs' },
+  { page: 'actions', label: 'Actions', hint: 'task cockpit' },
+];
 
 function getPage(): Page {
   const hash = window.location.hash.replace('#', '') || 'dashboard';
-  if (['login', 'dashboard', 'agents', 'log', 'calibration', 'jobs'].includes(hash)) return hash as Page;
+  if (['login', 'dashboard', 'agents', 'log', 'calibration', 'jobs', 'actions'].includes(hash)) return hash as Page;
   return 'dashboard';
 }
 
@@ -48,18 +58,21 @@ export function App() {
   return (
     <div className="app">
       <nav className="sidebar">
-        <div className="sidebar-logo">GBrain</div>
+        <div className="sidebar-logo">
+          <span>VoltMind</span>
+          <span className="sidebar-logo-subtitle">Admin</span>
+        </div>
         <div className="sidebar-nav">
-          <a className={`nav-item ${page === 'dashboard' ? 'active' : ''}`}
-             onClick={() => navigate('dashboard')}>Dashboard</a>
-          <a className={`nav-item ${page === 'agents' ? 'active' : ''}`}
-             onClick={() => navigate('agents')}>Agents</a>
-          <a className={`nav-item ${page === 'log' ? 'active' : ''}`}
-             onClick={() => navigate('log')}>Request Log</a>
-          <a className={`nav-item ${page === 'calibration' ? 'active' : ''}`}
-             onClick={() => navigate('calibration')}>Calibration</a>
-          <a className={`nav-item ${page === 'jobs' ? 'active' : ''}`}
-             onClick={() => navigate('jobs')}>Jobs Watch</a>
+          {navItems.map(item => (
+            <a
+              key={item.page}
+              className={`nav-item ${page === item.page ? 'active' : ''}`}
+              onClick={() => navigate(item.page)}
+            >
+              <span className="nav-label">{item.label}</span>
+              <span className="nav-hint">{item.hint}</span>
+            </a>
+          ))}
         </div>
         <div style={{ marginTop: 'auto', padding: '16px 12px', borderTop: '1px solid var(--border)' }}>
           <button
@@ -86,6 +99,7 @@ export function App() {
         {page === 'log' && <RequestLogPage />}
         {page === 'calibration' && <CalibrationPage />}
         {page === 'jobs' && <JobsWatchPage />}
+        {page === 'actions' && <ActionsPage />}
       </main>
     </div>
   );

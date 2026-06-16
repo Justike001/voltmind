@@ -28,11 +28,12 @@ Primary pages hold context. State pages hold structured operational status and b
 9. Deliverable, draft, proposal, report, design doc, plan, prompt, or memo -> `artifacts/`
 10. Stable reusable concept, method, framework, or model -> `concepts/`
 11. Raw possibility, product thought, thesis, bet, or observation not yet active -> `ideas/`
-12. Governance protocol, privacy rule, publish contract, source-of-truth rule, approval rule -> `policy/`
-13. Raw material or pointer to source material -> `sources/`
-14. Proposed publishable update from Personal Brain to Team/Company Brain -> `contribution/candidates/`
-15. Explicitly non-contributable private material -> `private/`
-16. Dead, obsolete, or historical page -> `archive/`
+12. Company-wide vocabulary, ontology, or department lens definition -> `ontology/`
+13. Governance protocol, privacy rule, publish contract, source-of-truth rule, approval rule -> `policy/`
+14. Raw material or pointer to source material -> `sources/`
+15. Proposed publishable update from Personal Brain to Team/Company Brain -> `contribution/candidates/`
+16. Explicitly non-contributable private material -> `private/`
+17. Dead, obsolete, or historical page -> `archive/`
 
 ## State Object Routing
 

@@ -40,7 +40,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'features', 'autopilot', 'graph-query', 'jobs', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'transcripts', 'models', 'remote', 'recall', 'forget', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'transcripts', 'models', 'remote', 'recall', 'forget', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'autopilot',
@@ -59,6 +59,8 @@ const INTERNAL_MIGRATION_CLI = new Set([
 const CLI_ONLY_SELF_HELP = new Set([
   'upgrade', 'post-upgrade', 'check-update',
   'embed', 'config',
+  'daemon',
+  'actions',
   'jobs',
   'skillpack', 'skillpack-check',
   'integrations', 'friction',
@@ -150,6 +152,11 @@ async function main() {
       printCliOnlyHelp(command);
       return;
     }
+  }
+
+  {
+    const { maybeForwardToLocalDaemon } = await import('./core/local-daemon.ts');
+    await maybeForwardToLocalDaemon(command, subArgs);
   }
 
   // CLI-only commands
@@ -1250,6 +1257,37 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
+  if (command === 'actions' && (args.includes('--help') || args.includes('-h'))) {
+    const { runActions } = await import('./commands/actions.ts');
+    await runActions(null as any, args);
+    return;
+  }
+
+  // PGLite lock recovery must run before connectEngine(); otherwise the
+  // recovery command can be blocked by the very lock it is trying to inspect
+  // or clear.
+  if (command === 'storage' && (args[0] === 'unlock-pglite' || args[0] === 'pglite-lock')) {
+    const storage = await import('./commands/storage.ts');
+    if (args[0] === 'unlock-pglite') {
+      await storage.runStorageUnlockPglite(args.slice(1));
+    } else {
+      await storage.runStorageInspectPgliteLock(args.slice(1));
+    }
+    return;
+  }
+
+  if (command === 'doctor' && args.includes('--fix-pglite-lock')) {
+    const { runStorageUnlockPglite } = await import('./commands/storage.ts');
+    await runStorageUnlockPglite(['--stale-only', ...args.filter(a => a === '--json')]);
+    return;
+  }
+
+  if (command === 'daemon') {
+    const { runDaemon } = await import('./commands/daemon.ts');
+    await runDaemon(args);
+    return;
+  }
+
   // v0.41.6.0 D3 (per outside-voice F1): connect-time + dispatch-time wallclock
   // timeouts for read-only commands whose hang would otherwise spin at 100% CPU
   // (the production "10-day zombie voltmind search ping" bug class). The wrap
@@ -1345,6 +1383,11 @@ async function handleCliOnly(command: string, args: string[]) {
         await runConfig(engine, args);
         break;
       }
+      case 'daemon': {
+        const { runDaemon } = await import('./commands/daemon.ts');
+        await runDaemon(args);
+        break;
+      }
       // doctor is handled before connectEngine() above
       case 'migrate': {
         const { runMigrateEngine } = await import('./commands/migrate-engine.ts');
@@ -1369,6 +1412,11 @@ async function handleCliOnly(command: string, args: string[]) {
       case 'jobs': {
         const { runJobs } = await import('./commands/jobs.ts');
         await runJobs(engine, args);
+        break;
+      }
+      case 'actions': {
+        const { runActions } = await import('./commands/actions.ts');
+        await runActions(engine, args);
         break;
       }
       case 'agent': {
@@ -1914,9 +1962,12 @@ SETUP
   init [--pglite|--supabase|--url]   Create brain (PGLite default, no server)
   config [show|get|set] <key> [val]  Brain config
   storage status [--json]            Storage tier status and health
+  storage pglite-lock [--json]       Inspect the local PGLite file lock
+  storage unlock-pglite --stale-only Clear a stale local PGLite file lock
   sources list|add|remove|status     Manage local knowledge sources
   providers list|test|env|explain    AI provider diagnostics
   status [--json]                    Runtime status snapshot
+  daemon start|status|stop           Local PGLite daemon
   doctor [--json] [--fast]           Health check
   apply-migrations --yes             Apply schema migrations
 
@@ -1949,6 +2000,12 @@ GRAPH
   untag <slug> <tag>                 Remove tag
   timeline [<slug>]                  View timeline
   timeline-add <slug> <date> <text>  Add timeline entry
+
+ACTION SYSTEM
+  actions scan                       Index state/actions/*.md
+  actions list [--due]               List action tasks by risk/status
+  actions approve <slug>             Approve a gated action
+  actions run <slug> [--now]         Prepare a draft-only agent prompt
 
 JOBS
   jobs list [--status S] [--limit N] List jobs

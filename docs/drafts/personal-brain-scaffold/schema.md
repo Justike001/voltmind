@@ -30,3 +30,29 @@ Allowed `publish_level` values are defined in `.system/policy-config.json` under
 ## Graph Materialization
 
 Agents should preserve relationships through `source_refs`, `related_entities`, wiki links, and timeline entries. The runtime indexes these into PGLite for search, graph traversal, backlinks, and brief generation.
+
+## Agent-Facing Templates
+
+Use the markdown templates in `templates/` when creating new pages. These files are the scaffold contract for page structure:
+
+- `templates/people.md`
+- `templates/companies.md`
+- `templates/meetings.md`
+- `templates/orgs.md`
+- `templates/workstreams.md`
+- `templates/projects.md`
+- `templates/artifacts.md`
+- `templates/concepts.md`
+- `templates/ideas.md`
+- `templates/daily.md`
+- `templates/policy.md`
+- `templates/sources.md`
+- `templates/contribution-candidate.md`
+- `templates/private.md`
+- `templates/inbox.md`
+- `templates/state-decision.md`
+- `templates/state-commitment.md`
+- `templates/state-action.md`
+- `templates/state-risk.md`
+
+Template headings and frontmatter keys stay stable for routing and indexing. The body guidance under those headings is UTF-8 Chinese by default, so agents can write natural Chinese brain pages without changing the structural contract.

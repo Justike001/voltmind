@@ -7,7 +7,11 @@
  * the rule can't drift without the suite catching it.
  */
 import { describe, test, expect } from 'bun:test';
-import { resolveBootstrapToken } from '../src/commands/serve-http.ts';
+import {
+  isAdminAutoLoginLoopbackRequest,
+  resolveAdminAutoLoginLocal,
+  resolveBootstrapToken,
+} from '../src/commands/serve-http.ts';
 
 describe('resolveBootstrapToken (v0.36.1.x #1024)', () => {
   test('unset env → generates a fresh token via the injected RNG', () => {
@@ -70,5 +74,34 @@ describe('resolveBootstrapToken (v0.36.1.x #1024)', () => {
   test('31 chars (one short) → error', () => {
     const r = resolveBootstrapToken('0123456789abcdef0123456789abcde'); // 31
     expect(r.kind).toBe('error');
+  });
+});
+
+describe('admin local auto-login guard', () => {
+  test('auto-login flag is explicit and only accepts 1', () => {
+    expect(resolveAdminAutoLoginLocal(undefined)).toBe(false);
+    expect(resolveAdminAutoLoginLocal('')).toBe(false);
+    expect(resolveAdminAutoLoginLocal('true')).toBe(false);
+    expect(resolveAdminAutoLoginLocal('1')).toBe(true);
+  });
+
+  test('auto-login loopback guard requires 127.0.0.1 host and peer', () => {
+    expect(isAdminAutoLoginLoopbackRequest({
+      ip: '127.0.0.1',
+      remoteAddress: '127.0.0.1',
+      hostname: '127.0.0.1',
+    })).toBe(true);
+    expect(isAdminAutoLoginLoopbackRequest({
+      ip: '::ffff:127.0.0.1',
+      hostname: '127.0.0.1',
+    })).toBe(true);
+    expect(isAdminAutoLoginLoopbackRequest({
+      ip: '127.0.0.1',
+      hostname: 'localhost',
+    })).toBe(false);
+    expect(isAdminAutoLoginLoopbackRequest({
+      ip: '192.168.1.20',
+      hostname: '127.0.0.1',
+    })).toBe(false);
   });
 });

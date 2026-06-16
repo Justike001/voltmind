@@ -791,6 +791,62 @@ CREATE INDEX IF NOT EXISTS idx_minion_jobs_timeout ON minion_jobs (timeout_at) W
 CREATE INDEX IF NOT EXISTS idx_minion_jobs_parent_status ON minion_jobs (parent_job_id, status) WHERE parent_job_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_minion_jobs_idempotency ON minion_jobs (idempotency_key) WHERE idempotency_key IS NOT NULL;
 
+-- ============================================================
+-- VoltMind Actions: FS-canonical task index + DB-only run ledger
+-- ============================================================
+CREATE TABLE IF NOT EXISTS action_index (
+  source_id TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  priority TEXT,
+  due_at TIMESTAMPTZ,
+  eligible BOOLEAN NOT NULL DEFAULT false,
+  mode TEXT NOT NULL DEFAULT 'manual',
+  runtime TEXT,
+  trigger TEXT,
+  risk_level TEXT NOT NULL DEFAULT 'medium',
+  requires_confirmation BOOLEAN NOT NULL DEFAULT true,
+  requires_approval BOOLEAN NOT NULL DEFAULT false,
+  max_autonomy TEXT,
+  outcome TEXT,
+  next_step TEXT,
+  agent_contract JSONB NOT NULL DEFAULT '{}'::jsonb,
+  automation JSONB NOT NULL DEFAULT '{}'::jsonb,
+  allowed_tools JSONB NOT NULL DEFAULT '[]'::jsonb,
+  blocked_tools JSONB NOT NULL DEFAULT '[]'::jsonb,
+  user_prompt TEXT,
+  file_path TEXT,
+  content_hash TEXT NOT NULL DEFAULT '',
+  approved_at TIMESTAMPTZ,
+  approved_by TEXT,
+  last_run_at TIMESTAMPTZ,
+  last_run_status TEXT,
+  plan_json JSONB,
+  last_scanned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source_id, slug)
+);
+CREATE INDEX IF NOT EXISTS idx_action_index_due ON action_index (due_at) WHERE eligible = true;
+CREATE INDEX IF NOT EXISTS idx_action_index_status ON action_index(status);
+
+CREATE TABLE IF NOT EXISTS action_runs (
+  id SERIAL PRIMARY KEY,
+  source_id TEXT NOT NULL,
+  action_slug TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  status TEXT NOT NULL,
+  dry_run BOOLEAN NOT NULL DEFAULT false,
+  prompt TEXT NOT NULL,
+  user_prompt TEXT,
+  result JSONB,
+  error_text TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at TIMESTAMPTZ,
+  UNIQUE (source_id, action_slug, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_action_runs_action ON action_runs (source_id, action_slug, created_at DESC);
+
 -- Inbox table for sidechannel messaging
 CREATE TABLE IF NOT EXISTS minion_inbox (
   id          SERIAL PRIMARY KEY,

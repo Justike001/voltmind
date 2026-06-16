@@ -119,6 +119,35 @@ If you are writing or reviewing an operation, consult:
 - **Check providers:** `voltmind providers list`, `voltmind providers test`
 - **Check health:** `voltmind status`, `voltmind doctor --fast`, `voltmind health`
 
+## Personal brain scaffold language
+
+The scaffold contract lives in `docs/drafts/personal-brain-scaffold/templates/`,
+`brain/templates/`, and the runtime fallback in `src/core/personal-brain-scaffold.ts`.
+Keep template headings and frontmatter keys stable. The body guidance under those
+headings should be UTF-8 Chinese by default. Do not make AGENTS.md the only
+place that defines page template wording.
+
+## People page signal hygiene
+
+When creating or updating `people/` pages, keep the section boundaries strict:
+
+- `Ownership And Expertise` is for durable routing knowledge only: long-term
+  ownership domains, systems, customers, workflows, institutional context, and
+  which questions/reviews/decisions should route to this person. Do not put
+  active projects, action items, temporary coordination, tool tips, social
+  chatter, birthday/team-building chat, API-key logistics, OA/admin errands, or
+  one-off Teams remarks here. Do not create graph links from this section unless
+  the linked entity is part of durable ownership or expertise.
+- `Current Work` is where active projects, actions, current delivery scope,
+  current process ownership, and short-term work dependencies belong.
+- `Open Threads` is only for unresolved commitments, risks, decisions, and
+  questions that still need follow-up. If the same source already answers a
+  question, do not write it under `Questions`; either omit it or summarize the
+  resolved fact in the correct section with citation.
+- Low-signal Teams/Email/Calendar material should stay in the source or
+  conversation page unless it changes durable context. A person page is not a
+  chat digest.
+
 ## Phase C-D-E agent protocol
 
 This repository has been translated from inherited GBrain operator notes to the
@@ -137,6 +166,34 @@ voltmind status
 voltmind health
 voltmind jobs stats
 ```
+
+PGLite is a single-process embedded database. Do not run DB-backed VoltMind CLI
+commands in parallel against the same `VOLTMIND_HOME`; serialize `status`,
+`health`, `config show`, `sources list`, `get`, `search`, `query`, `import`,
+`sync`, and `embed` checks. If a command times out waiting for the PGLite lock,
+inspect it before deleting anything:
+
+```bash
+voltmind storage pglite-lock
+voltmind storage unlock-pglite --stale-only
+```
+
+`VOLTMIND_PGLITE_LOCK_TIMEOUT_MS` controls how long a CLI waits for the file
+lock. `VOLTMIND_PGLITE_STALE_MS` controls when a lock is considered stale; raise
+it explicitly for long `import`/`embed` runs.
+
+Prefer the local daemon for interactive Personal Brain sessions:
+
+```bash
+voltmind daemon start
+voltmind daemon status
+voltmind daemon stop
+```
+
+When running, the daemon owns the PGLite connection and core DB commands such as
+`get`, `list`, `search`, `query`, `stats`, `health`, `import`, `embed`, `status`,
+`config`, and `sources` forward to it automatically. Use
+`VOLTMIND_DAEMON_BYPASS=1` only for debugging direct PGLite CLI access.
 
 Do not run `voltmind autopilot --install` on Windows/PGLite. The inherited
 autopilot installer only has macOS launchd, Linux systemd, ephemeral-container,

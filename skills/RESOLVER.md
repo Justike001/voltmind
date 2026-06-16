@@ -29,7 +29,7 @@ detection or background enrichment loops automatically.
 
 | Trigger | Skill |
 |---------|-------|
-| "meeting notes", "meeting transcript", "process this meeting", "会议整理", "会议纪要", "会议抽取" | `skills/meeting/SKILL.md` |
+| "meeting notes", "meeting transcript", "process this meeting", "会议整理", "会议纪要", "会议抽取" | `skills/meeting-ingestion/SKILL.md` |
 | "daily plan", "daily review", "today brief", "每日", "今日计划", "明日计划" | `skills/daily/SKILL.md` |
 | "project update", "update project page", "project context", "open threads", "项目更新", "项目上下文" | `skills/project/SKILL.md` |
 | "review draft", "approve changes", "reject changes", "edit before writing", "确认写入", "审核草稿" | `skills/review/SKILL.md` |
@@ -51,7 +51,7 @@ detection or background enrichment loops automatically.
 
 ## Content & media ingestion
 
-Phase 1 routes meeting notes through `skills/meeting/SKILL.md`; inherited media/book/PDF and enrichment skills are frozen unless explicitly working on future phases.
+Phase 1 routes meeting notes and transcripts through `skills/meeting-ingestion/SKILL.md`; inherited media/book/PDF pipelines are frozen unless explicitly working on future phases.
 
 ## Operational
 
@@ -92,7 +92,7 @@ Keep these files/modules recoverable, but do not dispatch to them in MVP:
   calibration, experts, contradiction, trajectory, code intelligence.
 - Skill platform features: `skillpack`, `skillify`, skill harvesting,
   schema authoring/evolution, functional-area resolver compression.
-- Advanced ingestion: media/book/podcast/PDF pipelines, inherited meeting enrichment,
+- Advanced ingestion: media/book/podcast/PDF pipelines,
   social/web research enrichers, archive crawler, academic verification,
   publish/export flows.
 - Background orchestration beyond MVP visibility: Minion submit/shell/worker,

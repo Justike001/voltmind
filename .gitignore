@@ -35,6 +35,7 @@ export/
 # .context/test-shards/. Workspace-local by design — never committed.
 .context/
 .codex-tmp/
+.codex_tmp/
 
 # Tier 3 PGLite snapshot fixture (built on demand by build:pglite-snapshot)
 test/fixtures/pglite-snapshot.tar

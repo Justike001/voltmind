@@ -15,7 +15,11 @@ import type { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import { spawn } from 'child_process';
 import { randomBytes, createHash } from 'crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { safeHexEqual } from '../core/timing-safe.ts';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -88,6 +92,24 @@ export function resolveBootstrapToken(
     };
   }
   return { kind: 'ok', token: trimmed, fromEnv: true };
+}
+
+export function resolveAdminAutoLoginLocal(envValue: string | undefined): boolean {
+  return envValue === '1';
+}
+
+export function isAdminAutoLoginLoopbackRequest(input: {
+  ip?: string | null;
+  remoteAddress?: string | null;
+  hostname?: string | null;
+}): boolean {
+  const normalizedIp = normalizeLoopbackAddress(input.ip || input.remoteAddress || '');
+  const hostname = String(input.hostname || '').toLowerCase();
+  return normalizedIp === '127.0.0.1' && hostname === '127.0.0.1';
+}
+
+function normalizeLoopbackAddress(value: string): string {
+  return value.replace(/^::ffff:/, '');
 }
 
 export type ProbeHealthResult =
@@ -301,6 +323,153 @@ interface ServeHttpOptions {
   suppressBootstrapToken?: boolean;
 }
 
+interface GeneratedActionPlan {
+  plan: Array<{ phase: string; steps: string[] }>;
+  raw: string;
+}
+
+const ACTION_PLAN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['plan'],
+  properties: {
+    plan: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 4,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['phase', 'steps'],
+        properties: {
+          phase: { type: 'string' },
+          steps: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 6,
+            items: { type: 'string' },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+
+async function generateActionPlanDirect(prompt: string): Promise<GeneratedActionPlan> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error('DEEPSEEK_API_KEY environment variable is not set');
+
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a task planning assistant. Return a JSON object with a "plan" key containing an array of phases. Each phase must have "phase" (string) and "steps" (array of strings). Use 2 to 4 phases with 2 to 5 concrete steps each. Output ONLY valid JSON with no markdown fences.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 2048,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`DeepSeek API error ${response.status}: ${text.substring(0, 200)}`);
+  }
+
+  const data = await response.json() as { choices: Array<{ message: { content: string } }> };
+  const raw = data.choices[0]?.message?.content;
+  if (!raw) throw new Error('DeepSeek returned an empty response');
+  return { plan: normalizeGeneratedPlan(raw), raw };
+}
+
+async function generateActionPlanWithCodex(prompt: string): Promise<GeneratedActionPlan> {
+  const workDir = await mkdtemp(join(tmpdir(), 'voltmind-action-plan-'));
+  const schemaPath = join(workDir, 'schema.json');
+  const outputPath = join(workDir, 'last-message.json');
+  try {
+    await writeFile(schemaPath, JSON.stringify(ACTION_PLAN_SCHEMA, null, 2), 'utf-8');
+    const child = spawn('codex', [
+      'exec',
+      '--cd', process.cwd(),
+      '--sandbox', 'read-only',
+      '--output-schema', schemaPath,
+      '--output-last-message', outputPath,
+      '-',
+    ], {
+      cwd: process.cwd(),
+     env: process.env,
+      shell: true,
+     stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', chunk => { stderr += String(chunk); });
+    child.stdout.resume();
+    child.stdin.end(prompt, 'utf8');
+
+    const exitCode = await new Promise<number>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error('codex exec timed out while generating the action plan'));
+      }, 180_000);
+      child.on('error', err => {
+        clearTimeout(timer);
+        reject(err);
+      });
+      child.on('close', code => {
+        clearTimeout(timer);
+        resolve(code ?? 1);
+      });
+    });
+    if (exitCode !== 0) {
+      throw new Error(`codex exec exited with ${exitCode}${stderr.trim() ? `: ${stderr.trim()}` : ''}`);
+    }
+
+    const raw = await readFile(outputPath, 'utf-8');
+    return { plan: normalizeGeneratedPlan(raw), raw };
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+function normalizeGeneratedPlan(raw: string): Array<{ phase: string; steps: string[] }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('codex plan response was not valid JSON');
+    parsed = JSON.parse(match[0]);
+  }
+  const plan = typeof parsed === 'object' && parsed !== null && Array.isArray((parsed as { plan?: unknown }).plan)
+    ? (parsed as { plan: unknown[] }).plan
+    : null;
+  if (!plan || plan.length === 0) throw new Error('codex plan response did not include a plan array');
+  return plan.slice(0, 4).map((item, index) => {
+    const obj = item && typeof item === 'object' ? item as { phase?: unknown; steps?: unknown } : {};
+    const steps = Array.isArray(obj.steps)
+      ? obj.steps.map(step => String(step).trim()).filter(Boolean).slice(0, 6)
+      : [];
+    if (steps.length === 0) throw new Error(`codex plan phase ${index + 1} did not include steps`);
+    return {
+      phase: typeof obj.phase === 'string' && obj.phase.trim() ? obj.phase.trim() : `Phase ${index + 1}`,
+      steps,
+    };
+  });
+}
+
 /**
  * v0.38 Slice 4 — per-OAuth-client agent spend snapshot. Exported so the
  * admin endpoint and `test/admin-agents-spend.test.ts` share the same SQL
@@ -441,6 +610,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   const bootstrapHash = createHash('sha256').update(bootstrapToken).digest('hex');
   const suppressBootstrapPrint = options.suppressBootstrapToken === true;
   const adminSessions = new Map<string, number>(); // sessionId → expiresAt
+  const adminAutoLoginLocal = resolveAdminAutoLoginLocal(process.env.VOLTMIND_ADMIN_AUTO_LOGIN_LOCAL);
 
   // SSE clients for live activity feed
   const sseClients = new Set<express.Response>();
@@ -644,6 +814,26 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     path: '/admin',
   });
 
+  function issueAdminSession(req: Request, res: Response, maxAgeMs: number): string {
+    const sessionId = randomBytes(32).toString('hex');
+    const expiresAt = Date.now() + maxAgeMs;
+    adminSessions.set(sessionId, expiresAt);
+    res.cookie('voltmind_admin', sessionId, adminCookie(req, maxAgeMs));
+    (req.cookies as Record<string, string>).voltmind_admin = sessionId;
+    return sessionId;
+  }
+
+  function hasValidAdminSession(req: Request): boolean {
+    const sessionId = (req.cookies as Record<string, string>)?.voltmind_admin;
+    if (!sessionId || !adminSessions.has(sessionId)) return false;
+    const expiresAt = adminSessions.get(sessionId)!;
+    if (Date.now() > expiresAt) {
+      adminSessions.delete(sessionId);
+      return false;
+    }
+    return true;
+  }
+
   const authRouterOptions: any = {
     provider: oauthProvider,
     issuerUrl,
@@ -692,6 +882,21 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   // ---------------------------------------------------------------------------
   // Admin authentication (cookie-based)
   // ---------------------------------------------------------------------------
+  app.use('/admin', (req: Request, res: Response, next: NextFunction) => {
+    if (
+      adminAutoLoginLocal &&
+      !hasValidAdminSession(req) &&
+      isAdminAutoLoginLoopbackRequest({
+        ip: req.ip,
+        remoteAddress: req.socket.remoteAddress,
+        hostname: req.hostname,
+      })
+    ) {
+      issueAdminSession(req, res, 24 * 60 * 60 * 1000);
+    }
+    next();
+  });
+
   // v0.40 D15.5: safeHexEqual extracted to src/core/timing-safe.ts so the new
   // /webhooks/github HMAC verifier reuses the same constant-time compare.
   // POST /admin/login — JSON body with token (for programmatic/UI login)
@@ -708,11 +913,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       return;
     }
 
-    const sessionId = randomBytes(32).toString('hex');
-    const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-    adminSessions.set(sessionId, expiresAt);
-
-    res.cookie('voltmind_admin', sessionId, adminCookie(req, 24 * 60 * 60 * 1000));
+    issueAdminSession(req, res, 24 * 60 * 60 * 1000);
     res.json({ status: 'authenticated' });
   });
 
@@ -819,11 +1020,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     magicLinkNonces.delete(nonce);
     consumedNonces.add(nonce);
 
-    const sessionId = randomBytes(32).toString('hex');
-    const sessionExpiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days for magic link
-    adminSessions.set(sessionId, sessionExpiresAt);
-
-    res.cookie('voltmind_admin', sessionId, adminCookie(req, 7 * 24 * 60 * 60 * 1000));
+    issueAdminSession(req, res, 7 * 24 * 60 * 60 * 1000);
     res.redirect('/admin/');
   });
 
@@ -953,6 +1150,170 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       res.status(500).json({ error: msg });
+    }
+  });
+
+  app.post('/admin/api/actions/scan', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const { scanActions } = await import('../core/actions.ts');
+      const result = await scanActions(engine, { repo: typeof req.body?.repo === 'string' ? req.body.repo : undefined });
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.get('/admin/api/actions', requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { listActions } = await import('../core/actions.ts');
+      const actions = await listActions(engine, {
+        status: typeof req.query.status === 'string' ? req.query.status : undefined,
+        risk: typeof req.query.risk === 'string' ? req.query.risk : undefined,
+        dueOnly: req.query.due === '1' || req.query.due === 'true',
+        limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : 100,
+        sourceId: typeof req.query.source_id === 'string' ? req.query.source_id : undefined,
+        allSources: req.query.all_sources === '1' || req.query.all_sources === 'true',
+      });
+      res.json(actions);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.get('/admin/api/actions/:slug/runs', requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { listActionRuns } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const runs = await listActionRuns(engine, slug, {
+        sourceId: typeof req.query.source_id === 'string' ? req.query.source_id : undefined,
+      });
+      res.json(runs);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post('/admin/api/actions/:slug/plan', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const { buildActionPlanPrompt, getAction, saveActionPlan } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const sourceId = typeof req.body?.source_id === 'string' ? req.body.source_id : 'default';
+      const action = await getAction(engine, slug, sourceId);
+      if (!action) {
+        res.status(404).json({ error: `Action not found: ${slug}` });
+        return;
+      }
+      const userPrompt = typeof req.body?.user_prompt === 'string' ? req.body.user_prompt : '';
+      const prompt = buildActionPlanPrompt(action, userPrompt || null);
+      let result: GeneratedActionPlan;
+      try {
+        result = await generateActionPlanDirect(prompt);
+      } catch (directErr) {
+        try {
+          result = await generateActionPlanWithCodex(prompt);
+        } catch (codexErr) {
+          throw new Error(
+            `Plan generation failed. Direct API: ${directErr instanceof Error ? directErr.message : String(directErr)}. ` +
+            `Codex: ${codexErr instanceof Error ? codexErr.message : String(codexErr)}`
+          );
+        }
+      }
+      // Auto-persist the generated plan so it survives page switches and reloads
+      await saveActionPlan(engine, slug, { plan: result.plan, done: {} }, sourceId);
+      res.json({ plan: result.plan, raw: result.raw });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  // Plan persistence: save and load generated action plans
+  app.post('/admin/api/actions/:slug/plan/save', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const { saveActionPlan } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const sourceId = typeof req.body?.source_id === 'string' ? req.body.source_id : 'default';
+      const plan = req.body?.plan ?? null;
+      await saveActionPlan(engine, slug, plan, sourceId);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.get('/admin/api/actions/:slug/plan', requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { getActionPlan } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const sourceId = typeof req.query.source_id === 'string' ? req.query.source_id : 'default';
+      const plan = await getActionPlan(engine, slug, sourceId);
+      res.json(plan);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post('/admin/api/actions/:slug/approve', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const { approveAction } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const action = await approveAction(engine, slug, {
+        sourceId: typeof req.body?.source_id === 'string' ? req.body.source_id : undefined,
+        approvedBy: typeof req.body?.approved_by === 'string' ? req.body.approved_by : 'admin-ui',
+      });
+      res.json(action);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post('/admin/api/actions/:slug/run', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const { runAction } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const result = await runAction(engine, slug, {
+        sourceId: typeof req.body?.source_id === 'string' ? req.body.source_id : undefined,
+        now: req.body?.now === true,
+        dryRun: req.body?.dry_run === true,
+        userPrompt: typeof req.body?.user_prompt === 'string' ? req.body.user_prompt : null,
+      });
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post('/admin/api/actions/:slug/status', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const { updateActionStatus } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const rawStatus = typeof req.body?.status === 'string' ? req.body.status : '';
+      const allowed = new Set(['open', 'in_progress', 'done', 'blocked', 'canceled']);
+      if (!allowed.has(rawStatus)) {
+        res.status(400).json({ error: 'invalid_status' });
+        return;
+      }
+      const action = await updateActionStatus(engine, slug, rawStatus, {
+        sourceId: typeof req.body?.source_id === 'string' ? req.body.source_id : undefined,
+        note: typeof req.body?.note === 'string' ? req.body.note : undefined,
+      });
+      res.json(action);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post('/admin/api/actions/:slug/update', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const { updateActionFields } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const action = await updateActionFields(engine, slug, {
+        sourceId: typeof req.body?.source_id === 'string' ? req.body.source_id : undefined,
+        dueAt: typeof req.body?.due_at === 'string' ? req.body.due_at : undefined,
+        userPrompt: typeof req.body?.user_prompt === 'string' ? req.body.user_prompt : undefined,
+      });
+      res.json(action);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
   });
 

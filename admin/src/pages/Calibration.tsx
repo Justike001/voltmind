@@ -110,22 +110,10 @@ export function CalibrationPage() {
   if (!profile) {
     return (
       <div style={{ padding: 24, maxWidth: 700 }}>
-        <h1 style={{ marginBottom: 16 }}>Calibration</h1>
+        <h1 style={{ marginBottom: 16 }}>Quality Lab</h1>
         <p style={{ color: 'var(--text-secondary)' }}>
-          No calibration profile yet. Builds after 5+ resolved takes.
+          Legacy calibration data is not available in this VoltMind MVP workspace.
         </p>
-        <pre
-          style={{
-            background: 'var(--bg-secondary)',
-            padding: 12,
-            borderRadius: 4,
-            color: 'var(--text-primary)',
-            marginTop: 12,
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          gbrain dream --phase calibration_profile
-        </pre>
       </div>
     );
   }
@@ -135,7 +123,7 @@ export function CalibrationPage() {
 
   return (
     <div style={{ padding: 32, maxWidth: 720 }}>
-      <h1 style={{ marginBottom: 8 }}>Calibration</h1>
+      <h1 style={{ marginBottom: 8 }}>Quality Lab</h1>
       <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 24 }}>
         Holder: {profile.holder}
         {' · '}

@@ -8,4 +8,17 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
   },
+  server: {
+    port: 5173,
+    proxy: {
+      '/admin/api': {
+        target: 'http://localhost:7331',
+        changeOrigin: true,
+      },
+      '/admin/login': {
+        target: 'http://localhost:7331',
+        changeOrigin: true,
+      },
+    },
+  },
 });
