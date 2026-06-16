@@ -1,14 +1,21 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, mkdir, rm, unlink, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readFile, rm, unlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
+  buildActionPlanPromptWithContext,
+  buildActionStepRegeneratePrompt,
   buildActionPrompt,
+  computeActionUrgencyScore,
   evaluateActionPolicy,
+  listArchivedActions,
   listActions,
   getActionPlan,
+  normalizeActionPlan,
   saveActionPlan,
   scanActions,
+  updateActionFields,
+  updateActionStatus,
   type ActionRecord,
 } from '../src/core/actions.ts';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
@@ -256,8 +263,15 @@ describe('VoltMind actions DB index', () => {
       });
 
       expect(await getActionPlan(engine, 'state/actions/plan-target')).toEqual({
-        plan: [{ phase: '1. Check', steps: ['Read action', 'Persist plan'] }],
-        done: { '0:1': true },
+        version: 2,
+        plan: [{
+          phase: '1. Check',
+          steps: [
+            { id: 'p1s1', text: 'Read action', done: false, note: '' },
+            { id: 'p1s2', text: 'Persist plan', done: true, note: '' },
+          ],
+        }],
+        done: { '0:0': false, '0:1': true },
       });
     } finally {
       await engine.disconnect().catch(() => {});
