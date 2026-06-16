@@ -1266,7 +1266,17 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   app.post('/admin/api/actions/scan', requireAdmin, express.json(), async (req: Request, res: Response) => {
     try {
       const { scanActions } = await import('../core/actions.ts');
-      const result = await scanActions(engine, { repo: typeof req.body?.repo === 'string' ? req.body.repo : undefined });
+      // Resolve repo: explicit body param > config sync.repo_path > env VOLTMIND_ACTIONS_REPO
+      let repo = typeof req.body?.repo === 'string' ? req.body.repo : undefined;
+      if (!repo) {
+        try { repo = await engine.getConfig('sync.repo_path') as string; } catch {}
+      }
+      if (!repo) repo = process.env.VOLTMIND_ACTIONS_REPO;
+      // Persist so next time it works without explicit param
+      if (repo) {
+        await engine.setConfig('sync.repo_path', repo).catch(() => {});
+      }
+      const result = await scanActions(engine, { repo });
       res.json(result);
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
@@ -1276,13 +1286,17 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   app.get('/admin/api/actions', requireAdmin, async (req: Request, res: Response) => {
     try {
       const { listActions } = await import('../core/actions.ts');
+      // Default to all_sources for admin UI convenience — most brains have only one source
+      const explicitSource = typeof req.query.source_id === 'string' ? req.query.source_id : undefined;
+      const explicitAll = req.query.all_sources === '1' || req.query.all_sources === 'true';
+      const allSources = explicitAll || (!explicitSource);
       const actions = await listActions(engine, {
         status: typeof req.query.status === 'string' ? req.query.status : undefined,
         risk: typeof req.query.risk === 'string' ? req.query.risk : undefined,
         dueOnly: req.query.due === '1' || req.query.due === 'true',
         limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : 100,
-        sourceId: typeof req.query.source_id === 'string' ? req.query.source_id : undefined,
-        allSources: req.query.all_sources === '1' || req.query.all_sources === 'true',
+        sourceId: explicitSource,
+        allSources,
       });
       res.json(actions);
     } catch (e) {
@@ -1421,6 +1435,19 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     }
   });
 
+  // Admin config set
+  app.post('/admin/api/config', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const key = typeof req.body?.key === 'string' ? req.body.key : '';
+      const value = typeof req.body?.value === 'string' ? req.body.value : '';
+      if (!key) { res.status(400).json({ error: 'key is required' }); return; }
+      await engine.setConfig(key, value);
+      res.json({ ok: true, key, value });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
   // Plan persistence: save and load generated action plans
   app.post('/admin/api/actions/:slug/plan/save', requireAdmin, express.json(), async (req: Request, res: Response) => {
     try {
@@ -1503,10 +1530,16 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
       const action = await updateActionFields(engine, slug, {
         sourceId: typeof req.body?.source_id === 'string' ? req.body.source_id : undefined,
-        dueAt: typeof req.body?.due_at === 'string' ? req.body.due_at : undefined,
-        userPrompt: typeof req.body?.user_prompt === 'string' ? req.body.user_prompt : undefined,
+        dueAt: req.body && Object.prototype.hasOwnProperty.call(req.body, 'due_at')
+          ? (typeof req.body.due_at === 'string' ? req.body.due_at : null)
+          : undefined,
+        userPrompt: req.body && Object.prototype.hasOwnProperty.call(req.body, 'user_prompt')
+          ? (typeof req.body.user_prompt === 'string' ? req.body.user_prompt : null)
+          : undefined,
         mode: typeof req.body?.mode === 'string' ? req.body.mode : undefined,
-        priority: typeof req.body?.priority === 'string' ? req.body.priority : undefined,
+        priority: req.body && Object.prototype.hasOwnProperty.call(req.body, 'priority')
+          ? (typeof req.body.priority === 'string' ? req.body.priority : null)
+          : undefined,
       });
       res.json(action);
     } catch (e) {

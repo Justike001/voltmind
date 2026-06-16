@@ -9,12 +9,12 @@ import { api } from './api';
 
 type Page = 'login' | 'dashboard' | 'agents' | 'archive' | 'jobs' | 'actions';
 
-const navItems: Array<{ page: Page; label: string; hint: string }> = [
-  { page: 'dashboard', label: 'Overview', hint: 'health and activity' },
-  { page: 'agents', label: 'MCP Agents', hint: 'clients, tokens, access' },
-  { page: 'archive', label: 'Archive', hint: 'completed actions' },
-  { page: 'jobs', label: 'Job Queue', hint: 'background runs' },
-  { page: 'actions', label: 'Actions', hint: 'task cockpit' },
+const navItems: Array<{ page: Page; label: string; icon: string }> = [
+  { page: 'dashboard', label: 'Dashboard', icon: '⌂' },
+  { page: 'agents', label: 'Agents', icon: '♙' },
+  { page: 'archive', label: 'Archive', icon: '▰' },
+  { page: 'jobs', label: 'Jobs Watch', icon: '◴' },
+  { page: 'actions', label: 'Actions', icon: 'ϟ' },
 ];
 
 function getPage(): Page {
@@ -58,6 +58,7 @@ export function App() {
     <div className="app">
       <nav className="sidebar">
         <div className="sidebar-logo">
+          <span className="brand-mark">ϟ</span>
           <span>VoltMind</span>
           <span className="sidebar-logo-subtitle">Admin</span>
         </div>
@@ -68,24 +69,21 @@ export function App() {
               className={`nav-item ${page === item.page ? 'active' : ''}`}
               onClick={() => navigate(item.page)}
             >
+              <span className="nav-icon">{item.icon}</span>
               <span className="nav-label">{item.label}</span>
-              <span className="nav-hint">{item.hint}</span>
             </a>
           ))}
         </div>
-        <div style={{ marginTop: 'auto', padding: '16px 12px', borderTop: '1px solid var(--border)' }}>
+        <div className="sidebar-footer">
+          <div className="local-state"><span>Local First</span><i /> <em>v0.9.3</em></div>
+          <div className="profile-strip">
+            <span className="avatar">JD</span>
+            <div><strong>Jane Doe</strong><small>Local Profile</small></div>
+            <span>⌄</span>
+          </div>
           <button
             onClick={handleSignOutEverywhere}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--border)',
-              color: 'var(--text-secondary)',
-              padding: '6px 10px',
-              borderRadius: 6,
-              fontSize: 12,
-              cursor: 'pointer',
-              width: '100%',
-            }}
+            className="signout-button"
             title="Revoke every active admin session — every browser, every tab"
           >
             Sign out everywhere

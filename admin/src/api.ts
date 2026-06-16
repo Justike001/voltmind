@@ -54,7 +54,7 @@ export const api = {
   // v0.41 D2 — live minion-jobs dashboard snapshot.
   jobsWatch: () => apiFetch('/admin/api/jobs/watch'),
   archivedActions: () => apiFetch('/admin/api/actions/archive?limit=100'),
-  actionsScan: () => apiFetch('/admin/api/actions/scan', { method: 'POST', body: JSON.stringify({}) }),
+  actionsScan: (repo?: string) => apiFetch('/admin/api/actions/scan', { method: 'POST', body: JSON.stringify(repo ? { repo } : {}) }),
   actions: (qs = '') => apiFetch(`/admin/api/actions${qs}`),
   actionRuns: (slug: string, sourceId = 'default') =>
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/runs?source_id=${encodeURIComponent(sourceId)}`),
@@ -94,6 +94,21 @@ export const api = {
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/update`, {
       method: 'POST',
       body: JSON.stringify({ source_id: sourceId, due_at: dueAt, user_prompt: userPrompt, mode, priority }),
+    }),
+  updateActionPatch: (
+    slug: string,
+    sourceId = 'default',
+    patch: { dueAt?: string | null; userPrompt?: string | null; mode?: string; priority?: string | null },
+  ) =>
+    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/update`, {
+      method: 'POST',
+      body: JSON.stringify({
+        source_id: sourceId,
+        due_at: patch.dueAt,
+        user_prompt: patch.userPrompt,
+        mode: patch.mode,
+        priority: patch.priority,
+      }),
     }),
   setActionStatus: (slug: string, sourceId: string, status: string) =>
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/status`, {

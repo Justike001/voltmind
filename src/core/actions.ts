@@ -180,9 +180,9 @@ async function resolveActionTarget(
   );
   const repoPath = opts.repo ||
     process.env.VOLTMIND_ACTIONS_REPO ||
+    await engine.getConfig('sync.repo_path') ||
     inferActionRepoFromHome() ||
-    sourceRows[0]?.local_path ||
-    await engine.getConfig('sync.repo_path');
+    sourceRows[0]?.local_path;
   if (!repoPath) {
     throw new Error('No brain repo path configured. Run `voltmind config set sync.repo_path <path>`, set VOLTMIND_ACTIONS_REPO, or pass --repo <path>.');
   }
@@ -337,13 +337,24 @@ export async function updateActionFields(
   }
   await engine.executeRaw(
     `UPDATE action_index
-        SET due_at = COALESCE($3::timestamptz, due_at),
-            user_prompt = COALESCE($4, user_prompt),
-            mode = COALESCE($5, mode),
-            priority = COALESCE($6, priority),
+        SET due_at = CASE WHEN $3::boolean THEN $4::timestamptz ELSE due_at END,
+            user_prompt = CASE WHEN $5::boolean THEN $6 ELSE user_prompt END,
+            mode = CASE WHEN $7::boolean THEN $8 ELSE mode END,
+            priority = CASE WHEN $9::boolean THEN $10 ELSE priority END,
             updated_at = now()
       WHERE source_id = $1 AND slug = $2`,
-    [sourceId, slug, normalizedDue ?? null, fields.userPrompt ?? null, normalizedMode ?? null, normalizedPriority ?? null],
+    [
+      sourceId,
+      slug,
+      fields.dueAt !== undefined,
+      normalizedDue,
+      fields.userPrompt !== undefined,
+      fields.userPrompt ?? null,
+      fields.mode !== undefined,
+      normalizedMode ?? null,
+      fields.priority !== undefined,
+      normalizedPriority,
+    ],
   );
   return (await getAction(engine, slug, sourceId))!;
 }
@@ -799,6 +810,11 @@ async function updateActionMarkdownDue(filePath: string, dueAt: string | null): 
     automation.run_at = localish;
     automation.trigger = automation.trigger || 'due_time';
     doc.data.automation = automation;
+  } else {
+    delete doc.data.due;
+    const automation = objectValue(doc.data.automation);
+    delete automation.run_at;
+    doc.data.automation = automation;
   }
   doc.data.updated = new Date().toISOString().slice(0, 10);
   await mkdir(dirname(filePath), { recursive: true });
@@ -821,6 +837,7 @@ async function updateActionMarkdownPriority(filePath: string, priority: string |
   const raw = await readFile(filePath, 'utf-8');
   const doc = matter(raw);
   if (priority) doc.data.priority = priority;
+  else delete doc.data.priority;
   doc.data.updated = new Date().toISOString().slice(0, 10);
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, matter.stringify(doc.content, doc.data), 'utf-8');

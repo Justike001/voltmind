@@ -44,25 +44,71 @@ interface ActionPlan {
   done: Record<string, boolean>;
 }
 
-const modes: Array<{ value: ActionMode; label: string; hint: string }> = [
-  { value: 'manual', label: 'Manual', hint: 'plan and schedule only' },
-  { value: 'agent_assisted', label: 'Agent Assisted', hint: 'drafts with approval' },
-  { value: 'agent_executable', label: 'Agent Executable', hint: 'bounded execution' },
+const modes: Array<{ value: ActionMode; label: string; hint: string; icon: string }> = [
+  { value: 'manual', label: 'Manual', hint: 'You execute steps', icon: 'hand' },
+  { value: 'agent_assisted', label: 'Agent Assisted', hint: 'Plan with agent, you execute', icon: 'bot' },
+  { value: 'agent_executable', label: 'Agent Executable', hint: 'Agent executes end-to-end', icon: 'rocket' },
 ];
+
+const priorityLabels: Record<string, string> = {
+  urgent: 'P1',
+  high: 'P1',
+  medium: 'P2',
+  low: 'P3',
+  none: 'P4',
+};
 
 function actionKey(a: Pick<ActionRecord, 'source_id' | 'slug'>): string {
   return `${a.source_id}:${a.slug}`;
 }
 
-function riskBadge(risk: string) {
-  return <span className={`action-badge-risk action-badge-risk-${risk}`}>{risk}</span>;
+function modeLabel(value: string): string {
+  return modes.find(m => m.value === value)?.label || value.replace('_', ' ');
 }
 
-function approvalBadge(a: ActionRecord) {
-  if (a.mode === 'manual') return <span className="action-badge-approval action-badge-ready">manual</span>;
-  if (a.approved_at) return <span className="action-badge-approval action-badge-approved">approved</span>;
-  if (a.requires_approval || a.risk_level !== 'low') return <span className="action-badge-approval action-badge-pending">needs approval</span>;
-  return <span className="action-badge-approval action-badge-ready">ready</span>;
+function scoreValue(action: Pick<ActionRecord, 'urgency_score'>): number {
+  return Math.round((action.urgency_score || 0) * 100);
+}
+
+function scoreTone(score: number): 'hot' | 'warm' | 'cool' {
+  if (score >= 75) return 'hot';
+  if (score >= 50) return 'warm';
+  return 'cool';
+}
+
+function Icon({ name }: { name: string }) {
+  if (name === 'bot') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9V6.5a4 4 0 0 1 8 0V9" /><path d="M5 10.5h14v8H5z" /><path d="M9 14h.01M15 14h.01M9 18h6" /><path d="M3 14h2M19 14h2" /></svg>;
+  }
+  if (name === 'rocket') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4c2.7.4 4.6 2.3 5 5l-7 7-4-4z" /><path d="M9 15l-2 4-2-2 4-2z" /><path d="M15 5l4 4" /><path d="M12 19l-3-3" /></svg>;
+  }
+  if (name === 'refresh') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-13.7 5.7" /><path d="M4 12A8 8 0 0 1 17.7 6.3" /><path d="M7 18H4v-3" /><path d="M17 6h3v3" /></svg>;
+  }
+  if (name === 'play') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>;
+  }
+  if (name === 'check') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>;
+  }
+  if (name === 'block') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="m8 8 8 8" /></svg>;
+  }
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 5 8l3 3" /><path d="M16 19l3-3-3-3" /><path d="M5 8h14M5 16h14" /></svg>;
+}
+
+function riskBadge(risk: string) {
+  return <span className={`vm-chip vm-risk-${risk}`}>{risk}</span>;
+}
+
+function priorityBadge(priority: string | null) {
+  const value = priority || 'none';
+  return <span className={`vm-chip vm-priority-${value}`}>{priorityLabels[value] || value.toUpperCase()}</span>;
+}
+
+function statusBadge(status: string) {
+  return <span className={`vm-chip vm-status-${status}`}><span className="vm-dot" />{status.replace('_', ' ')}</span>;
 }
 
 function toDatetimeLocal(value: string | null): string {
@@ -73,38 +119,50 @@ function toDatetimeLocal(value: string | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function formatDue(value: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
 function remaining(value: string | null): string {
-  if (!value) return 'unscheduled';
+  if (!value) return '-';
   const ms = new Date(value).getTime() - Date.now();
-  if (Number.isNaN(ms)) return 'unscheduled';
+  if (Number.isNaN(ms)) return '-';
   const abs = Math.abs(ms);
   const hours = Math.round(abs / 3_600_000);
   if (ms < 0) return hours < 24 ? `${hours}h overdue` : `${Math.round(hours / 24)}d overdue`;
   if (hours < 24) return `${hours}h left`;
-  return `${Math.round(hours / 24)}d left`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
 }
 
 function normalizePlan(raw: any): ActionPlan | null {
   if (!raw?.plan || !Array.isArray(raw.plan)) return null;
   const done = raw.done || {};
+  const plan = raw.plan.map((phase: any, phaseIndex: number) => ({
+    phase: typeof phase.phase === 'string' ? phase.phase : `Phase ${phaseIndex + 1}`,
+    steps: Array.isArray(phase.steps) ? phase.steps.map((step: any, stepIndex: number) => {
+      if (typeof step === 'string') {
+        return { id: `p${phaseIndex + 1}s${stepIndex + 1}`, text: step, done: Boolean(done[`${phaseIndex}:${stepIndex}`]), note: '' };
+      }
+      return {
+        id: step.id || `p${phaseIndex + 1}s${stepIndex + 1}`,
+        text: step.text || '',
+        done: Boolean(step.done ?? done[`${phaseIndex}:${stepIndex}`]),
+        note: step.note || '',
+        regenerated_at: step.regenerated_at,
+      };
+    }).filter((step: PlanStep) => step.text.trim()) : [],
+  })).filter((phase: PlanPhase) => phase.steps.length > 0);
+  return { version: 2, plan, done: {} };
+}
+
+function withDoneMap(plan: ActionPlan): ActionPlan {
   return {
-    version: 2,
-    plan: raw.plan.map((phase: any, phaseIndex: number) => ({
-      phase: typeof phase.phase === 'string' ? phase.phase : `Phase ${phaseIndex + 1}`,
-      steps: Array.isArray(phase.steps) ? phase.steps.map((step: any, stepIndex: number) => {
-        if (typeof step === 'string') {
-          return { id: `p${phaseIndex + 1}s${stepIndex + 1}`, text: step, done: Boolean(done[`${phaseIndex}:${stepIndex}`]), note: '' };
-        }
-        return {
-          id: step.id || `p${phaseIndex + 1}s${stepIndex + 1}`,
-          text: step.text || '',
-          done: Boolean(step.done ?? done[`${phaseIndex}:${stepIndex}`]),
-          note: step.note || '',
-          regenerated_at: step.regenerated_at,
-        };
-      }).filter((step: PlanStep) => step.text.trim()) : [],
-    })).filter((phase: PlanPhase) => phase.steps.length > 0),
-    done: {},
+    ...plan,
+    done: Object.fromEntries(plan.plan.flatMap((phase, pi) => phase.steps.map((step, si) => [`${pi}:${si}`, step.done]))),
   };
 }
 
@@ -131,9 +189,11 @@ export function ActionsPage() {
   const [modeEdit, setModeEdit] = useState<ActionMode>('agent_assisted');
   const [priorityEdit, setPriorityEdit] = useState('medium');
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<ActionPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   const load = async (status: string) => {
     setLoading(true);
@@ -141,6 +201,7 @@ export function ActionsPage() {
       const qs = status ? `?status=${encodeURIComponent(status)}&limit=150` : '?limit=150';
       const rows: ActionRecord[] = await api.actions(qs);
       setActions(rows);
+      setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -178,11 +239,57 @@ export function ActionsPage() {
     return () => { cancelled = true; };
   }, [current?.source_id, current?.slug]);
 
+  const replaceAction = (updated: ActionRecord) => {
+    const key = actionKey(updated);
+    setActions(prev => prev.map(a => actionKey(a) === key ? updated : a));
+    setSelectedKey(key);
+    setMode(updated.mode);
+    setModeEdit(updated.mode);
+    setPriorityEdit(updated.priority || 'medium');
+    setDueEdit(toDatetimeLocal(updated.due_at));
+  };
+
+  const commitActionPatch = async (
+    patch: { dueAt?: string | null; userPrompt?: string | null; mode?: ActionMode; priority?: string | null },
+    savingKey: string,
+  ) => {
+    if (!current) return;
+    setSaving(savingKey);
+    try {
+      const updated: ActionRecord = await api.updateActionPatch(current.slug, current.source_id, patch);
+      replaceAction(updated);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      await load(statusFilter);
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const persistPlan = async (next: ActionPlan) => {
     if (!current) return;
-    next.done = Object.fromEntries(next.plan.flatMap((phase, pi) => phase.steps.map((step, si) => [`${pi}:${si}`, step.done])));
-    setPlan({ ...next, plan: [...next.plan] });
-    await api.saveActionPlan(current.slug, current.source_id || 'default', next);
+    const normalized = withDoneMap(next);
+    setPlan(normalized);
+    await api.saveActionPlan(current.slug, current.source_id || 'default', normalized);
+  };
+
+  const patchPlanStepLocal = (phaseIndex: number, stepIndex: number, patch: Partial<PlanStep>): ActionPlan | null => {
+    if (!plan) return null;
+    const next: ActionPlan = {
+      ...plan,
+      plan: plan.plan.map((phase, pi) => ({
+        ...phase,
+        steps: phase.steps.map((step, si) => pi === phaseIndex && si === stepIndex ? { ...step, ...patch } : step),
+      })),
+    };
+    setPlan(next);
+    return next;
+  };
+
+  const updatePlanStep = async (phaseIndex: number, stepIndex: number, patch: Partial<PlanStep>) => {
+    const next = patchPlanStepLocal(phaseIndex, stepIndex, patch);
+    if (next) await persistPlan(next);
   };
 
   const handleGeneratePlan = async (regenerate = false) => {
@@ -193,6 +300,7 @@ export function ActionsPage() {
         ? await api.regenerateActionPlan(current.slug, current.source_id, wholePlanInstructions, executionPrompt)
         : await api.generateActionPlan(current.slug, current.source_id, executionPrompt);
       setPlan(normalizePlan(result));
+      setWholePlanInstructions('');
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -216,24 +324,30 @@ export function ActionsPage() {
     }
   };
 
-  const updatePlanStep = async (phaseIndex: number, stepIndex: number, patch: Partial<PlanStep>) => {
+  const addPlanStep = async () => {
     if (!plan) return;
+    const phase = plan.plan[0] || { phase: 'Plan', steps: [] };
     const next: ActionPlan = {
       ...plan,
-      plan: plan.plan.map((phase, pi) => ({
-        ...phase,
-        steps: phase.steps.map((step, si) => pi === phaseIndex && si === stepIndex ? { ...step, ...patch } : step),
-      })),
+      plan: [
+        { ...phase, steps: [...phase.steps, { id: `p1s${phase.steps.length + 1}-${Date.now()}`, text: 'New step', done: false, note: '' }] },
+        ...plan.plan.slice(1),
+      ],
     };
     await persistPlan(next);
   };
 
   const allPlanDone = Boolean(plan?.plan.length) && plan!.plan.every(phase => phase.steps.every(step => step.done));
+  const checkedCount = Object.values(checked).filter(Boolean).length;
+  const modeCounts = Object.fromEntries(modes.map(m => [m.value, actions.filter(a => a.mode === m.value).length]));
+  const selectedScore = current ? scoreValue(current) : 0;
+  const selectedTone = scoreTone(selectedScore);
+  const planStepCount = plan?.plan.reduce((sum, phase) => sum + phase.steps.length, 0) || 0;
 
   const scan = async () => {
     setLoading(true);
     try {
-      await api.actionsScan();
+      await api.actionsScan('E:\\gbrain\\VoltMind-PersonalBrain');
       await load(statusFilter);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -242,16 +356,10 @@ export function ActionsPage() {
     }
   };
 
-  const save = async () => {
-    if (!current) return;
-    await api.updateAction(current.slug, current.source_id, dueEdit || undefined, executionPrompt || undefined, modeEdit, priorityEdit);
-    await load(statusFilter);
-  };
-
   const approve = async () => {
     if (!current) return;
-    await api.approveAction(current.slug, current.source_id);
-    await load(statusFilter);
+    const updated = await api.approveAction(current.slug, current.source_id);
+    replaceAction(updated);
   };
 
   const run = async () => {
@@ -276,175 +384,228 @@ export function ActionsPage() {
     setChecked({});
   };
 
-  const checkedCount = Object.values(checked).filter(Boolean).length;
-  const modeCounts = Object.fromEntries(modes.map(m => [m.value, actions.filter(a => a.mode === m.value).length]));
-
   return (
-    <>
-      <div className="actions-toolbar">
-        <div className="actions-toolbar-left">
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Actions</h1>
-            <div className="page-subtitle">Review mode, schedule precisely, plan, approve, and prepare agent work.</div>
-          </div>
+    <div className="actions-workbench">
+      <header className="actions-topbar">
+        <div className="actions-title-block">
+          <h1>Actions</h1>
         </div>
-        <div className="actions-toolbar-right">
-          <button className="btn btn-secondary" onClick={runChecked} disabled={checkedCount === 0 || mode === 'manual'}>
-            Prepare selected ({checkedCount})
-          </button>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ width: 'auto', minWidth: 120 }}>
-            <option value="">All</option>
-            <option value="open">Open</option>
-            <option value="in_progress">In progress</option>
-            <option value="blocked">Blocked</option>
-            <option value="done">Done</option>
-            <option value="canceled">Canceled</option>
-          </select>
-          <button className="btn btn-primary" onClick={scan} disabled={loading}>Scan</button>
+        <div className="actions-status-strip">
+          <div className="sync-state sync-state-ok"><Icon name="check" /><span>Scan Complete</span><small>{lastSyncedAt || '-'}</small></div>
+          <div className="sync-state sync-state-blue"><Icon name="refresh" /><span>All Synced</span><small>{lastSyncedAt || '-'}</small></div>
+          <button className="vm-tool-button" onClick={scan} disabled={loading}><Icon name="play" />Scan Now</button>
+          <button className="vm-tool-button" onClick={() => void load(statusFilter)} disabled={loading}><Icon name="refresh" />Sync Now</button>
+          <label className="vm-filter-button">Filters
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="">All</option>
+              <option value="open">Open</option>
+              <option value="in_progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="done">Done</option>
+              <option value="canceled">Canceled</option>
+            </select>
+          </label>
         </div>
-      </div>
-
-      <div className="mode-switch">
-        {modes.map(item => (
-          <button key={item.value} className={`mode-switch-item ${mode === item.value ? 'active' : ''}`} onClick={() => { setMode(item.value); setSelectedKey(null); }}>
-            <span>{item.label}</span>
-            <small>{modeCounts[item.value] || 0} · {item.hint}</small>
-          </button>
-        ))}
-      </div>
+      </header>
 
       {error && <div className="action-error">{error}</div>}
 
-      <div className="actions-grid">
-        <div className="actions-list">
-          {visibleActions.length === 0 && !loading ? (
-            <div className="action-empty">No {mode.replace('_', ' ')} actions in this status filter.</div>
-          ) : visibleActions.map(a => (
-            <div
-              key={actionKey(a)}
-              className={`action-row ${current && actionKey(current) === actionKey(a) ? 'selected' : ''}`}
-              onClick={() => setSelectedKey(actionKey(a))}
-            >
-              <div className="action-row-checkbox" onClick={e => e.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  disabled={a.mode === 'manual'}
-                  checked={Boolean(checked[actionKey(a)])}
-                  onChange={e => setChecked({ ...checked, [actionKey(a)]: e.target.checked })}
-                />
-              </div>
-              <div className="action-row-body">
-                <span className="action-row-title">{a.title}</span>
-                <div className="action-row-meta">
-                  <span className="mono">{a.slug}</span>
-                  <span>·</span>
-                  <span>{a.status}</span>
-                  <span>·</span>
-                  <span>{remaining(a.due_at)}</span>
-                </div>
-              </div>
-              <div className="action-row-badges">
-                <span className="score-pill">{Math.round((a.urgency_score || 0) * 100)}</span>
-                {riskBadge(a.risk_level)}
-                {approvalBadge(a)}
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="actions-board">
+        <section className="actions-queue-panel">
+          <div className="mode-switch">
+            {modes.map(item => (
+              <button key={item.value} className={`mode-switch-item ${mode === item.value ? 'active' : ''}`} onClick={() => { setMode(item.value); setSelectedKey(null); }}>
+                <Icon name={item.icon} />
+                <span>{item.label}</span>
+                <small>{item.hint}</small>
+                <em>{modeCounts[item.value] || 0}</em>
+              </button>
+            ))}
+          </div>
 
-        <div className="action-detail-panel">
+          <div className="actions-table-shell">
+            <table className="actions-table">
+              <thead>
+                <tr>
+                  <th className="select-col"><input type="checkbox" aria-label="Select visible" disabled={mode === 'manual'} onChange={e => {
+                    const next = { ...checked };
+                    visibleActions.forEach(a => { if (a.mode !== 'manual') next[actionKey(a)] = e.target.checked; });
+                    setChecked(next);
+                  }} /></th>
+                  <th>Title</th>
+                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Risk</th>
+                  <th>Priority</th>
+                  <th>Due (Local)</th>
+                  <th>Remaining</th>
+                  <th>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleActions.length === 0 && !loading ? (
+                  <tr><td colSpan={9} className="table-empty">No {modeLabel(mode)} actions in this status filter.</td></tr>
+                ) : visibleActions.map(a => {
+                  const key = actionKey(a);
+                  const score = scoreValue(a);
+                  return (
+                    <tr key={key} className={current && actionKey(current) === key ? 'selected' : ''} onClick={() => setSelectedKey(key)}>
+                      <td className="select-col" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          disabled={a.mode === 'manual'}
+                          checked={Boolean(checked[key])}
+                          onChange={e => setChecked({ ...checked, [key]: e.target.checked })}
+                        />
+                      </td>
+                      <td><strong>{a.title}</strong></td>
+                      <td><span className="source-path">{a.slug.replace(/^state\/actions\//, '')}</span></td>
+                      <td>{statusBadge(a.status)}</td>
+                      <td>{riskBadge(a.risk_level)}</td>
+                      <td>{priorityBadge(a.priority)}</td>
+                      <td>{formatDue(a.due_at)}</td>
+                      <td>{remaining(a.due_at)}</td>
+                      <td>
+                        <div className={`score-cell score-${scoreTone(score)}`}>
+                          <span>{score || '-'}</span>
+                          <div className="score-bars">{Array.from({ length: 12 }, (_, i) => <i key={i} className={i < Math.round(score / 8.4) ? 'on' : ''} />)}</div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <footer className="actions-table-footer">
+              <span>{checkedCount} selected</span>
+              <span>{visibleActions.length} of {actions.length} actions</span>
+            </footer>
+          </div>
+
+          <div className="score-formula">
+            <span>Score =</span>
+            <strong>Risk (20%)</strong>
+            <span>+</span>
+            <strong>Deadline (45%)</strong>
+            <span>+</span>
+            <strong>Priority (35%)</strong>
+            <em>Higher score rises first.</em>
+          </div>
+        </section>
+
+        <aside className="action-inspector">
           {!current ? (
             <div className="action-detail-empty">Select an action to inspect</div>
           ) : (
             <>
-              <div className="action-detail-header">
-                <div className="action-detail-title">{current.title}</div>
-                <div className="action-detail-slug">{current.slug}</div>
-                <div className="action-detail-meta">
-                  {riskBadge(current.risk_level)}
-                  {approvalBadge(current)}
-                  <span className="score-pill">score {Math.round((current.urgency_score || 0) * 100)}</span>
-                </div>
+              <div className="inspector-nav">
+                <button className="back-link" onClick={() => setSelectedKey(null)}>Back to list</button>
+                <div className="inspector-icons"><button title="Open source">↗</button><button title="More">⋮</button></div>
+              </div>
+              <div className="inspector-heading">
+                <h2>{current.title}</h2>
+                <span>☆</span>
               </div>
 
-              <div className="action-detail-section">
-                <h3>Review</h3>
-                <div className="detail-two-col">
-                  <label>Mode
-                    <select value={modeEdit} onChange={e => setModeEdit(e.target.value as ActionMode)}>
-                      {modes.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-                    </select>
-                  </label>
-                  <label>Priority
-                    <select value={priorityEdit} onChange={e => setPriorityEdit(e.target.value)}>
-                      <option value="urgent">Urgent</option>
-                      <option value="high">High</option>
-                      <option value="medium">Medium</option>
-                      <option value="low">Low</option>
-                    </select>
-                  </label>
-                </div>
+              <div className="field-stack">
+                <label>Outcome
+                  <input readOnly value={current.outcome || 'No outcome captured yet.'} />
+                </label>
+                <label>Next Step
+                  <input readOnly value={current.next_step || 'No next step captured yet.'} />
+                </label>
               </div>
 
-              <div className="action-detail-section">
-                <h3>Schedule</h3>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input type="datetime-local" value={dueEdit} onChange={e => setDueEdit(e.target.value)} style={{ flex: 1 }} />
-                  <button className="btn btn-secondary" onClick={save}>Save</button>
-                </div>
-                <div className="schedule-hint">{remaining(current.due_at)}</div>
+              <div className="review-grid">
+                <label>Mode (Review)
+                  <select
+                    value={modeEdit}
+                    disabled={saving === 'mode'}
+                    onChange={e => {
+                      const value = e.target.value as ActionMode;
+                      setModeEdit(value);
+                      void commitActionPatch({ mode: value }, 'mode');
+                    }}
+                  >
+                    {modes.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                </label>
+                <label>Schedule (Local)
+                  <input
+                    type="datetime-local"
+                    value={dueEdit}
+                    disabled={saving === 'due'}
+                    onChange={e => setDueEdit(e.target.value)}
+                    onBlur={() => {
+                      if (dueEdit !== toDatetimeLocal(current.due_at)) void commitActionPatch({ dueAt: dueEdit || null }, 'due');
+                    }}
+                  />
+                </label>
+                <label>Priority
+                  <select
+                    value={priorityEdit}
+                    disabled={saving === 'priority'}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setPriorityEdit(value);
+                      void commitActionPatch({ priority: value }, 'priority');
+                    }}
+                  >
+                    <option value="urgent">P1 Urgent</option>
+                    <option value="high">P1 High</option>
+                    <option value="medium">P2 Medium</option>
+                    <option value="low">P3 Low</option>
+                  </select>
+                </label>
               </div>
 
-              {current.outcome && (
-                <div className="action-detail-section">
-                  <h3>Outcome</h3>
-                  <p className="detail-copy">{current.outcome}</p>
-                </div>
-              )}
-              {current.next_step && (
-                <div className="action-detail-section">
-                  <h3>Next Step</h3>
-                  <p className="detail-copy">{current.next_step}</p>
-                </div>
-              )}
+              <div className="inspector-facts">
+                <div><small>Risk</small><span className={`fact-risk-${current.risk_level}`}>{current.risk_level}</span></div>
+                <div><small>Priority</small><span>{priorityLabels[current.priority || 'none'] || '-'}</span></div>
+                <div><small>Due</small><span>{formatDue(current.due_at)}</span></div>
+                <div><small>Remaining</small><span>{remaining(current.due_at)}</span></div>
+                <div><small>Score</small><span className={`fact-score-${selectedTone}`}>{selectedScore || '-'}</span></div>
+              </div>
 
               <div className="plan-container">
                 <div className="plan-header-row">
-                  <h3>Generated Plan</h3>
-                  <button className="btn btn-secondary" onClick={() => handleGeneratePlan(false)} disabled={planLoading}>
-                    {plan ? 'Generate fresh' : 'Generate Plan'}
+                  <h3>Generated Plan <span>{planStepCount} steps</span></h3>
+                  <button className="vm-tool-button" onClick={() => handleGeneratePlan(Boolean(plan))} disabled={planLoading || (Boolean(plan) && !wholePlanInstructions.trim())}>
+                    <Icon name="refresh" />{plan ? 'Regenerate whole plan' : 'Generate Plan'}
                   </button>
                 </div>
-                {planLoading && <div className="plan-loading">Generating…</div>}
+                <div className="whole-plan-regenerate">
+                  <input value={wholePlanInstructions} onChange={e => setWholePlanInstructions(e.target.value)} placeholder="Plan instructions (optional), e.g., focus on compliance, be concise, include citations..." />
+                  <button className="btn btn-primary" onClick={() => handleGeneratePlan(Boolean(plan))} disabled={planLoading || (Boolean(plan) && !wholePlanInstructions.trim())}>Apply</button>
+                </div>
+                {planLoading && <div className="plan-loading">Generating...</div>}
                 {plan && (
                   <>
                     <div className="plan-list">
                       {plan.plan.map((phase, pi) => (
-                        <div key={`${phase.phase}:${pi}`}>
-                          <div className="plan-phase">{phase.phase}</div>
+                        <div key={`${phase.phase}:${pi}`} className="plan-phase-block">
+                          {plan.plan.length > 1 && <div className="plan-phase">{phase.phase}</div>}
                           {phase.steps.map((step, si) => (
                             <div key={step.id} className="plan-item">
+                              <span className="drag-handle">::</span>
                               <input className="plan-item-checkbox" type="checkbox" checked={step.done} onChange={() => updatePlanStep(pi, si, { done: !step.done })} />
                               <div className="plan-item-main">
                                 <span className={`plan-item-text${step.done ? ' plan-item-done' : ''}`}>{step.text}</span>
-                                <div className="plan-item-tools">
-                                  <input
-                                    value={step.note}
-                                    onChange={e => updatePlanStep(pi, si, { note: e.target.value })}
-                                    placeholder="Instruction for this step"
-                                  />
-                                  <button className="icon-btn" title="Regenerate this step" onClick={() => regenerateStep(pi, si)} disabled={planLoading}>↻</button>
-                                </div>
                               </div>
+                              <input
+                                className="step-note"
+                                value={step.note}
+                                onChange={e => patchPlanStepLocal(pi, si, { note: e.target.value })}
+                                onBlur={() => plan && persistPlan(plan)}
+                                placeholder="Add feedback..."
+                              />
+                              <button className="icon-btn" title="Regenerate this step" onClick={() => regenerateStep(pi, si)} disabled={planLoading}><Icon name="refresh" /></button>
                             </div>
                           ))}
                         </div>
                       ))}
                     </div>
-                    <div className="whole-plan-regenerate">
-                      <input value={wholePlanInstructions} onChange={e => setWholePlanInstructions(e.target.value)} placeholder="Instructions for regenerating the whole plan" />
-                      <button className="btn btn-secondary" onClick={() => handleGeneratePlan(true)} disabled={planLoading || !wholePlanInstructions.trim()}>Regenerate plan</button>
-                    </div>
+                    <button className="add-step-button" onClick={addPlanStep}>+ Add step</button>
                   </>
                 )}
               </div>
@@ -455,37 +616,32 @@ export function ActionsPage() {
                   <textarea
                     className="action-detail-prompt"
                     value={executionPrompt}
+                    onBlur={() => executionPrompt && commitActionPatch({ userPrompt: executionPrompt }, 'prompt')}
                     onChange={e => setExecutionPrompt(e.target.value)}
                     placeholder="Add constraints, desired output format, or context for the agent run."
                   />
                 </div>
               )}
 
-              <div className="action-detail-section">
-                <h3>Details</h3>
-                <div className="action-detail-field"><span className="action-detail-field-label">Status</span><span className="action-detail-field-value">{current.status}</span></div>
-                <div className="action-detail-field"><span className="action-detail-field-label">Priority</span><span className="action-detail-field-value">{current.priority || '—'}</span></div>
-                <div className="action-detail-field"><span className="action-detail-field-label">Runtime</span><span className="action-detail-field-value">{current.runtime || '—'}</span></div>
-                <div className="action-detail-field"><span className="action-detail-field-label">Trigger</span><span className="action-detail-field-value">{current.trigger || '—'}</span></div>
-              </div>
-
               {current.mode === 'manual' ? (
                 <div className="manual-archive-panel">
                   <span>{allPlanDone ? 'Plan complete. Ready to archive this manual action.' : 'Manual actions archive after every generated plan checkbox is complete.'}</span>
-                  <button className="btn btn-primary" onClick={archiveManual} disabled={!allPlanDone}>Archive action</button>
+                  <button className="btn btn-primary" onClick={archiveManual} disabled={!allPlanDone}><Icon name="check" />Archive action</button>
                 </div>
               ) : (
                 <div className="action-detail-actions">
-                  <button className="btn btn-primary" onClick={approve}>Approve</button>
-                  <button className="btn btn-secondary" onClick={run}>Start</button>
-                  <button className="btn btn-secondary" onClick={() => api.setActionStatus(current.slug, current.source_id, 'done').then(() => load(statusFilter))}>Done</button>
-                  <button className="btn btn-secondary" onClick={() => api.setActionStatus(current.slug, current.source_id, 'blocked').then(() => load(statusFilter))}>Block</button>
+                  <button className="btn btn-success" onClick={approve}><Icon name="check" />Approve Plan</button>
+                  <button className="btn btn-primary" onClick={run}><Icon name="play" />Start</button>
+                  <button className="btn btn-warning" onClick={() => api.setActionStatus(current.slug, current.source_id, 'blocked').then(() => load(statusFilter))}><Icon name="block" />Block</button>
+                  <button className="btn btn-secondary" onClick={() => api.setActionStatus(current.slug, current.source_id, 'done').then(() => load(statusFilter))}><Icon name="check" />Mark Done</button>
                 </div>
               )}
+
+              <p className="execution-note">{current.mode === 'manual' ? 'Agent will not execute. You use the plan as guidance.' : 'Agent will not execute until the action is approved and started.'}</p>
             </>
           )}
-        </div>
+        </aside>
       </div>
-    </>
+    </div>
   );
 }

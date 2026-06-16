@@ -38,6 +38,9 @@ function action(overrides: Partial<ActionRecord> = {}): ActionRecord {
     max_autonomy: 'draft_only',
     approved_at: null,
     approved_by: null,
+    started_at: null,
+    completed_at: null,
+    archived_at: null,
     last_run_at: null,
     last_run_status: null,
     outcome: null,
@@ -273,6 +276,191 @@ describe('VoltMind actions DB index', () => {
         }],
         done: { '0:0': false, '0:1': true },
       });
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('scan normalizes legacy scheduled/watch modes into current mode taxonomy', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-legacy-mode-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      const actionsDir = join(repo, 'state', 'actions');
+      await mkdir(actionsDir, { recursive: true });
+      await writeFile(join(actionsDir, 'scheduled.md'), [
+        '---',
+        'title: Scheduled action',
+        'automation:',
+        '  eligible: true',
+        '  mode: scheduled_agent',
+        '  risk_level: low',
+        '---',
+        '',
+      ].join('\n'), 'utf-8');
+      await writeFile(join(actionsDir, 'watch.md'), [
+        '---',
+        'title: Watch action',
+        'automation:',
+        '  eligible: true',
+        '  mode: watch_agent',
+        '  risk_level: low',
+        '---',
+        '',
+      ].join('\n'), 'utf-8');
+
+      await scanActions(engine, { repo });
+      const rows = await listActions(engine, { limit: 10 });
+      expect(rows.map(r => r.mode)).toEqual(['agent_assisted', 'agent_assisted']);
+      expect(rows.map(r => r.trigger).sort()).toEqual(['due_time', 'watch_event']);
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('updateActionFields writes mode priority and due back to markdown frontmatter', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-update-fields-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      const actionsDir = join(repo, 'state', 'actions');
+      await mkdir(actionsDir, { recursive: true });
+      const file = join(actionsDir, 'review.md');
+      await writeFile(file, [
+        '---',
+        'title: Review task',
+        'priority: low',
+        'automation:',
+        '  eligible: true',
+        '  mode: manual',
+        '  risk_level: low',
+        '---',
+        '',
+      ].join('\n'), 'utf-8');
+      await scanActions(engine, { repo });
+
+      await updateActionFields(engine, 'state/actions/review', {
+        mode: 'agent_assisted',
+        priority: 'high',
+        dueAt: '2026-06-20T09:45',
+      });
+      const raw = await readFile(file, 'utf-8');
+      expect(raw).toContain('priority: high');
+      expect(raw).toContain('mode: agent_assisted');
+      expect(raw).toContain("due: '2026-06-20T09:45'");
+
+      await scanActions(engine, { repo });
+      const row = (await listActions(engine, { limit: 10 }))[0];
+      expect(row).toMatchObject({ mode: 'agent_assisted', priority: 'high' });
+
+      await updateActionFields(engine, 'state/actions/review', {
+        priority: null,
+        dueAt: null,
+      });
+      const clearedRaw = await readFile(file, 'utf-8');
+      expect(clearedRaw).not.toContain('priority:');
+      expect(clearedRaw).not.toContain('due:');
+      expect(clearedRaw).not.toContain('run_at:');
+      const cleared = (await listActions(engine, { limit: 10 }))[0];
+      expect(cleared.priority).toBeNull();
+      expect(cleared.due_at).toBeNull();
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('computeActionUrgencyScore weights deadline priority and risk', () => {
+    const now = new Date('2026-06-16T00:00:00Z');
+    const urgent = computeActionUrgencyScore(action({
+      due_at: '2026-06-15T00:00:00Z',
+      priority: 'urgent',
+      risk_level: 'high',
+    }), now);
+    const later = computeActionUrgencyScore(action({
+      due_at: null,
+      priority: 'low',
+      risk_level: 'low',
+    }), now);
+    expect(urgent).toBeGreaterThan(later);
+    expect(urgent).toBeCloseTo(0.97, 2);
+  });
+
+  test('normalizeActionPlan upgrades v1 steps and preserves done state', () => {
+    expect(normalizeActionPlan({
+      plan: [{ phase: 'Phase 1', steps: ['A', 'B'] }],
+      done: { '0:1': true },
+    })).toEqual({
+      version: 2,
+      plan: [{
+        phase: 'Phase 1',
+        steps: [
+          { id: 'p1s1', text: 'A', done: false, note: '' },
+          { id: 'p1s2', text: 'B', done: true, note: '' },
+        ],
+      }],
+      done: { '0:0': false, '0:1': true },
+    });
+  });
+
+  test('plan prompts include identity context previous plan and step notes', () => {
+    const plan = normalizeActionPlan({
+      plan: [{ phase: 'Phase 1', steps: [{ id: 's1', text: 'Old step', done: false, note: 'Make it shorter' }] }],
+    })!;
+    const prompt = buildActionPlanPromptWithContext(action({
+      outcome: 'A ready draft',
+      next_step: 'Review it',
+    }), {
+      identityContext: { user_md: 'USER PREFS', soul_md: 'SOUL VOICE', found: [], missing: [] },
+      previousPlan: plan,
+      regenerateInstructions: 'Tighten the plan',
+      userPrompt: 'Use bullets',
+    });
+    expect(prompt).toContain('Outcome: A ready draft');
+    expect(prompt).toContain('Next Step: Review it');
+    expect(prompt).toContain('USER PREFS');
+    expect(prompt).toContain('SOUL VOICE');
+    expect(prompt).toContain('Tighten the plan');
+    expect(prompt).toContain('Use bullets');
+
+    const stepPrompt = buildActionStepRegeneratePrompt(action(), plan, 0, 0, 'One line only', null);
+    expect(stepPrompt).toContain('Old step');
+    expect(stepPrompt).toContain('Make it shorter');
+    expect(stepPrompt).toContain('One line only');
+  });
+
+  test('manual archive writes completion timestamps and exposes elapsed archive rows', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-archive-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      const actionsDir = join(repo, 'state', 'actions');
+      await mkdir(actionsDir, { recursive: true });
+      await writeFile(join(actionsDir, 'manual.md'), [
+        '---',
+        'title: Manual task',
+        'automation:',
+        '  eligible: true',
+        '  mode: manual',
+        '  risk_level: low',
+        '---',
+        '',
+      ].join('\n'), 'utf-8');
+      await scanActions(engine, { repo });
+      await saveActionPlan(engine, 'state/actions/manual', {
+        plan: [{ phase: 'Phase 1', steps: [{ id: 's1', text: 'Do it', done: true, note: '' }] }],
+      });
+      await updateActionStatus(engine, 'state/actions/manual', 'done');
+      const rows = await listArchivedActions(engine, { limit: 10 });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].completed_at).toBeTruthy();
+      expect(rows[0].archived_at).toBeTruthy();
+      expect(rows[0].elapsed_ms).not.toBeNull();
     } finally {
       await engine.disconnect().catch(() => {});
       await rm(repo, { recursive: true, force: true });
