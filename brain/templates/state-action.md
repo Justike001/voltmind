@@ -25,6 +25,8 @@ automation:
   eligible: true
   mode: manual | agent_assisted | agent_executable | scheduled_agent | watch_agent
   runtime: codex | browser | email | vault | api
+  agent: default | meeting_brief_agent | email_reply_agent | teams_message_agent
+  skill: meeting-brief | email-reply | project-memory-update
   trigger: manual_checkbox | cron | due_time | condition
   run_at:
   schedule:

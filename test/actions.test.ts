@@ -53,6 +53,8 @@ function action(overrides: Partial<ActionRecord> = {}): ActionRecord {
     automation: {},
     allowed_tools: ['browser'],
     blocked_tools: ['email_send'],
+    agent: null,
+    skill: null,
     user_prompt: null,
     file_path: null,
     updated_at: new Date().toISOString(),
@@ -62,12 +64,12 @@ function action(overrides: Partial<ActionRecord> = {}): ActionRecord {
 
 describe('VoltMind actions policy', () => {
   test('allows low-risk draft-only agent-assisted action', () => {
-    expect(evaluateActionPolicy(action())).toEqual({ allowed: true });
+    expect(evaluateActionPolicy(action()).allowed).toBe(true);
   });
 
   test('requires approval for medium risk', () => {
     expect(evaluateActionPolicy(action({ risk_level: 'medium' })).allowed).toBe(false);
-    expect(evaluateActionPolicy(action({ risk_level: 'medium', approved_at: new Date().toISOString() }))).toEqual({ allowed: true });
+    expect(evaluateActionPolicy(action({ risk_level: 'medium', approved_at: new Date().toISOString() })).allowed).toBe(true);
   });
 
   test('blocks high and restricted actions', () => {
@@ -78,7 +80,7 @@ describe('VoltMind actions policy', () => {
   test('does not run future actions unless forced', () => {
     const future = action({ due_at: new Date(Date.now() + 60_000).toISOString() });
     expect(evaluateActionPolicy(future).allowed).toBe(false);
-    expect(evaluateActionPolicy(future, { now: true })).toEqual({ allowed: true });
+    expect(evaluateActionPolicy(future, { force: true }).allowed).toBe(true);
   });
 });
 

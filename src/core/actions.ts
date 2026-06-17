@@ -1,13 +1,12 @@
 import { createHash } from 'crypto';
 import { existsSync } from 'fs';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'fs/promises';
 import { basename, dirname, join, relative } from 'path';
-import { spawn } from 'child_process';
-import { tmpdir } from 'os';
 import matter from 'gray-matter';
 import type { BrainEngine } from './engine.ts';
 import { parseMarkdown } from './markdown.ts';
 import { resolveSourceId } from './source-resolver.ts';
+import { DefaultActionRunner, type ActionRunStatus as RunnerActionRunStatus } from './action-runner.ts';
 
 export type ActionRiskLevel = 'low' | 'medium' | 'high' | 'restricted';
 export type ActionMode = 'manual' | 'agent_assisted' | 'agent_executable';
@@ -41,6 +40,8 @@ export interface ActionRecord {
   automation: Record<string, unknown>;
   allowed_tools: string[];
   blocked_tools: string[];
+  agent: string | null;
+  skill: string | null;
   user_prompt: string | null;
   file_path: string | null;
   updated_at: string;
@@ -162,6 +163,11 @@ export async function ensureActionSchema(engine: BrainEngine): Promise<void> {
   try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN started_at TIMESTAMPTZ`); } catch (_) {}
   try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN completed_at TIMESTAMPTZ`); } catch (_) {}
   try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN archived_at TIMESTAMPTZ`); } catch (_) {}
+  // Ensure status constraint includes 'failed' (Phase 1 runtime-exec)
+  try {
+    await engine.executeRaw(`ALTER TABLE action_index DROP CONSTRAINT IF EXISTS action_index_status_check`);
+    await engine.executeRaw(`ALTER TABLE action_index ADD CONSTRAINT action_index_status_check CHECK (status IN ('open','in_progress','done','blocked','canceled','failed'))`);
+  } catch (_) {}
 }
 
 export async function resolveActionRepoPath(engine: BrainEngine, repoArg?: string | null): Promise<string> {
@@ -387,13 +393,88 @@ export async function updateActionFields(
 export async function runAction(
   engine: BrainEngine,
   slug: string,
-  opts: { sourceId?: string; dryRun?: boolean; now?: boolean; userPrompt?: string | null } = {},
-): Promise<{ action: ActionRecord; run: ActionRunRecord; allowed: boolean; reason?: string }> {
+  opts: { sourceId?: string; dryRun?: boolean; now?: boolean; userPrompt?: string | null; execute?: boolean; force?: boolean; confirmed?: boolean } = {},
+): Promise<{ action: ActionRecord; run: ActionRunRecord; allowed: boolean; reason?: string; prompt?: string }> {
   await ensureActionSchema(engine);
   const sourceId = opts.sourceId || 'default';
   const action = await getAction(engine, slug, sourceId);
   if (!action) throw new Error(`Action not found: ${slug}`);
-  const gate = evaluateActionPolicy(action, { now: opts.now ?? false });
+
+  // ── New execution path: route to DefaultActionRunner ──
+  if (opts.execute && ['agent_assisted', 'agent_executable'].includes(action.mode)) {
+    const runner = new DefaultActionRunner();
+    const runnerResult = await runner.run({
+      action,
+      engine,
+      options: {
+        execute: true,
+        dryRun: opts.dryRun ?? false,
+        userPrompt: opts.userPrompt ?? undefined,
+        force: opts.force ?? false,
+        confirmed: opts.confirmed ?? false,
+      },
+    });
+
+    // Build a compatible return value for the legacy caller
+    const idempotencyKey = buildRunIdempotencyKey(action);
+    const prompt = runnerResult.prompt ?? buildActionPrompt(action, opts.userPrompt || action.user_prompt || null);
+    const status: ActionRunStatus = runnerResult.allowed ? 'prepared' : 'blocked';
+    const result = runnerResult.outcome
+      ? runnerResult.outcome
+      : { kind: runnerResult.allowed ? 'executed' : runnerResult.status, reason: runnerResult.reason };
+
+    const rows = await engine.executeRaw<ActionRunRecord>(
+      `INSERT INTO action_runs (source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt, result, error_text, finished_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, now())
+       ON CONFLICT (source_id, action_slug, idempotency_key)
+       DO UPDATE SET
+         status = EXCLUDED.status,
+         dry_run = EXCLUDED.dry_run,
+         prompt = EXCLUDED.prompt,
+         user_prompt = EXCLUDED.user_prompt,
+         result = EXCLUDED.result,
+         error_text = EXCLUDED.error_text,
+         finished_at = now()
+       RETURNING id, source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt,
+                 result, error_text, created_at::text, finished_at::text`,
+      [sourceId, slug, idempotencyKey, status, !!(opts.dryRun), prompt, opts.userPrompt || null, JSON.stringify(result), runnerResult.reason || null],
+    );
+    await engine.executeRaw(
+      `UPDATE action_index
+          SET last_run_at = now(), last_run_status = $3, user_prompt = COALESCE($4, user_prompt),
+              started_at = COALESCE(started_at, now()), updated_at = now()
+        WHERE source_id = $1 AND slug = $2`,
+      [sourceId, slug, status, opts.userPrompt || null],
+    );
+    // Update the action_runs row with the final execution result
+    if (runnerResult.status === 'executed' || runnerResult.status === 'failed') {
+      await engine.executeRaw(
+        `UPDATE action_runs
+            SET status = $1, result = $2::jsonb, error_text = $3, finished_at = now()
+          WHERE id = $4`,
+        [
+          runnerResult.status === 'executed' ? 'completed' : runnerResult.status,
+          JSON.stringify(runnerResult.outcome ?? {}),
+          runnerResult.status === 'failed' ? (runnerResult.reason ?? '') : null,
+          rows[0].id,
+        ],
+      );
+    }
+
+    const enriched = {
+      action,
+      run: rows[0],
+      allowed: runnerResult.allowed,
+      reason: runnerResult.reason,
+      status: runnerResult.status,
+      outcome: runnerResult.outcome ?? null,
+      prompt: runnerResult.prompt ?? undefined,
+    };
+    return enriched;
+  }
+
+  // ── Legacy draft_only path ──
+  const gate = evaluateActionPolicy(action, {});
   const prompt = buildActionPrompt(action, opts.userPrompt || action.user_prompt || null);
   const idempotencyKey = buildRunIdempotencyKey(action);
   const status: ActionRunStatus = gate.allowed ? 'prepared' : 'blocked';
@@ -427,7 +508,7 @@ export async function runAction(
       WHERE source_id = $1 AND slug = $2`,
     [sourceId, slug, status, opts.userPrompt || null],
   );
-  return { action, run: rows[0], allowed: gate.allowed, reason: gate.reason };
+  return { action, run: rows[0], allowed: gate.allowed, reason: gate.reason, prompt };
 }
 
 export async function listActionRuns(
@@ -491,28 +572,62 @@ export async function listArchivedActions(
   return normalized;
 }
 
-export function evaluateActionPolicy(action: ActionRecord, opts: { now?: boolean } = {}): { allowed: boolean; reason?: string } {
-  if (!action.eligible) return { allowed: false, reason: 'automation.eligible is not true' };
-  if (!['open', 'in_progress'].includes(action.status)) return { allowed: false, reason: `status is ${action.status}` };
-  if (!['agent_assisted', 'agent_executable'].includes(action.mode)) {
-    return { allowed: false, reason: `mode ${action.mode} is not v1 executable` };
-  }
-  if (!['draft_only', 'single_step'].includes(action.max_autonomy || 'draft_only')) {
-    return { allowed: false, reason: `max_autonomy ${action.max_autonomy} exceeds v1 draft/prep boundary` };
-  }
+export interface ActionPolicyResult {
+  allowed: boolean;
+  reason?: string;
+  requiresApproval: boolean;
+  requiresConfirmation: boolean;
+}
+
+export function evaluateActionPolicy(
+  action: ActionRecord,
+  opts: { force?: boolean; requireConfirmation?: boolean } = {},
+): ActionPolicyResult {
+  // ── Approval checks (NEVER skipped by force) ──
+
   if (action.risk_level === 'high' || action.risk_level === 'restricted') {
-    return { allowed: false, reason: `risk_level ${action.risk_level} requires human review` };
+    return { allowed: false, reason: `risk_level ${action.risk_level} requires human review`, requiresApproval: true, requiresConfirmation: false };
   }
-  if (action.risk_level === 'medium' && !action.approved_at) {
-    return { allowed: false, reason: 'medium risk action requires approval' };
-  }
+
   if (action.requires_approval && !action.approved_at) {
-    return { allowed: false, reason: 'action requires approval' };
+    return { allowed: false, reason: 'action requires approval', requiresApproval: true, requiresConfirmation: false };
   }
-  if (!opts.now && action.due_at && new Date(action.due_at).getTime() > Date.now()) {
-    return { allowed: false, reason: 'action is not due yet' };
+
+  if (action.risk_level === 'medium' && !action.approved_at) {
+    return { allowed: false, reason: 'medium risk action requires approval', requiresApproval: true, requiresConfirmation: false };
   }
-  return { allowed: true };
+
+  // ── Confirmation checks (NEVER skipped by force) ──
+
+  if (action.requires_confirmation && opts.requireConfirmation !== false) {
+    return { allowed: false, reason: 'action requires confirmation', requiresApproval: false, requiresConfirmation: true };
+  }
+
+  // ── Non-approval gates (SKIPPED by force) ──
+
+  const skipNonApproval = opts.force ?? false;
+
+  if (!skipNonApproval && !action.eligible) {
+    return { allowed: false, reason: 'automation.eligible is not true', requiresApproval: false, requiresConfirmation: false };
+  }
+
+  if (!skipNonApproval && !['open', 'in_progress'].includes(action.status)) {
+    return { allowed: false, reason: `status is ${action.status}`, requiresApproval: false, requiresConfirmation: false };
+  }
+
+  if (!skipNonApproval && !['agent_assisted', 'agent_executable'].includes(action.mode)) {
+    return { allowed: false, reason: `mode ${action.mode} is not executable`, requiresApproval: false, requiresConfirmation: false };
+  }
+
+  if (!skipNonApproval && action.max_autonomy && !['draft_only', 'single_step'].includes(action.max_autonomy)) {
+    return { allowed: false, reason: `max_autonomy ${action.max_autonomy} exceeds boundary`, requiresApproval: false, requiresConfirmation: false };
+  }
+
+  if (!skipNonApproval && action.due_at && new Date(action.due_at).getTime() > Date.now()) {
+    return { allowed: false, reason: 'action is not due yet', requiresApproval: false, requiresConfirmation: false };
+  }
+
+  return { allowed: true, requiresApproval: false, requiresConfirmation: false };
 }
 
 export function buildActionPrompt(action: ActionRecord, userPrompt: string | null): string {
@@ -1088,58 +1203,3 @@ export function planFromGeneratedPlan(plan: Array<{ phase: string; steps: string
   return normalized;
 }
 
-/* ── Codex CLI execution ── */
-
-interface CodexRunResult {
-  kind: "codex_exec";
-  exit_code: number;
-  stdout: string;
-  stderr: string;
-  wall_ms: number;
-}
-
-async function runActionWithCodex(prompt: string): Promise<CodexRunResult> {
-  const workDir = await mkdtemp(join(tmpdir(), "voltmind-action-run-"));
-  try {
-    const child = spawn("codex", [
-      "exec",
-      "--cd", process.cwd(),
-      "--sandbox", "workspace-write",
-      "-",
-    ], {
-      cwd: process.cwd(),
-      env: process.env,
-      shell: true,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
-
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
-    child.stdin.end(prompt, "utf8");
-
-    const start = Date.now();
-    const exitCode = await new Promise<number>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error("codex exec timed out while executing action"));
-      }, 600_000); // 10 minutes
-      child.on("error", (err: Error) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-      child.on("close", (code: number | null) => {
-        clearTimeout(timer);
-        resolve(code ?? 1);
-      });
-    });
-
-    return { kind: "codex_exec", exit_code: exitCode, stdout, stderr, wall_ms: Date.now() - start };
-  } finally {
-    await rm(workDir, { recursive: true, force: true }).catch(() => {});
-  }
-}

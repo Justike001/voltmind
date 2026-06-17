@@ -34,6 +34,63 @@ function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
 }
 
+function printActionResult(slug: string, result: Record<string, unknown>): void {
+  const status = typeof result.status === 'string' ? result.status : '';
+  const reason = typeof result.reason === 'string' ? result.reason : '';
+  const prompt = typeof result.prompt === 'string' ? result.prompt : (result.run as Record<string, unknown> | null)?.prompt as string || '';
+
+  switch (status) {
+    case 'draft_only':
+      console.log('Prepared action ' + slug + '.');
+      console.log('');
+      console.log(prompt);
+      break;
+    case 'dry_run':
+      console.log('[DRY RUN] ' + slug);
+      console.log('');
+      console.log(prompt);
+      break;
+    case 'blocked':
+      console.log('Blocked action ' + slug + ': ' + (reason || 'unknown reason'));
+      break;
+    case 'needs_approval':
+      console.log('Action ' + slug + ' needs approval: ' + (reason || ''));
+      console.log('Run `voltmind actions approve ' + slug + '` first.');
+      break;
+    case 'executed': {
+      const outcome = result.outcome as Record<string, unknown> | undefined;
+      const summary = typeof outcome?.summary === 'string' ? outcome.summary : 'Action executed.';
+      console.log('Executed action ' + slug + ': ' + summary);
+      const refs = Array.isArray(outcome?.artifactRefs) ? outcome.artifactRefs as string[] : [];
+      if (refs.length > 0) {
+        console.log('Artifacts:');
+        for (const ref of refs) console.log('  - ' + ref);
+      }
+      break;
+    }
+    case 'failed': {
+      const outcome = result.outcome as Record<string, unknown> | undefined;
+      const errors = Array.isArray(outcome?.errors) ? outcome.errors as string[] : [];
+      console.log('Failed action ' + slug);
+      if (errors.length > 0) {
+        console.log('Errors:');
+        for (const err of errors) console.log('  - ' + err);
+      }
+      const stderrTruncated = typeof outcome?.stderrTruncated === 'string' ? outcome.stderrTruncated : '';
+      if (stderrTruncated) {
+        console.log('');
+        console.log('stderr:');
+        console.log(stderrTruncated);
+      }
+      break;
+    }
+    default:
+      console.log(result.allowed ? 'Prepared action ' + slug + '.' : 'Blocked action ' + slug + ': ' + reason);
+      console.log('');
+      console.log(prompt);
+  }
+}
+
 export async function runActions(engine: BrainEngine, args: string[]): Promise<void> {
   const sub = args[0] || 'list';
   if (sub === '--help' || sub === '-h' || sub === 'help') {
