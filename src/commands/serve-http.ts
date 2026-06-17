@@ -104,12 +104,28 @@ export function isAdminAutoLoginLoopbackRequest(input: {
   hostname?: string | null;
 }): boolean {
   const normalizedIp = normalizeLoopbackAddress(input.ip || input.remoteAddress || '');
-  const hostname = String(input.hostname || '').toLowerCase();
-  return normalizedIp === '127.0.0.1' && hostname === '127.0.0.1';
+  const hostname = normalizeAdminHost(input.hostname || '');
+  return isLoopbackAddress(normalizedIp) && isLoopbackHost(hostname);
 }
 
 function normalizeLoopbackAddress(value: string): string {
-  return value.replace(/^::ffff:/, '');
+  return value.trim().toLowerCase().replace(/^::ffff:/, '').replace(/^\[|\]$/g, '');
+}
+
+function normalizeAdminHost(value: string): string {
+  const host = value.trim().toLowerCase();
+  if (host.startsWith('[') && host.endsWith(']')) {
+    return host.slice(1, -1);
+  }
+  return host;
+}
+
+function isLoopbackAddress(value: string): boolean {
+  return value === '127.0.0.1' || value === '::1';
+}
+
+function isLoopbackHost(value: string): boolean {
+  return value === '127.0.0.1' || value === '::1' || value === 'localhost';
 }
 
 export type ProbeHealthResult =

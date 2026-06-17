@@ -85,7 +85,7 @@ describe('admin local auto-login guard', () => {
     expect(resolveAdminAutoLoginLocal('1')).toBe(true);
   });
 
-  test('auto-login loopback guard requires 127.0.0.1 host and peer', () => {
+  test('auto-login loopback guard accepts local browser hosts and peers', () => {
     expect(isAdminAutoLoginLoopbackRequest({
       ip: '127.0.0.1',
       remoteAddress: '127.0.0.1',
@@ -98,7 +98,15 @@ describe('admin local auto-login guard', () => {
     expect(isAdminAutoLoginLoopbackRequest({
       ip: '127.0.0.1',
       hostname: 'localhost',
-    })).toBe(false);
+    })).toBe(true);
+    expect(isAdminAutoLoginLoopbackRequest({
+      ip: '::1',
+      hostname: '::1',
+    })).toBe(true);
+    expect(isAdminAutoLoginLoopbackRequest({
+      ip: '::1',
+      hostname: 'localhost',
+    })).toBe(true);
     expect(isAdminAutoLoginLoopbackRequest({
       ip: '192.168.1.20',
       hostname: '127.0.0.1',

@@ -1,6 +1,6 @@
 // AUTO-GENERATED — do not edit by hand.
 // Run `bun run scripts/build-admin-embedded.ts` to regenerate.
-// Source: admin/dist/ at 2026-06-16.
+// Source: admin/dist/ at 2026-06-17.
 //
 // Bun resolves the file: imports to a path that works at runtime even
 // inside a compiled binary (`bun build --compile`). The manifest maps
@@ -9,7 +9,7 @@
 // @ts-ignore — type: 'file' is Bun ESM, not in lib.d.ts
 import A_0_assets_index_As_KQAk7_css from '../admin/dist/assets/index-As-KQAk7.css' with { type: 'file' };
 // @ts-ignore — type: 'file' is Bun ESM, not in lib.d.ts
-import A_1_assets_index_Dpas_vCQ_js from '../admin/dist/assets/index-Dpas_vCQ.js' with { type: 'file' };
+import A_1_assets_index_BPtvum1p_js from '../admin/dist/assets/index-BPtvum1p.js' with { type: 'file' };
 // @ts-ignore — type: 'file' is Bun ESM, not in lib.d.ts
 import A_2_index_html from '../admin/dist/index.html' with { type: 'file' };
 
@@ -20,7 +20,7 @@ export interface AdminAsset {
 
 export const ADMIN_ASSETS: Record<string, AdminAsset> = {
   "/admin/assets/index-As-KQAk7.css": { path: A_0_assets_index_As_KQAk7_css as unknown as string, mime: "text/css; charset=utf-8" },
-  "/admin/assets/index-Dpas_vCQ.js": { path: A_1_assets_index_Dpas_vCQ_js as unknown as string, mime: "application/javascript; charset=utf-8" },
+  "/admin/assets/index-BPtvum1p.js": { path: A_1_assets_index_BPtvum1p_js as unknown as string, mime: "application/javascript; charset=utf-8" },
   "/admin/index.html": { path: A_2_index_html as unknown as string, mime: "text/html; charset=utf-8" },
 };
 
