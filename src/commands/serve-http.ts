@@ -1369,8 +1369,11 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   app.get('/admin/api/actions/archive', requireAdmin, async (req: Request, res: Response) => {
     try {
       const { listArchivedActions } = await import('../core/actions.ts');
+      const explicitSource = typeof req.query.source_id === 'string' ? req.query.source_id : undefined;
+      const allSources = req.query.all_sources === '1' || req.query.all_sources === 'true';
       const rows = await listArchivedActions(engine, {
-        sourceId: typeof req.query.source_id === 'string' ? req.query.source_id : undefined,
+        sourceId: explicitSource,
+        allSources,
         limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : 100,
       });
       res.json(rows);
@@ -1517,6 +1520,20 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       const action = await updateActionStatus(engine, slug, rawStatus, {
         sourceId: typeof req.body?.source_id === 'string' ? req.body.source_id : undefined,
         note: typeof req.body?.note === 'string' ? req.body.note : undefined,
+      });
+      res.json(action);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post('/admin/api/actions/:slug/unarchive', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const { unarchiveAction } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const action = await unarchiveAction(engine, slug, {
+        sourceId: typeof req.body?.source_id === 'string' ? req.body.source_id : undefined,
+        note: 'Unarchived from admin UI.',
       });
       res.json(action);
     } catch (e) {

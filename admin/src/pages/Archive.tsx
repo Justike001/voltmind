@@ -56,6 +56,19 @@ export function ArchivePage() {
 
   useEffect(() => { void load(); }, []);
 
+  const handleRestore = async (row: ArchivedAction) => {
+    if (!confirm(`Restore "${row.title}" back to open actions?`)) return;
+    setLoading(true);
+    try {
+      await api.unarchiveAction(row.slug, row.source_id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <div className="page-header-row">
@@ -113,6 +126,15 @@ export function ArchivePage() {
                             <span>Archived</span><span>{formatDate(row.archived_at)}</span>
                             <span>Run result</span>
                             <pre>{JSON.stringify(row.last_run?.result || row.last_run?.error_text || {}, null, 2)}</pre>
+                          </div>
+                          <div className="archive-actions-bar">
+                            <button
+                              className="btn btn-warning"
+                              onClick={() => handleRestore(row)}
+                              disabled={loading}
+                            >
+                              Restore action
+                            </button>
                           </div>
                         </td>
                       </tr>

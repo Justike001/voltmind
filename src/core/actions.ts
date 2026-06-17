@@ -318,6 +318,31 @@ export async function updateActionStatus(
   return (await getAction(engine, slug, sourceId))!;
 }
 
+export async function unarchiveAction(
+  engine: BrainEngine,
+  slug: string,
+  opts: { sourceId?: string; note?: string } = {},
+): Promise<ActionRecord> {
+  await ensureActionSchema(engine);
+  const sourceId = opts.sourceId || 'default';
+  const action = await getAction(engine, slug, sourceId);
+  if (!action) throw new Error(`Action not found: ${slug}`);
+  if (action.status !== 'done') {
+    throw new Error(`Action '${slug}' is not archived (status=${action.status}). Only done actions can be unarchived.`);
+  }
+  if (action.file_path) {
+    await updateActionMarkdownStatus(action.file_path, 'open', opts.note || 'Unarchived from admin UI.');
+  }
+  await engine.executeRaw(
+    `UPDATE action_index
+        SET status = 'open', updated_at = now(),
+            completed_at = NULL, archived_at = NULL
+      WHERE source_id = $1 AND slug = $2`,
+    [sourceId, slug],
+  );
+  return (await getAction(engine, slug, sourceId))!;
+}
+
 export async function updateActionFields(
   engine: BrainEngine,
   slug: string,
@@ -425,11 +450,21 @@ export async function listActionRuns(
 
 export async function listArchivedActions(
   engine: BrainEngine,
-  opts: { sourceId?: string; limit?: number } = {},
+  opts: { sourceId?: string; limit?: number; allSources?: boolean } = {},
 ): Promise<ActionRecord[]> {
   await ensureActionSchema(engine);
-  const sourceId = opts.sourceId || await resolveSourceId(engine, null);
   const limit = Math.max(1, Math.min(opts.limit ?? 100, 200));
+  const params: unknown[] = [];
+  const where: string[] = [];
+  // Match listActions behaviour: allSources skips source_id filter.
+  const allSources = opts.allSources === true;
+  const noSourceFilter = allSources && !opts.sourceId;
+  if (!noSourceFilter) {
+    params.push(opts.sourceId || await resolveSourceId(engine, null));
+    where.push(`source_id = $${params.length}`);
+  }
+  where.push(`status = 'done'`);
+  params.push(limit);
   const rows = await engine.executeRaw<ActionRecord>(
     `SELECT source_id, slug, title, status, priority,
             due_at::text, eligible, mode, runtime, trigger, risk_level,
@@ -443,10 +478,10 @@ export async function listArchivedActions(
               ELSE NULL
             END::bigint as elapsed_ms
        FROM action_index
-      WHERE source_id = $1 AND status = 'done'
+      WHERE ${where.join(' AND ')}
       ORDER BY archived_at DESC NULLS LAST, completed_at DESC NULLS LAST, updated_at DESC
-      LIMIT $2`,
-    [sourceId, limit],
+      LIMIT $${params.length}`,
+    params,
   );
   const normalized = rows.map(normalizeActionRow);
   for (const row of normalized) {

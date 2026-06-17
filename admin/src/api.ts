@@ -53,7 +53,7 @@ export const api = {
     apiFetchText(`/admin/api/calibration/charts/${encodeURIComponent(type)}${holder ? `?holder=${encodeURIComponent(holder)}` : ''}`),
   // v0.41 D2 — live minion-jobs dashboard snapshot.
   jobsWatch: () => apiFetch('/admin/api/jobs/watch'),
-  archivedActions: () => apiFetch('/admin/api/actions/archive?limit=100'),
+  archivedActions: () => apiFetch('/admin/api/actions/archive?limit=100&all_sources=1'),
   actionsScan: (repo?: string) => apiFetch('/admin/api/actions/scan', { method: 'POST', body: JSON.stringify(repo ? { repo } : {}) }),
   actions: (qs = '') => apiFetch(`/admin/api/actions${qs}`),
   actionRuns: (slug: string, sourceId = 'default') =>
@@ -114,5 +114,10 @@ export const api = {
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/status`, {
       method: 'POST',
       body: JSON.stringify({ source_id: sourceId, status }),
+    }),
+  unarchiveAction: (slug: string, sourceId: string) =>
+    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/unarchive`, {
+      method: 'POST',
+      body: JSON.stringify({ source_id: sourceId }),
     }),
 };
