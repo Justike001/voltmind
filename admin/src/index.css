@@ -1033,7 +1033,7 @@ body {
 
 .actions-board {
   display: grid;
-  grid-template-columns: minmax(680px, 1.52fr) minmax(420px, 0.98fr);
+  grid-template-columns: minmax(640px, 1fr) var(--inspector-width, 520px);
   min-height: calc(100vh - 88px);
 }
 
@@ -1304,11 +1304,48 @@ body {
 }
 
 .action-inspector {
+  position: relative;
+  container-type: inline-size;
   padding: 22px 28px 30px;
   overflow-y: auto;
   background:
     radial-gradient(circle at 82% 8%, rgba(47, 125, 244, 0.10), transparent 32%),
     rgba(8, 13, 19, 0.72);
+}
+
+.inspector-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  z-index: 6;
+  width: 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: col-resize;
+}
+
+.inspector-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: var(--vm-line);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.inspector-resize-handle:hover::before,
+body.inspector-resizing .inspector-resize-handle::before {
+  background: #2f7df4;
+  box-shadow: 0 0 0 1px rgba(47, 125, 244, 0.22), 0 0 18px rgba(47, 125, 244, 0.36);
+}
+
+body.inspector-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .inspector-nav,
@@ -1324,8 +1361,7 @@ body {
   margin-bottom: 22px;
 }
 
-.back-link,
-.inspector-icons button {
+.back-link {
   border: 0;
   background: transparent;
   color: #dbe4f1;
@@ -1340,16 +1376,6 @@ body {
 .back-link::before {
   content: "<";
   margin-right: 8px;
-}
-
-.inspector-icons {
-  display: flex;
-  gap: 8px;
-}
-
-.inspector-icons button {
-  font-size: 22px;
-  line-height: 1;
 }
 
 .inspector-heading {
@@ -1450,6 +1476,7 @@ body {
 
 .plan-header-row {
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 8px;
 }
 
@@ -1671,6 +1698,10 @@ body {
     border-right: 0;
     border-bottom: 1px solid var(--vm-line);
   }
+
+  .inspector-resize-handle {
+    display: none;
+  }
 }
 
 @media (max-width: 820px) {
@@ -1707,5 +1738,38 @@ body {
 
   .review-grid label:nth-child(3) {
     grid-column: auto;
+  }
+}
+
+@container (max-width: 460px) {
+  .review-grid,
+  .inspector-facts,
+  .plan-item {
+    grid-template-columns: 1fr;
+  }
+
+  .review-grid label:nth-child(3) {
+    grid-column: auto;
+  }
+
+  .inspector-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .whole-plan-regenerate {
+    grid-template-columns: 1fr;
+  }
+
+  .whole-plan-regenerate .btn {
+    width: 100%;
+  }
+
+  .step-note,
+  .icon-btn {
+    width: 100%;
+  }
+
+  .plan-item {
+    gap: 8px;
   }
 }

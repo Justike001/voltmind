@@ -110,10 +110,10 @@ export const api = {
         priority: patch.priority,
       }),
     }),
-  setActionStatus: (slug: string, sourceId: string, status: string) =>
+  setActionStatus: (slug: string, sourceId: string, status: string, note?: string) =>
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/status`, {
       method: 'POST',
-      body: JSON.stringify({ source_id: sourceId, status }),
+      body: JSON.stringify({ source_id: sourceId, status, note }),
     }),
   unarchiveAction: (slug: string, sourceId: string) =>
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/unarchive`, {

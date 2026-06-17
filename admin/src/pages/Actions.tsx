@@ -50,6 +50,13 @@ const modes: Array<{ value: ActionMode; label: string; hint: string; icon: strin
   { value: 'agent_executable', label: 'Agent Executable', hint: 'Agent executes end-to-end', icon: 'rocket' },
 ];
 
+const ACTIONS_STATUS_FILTER_KEY = 'voltmind.admin.actions.statusFilter';
+const ACTIONS_INSPECTOR_WIDTH_KEY = 'voltmind.admin.actions.inspectorWidth';
+const validStatusFilters = new Set(['', 'open', 'in_progress', 'blocked', 'done', 'canceled']);
+const MIN_INSPECTOR_WIDTH = 360;
+const MAX_INSPECTOR_WIDTH = 760;
+const DEFAULT_INSPECTOR_WIDTH = 520;
+
 const priorityLabels: Record<string, string> = {
   urgent: 'P1',
   high: 'P1',
@@ -177,12 +184,51 @@ function serializePlan(plan: ActionPlan | null): string {
   ].join('\n');
 }
 
+function getSavedStatusFilter(): string {
+  try {
+    const saved = window.localStorage.getItem(ACTIONS_STATUS_FILTER_KEY);
+    return saved !== null && validStatusFilters.has(saved) ? saved : 'open';
+  } catch {
+    return 'open';
+  }
+}
+
+function saveStatusFilter(value: string): void {
+  try {
+    window.localStorage.setItem(ACTIONS_STATUS_FILTER_KEY, value);
+  } catch {
+    // localStorage can be unavailable in hardened browser contexts.
+  }
+}
+
+function clampInspectorWidth(value: number): number {
+  const viewportMax = Math.max(MIN_INSPECTOR_WIDTH, Math.min(MAX_INSPECTOR_WIDTH, window.innerWidth - 900));
+  return Math.min(Math.max(Math.round(value), MIN_INSPECTOR_WIDTH), viewportMax);
+}
+
+function getSavedInspectorWidth(): number {
+  try {
+    const saved = Number(window.localStorage.getItem(ACTIONS_INSPECTOR_WIDTH_KEY));
+    return Number.isFinite(saved) ? clampInspectorWidth(saved) : DEFAULT_INSPECTOR_WIDTH;
+  } catch {
+    return DEFAULT_INSPECTOR_WIDTH;
+  }
+}
+
+function saveInspectorWidth(value: number): void {
+  try {
+    window.localStorage.setItem(ACTIONS_INSPECTOR_WIDTH_KEY, String(value));
+  } catch {
+    // Best effort only.
+  }
+}
+
 export function ActionsPage() {
   const [actions, setActions] = useState<ActionRecord[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [mode, setMode] = useState<ActionMode>('agent_assisted');
-  const [statusFilter, setStatusFilter] = useState('open');
+  const [statusFilter, setStatusFilter] = useState(getSavedStatusFilter);
   const [executionPrompt, setExecutionPrompt] = useState('');
   const [wholePlanInstructions, setWholePlanInstructions] = useState('');
   const [dueEdit, setDueEdit] = useState('');
@@ -194,6 +240,7 @@ export function ActionsPage() {
   const [plan, setPlan] = useState<ActionPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [inspectorWidth, setInspectorWidth] = useState(getSavedInspectorWidth);
 
   const load = async (status: string) => {
     setLoading(true);
@@ -210,7 +257,41 @@ export function ActionsPage() {
     }
   };
 
-  useEffect(() => { void load(statusFilter); }, [statusFilter]);
+  useEffect(() => {
+    saveStatusFilter(statusFilter);
+    void load(statusFilter);
+  }, [statusFilter]);
+
+  useEffect(() => {
+    saveInspectorWidth(inspectorWidth);
+  }, [inspectorWidth]);
+
+  useEffect(() => {
+    const onResize = () => setInspectorWidth(width => clampInspectorWidth(width));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const startInspectorResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const pointerId = event.pointerId;
+    event.currentTarget.setPointerCapture(pointerId);
+    document.body.classList.add('inspector-resizing');
+
+    const onMove = (moveEvent: PointerEvent) => {
+      setInspectorWidth(clampInspectorWidth(window.innerWidth - moveEvent.clientX));
+    };
+    const onUp = () => {
+      document.body.classList.remove('inspector-resizing');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
+    window.addEventListener('pointercancel', onUp, { once: true });
+  };
 
   const visibleActions = useMemo(() => actions.filter(a => a.mode === mode), [actions, mode]);
   const current = useMemo(() => {
@@ -369,10 +450,34 @@ export function ActionsPage() {
     await load(statusFilter);
   };
 
-  const archiveManual = async () => {
+  const archiveCurrent = async (note: string) => {
     if (!current) return;
-    await api.setActionStatus(current.slug, current.source_id || 'default', 'done');
-    await load(statusFilter);
+    setSaving('archive');
+    const key = actionKey(current);
+    try {
+      await api.setActionStatus(current.slug, current.source_id || 'default', 'done', note);
+      setActions(prev => prev.filter(a => actionKey(a) !== key));
+      setSelectedKey(null);
+      setChecked(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      window.location.hash = 'archive';
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      await load(statusFilter);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const archiveManual = async () => {
+    await archiveCurrent('Archived from manual action cockpit.');
+  };
+
+  const markDone = async () => {
+    await archiveCurrent('Marked done from action cockpit.');
   };
 
   const runChecked = async () => {
@@ -410,7 +515,10 @@ export function ActionsPage() {
 
       {error && <div className="action-error">{error}</div>}
 
-      <div className="actions-board">
+      <div
+        className="actions-board"
+        style={{ '--inspector-width': `${inspectorWidth}px` } as React.CSSProperties}
+      >
         <section className="actions-queue-panel">
           <div className="mode-switch">
             {modes.map(item => (
@@ -494,13 +602,18 @@ export function ActionsPage() {
         </section>
 
         <aside className="action-inspector">
+          <button
+            className="inspector-resize-handle"
+            aria-label="Resize action inspector"
+            title="Drag to resize inspector"
+            onPointerDown={startInspectorResize}
+          />
           {!current ? (
             <div className="action-detail-empty">Select an action to inspect</div>
           ) : (
             <>
               <div className="inspector-nav">
                 <button className="back-link" onClick={() => setSelectedKey(null)}>Back to list</button>
-                <div className="inspector-icons"><button title="Open source">↗</button><button title="More">⋮</button></div>
               </div>
               <div className="inspector-heading">
                 <h2>{current.title}</h2>
@@ -570,9 +683,6 @@ export function ActionsPage() {
               <div className="plan-container">
                 <div className="plan-header-row">
                   <h3>Generated Plan <span>{planStepCount} steps</span></h3>
-                  <button className="vm-tool-button" onClick={() => handleGeneratePlan(Boolean(plan))} disabled={planLoading || (Boolean(plan) && !wholePlanInstructions.trim())}>
-                    <Icon name="refresh" />{plan ? 'Regenerate whole plan' : 'Generate Plan'}
-                  </button>
                 </div>
                 <div className="whole-plan-regenerate">
                   <input value={wholePlanInstructions} onChange={e => setWholePlanInstructions(e.target.value)} placeholder="Plan instructions (optional), e.g., focus on compliance, be concise, include citations..." />
@@ -626,14 +736,14 @@ export function ActionsPage() {
               {current.mode === 'manual' ? (
                 <div className="manual-archive-panel">
                   <span>{allPlanDone ? 'Plan complete. Ready to archive this manual action.' : 'Manual actions archive after every generated plan checkbox is complete.'}</span>
-                  <button className="btn btn-primary" onClick={archiveManual} disabled={!allPlanDone}><Icon name="check" />Archive action</button>
+                  <button className="btn btn-primary" onClick={archiveManual} disabled={!allPlanDone || saving === 'archive'}><Icon name="check" />Archive action</button>
                 </div>
               ) : (
                 <div className="action-detail-actions">
                   <button className="btn btn-success" onClick={approve}><Icon name="check" />Approve Plan</button>
                   <button className="btn btn-primary" onClick={run}><Icon name="play" />Start</button>
                   <button className="btn btn-warning" onClick={() => api.setActionStatus(current.slug, current.source_id, 'blocked').then(() => load(statusFilter))}><Icon name="block" />Block</button>
-                  <button className="btn btn-secondary" onClick={() => api.setActionStatus(current.slug, current.source_id, 'done').then(() => load(statusFilter))}><Icon name="check" />Mark Done</button>
+                  <button className="btn btn-secondary" onClick={markDone} disabled={saving === 'archive'}><Icon name="check" />Mark Done</button>
                 </div>
               )}
 
