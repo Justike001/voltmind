@@ -1,4 +1,6 @@
 import type { BrainEngine } from '../core/engine.ts';
+import { stdin as input, stdout as output } from 'process';
+import { createInterface } from 'readline/promises';
 import {
   approveAction,
   getAction,
@@ -7,6 +9,7 @@ import {
   runAction,
   scanActions,
   updateActionStatus,
+  type RunActionResult,
 } from '../core/actions.ts';
 
 function printHelp(): void {
@@ -17,12 +20,13 @@ USAGE
   voltmind actions list [--status open] [--risk low|medium|high|restricted] [--due] [--limit N] [--json]
   voltmind actions get <slug> [--json]
   voltmind actions approve <slug> [--by NAME]
-  voltmind actions run <slug> [--now] [--dry-run] [--prompt TEXT] [--json]
+  voltmind actions run <slug> [--now] [--execute] [--interactive] [--force] [--dry-run] [--prompt TEXT] [--json]
   voltmind actions runs <slug> [--json]
   voltmind actions complete|block|cancel <slug> [--note TEXT]
 
-V1 prepares draft-only execution prompts. It does not send email, operate a
-browser, or mutate external systems.`);
+Without --execute, actions still prepare draft-only prompts. With --execute,
+eligible agent actions run through the configured runtime backend. Add
+--interactive to hand off to the Codex TUI with inherited stdio.`);
 }
 
 function parseFlag(args: string[], flag: string): string | undefined {
@@ -34,10 +38,10 @@ function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
 }
 
-function printActionResult(slug: string, result: Record<string, unknown>): void {
+function printActionResult(slug: string, result: RunActionResult): void {
   const status = typeof result.status === 'string' ? result.status : '';
   const reason = typeof result.reason === 'string' ? result.reason : '';
-  const prompt = typeof result.prompt === 'string' ? result.prompt : (result.run as Record<string, unknown> | null)?.prompt as string || '';
+  const prompt = typeof result.prompt === 'string' ? result.prompt : result.run.prompt;
 
   switch (status) {
     case 'draft_only':
@@ -53,12 +57,30 @@ function printActionResult(slug: string, result: Record<string, unknown>): void 
     case 'blocked':
       console.log('Blocked action ' + slug + ': ' + (reason || 'unknown reason'));
       break;
+    case 'needs_confirmation':
+      console.log('Action ' + slug + ' needs confirmation: ' + (reason || ''));
+      console.log('');
+      if (prompt) {
+        console.log('Prompt preview:');
+        console.log(prompt.slice(0, 500));
+        console.log('');
+      }
+      console.log('The CLI confirmation flow should handle this. Run without --dry-run to proceed interactively.');
+      break;
     case 'needs_approval':
       console.log('Action ' + slug + ' needs approval: ' + (reason || ''));
       console.log('Run `voltmind actions approve ' + slug + '` first.');
       break;
+    case 'needs_confirmation':
+      console.log('Action ' + slug + ' needs confirmation: ' + (reason || ''));
+      if (prompt) {
+        const preview = prompt.length > 1200 ? prompt.slice(0, 1200) + '\n...[truncated]' : prompt;
+        console.log('');
+        console.log(preview);
+      }
+      break;
     case 'executed': {
-      const outcome = result.outcome as Record<string, unknown> | undefined;
+      const outcome = result.outcome;
       const summary = typeof outcome?.summary === 'string' ? outcome.summary : 'Action executed.';
       console.log('Executed action ' + slug + ': ' + summary);
       const refs = Array.isArray(outcome?.artifactRefs) ? outcome.artifactRefs as string[] : [];
@@ -68,10 +90,23 @@ function printActionResult(slug: string, result: Record<string, unknown>): void 
       }
       break;
     }
+    case 'interactive_handoff': {
+      const outcome = result.outcome;
+      const summary = typeof outcome?.summary === 'string'
+        ? outcome.summary
+        : 'Interactive Codex session ended. Review the session and mark the action complete or blocked manually.';
+      console.log('Interactive handoff for action ' + slug + ': ' + summary);
+      console.log('Use `voltmind actions complete ' + slug + '` or `voltmind actions block ' + slug + ' --note TEXT` after reviewing the Codex session.');
+      break;
+    }
     case 'failed': {
-      const outcome = result.outcome as Record<string, unknown> | undefined;
+      const outcome = result.outcome;
       const errors = Array.isArray(outcome?.errors) ? outcome.errors as string[] : [];
       console.log('Failed action ' + slug);
+      const diagnosticCode = typeof outcome?.diagnosticCode === 'string' ? outcome.diagnosticCode : '';
+      if (diagnosticCode) {
+        console.log('Diagnostic: ' + diagnosticCode);
+      }
       if (errors.length > 0) {
         console.log('Errors:');
         for (const err of errors) console.log('  - ' + err);
@@ -146,18 +181,39 @@ export async function runActions(engine: BrainEngine, args: string[]): Promise<v
     case 'run': {
       const slug = args[1];
       if (!slug) throw new Error('Usage: voltmind actions run <slug>');
-      const result = await runAction(engine, slug, {
+      let result = await runAction(engine, slug, {
         now: hasFlag(args, '--now'),
         dryRun: hasFlag(args, '--dry-run'),
         userPrompt: parseFlag(args, '--prompt') || null,
+        execute: hasFlag(args, '--execute'),
+        interactive: hasFlag(args, '--interactive'),
+        force: hasFlag(args, '--force'),
+        confirmed: hasFlag(args, '--dry-run') ? true : undefined,
       });
+
       if (hasFlag(args, '--json')) {
         console.log(JSON.stringify(result, null, 2));
         return;
       }
-      console.log(result.allowed ? `Prepared action ${slug}.` : `Blocked action ${slug}: ${result.reason}`);
-      console.log('');
-      console.log(result.run.prompt);
+
+      if (result.status === 'needs_confirmation') {
+        printActionResult(slug, result);
+        const rl = createInterface({ input, output });
+        const answer = await rl.question('\nExecute this action now? [y/N] ');
+        rl.close();
+        if (!/^y(es)?$/i.test(answer.trim())) return;
+        result = await runAction(engine, slug, {
+          now: hasFlag(args, '--now'),
+          dryRun: hasFlag(args, '--dry-run'),
+          userPrompt: parseFlag(args, '--prompt') || null,
+          execute: hasFlag(args, '--execute'),
+          interactive: hasFlag(args, '--interactive'),
+          force: hasFlag(args, '--force'),
+          confirmed: true,
+        });
+      }
+
+      printActionResult(slug, result);
       return;
     }
     case 'runs': {

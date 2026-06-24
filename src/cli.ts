@@ -2005,7 +2005,7 @@ ACTION SYSTEM
   actions scan                       Index state/actions/*.md
   actions list [--due]               List action tasks by risk/status
   actions approve <slug>             Approve a gated action
-  actions run <slug> [--now]         Prepare a draft-only agent prompt
+  actions run <slug> [--execute]     Prepare or execute an agent action; add --interactive for Codex TUI
 
 JOBS
   jobs list [--status S] [--limit N] List jobs

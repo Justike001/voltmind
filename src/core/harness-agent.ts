@@ -3,7 +3,7 @@
  *
  * An agent decides HOW to execute: what tools are in scope, which skill (if any)
  * provides the procedure, and how the prompt is assembled.  The runner owns the
- * orchestration (gate → agent → executor → outcome); the agent owns the
+ * orchestration (gate -> agent -> executor -> outcome); the agent owns the
  * "what does the model actually see and what is it allowed to do" decisions.
  *
  * Phase 1 ships DefaultHarnessAgent which:
@@ -18,7 +18,7 @@ import type { ToolScope } from './action-executor.ts';
 
 export type { ToolScope } from './action-executor.ts';
 
-/* ── Context types ──────────────────────────────────────── */
+/* ---- Context types ---- */
 
 export interface HarnessAgentBaseContext {
   action: ActionRecord;
@@ -31,9 +31,11 @@ export interface HarnessAgentContext extends HarnessAgentBaseContext {
   toolScope?: ToolScope;
   /** Pre-loaded by ActionRunner; null means no skill configured / Phase 1 placeholder */
   skillText?: string | null;
+  /** Tool search bootstrap context — injected by ActionRunner before buildPrompt */
+  toolSearchContext?: string;
 }
 
-/* ── Agent interface ─────────────────────────────────────── */
+/* ---- Agent interface ---- */
 
 export interface HarnessAgent {
   readonly name: string;
@@ -48,7 +50,7 @@ export interface HarnessAgent {
   loadSkill(ctx: HarnessAgentBaseContext): Promise<string | null>;
 }
 
-/* ── DefaultHarnessAgent ─────────────────────────────────── */
+/* ---- DefaultHarnessAgent ---- */
 
 export class DefaultHarnessAgent implements HarnessAgent {
   readonly name = 'default';
@@ -82,7 +84,13 @@ export class DefaultHarnessAgent implements HarnessAgent {
       ? '\n## Skill Procedure\n\n' + ctx.skillText + '\n'
       : '';
 
+    // Tool search context (from ToolSearchBootstrap)
+    const toolSearchSection = ctx.toolSearchContext
+      ? ctx.toolSearchContext + '\n'
+      : '';
+
     const parts: string[] = [
+      toolSearchSection,
       'You are executing a VoltMind Action as a harnessed agent.',
       '',
       'Action: ' + action.slug,
@@ -114,7 +122,7 @@ export class DefaultHarnessAgent implements HarnessAgent {
   }
 }
 
-/* ── Agent factory ───────────────────────────────────────── */
+/* ---- Agent factory ---- */
 
 /**
  * Resolve a HarnessAgent from the action's `agent` field.
@@ -126,7 +134,7 @@ export function resolveHarnessAgent(_name: string | null | undefined): HarnessAg
   return new DefaultHarnessAgent();
 }
 
-/* ── Helpers ─────────────────────────────────────────────── */
+/* ---- Helpers ---- */
 
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';

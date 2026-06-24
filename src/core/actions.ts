@@ -6,7 +6,11 @@ import matter from 'gray-matter';
 import type { BrainEngine } from './engine.ts';
 import { parseMarkdown } from './markdown.ts';
 import { resolveSourceId } from './source-resolver.ts';
-import { DefaultActionRunner, type ActionRunStatus as RunnerActionRunStatus } from './action-runner.ts';
+import {
+  DefaultActionRunner,
+  type ActionRunStatus as RunnerActionRunStatus,
+  type OutcomeSummary,
+} from './action-runner.ts';
 
 export type ActionRiskLevel = 'low' | 'medium' | 'high' | 'restricted';
 export type ActionMode = 'manual' | 'agent_assisted' | 'agent_executable';
@@ -63,6 +67,16 @@ export interface ActionRunRecord {
   error_text: string | null;
   created_at: string;
   finished_at: string | null;
+}
+
+export interface RunActionResult {
+  action: ActionRecord;
+  run: ActionRunRecord;
+  allowed: boolean;
+  reason?: string;
+  prompt?: string;
+  status?: ActionRunStatus | RunnerActionRunStatus;
+  outcome?: OutcomeSummary | null;
 }
 
 interface ParsedAction {
@@ -166,7 +180,7 @@ export async function ensureActionSchema(engine: BrainEngine): Promise<void> {
   // Ensure status constraint includes 'failed' (Phase 1 runtime-exec)
   try {
     await engine.executeRaw(`ALTER TABLE action_index DROP CONSTRAINT IF EXISTS action_index_status_check`);
-    await engine.executeRaw(`ALTER TABLE action_index ADD CONSTRAINT action_index_status_check CHECK (status IN ('open','in_progress','done','blocked','canceled','failed'))`);
+    await engine.executeRaw(`ALTER TABLE action_index ADD CONSTRAINT action_index_status_check CHECK (status IN ('open','in_progress','done','blocked','canceled','failed','needs_confirmation','needs_approval'))`);
   } catch (_) {}
 }
 
@@ -279,7 +293,24 @@ export async function getAction(engine: BrainEngine, slug: string, sourceId = 'd
       WHERE source_id = $1 AND slug = $2`,
     [sourceId, slug],
   );
-  return rows[0] ? normalizeActionRow(rows[0]) : null;
+  if (rows[0]) return normalizeActionRow(rows[0]);
+  if (sourceId !== 'default') return null;
+
+  const fallbackRows = await engine.executeRaw<ActionRecord>(
+    `SELECT source_id, slug, title, status, priority,
+            due_at::text, eligible, mode, runtime, trigger, risk_level,
+            requires_confirmation, requires_approval, max_autonomy,
+            approved_at::text, approved_by, started_at::text, completed_at::text,
+            archived_at::text, last_run_at::text, last_run_status,
+            agent_contract, automation, allowed_tools, blocked_tools, user_prompt,
+            outcome, next_step, file_path, updated_at::text
+       FROM action_index
+      WHERE slug = $1
+      ORDER BY source_id ASC
+      LIMIT 2`,
+    [slug],
+  );
+  return fallbackRows.length === 1 ? normalizeActionRow(fallbackRows[0]) : null;
 }
 
 export async function approveAction(
@@ -393,18 +424,22 @@ export async function updateActionFields(
 export async function runAction(
   engine: BrainEngine,
   slug: string,
-  opts: { sourceId?: string; dryRun?: boolean; now?: boolean; userPrompt?: string | null; execute?: boolean; force?: boolean; confirmed?: boolean } = {},
-): Promise<{ action: ActionRecord; run: ActionRunRecord; allowed: boolean; reason?: string; prompt?: string }> {
+  opts: { sourceId?: string; dryRun?: boolean; now?: boolean; userPrompt?: string | null; execute?: boolean; force?: boolean; confirmed?: boolean; interactive?: boolean } = {},
+): Promise<RunActionResult> {
   await ensureActionSchema(engine);
   const sourceId = opts.sourceId || 'default';
   const action = await getAction(engine, slug, sourceId);
   if (!action) throw new Error(`Action not found: ${slug}`);
+  const resolvedSourceId = action.source_id || sourceId;
 
   // ── New execution path: route to DefaultActionRunner ──
   if (opts.execute && ['agent_assisted', 'agent_executable'].includes(action.mode)) {
     const runner = new DefaultActionRunner();
+    const actionForRun = opts.interactive
+      ? { ...action, runtime: 'codex_interactive' }
+      : action;
     const runnerResult = await runner.run({
-      action,
+      action: actionForRun,
       engine,
       options: {
         execute: true,
@@ -417,8 +452,8 @@ export async function runAction(
 
     // Build a compatible return value for the legacy caller
     const idempotencyKey = buildRunIdempotencyKey(action);
-    const prompt = runnerResult.prompt ?? buildActionPrompt(action, opts.userPrompt || action.user_prompt || null);
-    const status: ActionRunStatus = runnerResult.allowed ? 'prepared' : 'blocked';
+    const dbStatus = runnerResult.status === 'needs_confirmation' ? 'needs_confirmation' : runnerResult.status === 'needs_approval' ? 'needs_approval' : runnerResult.allowed ? 'prepared' : 'blocked';
+    const prompt = runnerResult.prompt ?? buildActionPrompt(actionForRun, opts.userPrompt || action.user_prompt || null);
     const result = runnerResult.outcome
       ? runnerResult.outcome
       : { kind: runnerResult.allowed ? 'executed' : runnerResult.status, reason: runnerResult.reason };
@@ -437,17 +472,17 @@ export async function runAction(
          finished_at = now()
        RETURNING id, source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt,
                  result, error_text, created_at::text, finished_at::text`,
-      [sourceId, slug, idempotencyKey, status, !!(opts.dryRun), prompt, opts.userPrompt || null, JSON.stringify(result), runnerResult.reason || null],
+      [resolvedSourceId, slug, idempotencyKey, dbStatus, !!(opts.dryRun), prompt, opts.userPrompt || null, JSON.stringify(result), runnerResult.reason || null],
     );
     await engine.executeRaw(
       `UPDATE action_index
           SET last_run_at = now(), last_run_status = $3, user_prompt = COALESCE($4, user_prompt),
               started_at = COALESCE(started_at, now()), updated_at = now()
         WHERE source_id = $1 AND slug = $2`,
-      [sourceId, slug, status, opts.userPrompt || null],
+      [resolvedSourceId, slug, dbStatus, opts.userPrompt || null],
     );
     // Update the action_runs row with the final execution result
-    if (runnerResult.status === 'executed' || runnerResult.status === 'failed') {
+    if (runnerResult.status === 'executed' || runnerResult.status === 'failed' || runnerResult.status === 'interactive_handoff') {
       await engine.executeRaw(
         `UPDATE action_runs
             SET status = $1, result = $2::jsonb, error_text = $3, finished_at = now()
@@ -499,14 +534,14 @@ export async function runAction(
        finished_at = now()
      RETURNING id, source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt,
                result, error_text, created_at::text, finished_at::text`,
-    [sourceId, slug, idempotencyKey, status, !!opts.dryRun, prompt, opts.userPrompt || null, JSON.stringify(result), gate.reason || null],
+    [resolvedSourceId, slug, idempotencyKey, status, !!opts.dryRun, prompt, opts.userPrompt || null, JSON.stringify(result), gate.reason || null],
   );
   await engine.executeRaw(
     `UPDATE action_index
         SET last_run_at = now(), last_run_status = $3, user_prompt = COALESCE($4, user_prompt),
             started_at = COALESCE(started_at, now()), updated_at = now()
       WHERE source_id = $1 AND slug = $2`,
-    [sourceId, slug, status, opts.userPrompt || null],
+    [resolvedSourceId, slug, status, opts.userPrompt || null],
   );
   return { action, run: rows[0], allowed: gate.allowed, reason: gate.reason, prompt };
 }

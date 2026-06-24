@@ -18,7 +18,16 @@ import {
   updateActionStatus,
   type ActionRecord,
 } from '../src/core/actions.ts';
+import { runActions } from '../src/commands/actions.ts';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
+import {
+  buildCodexExecArgs,
+  buildCodexInteractiveArgs,
+  buildCodexInteractiveLaunch,
+  resolveCodexInteractiveCommand,
+  type ActionExecutionResult,
+} from '../src/core/action-executor.ts';
+import { parseExecutionOutcome } from '../src/core/action-runner.ts';
 
 function action(overrides: Partial<ActionRecord> = {}): ActionRecord {
   return {
@@ -33,7 +42,7 @@ function action(overrides: Partial<ActionRecord> = {}): ActionRecord {
     runtime: 'codex',
     trigger: 'due_time',
     risk_level: 'low',
-    requires_confirmation: true,
+    requires_confirmation: false,
     requires_approval: false,
     max_autonomy: 'draft_only',
     approved_at: null,
@@ -81,6 +90,157 @@ describe('VoltMind actions policy', () => {
     const future = action({ due_at: new Date(Date.now() + 60_000).toISOString() });
     expect(evaluateActionPolicy(future).allowed).toBe(false);
     expect(evaluateActionPolicy(future, { force: true }).allowed).toBe(true);
+  });
+
+  test('requires confirmation when action asks for it', () => {
+    const result = evaluateActionPolicy(action({ requires_confirmation: true }));
+    expect(result).toMatchObject({
+      allowed: false,
+      requiresConfirmation: true,
+      reason: 'action requires confirmation',
+    });
+  });
+});
+
+describe('VoltMind Codex Apps connector execution', () => {
+  function execResult(overrides: Partial<ActionExecutionResult> = {}): ActionExecutionResult {
+    return {
+      kind: 'codex_exec',
+      exitCode: 0,
+      args: [],
+      stdout: '',
+      stderr: '',
+      wallMs: 10,
+      ...overrides,
+    };
+  }
+
+  test('CodexExecutor config enables apps without mixing approval mechanisms', () => {
+    const args = buildCodexExecArgs('E:\\gbrain\\VoltMind', {
+      VOLTMIND_CODEX_OUTLOOK_EMAIL_APP_ID: 'microsoft_outlook_email',
+      VOLTMIND_CODEX_OUTLOOK_EMAIL_SEND_TOOL_ID: 'send_email',
+      VOLTMIND_CODEX_OUTLOOK_EMAIL_DRAFT_TOOL_ID: 'create_draft',
+    });
+
+    expect(args).toContain('exec');
+    expect(args).toContain('--enable');
+    expect(args).toContain('apps');
+    expect(args).toContain('--json');
+    expect(args).toContain('--sandbox');
+    expect(args).toContain('read-only');
+    expect(args).toContain('-c');
+    expect(args).toContain('approval_policy="never"');
+    expect(args).toContain('apps._default.enabled=true');
+    expect(args).toContain('apps._default.destructive_enabled=false');
+    expect(args).toContain('apps._default.open_world_enabled=false');
+    expect(args).toContain('apps.microsoft_outlook_email.enabled=true');
+    expect(args).toContain('apps.microsoft_outlook_email.default_tools_enabled=true');
+    expect(args).toContain('apps.microsoft_outlook_email.default_tools_approval_mode="approve"');
+    expect(args).toContain('apps.microsoft_outlook_email.tools.send_email.approval_mode="approve"');
+    expect(args).toContain('apps.microsoft_outlook_email.tools.create_draft.approval_mode="approve"');
+    expect(args).not.toContain('--ask-for-approval');
+    expect(args).not.toContain('apps._default.default_tools_approval_mode="approve"');
+  });
+
+  test('Codex interactive args enable apps without non-interactive approval override', () => {
+    const args = buildCodexInteractiveArgs('E:\\gbrain\\VoltMind', 'E:\\gbrain\\VoltMind\\.voltmind-codex-interactive-test\\action-prompt.md', {
+      VOLTMIND_CODEX_OUTLOOK_EMAIL_APP_ID: 'microsoft_outlook_email',
+    });
+
+    expect(args).toContain('--enable');
+    expect(args).toContain('apps');
+    expect(args).toContain('--sandbox');
+    expect(args).toContain('read-only');
+    expect(args).toContain('apps.microsoft_outlook_email.default_tools_approval_mode="prompt"');
+    expect(args).not.toContain('--json');
+    expect(args).not.toContain('exec');
+    expect(args).not.toContain('approval_policy="never"');
+    expect(args).not.toContain('--add-dir');
+    expect(args[args.length - 1]).toBe('Read and execute the VoltMind action prompt from this file: E:\\gbrain\\VoltMind\\.voltmind-codex-interactive-test\\action-prompt.md');
+  });
+
+  test('Codex interactive command can use an explicit binary path', () => {
+    expect(resolveCodexInteractiveCommand({ VOLTMIND_CODEX_BIN: 'C:\\Tools\\codex.exe' })).toBe('C:\\Tools\\codex.exe');
+  });
+
+  test('Codex interactive launch wraps PowerShell ps1 shims without shell splitting', () => {
+    const launch = buildCodexInteractiveLaunch(['--enable', 'apps', 'Read and execute file C:\\Temp\\action-prompt.md'], {
+      VOLTMIND_CODEX_BIN: 'C:\\Users\\example\\AppData\\Roaming\\npm\\codex.ps1',
+    });
+    expect(launch.command.toLowerCase()).toContain('powershell');
+    expect(launch.args).toContain('-File');
+    expect(launch.args).toContain('C:\\Users\\example\\AppData\\Roaming\\npm\\codex.ps1');
+    expect(launch.args[launch.args.length - 1]).toBe('Read and execute file C:\\Temp\\action-prompt.md');
+  });
+
+  test('JSONL connector cancellation fails the action outcome', () => {
+    const outcome = parseExecutionOutcome(execResult({
+      stdout: [
+        JSON.stringify({ type: 'app_tool_call', app_id: 'microsoft_outlook_email', tool: 'send_email', status: 'cancelled' }),
+        JSON.stringify({ type: 'message', content: 'Email was not sent.' }),
+      ].join('\n'),
+    }), {
+      action: action({ allowed_tools: ['outlook_email'] }),
+    });
+
+    expect(outcome.success).toBe(false);
+    expect(outcome.diagnosticCode).toBe('connector_call_failed');
+  });
+
+  test('exit 0 final message that says email was not sent fails closed', () => {
+    const outcome = parseExecutionOutcome(execResult({
+      stdout: 'Email was not sent. The connector call was cancelled.',
+    }), {
+      action: action({ allowed_tools: ['outlook_email'] }),
+    });
+
+    expect(outcome.success).toBe(false);
+    expect(outcome.diagnosticCode).toBe('connector_call_failed');
+  });
+
+  test('exit 0 final message that says no email was sent fails closed', () => {
+    const outcome = parseExecutionOutcome(execResult({
+      stdout: JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'agent_message',
+          text: 'Blocked: connector tools do not include a send/create operation. No email was sent.',
+        },
+      }),
+    }), {
+      action: action({ allowed_tools: ['outlook_email'] }),
+    });
+
+    expect(outcome.success).toBe(false);
+    expect(outcome.diagnosticCode).toBe('connector_call_failed');
+  });
+
+  test('email action without connector success event fails with connector_not_observed', () => {
+    const outcome = parseExecutionOutcome(execResult({
+      stdout: JSON.stringify({ type: 'message', content: 'I prepared the email.' }),
+    }), {
+      action: action({ allowed_tools: ['outlook_email'] }),
+    });
+
+    expect(outcome.success).toBe(false);
+    expect(outcome.diagnosticCode).toBe('connector_not_observed');
+    expect(outcome.errors.join('\n')).toContain('app id is wrong');
+  });
+
+  test('email action with Outlook Email connector success event succeeds', () => {
+    const outcome = parseExecutionOutcome(execResult({
+      stdout: JSON.stringify({
+        type: 'app_tool_call',
+        app_id: 'microsoft_outlook_email',
+        tool: 'create_draft',
+        status: 'completed',
+        result: { id: 'draft-1' },
+      }),
+    }), {
+      action: action({ allowed_tools: ['outlook_email'] }),
+    });
+
+    expect(outcome.success).toBe(true);
   });
 });
 
@@ -234,6 +394,97 @@ describe('VoltMind actions DB index', () => {
     } finally {
       if (previous === undefined) delete process.env.VOLTMIND_ACTIONS_REPO;
       else process.env.VOLTMIND_ACTIONS_REPO = previous;
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('CLI --execute --dry-run routes through the action runner harness', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-cli-execute-'));
+    const engine = new PGLiteEngine();
+    const originalLog = console.log;
+    const output: string[] = [];
+    try {
+      console.log = (...args: unknown[]) => { output.push(args.map(String).join(' ')); };
+      await engine.connect({});
+      await engine.initSchema();
+      const actionsDir = join(repo, 'state', 'actions');
+      await mkdir(actionsDir, { recursive: true });
+      await writeFile(join(actionsDir, 'send-test.md'), [
+        '---',
+        'title: Send test message',
+        'status: open',
+        'automation:',
+        '  eligible: true',
+        '  mode: agent_executable',
+        '  runtime: codex',
+        '  risk_level: low',
+        '  requires_confirmation: false',
+        'agent_contract:',
+        '  objective: Send a dry-run test message',
+        '  success_criteria:',
+        '    - Harness prompt is generated',
+        'allowed_tools:',
+        '  - outlook_email',
+        'max_autonomy: single_step',
+        '---',
+        '',
+      ].join('\n'), 'utf-8');
+
+      await scanActions(engine, { repo });
+      await runActions(engine, ['run', 'state/actions/send-test', '--execute', '--dry-run']);
+
+      const text = output.join('\n');
+      expect(text).toContain('[DRY RUN] state/actions/send-test');
+      expect(text).toContain('You are executing a VoltMind Action as a harnessed agent.');
+      expect(text).toContain('You may ONLY use these tools: outlook_email.');
+      expect(text).toContain('Success criteria:');
+    } finally {
+      console.log = originalLog;
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('CLI --execute --interactive --dry-run uses codex_interactive runtime', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-cli-interactive-'));
+    const engine = new PGLiteEngine();
+    const originalLog = console.log;
+    const output: string[] = [];
+    try {
+      console.log = (...args: unknown[]) => { output.push(args.map(String).join(' ')); };
+      await engine.connect({});
+      await engine.initSchema();
+      const actionsDir = join(repo, 'state', 'actions');
+      await mkdir(actionsDir, { recursive: true });
+      await writeFile(join(actionsDir, 'interactive-test.md'), [
+        '---',
+        'title: Interactive test message',
+        'status: open',
+        'automation:',
+        '  eligible: true',
+        '  mode: agent_executable',
+        '  runtime: codex',
+        '  risk_level: low',
+        '  requires_confirmation: false',
+        'agent_contract:',
+        '  objective: Hand off to interactive Codex',
+        'allowed_tools:',
+        '  - outlook_email',
+        'max_autonomy: single_step',
+        '---',
+        '',
+      ].join('\n'), 'utf-8');
+
+      await scanActions(engine, { repo });
+      await runActions(engine, ['run', 'state/actions/interactive-test', '--execute', '--interactive', '--dry-run']);
+
+      const text = output.join('\n');
+      expect(text).toContain('[DRY RUN] state/actions/interactive-test');
+      expect(text).toContain('Runtime backend: codex_interactive');
+      expect(text).toContain('You may ONLY use these tools: outlook_email.');
+    } finally {
+      console.log = originalLog;
       await engine.disconnect().catch(() => {});
       await rm(repo, { recursive: true, force: true });
     }
