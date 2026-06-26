@@ -149,7 +149,7 @@ export class CodexInteractiveExecutor implements ActionExecutor {
     await writeFile(promptPath, req.prompt, 'utf-8');
 
     try {
-      const args = buildCodexInteractiveArgs(process.cwd(), promptPath, process.env);
+      const args = buildCodexInteractiveArgs(process.cwd(), promptPath);
       const hasTTY = process.stdin.isTTY && process.stdout.isTTY;
 
       if (hasTTY) {
@@ -282,13 +282,15 @@ export function buildCodexExecArgs(cwd: string = process.cwd(), env: NodeJS.Proc
 export function buildCodexInteractiveArgs(
   cwd: string = process.cwd(),
   promptPath: string,
-  env: NodeJS.ProcessEnv = process.env,
 ): string[] {
+  // The interactive executor deliberately does not pin --sandbox or --enable
+  // here. Codex's own config ( ~/.codex/config.toml or env) controls sandbox
+  // level and app enablement for the TUI session. Pinning them inline
+  // conflicted with connector hydration (apps._default.* config overrides)
+  // and prevented Codex from loading its own plugin/app runtime config.
+  // The non-interactive path (buildCodexExecArgs) still uses explicit flags.
   return [
-    '--enable', 'apps',
-    ...codexInteractiveConfigArgs(env),
     '--cd', cwd,
-    '--sandbox', 'read-only',
     `Read and execute the VoltMind action prompt from this file: ${promptPath}`,
   ];
 }
@@ -367,22 +369,3 @@ export function codexConfigArgs(env: NodeJS.ProcessEnv = process.env): string[] 
   return args;
 }
 
-function codexInteractiveConfigArgs(env: NodeJS.ProcessEnv = process.env): string[] {
-  const args: string[] = [];
-  args.push('-c', 'apps._default.enabled=true');
-  args.push('-c', 'apps._default.destructive_enabled=false');
-  args.push('-c', 'apps._default.open_world_enabled=false');
-
-  const outlookEmailAppId = (env.VOLTMIND_CODEX_OUTLOOK_EMAIL_APP_ID ?? 'microsoft_outlook_email').trim();
-  if (outlookEmailAppId) {
-    args.push('-c', `apps.${outlookEmailAppId}.enabled=true`);
-    args.push('-c', `apps.${outlookEmailAppId}.default_tools_enabled=true`);
-    args.push('-c', `apps.${outlookEmailAppId}.default_tools_approval_mode="prompt"`);
-  }
-
-  const model = env.VOLTMIND_CODEX_MODEL?.trim();
-  if (model) {
-    args.push('-m', model);
-  }
-  return args;
-}

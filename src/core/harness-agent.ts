@@ -15,6 +15,7 @@
 import type { BrainEngine } from './engine.ts';
 import type { ActionRecord } from './actions.ts';
 import type { ToolScope } from './action-executor.ts';
+import type { ActionExecutionPacket } from './action-execution-packet.ts';
 
 export type { ToolScope } from './action-executor.ts';
 
@@ -33,6 +34,8 @@ export interface HarnessAgentContext extends HarnessAgentBaseContext {
   skillText?: string | null;
   /** Tool search bootstrap context — injected by ActionRunner before buildPrompt */
   toolSearchContext?: string;
+  /** Compact server-built execution context: selected route, persisted plan, and route-derived scope. */
+  executionPacket?: ActionExecutionPacket;
 }
 
 /* ---- Agent interface ---- */
@@ -84,13 +87,14 @@ export class DefaultHarnessAgent implements HarnessAgent {
       ? '\n## Skill Procedure\n\n' + ctx.skillText + '\n'
       : '';
 
-    // Tool search context (from ToolSearchBootstrap)
-    const toolSearchSection = ctx.toolSearchContext
-      ? ctx.toolSearchContext + '\n'
-      : '';
+    const executionContextSection = [
+      ctx.executionPacket?.routeContextText,
+      ctx.executionPacket?.planText,
+      ctx.toolSearchContext,
+    ].filter(Boolean).join('\n\n');
 
     const parts: string[] = [
-      toolSearchSection,
+      executionContextSection,
       'You are executing a VoltMind Action as a harnessed agent.',
       '',
       'Action: ' + action.slug,

@@ -17,7 +17,7 @@ function printHelp(): void {
 
 USAGE
   voltmind actions scan [--repo PATH]
-  voltmind actions list [--status open] [--risk low|medium|high|restricted] [--due] [--limit N] [--json]
+  voltmind actions list [--status open|on_schedule|in_progress|blocked|canceled] [--risk low|medium|high|restricted] [--due] [--limit N] [--json]
   voltmind actions get <slug> [--json]
   voltmind actions approve <slug> [--by NAME]
   voltmind actions run <slug> [--now] [--execute] [--interactive] [--force] [--dry-run] [--prompt TEXT] [--json]

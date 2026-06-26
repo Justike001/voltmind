@@ -23,7 +23,7 @@ import {
 } from './actions.ts';
 import { resolveExecutor, type ActionExecutor, type ActionExecutionResult } from './action-executor.ts';
 import { resolveHarnessAgent, type HarnessAgent, type ToolScope } from './harness-agent.ts';
-import { bootstrapToolSearch } from './tool-search-bootstrap.ts';
+import { buildActionExecutionPacket } from './action-execution-packet.ts';
 
 /* ── Public types ────────────────────────────────────────── */
 
@@ -144,22 +144,16 @@ export class DefaultActionRunner implements ActionRunner {
     // ── Build context ──
     const baseCtx = { action, engine, userPrompt: options.userPrompt ?? undefined };
 
-    // ── Tool Search Bootstrap ──
-    let toolSearchContext: string | undefined;
-    try {
-      const toolSearchResult = await bootstrapToolSearch(action);
-      toolSearchContext = toolSearchResult.contextText || undefined;
-    } catch {
-      // Non-fatal: if plugin scanning fails, proceed without tool context
-    }
-
-    const toolScope = await agent.resolveToolScope(baseCtx);
+    const executionPacket = await buildActionExecutionPacket(engine, action, {
+      userPrompt: options.userPrompt ?? undefined,
+    });
+    const toolScope = mergeToolScopes(await agent.resolveToolScope(baseCtx), executionPacket.toolScope);
     const skillText = await agent.loadSkill(baseCtx);
     const prompt = await agent.buildPrompt({
       ...baseCtx,
       toolScope,
       skillText,
-      toolSearchContext,
+      executionPacket,
     });
 
     // ── Dry run: stop here ──
@@ -260,6 +254,13 @@ export class DefaultActionRunner implements ActionRunner {
       outcome,
     };
   }
+}
+
+function mergeToolScopes(primary: ToolScope, routed: ToolScope): ToolScope {
+  return {
+    allowed: primary.allowed.length > 0 ? primary.allowed : routed.allowed,
+    blocked: [...new Set([...primary.blocked, ...routed.blocked])],
+  };
 }
 
 /* ── Outcome parsing ─────────────────────────────────────── */
@@ -463,7 +464,13 @@ export async function writeOutcome(
 
   // Update DB
   await engine.executeRaw(
-    'UPDATE action_index SET status = $3, outcome = $4, updated_at = now() WHERE source_id = $1 AND slug = $2',
+    `UPDATE action_index
+        SET status = $3,
+            outcome = $4,
+            completed_at = CASE WHEN $3 = 'done' THEN COALESCE(completed_at, now()) ELSE completed_at END,
+            archived_at = CASE WHEN $3 = 'done' THEN COALESCE(archived_at, now()) ELSE archived_at END,
+            updated_at = now()
+      WHERE source_id = $1 AND slug = $2`,
     [action.source_id, action.slug, dbStatus, outcome.summary],
   );
 

@@ -6,12 +6,16 @@ import {
   buildActionPlanPromptWithContext,
   buildActionStepRegeneratePrompt,
   buildActionPrompt,
+  collectActionRelatedQueryRequests,
   computeActionUrgencyScore,
+  dedupeAndCapActionRelatedHits,
   evaluateActionPolicy,
   listArchivedActions,
   listActions,
   getActionPlan,
+  normalizeActionRelatedQueryHits,
   normalizeActionPlan,
+  saveUserActionToolRoute,
   saveActionPlan,
   scanActions,
   updateActionFields,
@@ -28,6 +32,9 @@ import {
   type ActionExecutionResult,
 } from '../src/core/action-executor.ts';
 import { parseExecutionOutcome } from '../src/core/action-runner.ts';
+import { routeActionToolsFromRegistry } from '../src/core/action-tool-router.ts';
+import type { PluginRegistry } from '../src/core/plugin-registry.ts';
+import { generateAdminActionPlan } from '../src/commands/serve-http.ts';
 
 function action(overrides: Partial<ActionRecord> = {}): ActionRecord {
   return {
@@ -62,13 +69,54 @@ function action(overrides: Partial<ActionRecord> = {}): ActionRecord {
     automation: {},
     allowed_tools: ['browser'],
     blocked_tools: ['email_send'],
+    related_context: {
+      related_people: [],
+      related_project: null,
+      related_systems: [],
+      related_entities: [],
+      related_projects: [],
+      related_workstream: null,
+    },
     agent: null,
     skill: null,
     user_prompt: null,
+    tool_route: null,
     file_path: null,
     updated_at: new Date().toISOString(),
     ...overrides,
   };
+}
+
+function registry(plugins: Array<{
+  name: string;
+  displayName?: string;
+  description?: string;
+  category?: string;
+  skills?: Array<{ name: string; description: string; tools?: string[] }>;
+}>): PluginRegistry {
+  const skillIndex: PluginRegistry['skillIndex'] = new Map();
+  const toolIndex = new Map<string, string[]>();
+  const descriptors = plugins.map(plugin => ({
+    name: plugin.name,
+    displayName: plugin.displayName ?? plugin.name,
+    description: plugin.description ?? '',
+    category: plugin.category ?? 'Other',
+    repoPath: `C:\\plugins\\${plugin.name}`,
+    skills: (plugin.skills ?? []).map(skill => {
+      const descriptor = {
+        name: skill.name,
+        description: skill.description,
+        referencedTools: skill.tools ?? [],
+        filePath: `C:\\plugins\\${plugin.name}\\skills\\${skill.name}\\SKILL.md`,
+      };
+      skillIndex.set(skill.name, descriptor);
+      for (const tool of descriptor.referencedTools) {
+        toolIndex.set(tool, [...(toolIndex.get(tool) ?? []), plugin.name]);
+      }
+      return descriptor;
+    }),
+  }));
+  return { plugins: descriptors, skillIndex, toolIndex };
 }
 
 describe('VoltMind actions policy', () => {
@@ -90,6 +138,11 @@ describe('VoltMind actions policy', () => {
     const future = action({ due_at: new Date(Date.now() + 60_000).toISOString() });
     expect(evaluateActionPolicy(future).allowed).toBe(false);
     expect(evaluateActionPolicy(future, { force: true }).allowed).toBe(true);
+  });
+
+  test('allows due on-schedule actions through the execution gate', () => {
+    const scheduled = action({ status: 'on_schedule', due_at: new Date(Date.now() - 60_000).toISOString() });
+    expect(evaluateActionPolicy(scheduled).allowed).toBe(true);
   });
 
   test('requires confirmation when action asks for it', () => {
@@ -142,19 +195,19 @@ describe('VoltMind Codex Apps connector execution', () => {
     expect(args).not.toContain('apps._default.default_tools_approval_mode="approve"');
   });
 
-  test('Codex interactive args enable apps without non-interactive approval override', () => {
-    const args = buildCodexInteractiveArgs('E:\\gbrain\\VoltMind', 'E:\\gbrain\\VoltMind\\.voltmind-codex-interactive-test\\action-prompt.md', {
-      VOLTMIND_CODEX_OUTLOOK_EMAIL_APP_ID: 'microsoft_outlook_email',
-    });
+  test('Codex interactive args avoid connector-hydration overrides', () => {
+    const args = buildCodexInteractiveArgs('E:\\gbrain\\VoltMind', 'E:\\gbrain\\VoltMind\\.voltmind-codex-interactive-test\\action-prompt.md');
 
-    expect(args).toContain('--enable');
-    expect(args).toContain('apps');
-    expect(args).toContain('--sandbox');
-    expect(args).toContain('read-only');
-    expect(args).toContain('apps.microsoft_outlook_email.default_tools_approval_mode="prompt"');
+    expect(args).toContain('--cd');
+    expect(args).toContain('E:\\gbrain\\VoltMind');
+    expect(args).not.toContain('--enable');
+    expect(args).not.toContain('apps');
+    expect(args).not.toContain('--sandbox');
+    expect(args).not.toContain('read-only');
     expect(args).not.toContain('--json');
     expect(args).not.toContain('exec');
     expect(args).not.toContain('approval_policy="never"');
+    expect(args).not.toContain('apps.microsoft_outlook_email.default_tools_approval_mode="prompt"');
     expect(args).not.toContain('--add-dir');
     expect(args[args.length - 1]).toBe('Read and execute the VoltMind action prompt from this file: E:\\gbrain\\VoltMind\\.voltmind-codex-interactive-test\\action-prompt.md');
   });
@@ -244,6 +297,86 @@ describe('VoltMind Codex Apps connector execution', () => {
   });
 });
 
+describe('VoltMind action tool router', () => {
+  const fakeRegistry = registry([
+    {
+      name: 'outlook-email',
+      displayName: 'Outlook Email',
+      description: 'Triage Outlook mail, draft replies, and search messages.',
+      category: 'Communication',
+      skills: [
+        { name: 'outlook-email-reply-drafting', description: 'Draft Outlook email replies.', tools: ['search_messages', 'create_reply_draft'] },
+      ],
+    },
+    {
+      name: 'teams',
+      displayName: 'Teams',
+      description: 'Review Microsoft Teams chats and send follow-up messages.',
+      category: 'Communication',
+      skills: [
+        { name: 'teams-messages', description: 'Compose and route Microsoft Teams messages.', tools: ['send_chat_message', 'search'] },
+      ],
+    },
+    {
+      name: 'outlook-calendar',
+      displayName: 'Outlook Calendar',
+      description: 'Schedule meetings and inspect calendar availability.',
+      category: 'Calendar',
+      skills: [
+        { name: 'outlook-calendar-group-scheduler', description: 'Find meeting times.', tools: ['get_schedule', 'create_event'] },
+      ],
+    },
+    {
+      name: 'browser',
+      displayName: 'Browser',
+      description: 'Open pages, click controls, and inspect local web apps.',
+      category: 'Browser',
+      skills: [
+        { name: 'browser-control', description: 'Control browser sessions.', tools: ['open', 'click', 'screenshot'] },
+      ],
+    },
+  ]);
+
+  test('returns compact metadata without raw SKILL.md procedure text', async () => {
+    const route = await routeActionToolsFromRegistry(action({
+      title: 'Draft a follow-up email',
+      allowed_tools: [],
+      agent_contract: { objective: 'Draft an Outlook email reply to Alice.' },
+    }), fakeRegistry, { allowLlm: false, now: new Date('2026-06-25T00:00:00Z') });
+
+    expect(route.selected_plugins).toEqual(['outlook-email']);
+    expect(JSON.stringify(route)).toContain('Draft Outlook email replies');
+    expect(JSON.stringify(route)).not.toContain('Relevant Actions');
+    expect(JSON.stringify(route)).not.toContain('SKILL.md');
+  });
+
+  test('deterministically routes common communication and browser actions', async () => {
+    const email = await routeActionToolsFromRegistry(action({ title: 'Draft customer email', allowed_tools: [], agent_contract: { objective: 'Draft a customer email.' } }), fakeRegistry, { allowLlm: false });
+    const teams = await routeActionToolsFromRegistry(action({ title: 'Send a Teams follow-up message', allowed_tools: [], agent_contract: { objective: 'Send a Microsoft Teams follow-up message.' } }), fakeRegistry, { allowLlm: false });
+    const calendar = await routeActionToolsFromRegistry(action({ title: 'Schedule a calendar meeting', allowed_tools: [], agent_contract: { objective: 'Schedule a calendar meeting.' } }), fakeRegistry, { allowLlm: false });
+    const browser = await routeActionToolsFromRegistry(action({ title: 'Open browser and inspect admin UI', allowed_tools: [], agent_contract: { objective: 'Open browser and inspect admin UI.' } }), fakeRegistry, { allowLlm: false });
+
+    expect(email.selected_plugins).toEqual(['outlook-email']);
+    expect(teams.selected_plugins).toEqual(['teams']);
+    expect(calendar.selected_plugins).toEqual(['outlook-calendar']);
+    expect(browser.selected_plugins).toEqual(['browser']);
+  });
+
+  test('LLM rerank parse failure falls back to deterministic route', async () => {
+    const route = await routeActionToolsFromRegistry(action({
+      title: 'Send a message',
+      allowed_tools: [],
+      agent_contract: { objective: 'Decide whether this message belongs in email or Teams.' },
+    }), fakeRegistry, {
+      allowLlm: true,
+      chat: async () => ({ text: 'not valid json' }),
+    });
+
+    expect(route.source).toBe('auto');
+    expect(route.selected_plugins.length).toBeGreaterThan(0);
+  });
+});
+
 describe('VoltMind actions prompt', () => {
   test('includes the v1 no-side-effect boundary', () => {
     const prompt = buildActionPrompt(action(), 'Prefer a short draft.');
@@ -251,6 +384,83 @@ describe('VoltMind actions prompt', () => {
     expect(prompt).toContain('projects/example');
     expect(prompt).toContain('Prefer a short draft.');
     expect(prompt).toContain('Do not send email, operate a browser, mutate external systems');
+  });
+
+  test('plan prompt includes action body and related query context', () => {
+    const prompt = buildActionPlanPromptWithContext(action({
+      related_context: {
+        related_people: ['people/alice-example'],
+        related_project: 'projects/admin-ui',
+        related_systems: [],
+        related_entities: [],
+        related_projects: [],
+        related_workstream: null,
+      },
+    }), {
+      actionBody: '## Action\nShip the admin plan generator.',
+      relatedRuntimeContext: {
+        warnings: [],
+        hits: [{
+          field: 'related_project',
+          value: 'projects/admin-ui',
+          slug: 'projects/admin-ui',
+          title: 'Admin UI',
+          type: 'project',
+          score: 0.91,
+          snippet: 'Admin UI owns action review and planning workflows.',
+        }],
+      },
+    });
+
+    expect(prompt).toContain('Action markdown body:');
+    expect(prompt).toContain('Ship the admin plan generator.');
+    expect(prompt).toContain('Action related frontmatter:');
+    expect(prompt).toContain('related_people: people/alice-example');
+    expect(prompt).toContain('Related Context From VoltMind Query:');
+    expect(prompt).toContain('projects/admin-ui');
+    expect(prompt).toContain('Admin UI owns action review');
+  });
+
+  test('related query helpers collect parse dedupe and cap runtime context', () => {
+    const requests = collectActionRelatedQueryRequests({
+      related_people: ['people/alice-example'],
+      related_project: 'projects/admin-ui',
+      related_systems: [],
+      related_entities: [],
+      related_projects: ['projects/admin-ui'],
+      related_workstream: null,
+    });
+    expect(requests.map(req => [req.field, req.value])).toEqual([
+      ['related_people', 'people/alice-example'],
+      ['related_project', 'projects/admin-ui'],
+      ['related_projects', 'projects/admin-ui'],
+    ]);
+
+    const hits = normalizeActionRelatedQueryHits('related_project', 'projects/admin-ui', [
+      {
+        slug: 'projects/admin-ui',
+        page_id: 1,
+        title: 'Admin UI',
+        type: 'project',
+        chunk_text: 'A'.repeat(900),
+        chunk_source: 'compiled_truth',
+        chunk_id: 10,
+        chunk_index: 0,
+        score: 0.8,
+        stale: false,
+        source_id: 'default',
+      },
+      { nope: true },
+    ]);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].snippet.length).toBeLessThanOrEqual(700);
+
+    const capped = dedupeAndCapActionRelatedHits([...hits, ...hits, {
+      ...hits[0],
+      slug: 'projects/other',
+      snippet: 'Other project',
+    }], 2);
+    expect(capped.map(hit => hit.slug)).toEqual(['projects/admin-ui', 'projects/other']);
   });
 });
 
@@ -278,6 +488,16 @@ describe('VoltMind actions DB index', () => {
         '  risk_level: low',
         'agent_contract:',
         '  objective: Prepare the email draft only',
+        'related_people:',
+        '  - people/alice-example',
+        'related_project: projects/fundraise-example',
+        'related_projects:',
+        '  - projects/growth-example',
+        'related_workstream: workstreams/customer-example',
+        'related_systems:',
+        '  - systems/email',
+        'related_entities:',
+        '  - companies/acme-example',
         'allowed_tools:',
         '  - outlook_email',
         'blocked_tools:',
@@ -299,12 +519,63 @@ describe('VoltMind actions DB index', () => {
         mode: 'agent_assisted',
         risk_level: 'low',
         file_path: actionPath,
+        related_context: {
+          related_people: ['people/alice-example'],
+          related_project: 'projects/fundraise-example',
+          related_systems: ['systems/email'],
+          related_entities: ['companies/acme-example'],
+          related_projects: ['projects/growth-example'],
+          related_workstream: 'workstreams/customer-example',
+        },
       });
 
       await unlink(actionPath);
       const second = await scanActions(engine, { repo });
       expect(second).toMatchObject({ scanned: 0, indexed: 0, removed: 1, source_id: 'default' });
       expect(await listActions(engine, { limit: 10 })).toHaveLength(0);
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('scan normalizes scalar and plural related frontmatter into related_context', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-related-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      const actionsDir = join(repo, 'state', 'actions');
+      await mkdir(actionsDir, { recursive: true });
+      await writeFile(join(actionsDir, 'related.md'), [
+        '---',
+        'title: Related target',
+        'automation:',
+        '  eligible: true',
+        '  mode: agent_assisted',
+        '  risk_level: low',
+        'related_people: people/bob-example',
+        'related_project: projects/alpha-example',
+        'related_projects: projects/beta-example',
+        'related_workstream: workstreams/launch-example',
+        'related_systems: systems/admin-ui',
+        'related_entities:',
+        '  - companies/acme-example',
+        '  - concepts/pglite-locks',
+        '---',
+        '',
+      ].join('\n'), 'utf-8');
+
+      await scanActions(engine, { repo });
+      const [row] = await listActions(engine, { limit: 10 });
+      expect(row.related_context).toEqual({
+        related_people: ['people/bob-example'],
+        related_project: 'projects/alpha-example',
+        related_systems: ['systems/admin-ui'],
+        related_entities: ['companies/acme-example', 'concepts/pglite-locks'],
+        related_projects: ['projects/beta-example'],
+        related_workstream: 'workstreams/launch-example',
+      });
     } finally {
       await engine.disconnect().catch(() => {});
       await rm(repo, { recursive: true, force: true });
@@ -432,10 +703,23 @@ describe('VoltMind actions DB index', () => {
       ].join('\n'), 'utf-8');
 
       await scanActions(engine, { repo });
+      await saveUserActionToolRoute(engine, 'state/actions/send-test', {
+        selectedPlugins: ['outlook-email'],
+        selectedTools: ['outlook_email'],
+        blockedTools: ['email_send'],
+      });
+      await saveActionPlan(engine, 'state/actions/send-test', {
+        plan: [{ phase: 'Phase 1', steps: ['Read the source message', 'Prepare the draft'] }],
+      });
       await runActions(engine, ['run', 'state/actions/send-test', '--execute', '--dry-run']);
 
       const text = output.join('\n');
       expect(text).toContain('[DRY RUN] state/actions/send-test');
+      expect(text).toContain('## Action Tool Route');
+      expect(text).toContain('Selected route: @outlook-email');
+      expect(text).toContain('## Persisted Action Plan');
+      expect(text).toContain('Prepare the draft');
+      expect(text).not.toContain('Other available plugins');
       expect(text).toContain('You are executing a VoltMind Action as a harnessed agent.');
       expect(text).toContain('You may ONLY use these tools: outlook_email.');
       expect(text).toContain('Success criteria:');
@@ -535,6 +819,123 @@ describe('VoltMind actions DB index', () => {
     }
   });
 
+  test('admin plan generation queries related context through injected dispatcher with source scope', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-admin-plan-'));
+    const engine = new PGLiteEngine();
+    const calls: Array<{ name: string; params: Record<string, unknown> | undefined; opts: Record<string, unknown> | undefined }> = [];
+    let capturedPrompt = '';
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      const actionsDir = join(repo, 'state', 'actions');
+      await mkdir(actionsDir, { recursive: true });
+      await writeFile(join(actionsDir, 'plan-related.md'), [
+        '---',
+        'title: Plan with related context',
+        'automation:',
+        '  eligible: true',
+        '  mode: agent_assisted',
+        '  risk_level: low',
+        'related_people:',
+        '  - people/alice-example',
+        'agent_contract:',
+        '  objective: Build a tailored plan',
+        '---',
+        '',
+        '## Action',
+        '',
+        'Use related brain context.',
+      ].join('\n'), 'utf-8');
+
+      await scanActions(engine, { repo, sourceId: 'source-a' });
+      const result = await generateAdminActionPlan(engine, 'state/actions/plan-related', {
+        sourceId: 'source-a',
+        userPrompt: 'Keep it crisp',
+        toolDispatcher: async (name, params, opts) => {
+          calls.push({ name, params, opts: opts as Record<string, unknown> | undefined });
+          return {
+            content: [{ type: 'text', text: JSON.stringify([{
+              slug: 'people/alice-example',
+              page_id: 1,
+              title: 'Alice Example',
+              type: 'person',
+              chunk_text: 'Alice owns the relevant admin planning workflow.',
+              chunk_source: 'compiled_truth',
+              chunk_id: 1,
+              chunk_index: 0,
+              score: 0.7,
+              stale: false,
+              source_id: 'source-a',
+            }]) }],
+          };
+        },
+        generatePlan: async (prompt) => {
+          capturedPrompt = prompt;
+          return { raw: JSON.stringify({ plan: [{ phase: 'Phase 1', steps: ['Read related context'] }] }), plan: [{ phase: 'Phase 1', steps: ['Read related context'] }] };
+        },
+      });
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({
+        name: 'query',
+        params: { source_id: 'source-a', detail: 'medium', limit: 3 },
+        opts: { remote: false, sourceId: 'source-a' },
+      });
+      expect(String(calls[0].params?.query)).toContain('people/alice-example');
+      expect(capturedPrompt).toContain('Use related brain context.');
+      expect(capturedPrompt).toContain('Alice owns the relevant admin planning workflow.');
+      expect((result.related_runtime_context as { warnings: string[] }).warnings).toEqual([]);
+      expect(result.plan).toEqual([{ phase: 'Phase 1', steps: [{ id: 'p1s1', text: 'Read related context', done: false, note: '' }] }]);
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('saveUserActionToolRoute persists user choice and writes markdown tools', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-route-save-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      const actionsDir = join(repo, 'state', 'actions');
+      await mkdir(actionsDir, { recursive: true });
+      const file = join(actionsDir, 'route-target.md');
+      await writeFile(file, [
+        '---',
+        'title: Route target',
+        'status: open',
+        'automation:',
+        '  eligible: true',
+        '  mode: agent_assisted',
+        '  risk_level: low',
+        'agent_contract:',
+        '  objective: Send a Teams follow-up',
+        '---',
+        '',
+      ].join('\n'), 'utf-8');
+
+      await scanActions(engine, { repo });
+      const updated = await saveUserActionToolRoute(engine, 'state/actions/route-target', {
+        selectedPlugins: ['teams'],
+        selectedTools: ['send_chat_message'],
+        blockedTools: ['send_email'],
+      });
+
+      expect(updated.tool_route?.source).toBe('user');
+      expect(updated.allowed_tools).toEqual(['send_chat_message']);
+      expect(updated.blocked_tools).toEqual(['send_email']);
+      const text = await readFile(file, 'utf-8');
+      expect(text).toContain('allowed_tools:');
+      expect(text).toContain('- send_chat_message');
+      expect(text).toContain('blocked_tools:');
+      expect(text).toContain('- send_email');
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
   test('scan normalizes legacy scheduled/watch modes into current mode taxonomy', async () => {
     const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-legacy-mode-'));
     const engine = new PGLiteEngine();
@@ -568,6 +969,49 @@ describe('VoltMind actions DB index', () => {
       const rows = await listActions(engine, { limit: 10 });
       expect(rows.map(r => r.mode)).toEqual(['agent_assisted', 'agent_assisted']);
       expect(rows.map(r => r.trigger).sort()).toEqual(['due_time', 'watch_event']);
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('scan normalizes legacy action statuses before indexing', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-legacy-status-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      const actionsDir = join(repo, 'state', 'actions');
+      await mkdir(actionsDir, { recursive: true });
+      const cases = [
+        ['active', 'in_progress'],
+        ['completed', 'done'],
+        ['cancelled', 'canceled'],
+        ['scheduled', 'on_schedule'],
+        ['pending', 'open'],
+        ['unknown_external_state', 'open'],
+      ];
+      for (const [rawStatus] of cases) {
+        await writeFile(join(actionsDir, `${rawStatus}.md`), [
+          '---',
+          `title: ${rawStatus}`,
+          `status: ${rawStatus}`,
+          'automation:',
+          '  eligible: true',
+          '  mode: agent_assisted',
+          '  risk_level: low',
+          '---',
+          '',
+        ].join('\n'), 'utf-8');
+      }
+
+      await scanActions(engine, { repo });
+      const rows = await engine.executeRaw<{ slug: string; status: string }>(
+        `SELECT slug, status FROM action_index ORDER BY slug`,
+      );
+      expect(rows.map(row => [row.slug.replace(/^state\/actions\//, ''), row.status])).toEqual(
+        cases.map(([, normalized], index) => [`${cases[index][0]}`, normalized]).sort((a, b) => a[0].localeCompare(b[0])),
+      );
     } finally {
       await engine.disconnect().catch(() => {});
       await rm(repo, { recursive: true, force: true });
@@ -714,6 +1158,37 @@ describe('VoltMind actions DB index', () => {
       expect(rows[0].completed_at).toBeTruthy();
       expect(rows[0].archived_at).toBeTruthy();
       expect(rows[0].elapsed_ms).not.toBeNull();
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('status updates normalize legacy scheduled to on_schedule', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-on-schedule-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      const actionsDir = join(repo, 'state', 'actions');
+      const file = join(actionsDir, 'legacy-schedule.md');
+      await mkdir(actionsDir, { recursive: true });
+      await writeFile(file, [
+        '---',
+        'title: Legacy schedule task',
+        'status: open',
+        'automation:',
+        '  eligible: true',
+        '  mode: agent_assisted',
+        '  risk_level: low',
+        '---',
+        '',
+      ].join('\n'), 'utf-8');
+      await scanActions(engine, { repo });
+
+      const updated = await updateActionStatus(engine, 'state/actions/legacy-schedule', 'scheduled');
+      expect(updated.status).toBe('on_schedule');
+      expect(await readFile(file, 'utf-8')).toContain('status: on_schedule');
     } finally {
       await engine.disconnect().catch(() => {});
       await rm(repo, { recursive: true, force: true });

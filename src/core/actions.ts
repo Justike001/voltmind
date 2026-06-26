@@ -4,6 +4,8 @@ import { mkdir, readFile, readdir, writeFile } from 'fs/promises';
 import { basename, dirname, join, relative } from 'path';
 import matter from 'gray-matter';
 import type { BrainEngine } from './engine.ts';
+import type { SearchResult } from './types.ts';
+import type { DispatchOpts, ToolResult } from '../mcp/dispatch.ts';
 import { parseMarkdown } from './markdown.ts';
 import { resolveSourceId } from './source-resolver.ts';
 import {
@@ -11,10 +13,27 @@ import {
   type ActionRunStatus as RunnerActionRunStatus,
   type OutcomeSummary,
 } from './action-runner.ts';
+import {
+  buildUserActionToolRoute,
+  normalizeActionToolRoute,
+  renderActionToolRouteForPrompt,
+  routeActionTools,
+  type ActionToolRoute,
+} from './action-tool-router.ts';
+import { scanPluginRegistry, type PluginRegistry } from './plugin-registry.ts';
 
 export type ActionRiskLevel = 'low' | 'medium' | 'high' | 'restricted';
 export type ActionMode = 'manual' | 'agent_assisted' | 'agent_executable';
 export type ActionRunStatus = 'prepared' | 'blocked' | 'failed';
+
+export interface ActionRelatedContext {
+  related_people: string[];
+  related_project: string | null;
+  related_systems: string[];
+  related_entities: string[];
+  related_projects: string[];
+  related_workstream: string | null;
+}
 
 export interface ActionRecord {
   source_id: string;
@@ -44,9 +63,11 @@ export interface ActionRecord {
   automation: Record<string, unknown>;
   allowed_tools: string[];
   blocked_tools: string[];
+  related_context: ActionRelatedContext;
   agent: string | null;
   skill: string | null;
   user_prompt: string | null;
+  tool_route: ActionToolRoute | null;
   file_path: string | null;
   updated_at: string;
   urgency_score?: number;
@@ -100,6 +121,7 @@ interface ParsedAction {
   automation: Record<string, unknown>;
   allowedTools: string[];
   blockedTools: string[];
+  relatedContext: ActionRelatedContext;
   filePath: string;
   contentHash: string;
 }
@@ -131,6 +153,7 @@ const ACTIONS_SCHEMA_SQL = [
     automation JSONB NOT NULL DEFAULT '{}'::jsonb,
     allowed_tools JSONB NOT NULL DEFAULT '[]'::jsonb,
     blocked_tools JSONB NOT NULL DEFAULT '[]'::jsonb,
+    related_context JSONB NOT NULL DEFAULT '{}'::jsonb,
     user_prompt TEXT,
     file_path TEXT,
     content_hash TEXT NOT NULL DEFAULT '',
@@ -142,6 +165,7 @@ const ACTIONS_SCHEMA_SQL = [
     last_run_at TIMESTAMPTZ,
     last_run_status TEXT,
     plan_json JSONB,
+    tool_route_json JSONB,
     last_scanned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (source_id, slug)
@@ -174,13 +198,28 @@ export async function ensureActionSchema(engine: BrainEngine): Promise<void> {
   try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN outcome TEXT`); } catch (_) {}
   try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN next_step TEXT`); } catch (_) {}
   try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN plan_json JSONB`); } catch (_) {}
+  try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN tool_route_json JSONB`); } catch (_) {}
   try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN started_at TIMESTAMPTZ`); } catch (_) {}
   try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN completed_at TIMESTAMPTZ`); } catch (_) {}
   try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN archived_at TIMESTAMPTZ`); } catch (_) {}
-  // Ensure status constraint includes 'failed' (Phase 1 runtime-exec)
+  try { await engine.executeRaw(`ALTER TABLE action_index ADD COLUMN related_context JSONB NOT NULL DEFAULT '{}'::jsonb`); } catch (_) {}
+  // Ensure status constraint includes runtime and scheduling states.
   try {
+    await engine.executeRaw(`
+      UPDATE action_index
+         SET status = CASE
+           WHEN lower(status) = 'active' THEN 'in_progress'
+           WHEN lower(status) IN ('complete','completed') THEN 'done'
+           WHEN lower(status) = 'cancelled' THEN 'canceled'
+           WHEN lower(status) IN ('scheduled','on schedule','on-schedule') THEN 'on_schedule'
+           WHEN lower(status) IN ('pending','waiting') THEN 'open'
+           WHEN lower(status) IN ('open','on_schedule','in_progress','done','blocked','canceled','failed','needs_confirmation','needs_approval') THEN lower(status)
+           ELSE 'open'
+         END
+       WHERE status IS NOT NULL
+    `);
     await engine.executeRaw(`ALTER TABLE action_index DROP CONSTRAINT IF EXISTS action_index_status_check`);
-    await engine.executeRaw(`ALTER TABLE action_index ADD CONSTRAINT action_index_status_check CHECK (status IN ('open','in_progress','done','blocked','canceled','failed','needs_confirmation','needs_approval'))`);
+    await engine.executeRaw(`ALTER TABLE action_index ADD CONSTRAINT action_index_status_check CHECK (status IN ('open','on_schedule','in_progress','done','blocked','canceled','failed','needs_confirmation','needs_approval'))`);
   } catch (_) {}
 }
 
@@ -221,6 +260,7 @@ export async function scanActions(
     return { scanned: 0, indexed: 0, removed, source_id: sourceId, repo, actions_dir: null };
   }
   const files = await listMarkdownFiles(scanRoot.root);
+  const pluginRegistry = await scanPluginRegistry().catch(() => null);
   let indexed = 0;
   const indexedFilePaths: string[] = [];
   for (const file of files) {
@@ -228,6 +268,7 @@ export async function scanActions(
     const raw = await readFile(file, 'utf-8');
     const parsed = parseActionFile(raw, file, scanRoot.slugBase, sourceId);
     await upsertAction(engine, parsed);
+    await refreshActionToolRouteBestEffort(engine, parsed.slug, sourceId, pluginRegistry, opts.now);
     indexedFilePaths.push(file);
     indexed++;
   }
@@ -268,8 +309,8 @@ export async function listActions(
             requires_confirmation, requires_approval, max_autonomy,
             approved_at::text, approved_by, started_at::text, completed_at::text,
             archived_at::text, last_run_at::text, last_run_status,
-            agent_contract, automation, allowed_tools, blocked_tools, user_prompt,
-            outcome, next_step, file_path, updated_at::text
+            agent_contract, automation, allowed_tools, blocked_tools, related_context, user_prompt,
+            tool_route_json AS tool_route, outcome, next_step, file_path, updated_at::text
        FROM action_index
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY due_at ASC NULLS LAST, updated_at DESC
@@ -287,8 +328,8 @@ export async function getAction(engine: BrainEngine, slug: string, sourceId = 'd
             requires_confirmation, requires_approval, max_autonomy,
             approved_at::text, approved_by, started_at::text, completed_at::text,
             archived_at::text, last_run_at::text, last_run_status,
-            agent_contract, automation, allowed_tools, blocked_tools, user_prompt,
-            outcome, next_step, file_path, updated_at::text
+            agent_contract, automation, allowed_tools, blocked_tools, related_context, user_prompt,
+            tool_route_json AS tool_route, outcome, next_step, file_path, updated_at::text
        FROM action_index
       WHERE source_id = $1 AND slug = $2`,
     [sourceId, slug],
@@ -302,8 +343,8 @@ export async function getAction(engine: BrainEngine, slug: string, sourceId = 'd
             requires_confirmation, requires_approval, max_autonomy,
             approved_at::text, approved_by, started_at::text, completed_at::text,
             archived_at::text, last_run_at::text, last_run_status,
-            agent_contract, automation, allowed_tools, blocked_tools, user_prompt,
-            outcome, next_step, file_path, updated_at::text
+            agent_contract, automation, allowed_tools, blocked_tools, related_context, user_prompt,
+            tool_route_json AS tool_route, outcome, next_step, file_path, updated_at::text
        FROM action_index
       WHERE slug = $1
       ORDER BY source_id ASC
@@ -337,20 +378,24 @@ export async function updateActionStatus(
   opts: { sourceId?: string; note?: string } = {},
 ): Promise<ActionRecord> {
   await ensureActionSchema(engine);
+  const normalizedStatus = normalizeActionStatus(status);
   const sourceId = opts.sourceId || 'default';
   const action = await getAction(engine, slug, sourceId);
   if (!action) throw new Error(`Action not found: ${slug}`);
   if (action.file_path) {
-    await updateActionMarkdownStatus(action.file_path, status, opts.note);
+    await updateActionMarkdownStatus(action.file_path, normalizedStatus, opts.note);
   }
-  const doneFields = status === 'done'
+  const doneFields = normalizedStatus === 'done'
     ? ', completed_at = COALESCE(completed_at, now()), archived_at = COALESCE(archived_at, now())'
+    : '';
+  const startedFields = normalizedStatus === 'in_progress'
+    ? ', started_at = COALESCE(started_at, now())'
     : '';
   await engine.executeRaw(
     `UPDATE action_index
-        SET status = $3, updated_at = now()${doneFields}
+        SET status = $3, updated_at = now()${doneFields}${startedFields}
       WHERE source_id = $1 AND slug = $2`,
-    [sourceId, slug, status],
+    [sourceId, slug, normalizedStatus],
   );
   return (await getAction(engine, slug, sourceId))!;
 }
@@ -421,6 +466,70 @@ export async function updateActionFields(
   return (await getAction(engine, slug, sourceId))!;
 }
 
+export async function regenerateActionToolRoute(
+  engine: BrainEngine,
+  slug: string,
+  opts: { sourceId?: string; now?: Date; allowLlm?: boolean; pluginProviders?: string[]; includeAllPlugins?: boolean } = {},
+): Promise<ActionToolRoute> {
+  await ensureActionSchema(engine);
+  const sourceId = opts.sourceId || 'default';
+  const action = await getAction(engine, slug, sourceId);
+  if (!action) throw new Error(`Action not found: ${slug}`);
+  const route = await routeActionTools(action, {
+    allowLlm: opts.allowLlm ?? true,
+    pluginProviders: opts.pluginProviders,
+    includeAllPlugins: opts.includeAllPlugins,
+    now: opts.now,
+  });
+  await saveActionToolRouteJson(engine, slug, action.source_id || sourceId, route);
+  return route;
+}
+
+export async function saveUserActionToolRoute(
+  engine: BrainEngine,
+  slug: string,
+  input: {
+    sourceId?: string;
+    selectedPlugins?: string[];
+    selectedTools?: string[];
+    blockedTools?: string[];
+    notes?: string;
+  },
+): Promise<ActionRecord> {
+  await ensureActionSchema(engine);
+  const sourceId = input.sourceId || 'default';
+  const action = await getAction(engine, slug, sourceId);
+  if (!action) throw new Error(`Action not found: ${slug}`);
+  const base = action.tool_route ?? await routeActionTools(action, { allowLlm: false }).catch(() => null);
+  const route = buildUserActionToolRoute(base, {
+    selected_plugins: input.selectedPlugins,
+    selected_tools: input.selectedTools,
+    blocked_tools: input.blockedTools,
+    notes: input.notes,
+  });
+  // Only sync route-selected tools to the action's allowed_tools when the user
+  // explicitly chose them. Clearing the selection should preserve whatever
+  // allowlist the frontmatter already had, not overwrite it with [] (which
+  // would widen the scope to "all tools available" in the harness prompt).
+  const selectedTools = route.selected_tools.length > 0
+    ? route.selected_tools
+    : action.allowed_tools;
+  const blockedTools = route.blocked_tools;
+  if (action.file_path) {
+    await updateActionMarkdownTools(action.file_path, selectedTools, blockedTools);
+  }
+  await engine.executeRaw(
+    `UPDATE action_index
+        SET tool_route_json = $3::jsonb,
+            allowed_tools = $4::jsonb,
+            blocked_tools = $5::jsonb,
+            updated_at = now()
+      WHERE source_id = $1 AND slug = $2`,
+    [action.source_id || sourceId, slug, JSON.stringify(route), JSON.stringify(selectedTools), JSON.stringify(blockedTools)],
+  );
+  return (await getAction(engine, slug, action.source_id || sourceId))!;
+}
+
 export async function runAction(
   engine: BrainEngine,
   slug: string,
@@ -442,11 +551,11 @@ export async function runAction(
       action: actionForRun,
       engine,
       options: {
-        execute: true,
-        dryRun: opts.dryRun ?? false,
-        userPrompt: opts.userPrompt ?? undefined,
-        force: opts.force ?? false,
-        confirmed: opts.confirmed ?? false,
+       execute: true,
+       dryRun: opts.dryRun ?? false,
+       userPrompt: opts.userPrompt ?? undefined,
+       force: opts.force ?? false,
+       confirmed: opts.confirmed ?? false,
       },
     });
 
@@ -587,8 +696,8 @@ export async function listArchivedActions(
             requires_confirmation, requires_approval, max_autonomy,
             approved_at::text, approved_by, started_at::text, completed_at::text,
             archived_at::text, last_run_at::text, last_run_status,
-            agent_contract, automation, allowed_tools, blocked_tools, user_prompt,
-            outcome, next_step, file_path, updated_at::text,
+            agent_contract, automation, allowed_tools, blocked_tools, related_context, user_prompt,
+            tool_route_json AS tool_route, outcome, next_step, file_path, updated_at::text,
             CASE
               WHEN completed_at IS NOT NULL AND started_at IS NOT NULL THEN EXTRACT(EPOCH FROM (completed_at - started_at)) * 1000
               ELSE NULL
@@ -646,7 +755,7 @@ export function evaluateActionPolicy(
     return { allowed: false, reason: 'automation.eligible is not true', requiresApproval: false, requiresConfirmation: false };
   }
 
-  if (!skipNonApproval && !['open', 'in_progress'].includes(action.status)) {
+  if (!skipNonApproval && !['open', 'on_schedule', 'in_progress'].includes(action.status)) {
     return { allowed: false, reason: `status is ${action.status}`, requiresApproval: false, requiresConfirmation: false };
   }
 
@@ -670,6 +779,7 @@ export function buildActionPrompt(action: ActionRecord, userPrompt: string | nul
   const objective = stringValue(contract.objective) || action.title;
   const criteria = Array.isArray(contract.success_criteria) ? contract.success_criteria.map(String) : [];
   const contextRefs = Array.isArray(contract.context_refs) ? contract.context_refs.map(String) : [];
+  const toolRouteText = renderActionToolRouteForPrompt(action.tool_route);
   return [
     `VoltMind Action: ${action.slug}`,
     `Objective: ${objective}`,
@@ -682,6 +792,7 @@ export function buildActionPrompt(action: ActionRecord, userPrompt: string | nul
     criteria.length ? `Success criteria:\n${criteria.map(c => `- ${c}`).join('\n')}` : '',
     action.allowed_tools.length ? `Allowed tools: ${action.allowed_tools.join(', ')}` : '',
     action.blocked_tools.length ? `Blocked tools: ${action.blocked_tools.join(', ')}` : '',
+    toolRouteText,
     userPrompt ? `User prompt:\n${userPrompt}` : '',
     '',
     'V1 boundary: prepare a draft, plan, or artifact only. Do not send email, operate a browser, mutate external systems, or perform final irreversible actions.',
@@ -699,11 +810,35 @@ export interface ActionIdentityContext {
   missing: string[];
 }
 
+export interface ActionRelatedQueryHit {
+  field: keyof ActionRelatedContext;
+  value: string;
+  slug: string;
+  title: string;
+  type: string;
+  score: number | null;
+  snippet: string;
+  source_id?: string;
+}
+
+export interface ActionRelatedRuntimeContext {
+  hits: ActionRelatedQueryHit[];
+  warnings: string[];
+}
+
+export type ActionRuntimeQueryDispatcher = (
+  name: string,
+  params: Record<string, unknown> | undefined,
+  opts: DispatchOpts,
+) => Promise<Pick<ToolResult, 'content' | 'isError'>>;
+
 export function buildActionPlanPromptWithContext(
   action: ActionRecord,
   opts: {
     userPrompt?: string | null;
     identityContext?: ActionIdentityContext | null;
+    actionBody?: string | null;
+    relatedRuntimeContext?: ActionRelatedRuntimeContext | null;
     previousPlan?: ActionPlan | null;
     regenerateInstructions?: string | null;
   } = {},
@@ -713,6 +848,7 @@ export function buildActionPlanPromptWithContext(
   const criteria = Array.isArray(contract.success_criteria) ? contract.success_criteria.map(String) : [];
   const contextRefs = Array.isArray(contract.context_refs) ? contract.context_refs.map(String) : [];
   const identity = opts.identityContext;
+  const toolRouteText = renderActionToolRouteForPrompt(action.tool_route);
   return [
     'Generate a practical execution todo list for this VoltMind action.',
     'Return JSON that exactly matches the provided schema.',
@@ -730,6 +866,10 @@ export function buildActionPlanPromptWithContext(
     criteria.length ? `Success criteria:\n${criteria.map(c => `- ${c}`).join('\n')}` : '',
     action.allowed_tools.length ? `Allowed tools: ${action.allowed_tools.join(', ')}` : '',
     action.blocked_tools.length ? `Blocked tools: ${action.blocked_tools.join(', ')}` : '',
+    toolRouteText,
+    renderRelatedContextForPrompt(action.related_context),
+    opts.actionBody ? `Action markdown body:\n${opts.actionBody}` : '',
+    renderRelatedRuntimeContextForPrompt(opts.relatedRuntimeContext),
     identity?.user_md ? `USER.md system context:\n${identity.user_md}` : '',
     identity?.soul_md ? `SOUL.md system context:\n${identity.soul_md}` : '',
     opts.previousPlan ? `Previous persisted plan JSON:\n${JSON.stringify(opts.previousPlan, null, 2)}` : '',
@@ -852,6 +992,17 @@ function extractSection(body: string, heading: string): string | null {
   return match ? match[1].trim() : null;
 }
 
+function normalizeRelatedContext(fm: Record<string, unknown>): ActionRelatedContext {
+  return {
+    related_people: arrayOfStringsFlexible(fm.related_people),
+    related_project: stringOrNull(fm.related_project),
+    related_systems: arrayOfStringsFlexible(fm.related_systems),
+    related_entities: arrayOfStringsFlexible(fm.related_entities),
+    related_projects: arrayOfStringsFlexible(fm.related_projects),
+    related_workstream: stringOrNull(fm.related_workstream),
+  };
+}
+
 function parseActionFile(raw: string, filePath: string, slugBase: string, sourceId: string): ParsedAction {
   const parsed = parseMarkdown(raw, filePath);
   const fm = matter(raw).data as Record<string, unknown>;
@@ -866,7 +1017,7 @@ function parseActionFile(raw: string, filePath: string, slugBase: string, source
     sourceId,
     slug,
     title: stringValue(fm.title) || parsed.title || slug,
-    status: stringValue(fm.status) || 'open',
+    status: normalizeActionStatus(fm.status),
     priority: stringValue(fm.priority) || null,
     dueAt,
     eligible: automation.eligible === true,
@@ -883,6 +1034,7 @@ function parseActionFile(raw: string, filePath: string, slugBase: string, source
     automation,
     allowedTools: arrayOfStrings(fm.allowed_tools),
     blockedTools: arrayOfStrings(fm.blocked_tools),
+    relatedContext: normalizeRelatedContext(fm),
     filePath,
     contentHash: createHash('sha256').update(raw).digest('hex'),
   };
@@ -893,10 +1045,10 @@ async function upsertAction(engine: BrainEngine, action: ParsedAction): Promise<
     `INSERT INTO action_index (
       source_id, slug, title, status, priority, due_at, eligible, mode, runtime, trigger,
       risk_level, requires_confirmation, requires_approval, max_autonomy, outcome, next_step,
-      agent_contract, automation, allowed_tools, blocked_tools, file_path, content_hash,
+      agent_contract, automation, allowed_tools, blocked_tools, related_context, file_path, content_hash,
       last_scanned_at, updated_at
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18::jsonb,$19::jsonb,$20::jsonb,$21,$22,now(),now())
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18::jsonb,$19::jsonb,$20::jsonb,$21::jsonb,$22,$23,now(),now())
     ON CONFLICT (source_id, slug)
     DO UPDATE SET
       title = EXCLUDED.title,
@@ -917,6 +1069,7 @@ async function upsertAction(engine: BrainEngine, action: ParsedAction): Promise<
       automation = EXCLUDED.automation,
       allowed_tools = EXCLUDED.allowed_tools,
       blocked_tools = EXCLUDED.blocked_tools,
+      related_context = EXCLUDED.related_context,
       file_path = EXCLUDED.file_path,
       content_hash = EXCLUDED.content_hash,
       last_scanned_at = now(),
@@ -927,6 +1080,7 @@ async function upsertAction(engine: BrainEngine, action: ParsedAction): Promise<
       action.requiresConfirmation, action.requiresApproval, action.maxAutonomy, action.outcome, action.nextStep,
       JSON.stringify(action.agentContract), JSON.stringify(action.automation),
       JSON.stringify(action.allowedTools), JSON.stringify(action.blockedTools),
+      JSON.stringify(action.relatedContext),
       action.filePath, action.contentHash,
     ],
   );
@@ -951,6 +1105,147 @@ async function pruneStaleActionIndex(engine: BrainEngine, sourceId: string, file
     [sourceId, ...filePaths],
   );
   return rows.length;
+}
+
+export async function loadActionBodyContext(action: ActionRecord): Promise<string | null> {
+  if (!action.file_path) return null;
+  try {
+    const raw = await readFile(action.file_path, 'utf-8');
+    return matter(raw).content.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function collectActionRelatedQueryRequests(
+  context: ActionRelatedContext,
+): Array<{ field: keyof ActionRelatedContext; value: string; query: string }> {
+  const requests: Array<{ field: keyof ActionRelatedContext; value: string; query: string }> = [];
+  const push = (field: keyof ActionRelatedContext, values: string[] | string | null) => {
+    const arr = Array.isArray(values) ? values : values ? [values] : [];
+    for (const value of arr) {
+      const trimmed = value.trim();
+      if (!trimmed || requests.some(req => req.field === field && req.value === trimmed)) continue;
+      requests.push({ field, value: trimmed, query: `what do we know about ${trimmed}` });
+    }
+  };
+  push('related_people', context.related_people);
+  push('related_project', context.related_project);
+  push('related_systems', context.related_systems);
+  push('related_entities', context.related_entities);
+  push('related_projects', context.related_projects);
+  push('related_workstream', context.related_workstream);
+  return requests.slice(0, 12);
+}
+
+export function normalizeActionRelatedQueryHits(
+  field: keyof ActionRelatedContext,
+  value: string,
+  rawResults: unknown,
+): ActionRelatedQueryHit[] {
+  const results = Array.isArray(rawResults) ? rawResults : [];
+  return results.map((result): ActionRelatedQueryHit | null => {
+    const r = result as Partial<SearchResult>;
+    if (typeof r.slug !== 'string' || typeof r.title !== 'string') return null;
+    const text = typeof r.chunk_text === 'string' ? r.chunk_text : '';
+    return {
+      field,
+      value,
+      slug: r.slug,
+      title: r.title,
+      type: typeof r.type === 'string' ? r.type : 'unknown',
+      score: typeof r.score === 'number' ? r.score : null,
+      snippet: truncateForPrompt(text.replace(/\s+/g, ' ').trim(), 700),
+      ...(typeof r.source_id === 'string' ? { source_id: r.source_id } : {}),
+    };
+  }).filter((hit): hit is ActionRelatedQueryHit => Boolean(hit));
+}
+
+export function dedupeAndCapActionRelatedHits(
+  hits: ActionRelatedQueryHit[],
+  maxHits = 12,
+): ActionRelatedQueryHit[] {
+  const seen = new Set<string>();
+  const out: ActionRelatedQueryHit[] = [];
+  for (const hit of hits) {
+    const key = `${hit.source_id || 'default'}:${hit.slug}:${hit.snippet}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(hit);
+    if (out.length >= maxHits) break;
+  }
+  return out;
+}
+
+export async function loadActionRelatedRuntimeContext(
+  action: ActionRecord,
+  dispatcher: ActionRuntimeQueryDispatcher,
+): Promise<ActionRelatedRuntimeContext> {
+  if (!dispatcher) throw new Error('Action plan runtime query dispatcher is unavailable');
+  const hits: ActionRelatedQueryHit[] = [];
+  const warnings: string[] = [];
+  for (const req of collectActionRelatedQueryRequests(action.related_context)) {
+    try {
+      const result = await dispatcher('query', {
+        query: req.query,
+        detail: 'medium',
+        limit: 3,
+        source_id: action.source_id,
+      }, {
+        remote: false,
+        sourceId: action.source_id,
+      });
+      const text = result.content?.[0]?.text ?? '[]';
+      if (result.isError) {
+        warnings.push(`${req.field}:${req.value}: ${extractRuntimeErrorMessage(text)}`);
+        continue;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        warnings.push(`${req.field}:${req.value}: query returned non-JSON output`);
+        continue;
+      }
+      hits.push(...normalizeActionRelatedQueryHits(req.field, req.value, parsed));
+    } catch (err) {
+      warnings.push(`${req.field}:${req.value}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return { hits: dedupeAndCapActionRelatedHits(hits), warnings };
+}
+
+async function refreshActionToolRouteBestEffort(
+  engine: BrainEngine,
+  slug: string,
+  sourceId: string,
+  registry: PluginRegistry | null,
+  now?: Date,
+): Promise<void> {
+  if (!registry) return;
+  try {
+    const action = await getAction(engine, slug, sourceId);
+    if (!action || action.tool_route?.source === 'user') return;
+    const route = await routeActionTools(action, { registry, now });
+    await saveActionToolRouteJson(engine, slug, sourceId, route);
+  } catch {
+    // Tool routing is advisory. A failed route scan must not block action indexing.
+  }
+}
+
+async function saveActionToolRouteJson(
+  engine: BrainEngine,
+  slug: string,
+  sourceId: string,
+  route: ActionToolRoute,
+): Promise<void> {
+  await engine.executeRaw(
+    `UPDATE action_index
+        SET tool_route_json = $3::jsonb,
+            updated_at = now()
+      WHERE source_id = $1 AND slug = $2`,
+    [sourceId, slug, JSON.stringify(route)],
+  );
 }
 
 async function listMarkdownFiles(root: string): Promise<string[]> {
@@ -1028,6 +1323,16 @@ async function updateActionMarkdownPriority(filePath: string, priority: string |
   await writeFile(filePath, matter.stringify(doc.content, doc.data), 'utf-8');
 }
 
+async function updateActionMarkdownTools(filePath: string, allowedTools: string[], blockedTools: string[]): Promise<void> {
+  const raw = await readFile(filePath, 'utf-8');
+  const doc = matter(raw);
+  doc.data.allowed_tools = allowedTools;
+  doc.data.blocked_tools = blockedTools;
+  doc.data.updated = new Date().toISOString().slice(0, 10);
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, matter.stringify(doc.content, doc.data), 'utf-8');
+}
+
 function normalizeActionRow(row: ActionRecord): ActionRecord {
   const mode = normalizeMode(row.mode, row.trigger);
   return {
@@ -1038,6 +1343,8 @@ function normalizeActionRow(row: ActionRecord): ActionRecord {
     automation: objectValue(row.automation),
     allowed_tools: arrayOfStrings(row.allowed_tools),
     blocked_tools: arrayOfStrings(row.blocked_tools),
+    related_context: normalizeActionRelatedContext(row.related_context),
+    tool_route: normalizeActionToolRoute(row.tool_route),
     risk_level: normalizeRisk(row.risk_level),
     urgency_score: computeActionUrgencyScore(row),
   };
@@ -1064,6 +1371,18 @@ function normalizeSlug(path: string): string {
 
 function normalizeRisk(raw: unknown): ActionRiskLevel {
   return raw === 'low' || raw === 'medium' || raw === 'high' || raw === 'restricted' ? raw : 'medium';
+}
+
+function normalizeActionStatus(raw: unknown): string {
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (!value) return 'open';
+  if (value === 'active') return 'in_progress';
+  if (value === 'complete' || value === 'completed') return 'done';
+  if (value === 'cancelled') return 'canceled';
+  if (value === 'scheduled' || value === 'on schedule' || value === 'on-schedule') return 'on_schedule';
+  if (value === 'pending' || value === 'waiting') return 'open';
+  if (['open', 'on_schedule', 'in_progress', 'done', 'blocked', 'canceled', 'failed', 'needs_confirmation', 'needs_approval'].includes(value)) return value;
+  return 'open';
 }
 
 function normalizeMode(raw: unknown, trigger?: string | null): { mode: ActionMode; trigger: string | null } {
@@ -1124,13 +1443,81 @@ function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function normalizeActionRelatedContext(value: unknown): ActionRelatedContext {
+  const obj = objectValue(value);
+  return {
+    related_people: arrayOfStringsFlexible(obj.related_people),
+    related_project: stringOrNull(obj.related_project),
+    related_systems: arrayOfStringsFlexible(obj.related_systems),
+    related_entities: arrayOfStringsFlexible(obj.related_entities),
+    related_projects: arrayOfStringsFlexible(obj.related_projects),
+    related_workstream: stringOrNull(obj.related_workstream),
+  };
+}
+
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function stringOrNull(value: unknown): string | null {
+  const str = stringValue(value);
+  return str || null;
 }
 
 function arrayOfStrings(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((v): v is string => typeof v === 'string').map(v => v.trim()).filter(Boolean);
+}
+
+function arrayOfStringsFlexible(value: unknown): string[] {
+  if (Array.isArray(value)) return arrayOfStrings(value);
+  const str = stringValue(value);
+  return str ? [str] : [];
+}
+
+function truncateForPrompt(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return value.slice(0, Math.max(0, maxLength - 3)).trimEnd() + '...';
+}
+
+function extractRuntimeErrorMessage(text: string): string {
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
+    if (parsed.error && typeof parsed.error === 'object') {
+      const message = (parsed.error as { message?: unknown }).message;
+      if (typeof message === 'string') return message;
+    }
+    if (typeof parsed.message === 'string') return parsed.message;
+    if (typeof parsed.error === 'string') return parsed.error;
+  } catch {
+    // Fall through to raw text.
+  }
+  return truncateForPrompt(text.trim() || 'query failed', 200);
+}
+
+function renderRelatedContextForPrompt(context: ActionRelatedContext): string {
+  const lines = [
+    context.related_people.length ? `related_people: ${context.related_people.join(', ')}` : '',
+    context.related_project ? `related_project: ${context.related_project}` : '',
+    context.related_systems.length ? `related_systems: ${context.related_systems.join(', ')}` : '',
+    context.related_entities.length ? `related_entities: ${context.related_entities.join(', ')}` : '',
+    context.related_projects.length ? `related_projects: ${context.related_projects.join(', ')}` : '',
+    context.related_workstream ? `related_workstream: ${context.related_workstream}` : '',
+  ].filter(Boolean);
+  return lines.length ? `Action related frontmatter:\n${lines.join('\n')}` : '';
+}
+
+function renderRelatedRuntimeContextForPrompt(context: ActionRelatedRuntimeContext | null | undefined): string {
+  if (!context || context.hits.length === 0) return '';
+  return [
+    'Related Context From VoltMind Query:',
+    ...context.hits.map(hit => [
+      `- ${hit.slug} (${hit.type}) score=${hit.score ?? 'n/a'}`,
+      `  Source field: ${hit.field} = ${hit.value}`,
+      `  Title: ${hit.title}`,
+      hit.snippet ? `  Snippet: ${hit.snippet}` : '',
+    ].filter(Boolean).join('\n')),
+  ].join('\n');
 }
 
 
