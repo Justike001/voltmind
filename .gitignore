@@ -37,6 +37,10 @@ export/
 .codex-tmp/
 .codex_tmp/
 
+# Codex local workspace config — never commit
+.codex/
+
+
 # Tier 3 PGLite snapshot fixture (built on demand by build:pglite-snapshot)
 test/fixtures/pglite-snapshot.tar
 test/fixtures/pglite-snapshot.version
