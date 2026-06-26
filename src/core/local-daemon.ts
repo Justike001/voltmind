@@ -3,6 +3,7 @@ import { voltmindPath } from './config.ts';
 
 export interface LocalDaemonState {
   schema_version: 1;
+  rpc_protocol_version?: number;
   pid: number;
   port: number;
   token: string;
@@ -12,10 +13,54 @@ export interface LocalDaemonState {
   version: string;
 }
 
-export interface LocalDaemonRequest {
+export const LOCAL_DAEMON_RPC_PROTOCOL_VERSION = 2;
+
+export interface LocalDaemonCliRequest {
   command: string;
   args: string[];
 }
+
+export interface LocalDaemonToolCallRequest {
+  kind: 'tool_call';
+  tool: string;
+  params?: Record<string, unknown>;
+  opts?: {
+    remote?: boolean;
+    takesHoldersAllowList?: string[];
+    sourceId?: string;
+    auth?: unknown;
+  };
+}
+
+export interface LocalDaemonRawSqlRequest {
+  kind: 'raw_sql';
+  sql: string;
+  params?: unknown[];
+}
+
+export interface LocalDaemonEngineStatsRequest {
+  kind: 'engine_stats';
+}
+
+export interface LocalDaemonEngineHealthRequest {
+  kind: 'engine_health';
+}
+
+export interface LocalDaemonQueueAddRequest {
+  kind: 'queue_add';
+  name: string;
+  data?: Record<string, unknown>;
+  opts?: Record<string, unknown>;
+  trusted?: { allowProtectedSubmit?: boolean };
+}
+
+export type LocalDaemonRequest =
+  | LocalDaemonCliRequest
+  | LocalDaemonToolCallRequest
+  | LocalDaemonRawSqlRequest
+  | LocalDaemonEngineStatsRequest
+  | LocalDaemonEngineHealthRequest
+  | LocalDaemonQueueAddRequest;
 
 export interface LocalDaemonResponse {
   ok: boolean;

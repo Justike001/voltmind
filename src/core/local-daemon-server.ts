@@ -3,7 +3,7 @@ import { randomBytes } from 'crypto';
 import { mkdirSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
 import type { BrainEngine } from './engine.ts';
-import type { Operation, OperationContext } from './operations.ts';
+import type { Operation, OperationContext, AuthInfo } from './operations.ts';
 import { operations, OperationError } from './operations.ts';
 import { serializeMarkdown } from './markdown.ts';
 import { loadConfig, loadConfigWithEngine, toEngineConfig, voltmindPath } from './config.ts';
@@ -16,13 +16,17 @@ import { getCliOptions } from './cli-options.ts';
 import { awaitPendingLastRetrievedWrites } from './last-retrieved.ts';
 import { isVoltMindMvpCliCommand, isVoltMindMvpOperationName } from './mvp-surface.ts';
 import {
+  LOCAL_DAEMON_RPC_PROTOCOL_VERSION,
   daemonStatePath,
   removeDaemonState,
+  type LocalDaemonCliRequest,
   type LocalDaemonRequest,
   type LocalDaemonResponse,
   type LocalDaemonState,
 } from './local-daemon.ts';
 import { VERSION } from '../version.ts';
+import { dispatchToolCall } from '../mcp/dispatch.ts';
+import { getBrainHotMemoryMeta } from './facts/meta-hook.ts';
 
 class DaemonCommandExit extends Error {
   constructor(readonly code: number) {
@@ -250,7 +254,7 @@ async function runOperation(engine: BrainEngine, config: VoltMindConfig, command
   return output;
 }
 
-async function runCommand(engine: BrainEngine, config: VoltMindConfig, req: LocalDaemonRequest): Promise<number> {
+async function runCommand(engine: BrainEngine, config: VoltMindConfig, req: LocalDaemonCliRequest): Promise<number> {
   const command = req.command === 'ask' ? 'query' : req.command;
   const args = req.args || [];
   switch (command) {
@@ -309,7 +313,34 @@ async function runCommand(engine: BrainEngine, config: VoltMindConfig, req: Loca
   }
 }
 
+function isStructuredRequest(req: LocalDaemonRequest): req is Extract<LocalDaemonRequest, { kind: string }> {
+  return typeof (req as { kind?: unknown }).kind === 'string';
+}
+
+function isCliRequest(req: LocalDaemonRequest): req is LocalDaemonCliRequest {
+  return typeof (req as { command?: unknown }).command === 'string';
+}
+
+function isReadOnlySql(sql: string): boolean {
+  const normalized = sql.trim().replace(/^\/\*[\s\S]*?\*\//, '').trim().toUpperCase();
+  if (!normalized) return false;
+  if (normalized.startsWith('SELECT') || normalized.startsWith('SHOW')) return true;
+  if (normalized.startsWith('WITH')) {
+    return !/\b(INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|REINDEX|VACUUM)\b/.test(normalized);
+  }
+  return false;
+}
+
 function isParallelReadRequest(req: LocalDaemonRequest): boolean {
+  if (isStructuredRequest(req)) {
+    if (req.kind === 'raw_sql') return isReadOnlySql(req.sql);
+    if (req.kind === 'engine_stats' || req.kind === 'engine_health') return true;
+    if (req.kind === 'tool_call') {
+      const op = operations.find(o => o.name === req.tool);
+      return Boolean(op && op.scope === 'read');
+    }
+    return false;
+  }
   const command = req.command === 'ask' ? 'query' : req.command;
   if (command === 'search' && ['modes', 'stats', 'tune'].includes(req.args?.[0] || '')) return false;
   return ['get', 'list', 'search', 'query', 'tags', 'backlinks', 'graph', 'timeline', 'stats', 'health'].includes(command);
@@ -318,11 +349,62 @@ function isParallelReadRequest(req: LocalDaemonRequest): boolean {
 async function runParallelReadOperation(
   engine: BrainEngine,
   config: VoltMindConfig,
-  req: LocalDaemonRequest,
+  req: LocalDaemonCliRequest,
 ): Promise<LocalDaemonResponse> {
   try {
     const stdout = await runOperation(engine, config, req.command, req.args || []);
     return { ok: true, stdout, exitCode: 0 };
+  } catch (err) {
+    if (err instanceof OperationError) {
+      return {
+        ok: false,
+        stderr: `Error [${err.code}]: ${err.message}${err.suggestion ? `\n  Fix: ${err.suggestion}` : ''}\n`,
+        exitCode: 1,
+      };
+    }
+    return { ok: false, error: err instanceof Error ? err.message : String(err), exitCode: 1 };
+  }
+}
+
+async function runStructuredRequest(engine: BrainEngine, req: Extract<LocalDaemonRequest, { kind: string }>): Promise<LocalDaemonResponse> {
+  try {
+    switch (req.kind) {
+      case 'tool_call': {
+        const result = await dispatchToolCall(engine, req.tool, req.params, {
+          remote: req.opts?.remote ?? true,
+          takesHoldersAllowList: req.opts?.takesHoldersAllowList,
+          sourceId: req.opts?.sourceId,
+          auth: req.opts?.auth as AuthInfo | undefined,
+          metaHook: getBrainHotMemoryMeta,
+          logger: {
+            info: (msg: string) => process.stderr.write(`[INFO] ${msg}\n`),
+            warn: (msg: string) => process.stderr.write(`[WARN] ${msg}\n`),
+            error: (msg: string) => process.stderr.write(`[ERROR] ${msg}\n`),
+          },
+        });
+        return { ok: true, result, exitCode: 0 };
+      }
+      case 'raw_sql': {
+        const result = await engine.executeRaw(req.sql, req.params ?? []);
+        return { ok: true, result, exitCode: 0 };
+      }
+      case 'engine_stats': {
+        return { ok: true, result: await engine.getStats(), exitCode: 0 };
+      }
+      case 'engine_health': {
+        return { ok: true, result: await engine.getHealth(), exitCode: 0 };
+      }
+      case 'queue_add': {
+        const { MinionQueue } = await import('./minions/queue.ts');
+        const queue = new MinionQueue(engine);
+        const result = await queue.add(req.name, req.data, req.opts as any, req.trusted);
+        return { ok: true, result: JSON.parse(JSON.stringify(result)), exitCode: 0 };
+      }
+      default: {
+        const neverReq: never = req;
+        return { ok: false, error: `unknown structured daemon request: ${(neverReq as any).kind}`, exitCode: 1 };
+      }
+    }
   } catch (err) {
     if (err instanceof OperationError) {
       return {
@@ -405,17 +487,25 @@ export async function runLocalDaemonServer(): Promise<void> {
   const actionScanner = setInterval(() => {
     void scheduler.runWrite(async () => {
       try {
-        const { scanActions, listActions, runAction } = await import('./actions.ts');
+        const { scanActions, listActions, runAction, updateActionStatus } = await import('./actions.ts');
         await scanActions(engine);
-        const due = await listActions(engine, { dueOnly: true, limit: 25 });
+        const due = await listActions(engine, { status: 'on_schedule', dueOnly: true, limit: 25 });
         for (const action of due) {
           const gateReady =
             action.eligible &&
-            ['open', 'in_progress'].includes(action.status) &&
+            action.status === 'on_schedule' &&
             ['low', 'medium'].includes(action.risk_level) &&
             (action.risk_level !== 'medium' || Boolean(action.approved_at));
           if (!gateReady) continue;
-          await runAction(engine, action.slug, { sourceId: action.source_id });
+          await updateActionStatus(engine, action.slug, 'in_progress', {
+            sourceId: action.source_id,
+            note: 'Scheduled execution started.',
+          });
+          await runAction(engine, action.slug, {
+            sourceId: action.source_id,
+            execute: true,
+            confirmed: true,
+          });
         }
       } catch (err) {
         process.stderr.write(`[voltmind-daemon] action scan failed: ${err instanceof Error ? err.message : String(err)}\n`);
@@ -429,7 +519,12 @@ export async function runLocalDaemonServer(): Promise<void> {
   const server = createServer(async (req, res) => {
     try {
       if (req.url === '/health' && req.method === 'GET') {
-        sendJson(res, 200, { ok: true, pid: process.pid, version: VERSION });
+        sendJson(res, 200, {
+          ok: true,
+          pid: process.pid,
+          version: VERSION,
+          rpc_protocol_version: LOCAL_DAEMON_RPC_PROTOCOL_VERSION,
+        });
         return;
       }
       if (req.url !== '/rpc' || req.method !== 'POST') {
@@ -442,15 +537,23 @@ export async function runLocalDaemonServer(): Promise<void> {
         return;
       }
       const parsed = JSON.parse(await readRequestBody(req)) as LocalDaemonRequest;
-      if (parsed.command === '__shutdown') {
+      if (isCliRequest(parsed) && parsed.command === '__shutdown') {
         shuttingDown = true;
         sendJson(res, 200, { ok: true, stdout: 'VoltMind daemon stopping.\n', exitCode: 0 });
         void shutdown();
         return;
       }
       const response = isParallelReadRequest(parsed)
-        ? await scheduler.runRead(() => runParallelReadOperation(engine, config, parsed))
-        : await scheduler.runWrite(() => captureCommand(() => runCommand(engine, config, parsed)));
+        ? await scheduler.runRead(() => (
+          isStructuredRequest(parsed)
+            ? runStructuredRequest(engine, parsed)
+            : runParallelReadOperation(engine, config, parsed)
+        ))
+        : await scheduler.runWrite(() => (
+          isStructuredRequest(parsed)
+            ? runStructuredRequest(engine, parsed)
+            : captureCommand(() => runCommand(engine, config, parsed))
+        ));
       sendJson(res, 200, response);
     } catch (err) {
       sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err), exitCode: 1 });
@@ -477,6 +580,7 @@ export async function runLocalDaemonServer(): Promise<void> {
 
   const state: LocalDaemonState = {
     schema_version: 1,
+    rpc_protocol_version: LOCAL_DAEMON_RPC_PROTOCOL_VERSION,
     pid: process.pid,
     port: address.port,
     token,

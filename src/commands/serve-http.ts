@@ -33,6 +33,7 @@ import { VoltMindOAuthProvider, validateTokenEndpointAuthMethod } from '../core/
 import type { SqlQuery } from '../core/oauth-provider.ts';
 import { hasScope, ALLOWED_SCOPES_LIST, normalizeScopesInput } from '../core/scope.ts';
 import { summarizeMcpParams, dispatchToolCall } from '../mcp/dispatch.ts';
+import type { DispatchOpts, ToolResult } from '../mcp/dispatch.ts';
 import { paramDefToSchema } from '../mcp/tool-defs.ts';
 import { getBrainHotMemoryMeta } from '../core/facts/meta-hook.ts';
 import { loadConfig } from '../core/config.ts';
@@ -41,6 +42,8 @@ import { VERSION } from '../version.ts';
 import * as db from '../core/db.ts';
 import { sqlQueryForEngine, executeRawJsonb } from '../core/sql-query.ts';
 import { MinionQueue } from '../core/minions/queue.ts';
+import type { MinionJob, MinionJobInput } from '../core/minions/types.ts';
+import type { TrustedSubmitOpts } from '../core/minions/queue.ts';
 import {
   computeContentHash,
   validateIngestionEvent,
@@ -118,6 +121,16 @@ function normalizeAdminHost(value: string): string {
     return host.slice(1, -1);
   }
   return host;
+}
+
+function normalizeAdminActionStatus(value: string): string {
+  const raw = value.trim().toLowerCase();
+  if (raw === 'active') return 'in_progress';
+  if (raw === 'complete' || raw === 'completed') return 'done';
+  if (raw === 'cancelled') return 'canceled';
+  if (raw === 'scheduled' || raw === 'on schedule' || raw === 'on-schedule') return 'on_schedule';
+  if (raw === 'pending' || raw === 'waiting') return 'open';
+  return raw;
 }
 
 function isLoopbackAddress(value: string): boolean {
@@ -293,6 +306,19 @@ export function resolveCorsOrigin(allowlist: Set<string> | null): cors.CorsOptio
   };
 }
 
+export type ServeToolDispatcher = (
+  name: string,
+  params: Record<string, unknown> | undefined,
+  opts: DispatchOpts,
+) => Promise<ToolResult>;
+
+export type ServeQueueAdd = (
+  name: string,
+  data?: Record<string, unknown>,
+  opts?: Partial<MinionJobInput>,
+  trusted?: TrustedSubmitOpts,
+) => Promise<MinionJob>;
+
 interface ServeHttpOptions {
   port: number;
   tokenTtl: number;
@@ -337,11 +363,21 @@ interface ServeHttpOptions {
    * tracking the regenerated value through other means.
    */
   suppressBootstrapToken?: boolean;
+  toolDispatcher?: ServeToolDispatcher;
+  queueAdd?: ServeQueueAdd;
 }
 
 interface GeneratedActionPlan {
   plan: Array<{ phase: string; steps: string[] }>;
   raw: string;
+}
+
+export interface GenerateAdminActionPlanInput {
+  sourceId?: string;
+  userPrompt?: string;
+  regenerateInstructions?: string;
+  toolDispatcher: ServeToolDispatcher;
+  generatePlan?: (prompt: string) => Promise<GeneratedActionPlan>;
 }
 
 interface GeneratedActionStep {
@@ -474,6 +510,21 @@ async function generateActionPlanWithCodex(prompt: string): Promise<GeneratedAct
   }
 }
 
+async function generateActionPlanWithFallback(prompt: string): Promise<GeneratedActionPlan> {
+  try {
+    return await generateActionPlanDirect(prompt);
+  } catch (directErr) {
+    try {
+      return await generateActionPlanWithCodex(prompt);
+    } catch (codexErr) {
+      throw new Error(
+        `Plan generation failed. Direct API: ${directErr instanceof Error ? directErr.message : String(directErr)}. ` +
+        `Codex: ${codexErr instanceof Error ? codexErr.message : String(codexErr)}`
+      );
+    }
+  }
+}
+
 function normalizeGeneratedPlan(raw: string): Array<{ phase: string; steps: string[] }> {
   let parsed: unknown;
   try {
@@ -498,6 +549,59 @@ function normalizeGeneratedPlan(raw: string): Array<{ phase: string; steps: stri
       steps,
     };
   });
+}
+
+export async function generateAdminActionPlan(
+  engine: BrainEngine,
+  slug: string,
+  input: GenerateAdminActionPlanInput,
+): Promise<{
+  plan: unknown;
+  version: number;
+  done: Record<string, boolean>;
+  raw: string;
+  identity: unknown;
+  related_runtime_context: unknown;
+}> {
+  if (!input.toolDispatcher) throw new Error('Action plan runtime query dispatcher is unavailable');
+  const {
+    buildActionPlanPromptWithContext,
+    getAction,
+    getActionPlan,
+    loadActionBodyContext,
+    loadActionIdentityContext,
+    loadActionRelatedRuntimeContext,
+    planFromGeneratedPlan,
+    saveActionPlan,
+  } = await import('../core/actions.ts');
+
+  const sourceId = input.sourceId || 'default';
+  const action = await getAction(engine, slug, sourceId);
+  if (!action) throw new Error(`Action not found: ${slug}`);
+
+  const previousPlan = await getActionPlan(engine, slug, sourceId);
+  const identityContext = await loadActionIdentityContext(engine, action);
+  const actionBody = await loadActionBodyContext(action);
+  const relatedRuntimeContext = await loadActionRelatedRuntimeContext(action, input.toolDispatcher);
+  const prompt = buildActionPlanPromptWithContext(action, {
+    userPrompt: input.userPrompt || null,
+    identityContext,
+    actionBody,
+    relatedRuntimeContext,
+    previousPlan,
+    regenerateInstructions: input.regenerateInstructions || null,
+  });
+  const result = await (input.generatePlan || generateActionPlanWithFallback)(prompt);
+  const plan = planFromGeneratedPlan(result.plan);
+  await saveActionPlan(engine, slug, plan, sourceId);
+  return {
+    plan: plan.plan,
+    version: plan.version,
+    done: plan.done,
+    raw: result.raw,
+    identity: identityContext,
+    related_runtime_context: relatedRuntimeContext,
+  };
 }
 
 async function generateActionStepDirect(prompt: string): Promise<GeneratedActionStep> {
@@ -680,6 +784,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   // than silently binding loopback only.
   const bind = options.bind ?? '127.0.0.1';
   const config = loadConfig() || { engine: 'pglite' as const };
+  const toolDispatcher: ServeToolDispatcher = options.toolDispatcher ?? ((name, params, dispatchOpts) =>
+    dispatchToolCall(engine, name, params, dispatchOpts));
 
   if (logFullParams) {
     console.error(
@@ -1335,48 +1441,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
 
   app.post('/admin/api/actions/:slug/plan', requireAdmin, express.json(), async (req: Request, res: Response) => {
     try {
-      const {
-        buildActionPlanPromptWithContext,
-        getAction,
-        getActionPlan,
-        loadActionIdentityContext,
-        planFromGeneratedPlan,
-        saveActionPlan,
-      } = await import('../core/actions.ts');
       const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
       const sourceId = typeof req.body?.source_id === 'string' ? req.body.source_id : 'default';
-      const action = await getAction(engine, slug, sourceId);
-      if (!action) {
-        res.status(404).json({ error: `Action not found: ${slug}` });
-        return;
-      }
-      const userPrompt = typeof req.body?.user_prompt === 'string' ? req.body.user_prompt : '';
-      const regenerateInstructions = typeof req.body?.instructions === 'string' ? req.body.instructions : '';
-      const previousPlan = await getActionPlan(engine, slug, sourceId);
-      const identityContext = await loadActionIdentityContext(engine, action);
-      const prompt = buildActionPlanPromptWithContext(action, {
-        userPrompt: userPrompt || null,
-        identityContext,
-        previousPlan,
-        regenerateInstructions: regenerateInstructions || null,
-      });
-      let result: GeneratedActionPlan;
       try {
-        result = await generateActionPlanDirect(prompt);
-      } catch (directErr) {
-        try {
-          result = await generateActionPlanWithCodex(prompt);
-        } catch (codexErr) {
-          throw new Error(
-            `Plan generation failed. Direct API: ${directErr instanceof Error ? directErr.message : String(directErr)}. ` +
-            `Codex: ${codexErr instanceof Error ? codexErr.message : String(codexErr)}`
-          );
+        const payload = await generateAdminActionPlan(engine, slug, {
+          sourceId,
+          userPrompt: typeof req.body?.user_prompt === 'string' ? req.body.user_prompt : '',
+          regenerateInstructions: typeof req.body?.instructions === 'string' ? req.body.instructions : '',
+          toolDispatcher,
+        });
+        res.json(payload);
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith('Action not found:')) {
+          res.status(404).json({ error: `Action not found: ${slug}` });
+          return;
         }
+        throw err;
       }
-      // Auto-persist the generated plan so it survives page switches and reloads
-      const plan = planFromGeneratedPlan(result.plan);
-      await saveActionPlan(engine, slug, plan, sourceId);
-      res.json({ plan: plan.plan, version: plan.version, done: plan.done, raw: result.raw, identity: identityContext });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
@@ -1493,6 +1574,61 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     }
   });
 
+  app.post('/admin/api/actions/:slug/tool-route', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const { regenerateActionToolRoute } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const sourceId = typeof req.body?.source_id === 'string' ? req.body.source_id : 'default';
+      const pluginProviders = Array.isArray(req.body?.plugin_providers)
+        ? req.body.plugin_providers.filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0)
+        : undefined;
+      const route = await regenerateActionToolRoute(engine, slug, {
+        sourceId,
+        allowLlm: req.body?.allow_llm !== false,
+        pluginProviders,
+        includeAllPlugins: req.body?.include_all_plugins === true,
+      });
+      res.json(route);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post('/admin/api/actions/:slug/tool-route/save', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const { saveUserActionToolRoute } = await import('../core/actions.ts');
+      const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+      const action = await saveUserActionToolRoute(engine, slug, {
+        sourceId: typeof req.body?.source_id === 'string' ? req.body.source_id : 'default',
+        selectedPlugins: Array.isArray(req.body?.selected_plugins) ? req.body.selected_plugins.filter((v: unknown): v is string => typeof v === 'string') : [],
+        selectedTools: Array.isArray(req.body?.selected_tools) ? req.body.selected_tools.filter((v: unknown): v is string => typeof v === 'string') : [],
+        blockedTools: Array.isArray(req.body?.blocked_tools) ? req.body.blocked_tools.filter((v: unknown): v is string => typeof v === 'string') : [],
+        notes: typeof req.body?.notes === 'string' ? req.body.notes : undefined,
+      });
+      res.json(action);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+
+  app.post('/admin/api/plugins/available-tool-plugins', requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { scanPluginRegistry } = await import('../core/plugin-registry.ts');
+      const registry = await scanPluginRegistry({ providers: ['openai-curated', 'openai-bundled'] });
+      const plugins = registry.plugins.map(plugin => ({
+        plugin: plugin.name,
+        display_name: plugin.displayName,
+        description: plugin.description,
+        category: plugin.category,
+        icon_data_url: plugin.iconDataUrl,
+      }));
+      res.json({ plugins });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
   app.post('/admin/api/actions/:slug/approve', requireAdmin, express.json(), async (req: Request, res: Response) => {
     try {
       const { approveAction } = await import('../core/actions.ts');
@@ -1516,6 +1652,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         now: req.body?.now === true,
         dryRun: req.body?.dry_run === true,
         userPrompt: typeof req.body?.user_prompt === 'string' ? req.body.user_prompt : null,
+        execute: req.body?.execute === true,
+        interactive: req.body?.interactive === true,
+        force: req.body?.force === true,
+        confirmed: req.body?.confirmed === true,
       });
       res.json(result);
     } catch (e) {
@@ -1528,12 +1668,13 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       const { updateActionStatus } = await import('../core/actions.ts');
       const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
       const rawStatus = typeof req.body?.status === 'string' ? req.body.status : '';
-      const allowed = new Set(['open', 'in_progress', 'done', 'blocked', 'canceled']);
-      if (!allowed.has(rawStatus)) {
+      const normalizedStatus = normalizeAdminActionStatus(rawStatus);
+      const allowed = new Set(['open', 'on_schedule', 'in_progress', 'done', 'blocked', 'canceled']);
+      if (!allowed.has(normalizedStatus)) {
         res.status(400).json({ error: 'invalid_status' });
         return;
       }
-      const action = await updateActionStatus(engine, slug, rawStatus, {
+      const action = await updateActionStatus(engine, slug, normalizedStatus, {
         sourceId: typeof req.body?.source_id === 'string' ? req.body.source_id : undefined,
         note: typeof req.body?.note === 'string' ? req.body.note : undefined,
       });
@@ -2155,9 +2296,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       // verifyAccessToken. The env-fallback is gone.
       const tokenSourceId = authInfo.sourceId ?? 'default';
 
-      let toolResult: Awaited<ReturnType<typeof dispatchToolCall>>;
+      let toolResult: Awaited<ReturnType<ServeToolDispatcher>>;
       try {
-        toolResult = await dispatchToolCall(engine, name, params as Record<string, unknown> | undefined, {
+        toolResult = await toolDispatcher(name, params as Record<string, unknown> | undefined, {
           remote: true,
           takesHoldersAllowList: tokenAllowList,
           sourceId: tokenSourceId,
@@ -2327,10 +2468,13 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     'application/json',
   ]);
 
-  // Single MinionQueue instance shared across POST /ingest invocations
-  // (the queue is stateless beyond the engine handle; reusing avoids
-  // per-request construction).
-  const ingestQueue = new MinionQueue(engine);
+  // Single MinionQueue instance shared across POST /ingest invocations on
+  // the direct-engine path. Daemon-backed serve injects queueAdd so
+  // transaction-heavy queue writes execute in the daemon process that owns
+  // PGLite.
+  const ingestQueue = options.queueAdd ? null : new MinionQueue(engine);
+  const queueAdd: ServeQueueAdd = options.queueAdd ?? ((name, data, opts, trusted) =>
+    ingestQueue!.add(name, data, opts, trusted));
 
   app.post(
     '/ingest',
@@ -2454,7 +2598,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       }
 
       try {
-        const job = await ingestQueue.add(
+        const job = await queueAdd(
           'ingest_capture',
           {
             event,
@@ -2653,8 +2797,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
 
       // Submit sync job with priority -10 (above autopilot's 0).
       try {
-        const queue = new MinionQueue(engine);
-        const job = await queue.add(
+        const job = await queueAdd(
           'sync',
           {
             sourceId: source.id,

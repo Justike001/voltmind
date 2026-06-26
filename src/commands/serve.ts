@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import type { BrainEngine } from '../core/engine.ts';
 import { startMcpServer } from '../mcp/server.ts';
+import type { McpToolDispatcher } from '../mcp/server.ts';
+import type { ServeQueueAdd, ServeToolDispatcher } from './serve-http.ts';
 
 // Maximum time the stdio path will wait for engine.disconnect() (PGLite
 // close + advisory lock release) before forcing exit. Keeps a wedged
@@ -34,6 +36,8 @@ export interface ServeOptions {
   // process.stdin and would pollute the test runner's stdin handle).
   // Defaults to the real implementation when omitted.
   startMcpServer?: (engine: BrainEngine) => Promise<void>;
+  toolDispatcher?: McpToolDispatcher & ServeToolDispatcher;
+  queueAdd?: ServeQueueAdd;
   // Test seam for the parent-process watchdog. The default
   // (`readLiveParentPid`) reads the live kernel PPID via `ps` because
   // `process.ppid` is captured at process creation and does not refresh
@@ -114,7 +118,17 @@ export async function runServe(
     const suppressBootstrapToken = args.includes('--suppress-bootstrap-token');
 
     const { runServeHttp } = await import('./serve-http.ts');
-    await runServeHttp(engine, { port, tokenTtl, enableDcr, publicUrl, logFullParams, bind, suppressBootstrapToken });
+    await runServeHttp(engine, {
+      port,
+      tokenTtl,
+      enableDcr,
+      publicUrl,
+      logFullParams,
+      bind,
+      suppressBootstrapToken,
+      toolDispatcher: opts.toolDispatcher,
+      queueAdd: opts.queueAdd,
+    });
     return;
   }
 
@@ -127,7 +141,8 @@ export async function runServe(
 
   installStdioLifecycle(engine, args, opts);
 
-  const start = opts.startMcpServer ?? startMcpServer;
+  const start = opts.startMcpServer ?? ((eng: BrainEngine) =>
+    startMcpServer(eng, { toolDispatcher: opts.toolDispatcher }));
   await start(engine);
   // startMcpServer's `await server.connect(transport)` resolves once the
   // SDK has wired up its stdin 'data' listener; that listener keeps the
