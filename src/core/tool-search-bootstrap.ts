@@ -6,7 +6,7 @@
  *   2. Matches the action's objective, title, and allowed_tools against
  *      available plugins and skills
  *   3. Returns a structured ToolSearchResult with:
- *      - Ranked matching plugins + their skill procedures
+ *      - Ranked matching plugins + skill metadata
  *      - Suggested tool scope constraints
  *      - Ready-to-inject context text for the harness prompt
  *
