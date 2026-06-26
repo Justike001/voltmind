@@ -4766,6 +4766,7 @@ export const MIGRATIONS: Migration[] = [
         archived_at TIMESTAMPTZ,
         last_run_at TIMESTAMPTZ,
         last_run_status TEXT,
+        tool_route_json JSONB,
         last_scanned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         PRIMARY KEY (source_id, slug)

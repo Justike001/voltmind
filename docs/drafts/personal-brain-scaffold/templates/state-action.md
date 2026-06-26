@@ -12,7 +12,7 @@ source_refs: []
 related_entities: []
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-status: open | in_progress | done | blocked | canceled
+status: open | on_schedule | in_progress | done | blocked | canceled
 due: YYYY-MM-DD
 priority: low | medium | high
 related_people: []
@@ -90,7 +90,7 @@ One concrete executable task. Keep it short.
 
 ## Status
 
-Open, in progress, done, blocked, or canceled.
+Open, on schedule, in progress, done, blocked, or canceled.
 
 <!-- timeline -->
 

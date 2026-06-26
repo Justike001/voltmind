@@ -2692,11 +2692,15 @@ const action_approve: Operation = {
 
 const action_run: Operation = {
   name: 'action_run',
-  description: 'Prepare a draft-only execution prompt for an approved VoltMind action. Performs no browser, email, or external side effects.',
+  description: 'Prepare or execute an indexed VoltMind action through the action runtime. Without execute=true this only prepares a draft prompt; with execute=true it enters the configured runtime backend.',
   params: {
     slug: { type: 'string', required: true, description: 'Action slug.' },
     now: { type: 'boolean', description: 'Ignore future due time and prepare now.' },
     dry_run: { type: 'boolean', description: 'Record this as a dry-run preparation.' },
+    execute: { type: 'boolean', description: 'Run through the configured action runtime instead of draft-only preparation.' },
+    interactive: { type: 'boolean', description: 'Use the Codex interactive runtime when execute=true.' },
+    force: { type: 'boolean', description: 'Skip non-approval gates such as future due time. Never bypasses approval/confirmation.' },
+    confirmed: { type: 'boolean', description: 'Mark user confirmation complete for actions that require confirmation.' },
     user_prompt: { type: 'string', description: 'Additional user prompt for this run.' },
   },
   mutating: true,
@@ -2707,6 +2711,10 @@ const action_run: Operation = {
       sourceId: ctx.sourceId,
       now: p.now === true,
       dryRun: p.dry_run === true,
+      execute: p.execute === true,
+      interactive: p.interactive === true,
+      force: p.force === true,
+      confirmed: p.confirmed === true,
       userPrompt: typeof p.user_prompt === 'string' ? p.user_prompt : null,
     });
   },

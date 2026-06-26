@@ -11,8 +11,8 @@ publish_level: never
 source_refs: []
 related_entities: []
 created: 2026-06-24T00:00:00.000Z
-updated: '2026-06-24'
-status: done
+updated: '2026-06-26'
+status: open
 priority: medium
 related_people: []
 related_project: null
@@ -88,3 +88,7 @@ Open.
 <!-- timeline -->
 
 - 2026-06-24 | VoltMind - Status set to done: E2E test passed - Codex interactive TUI sent email to justike001@163.com.
+
+<!-- timeline -->
+
+- 2026-06-26 | VoltMind - Status set to open: Unarchived from admin UI..
