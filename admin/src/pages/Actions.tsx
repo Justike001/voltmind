@@ -21,9 +21,64 @@ interface ActionRecord {
   max_autonomy: string | null;
   urgency_score?: number;
   agent_contract?: { objective?: string; context_refs?: string[]; output_target?: { type?: string; path?: string }; success_criteria?: string[] };
+  tool_route?: ActionToolRoute | null;
   outcome?: string | null;
   next_step?: string | null;
+  related_context?: ActionRelatedContext;
 }
+
+interface ActionRelatedContext {
+  related_people: string[];
+  related_project: string | null;
+  related_systems: string[];
+  related_entities: string[];
+  related_projects: string[];
+  related_workstream: string | null;
+}
+
+interface RelatedRuntimeContext {
+  hits?: unknown[];
+  warnings?: string[];
+}
+
+interface ActionToolRouteSkill {
+  name: string;
+  description: string;
+}
+
+interface ActionToolRouteCandidate {
+  plugin: string;
+  display_name: string;
+  description: string;
+  icon_data_url?: string;
+  category: string;
+  score: number;
+  reason: string;
+  skills: ActionToolRouteSkill[];
+  tools: string[];
+}
+
+interface ActionToolRoute {
+  version: 1;
+  source: 'auto' | 'llm' | 'user';
+  generated_at: string;
+  selected_plugins: string[];
+  selected_tools: string[];
+  blocked_tools: string[];
+  confidence: number;
+  reason: string;
+  candidates: ActionToolRouteCandidate[];
+  notes?: string;
+}
+
+interface ToolRouteDraft {
+  selectedPlugins: string[];
+  selectedTools: string[];
+  blockedTools: string[];
+  notes: string;
+}
+
+const toolRoutePluginProviders = ['openai-curated', 'openai-bundled'] as const;
 
 interface PlanStep {
   id: string;
@@ -45,14 +100,14 @@ interface ActionPlan {
 }
 
 const modes: Array<{ value: ActionMode; label: string; hint: string; icon: string }> = [
-  { value: 'manual', label: 'Manual', hint: 'You execute steps', icon: 'hand' },
-  { value: 'agent_assisted', label: 'Agent Assisted', hint: 'Plan with agent, you execute', icon: 'bot' },
-  { value: 'agent_executable', label: 'Agent Executable', hint: 'Agent executes end-to-end', icon: 'rocket' },
+  { value: 'manual', label: 'Manual', hint: 'Human-run checklist actions', icon: 'hand' },
+  { value: 'agent_assisted', label: 'Agent Assisted', hint: 'Agent prepares the plan; human starts execution', icon: 'bot' },
+  { value: 'agent_executable', label: 'Agent Executable', hint: 'Agent can run the approved action end to end', icon: 'rocket' },
 ];
 
 const ACTIONS_STATUS_FILTER_KEY = 'voltmind.admin.actions.statusFilter';
 const ACTIONS_INSPECTOR_WIDTH_KEY = 'voltmind.admin.actions.inspectorWidth';
-const validStatusFilters = new Set(['', 'open', 'in_progress', 'blocked', 'done', 'canceled']);
+const validStatusFilters = new Set(['', 'open', 'on_schedule', 'in_progress', 'blocked', 'canceled']);
 const MIN_INSPECTOR_WIDTH = 360;
 const MAX_INSPECTOR_WIDTH = 760;
 const DEFAULT_INSPECTOR_WIDTH = 520;
@@ -83,7 +138,31 @@ function scoreTone(score: number): 'hot' | 'warm' | 'cool' {
   return 'cool';
 }
 
+function routePluginIcon(plugin: string): string {
+  const id = plugin.toLowerCase();
+  if (id.includes('email') || id.includes('mail')) return 'mail';
+  if (id.includes('teams')) return 'messages';
+  if (id.includes('calendar')) return 'calendar';
+  if (id.includes('browser') || id.includes('chrome')) return 'browser';
+  return 'plugin';
+}
+
 function Icon({ name }: { name: string }) {
+  if (name === 'mail') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z" /><path d="m4 7 8 6 8-6" /></svg>;
+  }
+  if (name === 'messages') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14v9H8l-3 3z" /><path d="M8 9h8M8 12h5" /></svg>;
+  }
+  if (name === 'calendar') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v15H5z" /><path d="M8 3v4M16 3v4M5 10h14" /><path d="M8 14h2M12 14h2M16 14h1M8 17h2M12 17h2" /></svg>;
+  }
+  if (name === 'browser') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z" /><path d="M4 9h16" /><path d="M8 7h.01M11 7h.01" /></svg>;
+  }
+  if (name === 'plugin') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5h4v7h-5v4H8v-4H4V9h4z" /></svg>;
+  }
   if (name === 'bot') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9V6.5a4 4 0 0 1 8 0V9" /><path d="M5 10.5h14v8H5z" /><path d="M9 14h.01M15 14h.01M9 18h6" /><path d="M3 14h2M19 14h2" /></svg>;
   }
@@ -102,6 +181,15 @@ function Icon({ name }: { name: string }) {
   if (name === 'block') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="m8 8 8 8" /></svg>;
   }
+  if (name === 'x') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>;
+  }
+  if (name === 'arrow-right') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /><path d="M12 5l7 7-7 7" /></svg>;
+  }
+  if (name === 'help') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.5 10.2a2.6 2.6 0 0 1 5 1c0 1.8-2.5 2.2-2.5 3.8" /><path d="M12 17h.01" /></svg>;
+  }
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 5 8l3 3" /><path d="M16 19l3-3-3-3" /><path d="M5 8h14M5 16h14" /></svg>;
 }
 
@@ -112,6 +200,33 @@ function riskBadge(risk: string) {
 function priorityBadge(priority: string | null) {
   const value = priority || 'none';
   return <span className={`vm-chip vm-priority-${value}`}>{priorityLabels[value] || value.toUpperCase()}</span>;
+}
+
+function normalizeRelatedContext(context: ActionRelatedContext | undefined): ActionRelatedContext {
+  return {
+    related_people: context?.related_people || [],
+    related_project: context?.related_project || null,
+    related_systems: context?.related_systems || [],
+    related_entities: context?.related_entities || [],
+    related_projects: context?.related_projects || [],
+    related_workstream: context?.related_workstream || null,
+  };
+}
+
+function relatedEntries(action: ActionRecord): Array<{ label: string; values: string[] }> {
+  const context = normalizeRelatedContext(action.related_context);
+  return [
+    { label: 'People', values: context.related_people },
+    { label: 'Project', values: context.related_project ? [context.related_project] : [] },
+    { label: 'Projects', values: context.related_projects },
+    { label: 'Workstream', values: context.related_workstream ? [context.related_workstream] : [] },
+    { label: 'Systems', values: context.related_systems },
+    { label: 'Entities', values: context.related_entities },
+  ].filter(group => group.values.length > 0);
+}
+
+function relatedChipText(value: string): string {
+  return value.replace(/^(people|projects|workstreams|systems|companies|concepts)\//, '');
 }
 
 function statusBadge(status: string) {
@@ -173,15 +288,13 @@ function withDoneMap(plan: ActionPlan): ActionPlan {
   };
 }
 
-function serializePlan(plan: ActionPlan | null): string {
-  if (!plan?.plan.length) return '';
-  return [
-    'Generated execution todo list:',
-    ...plan.plan.flatMap((phase, index) => [
-      `${index + 1}. ${phase.phase.replace(/^\d+\.\s*/, '')}`,
-      ...phase.steps.map(step => `- [${step.done ? 'x' : ' '}] ${step.text}${step.note ? `\n  Note: ${step.note}` : ''}`),
-    ]),
-  ].join('\n');
+function normalizeToolRouteDraft(route: ActionToolRoute | null | undefined): ToolRouteDraft {
+  return {
+    selectedPlugins: route?.selected_plugins || [],
+    selectedTools: route?.selected_tools || [],
+    blockedTools: route?.blocked_tools || [],
+    notes: route?.notes || '',
+  };
 }
 
 function getSavedStatusFilter(): string {
@@ -239,15 +352,21 @@ export function ActionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<ActionPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
+  const [planContextWarnings, setPlanContextWarnings] = useState<string[]>([]);
+  const [toolRouteDraft, setToolRouteDraft] = useState<ToolRouteDraft>(normalizeToolRouteDraft(null));
+  const [toolRouteLoading, setToolRouteLoading] = useState(false);
+  const [availablePlugins, setAvailablePlugins] = useState<ActionToolRouteCandidate[]>([]);
+  const [pluginsLoading, setPluginsLoading] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [inspectorWidth, setInspectorWidth] = useState(getSavedInspectorWidth);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(true);
 
   const load = async (status: string) => {
     setLoading(true);
     try {
       const qs = status ? `?status=${encodeURIComponent(status)}&limit=150` : '?limit=150';
       const rows: ActionRecord[] = await api.actions(qs);
-      setActions(rows);
+      setActions(status ? rows : rows.filter(row => row.status !== 'done'));
       setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       setError(null);
     } catch (e) {
@@ -295,13 +414,15 @@ export function ActionsPage() {
 
   const visibleActions = useMemo(() => actions.filter(a => a.mode === mode), [actions, mode]);
   const current = useMemo(() => {
-    if (!selectedKey) return visibleActions[0] || null;
-    return visibleActions.find(a => actionKey(a) === selectedKey) || visibleActions[0] || null;
+    if (!selectedKey) return null;
+    return visibleActions.find(a => actionKey(a) === selectedKey) || null;
   }, [visibleActions, selectedKey]);
+  const inspectorOpen = Boolean(current && !inspectorCollapsed);
 
   useEffect(() => {
     setExecutionPrompt('');
     setWholePlanInstructions('');
+    setPlanContextWarnings([]);
     if (!current) {
       setPlan(null);
       return;
@@ -309,6 +430,7 @@ export function ActionsPage() {
     setDueEdit(toDatetimeLocal(current.due_at));
     setModeEdit(current.mode);
     setPriorityEdit(current.priority || 'medium');
+    setToolRouteDraft(normalizeToolRouteDraft(current.tool_route));
     let cancelled = false;
     api.getActionPlan(current.slug, current.source_id || 'default')
       .then(saved => {
@@ -317,8 +439,35 @@ export function ActionsPage() {
       .catch(() => {
         if (!cancelled) setPlan(null);
       });
+    if (current.mode !== 'manual') {
+      setPluginsLoading(true);
+      api.listAvailableToolPlugins()
+        .then(({ plugins }) => {
+          if (cancelled) return;
+          const normalized = plugins.map((p: any) => ({
+            plugin: p.plugin || '',
+            display_name: p.display_name || p.plugin || '',
+            description: p.description || '',
+            category: p.category || 'Other',
+            score: 0,
+            reason: '',
+            skills: [],
+            tools: [],
+            icon_data_url: p.icon_data_url,
+          }));
+          setAvailablePlugins(normalized);
+          const savedPlugin = current.tool_route?.selected_plugins?.[0];
+          if (savedPlugin && !normalized.find((c: ActionToolRouteCandidate) => c.plugin === savedPlugin)) {
+            setToolRouteDraft(normalizeToolRouteDraft(null));
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setPluginsLoading(false);
+        });
+    }
     return () => { cancelled = true; };
-  }, [current?.source_id, current?.slug]);
+  }, [current?.source_id, current?.slug, current?.mode]);
 
   const replaceAction = (updated: ActionRecord) => {
     const key = actionKey(updated);
@@ -328,6 +477,7 @@ export function ActionsPage() {
     setModeEdit(updated.mode);
     setPriorityEdit(updated.priority || 'medium');
     setDueEdit(toDatetimeLocal(updated.due_at));
+    setToolRouteDraft(normalizeToolRouteDraft(updated.tool_route));
   };
 
   const commitActionPatch = async (
@@ -381,6 +531,8 @@ export function ActionsPage() {
         ? await api.regenerateActionPlan(current.slug, current.source_id, wholePlanInstructions, executionPrompt)
         : await api.generateActionPlan(current.slug, current.source_id, executionPrompt);
       setPlan(normalizePlan(result));
+      const relatedRuntime = (result as { related_runtime_context?: RelatedRuntimeContext }).related_runtime_context;
+      setPlanContextWarnings(Array.isArray(relatedRuntime?.warnings) ? relatedRuntime.warnings : []);
       setWholePlanInstructions('');
       setError(null);
     } catch (e) {
@@ -418,12 +570,33 @@ export function ActionsPage() {
     await persistPlan(next);
   };
 
-  const allPlanDone = Boolean(plan?.plan.length) && plan!.plan.every(phase => phase.steps.every(step => step.done));
+  const saveSelectedToolRoute = async (pluginName: string) => {
+    if (!current) return;
+    const candidate = availablePlugins.find(c => c.plugin === pluginName);
+    if (!candidate) return;
+    const nextDraft: ToolRouteDraft = {
+      selectedPlugins: [candidate.plugin],
+      selectedTools: candidate.tools,
+      blockedTools: [],
+      notes: '',
+    };
+    setToolRouteDraft(nextDraft);
+    setToolRouteLoading(true);
+    try {
+      const updated: ActionRecord = await api.saveActionToolRoute(current.slug, current.source_id || 'default', nextDraft);
+      replaceAction(updated);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setToolRouteLoading(false);
+    }
+  };
+
   const checkedCount = Object.values(checked).filter(Boolean).length;
   const modeCounts = Object.fromEntries(modes.map(m => [m.value, actions.filter(a => a.mode === m.value).length]));
-  const selectedScore = current ? scoreValue(current) : 0;
-  const selectedTone = scoreTone(selectedScore);
   const planStepCount = plan?.plan.reduce((sum, phase) => sum + phase.steps.length, 0) || 0;
+  const selectedToolCandidate = availablePlugins.find(candidate => candidate.plugin === toolRouteDraft.selectedPlugins[0]) || null;
 
   const scan = async () => {
     setLoading(true);
@@ -439,15 +612,60 @@ export function ActionsPage() {
 
   const approve = async () => {
     if (!current) return;
-    const updated = await api.approveAction(current.slug, current.source_id);
-    replaceAction(updated);
+    const hasSchedule = Boolean(dueEdit || current.due_at);
+    const hasPlan = Boolean(plan?.plan.length);
+    const hasTool = current.mode === 'manual' || toolRouteDraft.selectedPlugins.length > 0;
+    if (!hasSchedule) {
+      setError('Set a schedule before approving this action.');
+      return;
+    }
+    if (!hasPlan) {
+      setError('Generate or save a plan before approving this action.');
+      return;
+    }
+    if (!hasTool) {
+      setError('Choose a tool before approving this action.');
+      return;
+    }
+
+    setSaving('approve');
+    try {
+      if (dueEdit !== toDatetimeLocal(current.due_at)) {
+        await api.updateActionPatch(current.slug, current.source_id, { dueAt: dueEdit || null });
+      }
+      await api.approveAction(current.slug, current.source_id);
+      await api.setActionStatus(current.slug, current.source_id || 'default', 'on_schedule', 'Approved plan and scheduled from action cockpit.');
+      await load(statusFilter);
+      setSelectedKey(null);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(null);
+    }
   };
 
   const run = async () => {
     if (!current) return;
-    await api.setActionStatus(current.slug, current.source_id || 'default', 'in_progress');
-    await api.runAction(current.slug, current.source_id, [serializePlan(plan), executionPrompt ? `User execution instructions:\n${executionPrompt}` : ''].filter(Boolean).join('\n\n'));
-    await load(statusFilter);
+    setSaving('start');
+    try {
+      await api.setActionStatus(current.slug, current.source_id || 'default', 'in_progress', 'Started from action cockpit.');
+      if (current.mode !== 'manual') {
+        await api.runAction(current.slug, current.source_id, {
+          userPrompt: executionPrompt,
+          execute: true,
+          interactive: true,
+          confirmed: true,
+          force: true,
+        });
+      }
+      await load(statusFilter);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(null);
+    }
   };
 
   const archiveCurrent = async (note: string) => {
@@ -472,18 +690,50 @@ export function ActionsPage() {
     }
   };
 
-  const archiveManual = async () => {
-    await archiveCurrent('Archived from manual action cockpit.');
-  };
-
   const markDone = async () => {
     await archiveCurrent('Marked done from action cockpit.');
+  };
+
+  const blockCurrent = async () => {
+    if (!current) return;
+    setSaving('block');
+    try {
+      await api.setActionStatus(current.slug, current.source_id, 'blocked', 'Blocked from action cockpit.');
+      await load(statusFilter);
+      setSelectedKey(null);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const cancelCurrent = async () => {
+    if (!current) return;
+    setSaving('cancel');
+    try {
+      await api.setActionStatus(current.slug, current.source_id, 'canceled', 'Canceled from action cockpit.');
+      await load(statusFilter);
+      setSelectedKey(null);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(null);
+    }
   };
 
   const runChecked = async () => {
     const rows = visibleActions.filter(a => checked[actionKey(a)] && a.mode !== 'manual');
     for (const a of rows) {
-      await api.runAction(a.slug, a.source_id, current && actionKey(a) === actionKey(current) ? serializePlan(plan) : '');
+     await api.runAction(a.slug, a.source_id, {
+       userPrompt: current && actionKey(a) === actionKey(current) ? executionPrompt : '',
+       execute: true,
+       interactive: true,
+       confirmed: true,
+       force: true,
+     });
     }
     await load(statusFilter);
     setChecked({});
@@ -504,9 +754,9 @@ export function ActionsPage() {
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="">All</option>
               <option value="open">Open</option>
+              <option value="on_schedule">On Schedule</option>
               <option value="in_progress">In progress</option>
               <option value="blocked">Blocked</option>
-              <option value="done">Done</option>
               <option value="canceled">Canceled</option>
             </select>
           </label>
@@ -516,16 +766,15 @@ export function ActionsPage() {
       {error && <div className="action-error">{error}</div>}
 
       <div
-        className="actions-board"
+        className={`actions-board ${inspectorOpen ? 'inspector-open' : 'inspector-hidden'}`}
         style={{ '--inspector-width': `${inspectorWidth}px` } as React.CSSProperties}
       >
         <section className="actions-queue-panel">
           <div className="mode-switch">
             {modes.map(item => (
-              <button key={item.value} className={`mode-switch-item ${mode === item.value ? 'active' : ''}`} onClick={() => { setMode(item.value); setSelectedKey(null); }}>
+              <button key={item.value} className={`mode-switch-item ${mode === item.value ? 'active' : ''}`} title={item.hint} onClick={() => { setMode(item.value); setSelectedKey(null); setInspectorCollapsed(true); }}>
                 <Icon name={item.icon} />
                 <span>{item.label}</span>
-                <small>{item.hint}</small>
                 <em>{modeCounts[item.value] || 0}</em>
               </button>
             ))}
@@ -547,7 +796,12 @@ export function ActionsPage() {
                   <th>Priority</th>
                   <th>Due (Local)</th>
                   <th>Remaining</th>
-                  <th>Score</th>
+                  <th>
+                    <span className="score-heading">
+                      Score
+                      <span className="score-help" title="Score = Risk (20%) + Deadline (45%) + Priority (35%). Higher score rises first."><Icon name="help" /></span>
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -556,8 +810,9 @@ export function ActionsPage() {
                 ) : visibleActions.map(a => {
                   const key = actionKey(a);
                   const score = scoreValue(a);
+                  const related = relatedEntries(a).flatMap(group => group.values.map(value => ({ group: group.label, value }))).slice(0, 4);
                   return (
-                    <tr key={key} className={current && actionKey(current) === key ? 'selected' : ''} onClick={() => setSelectedKey(key)}>
+                    <tr key={key} className={current && actionKey(current) === key ? 'selected' : ''} onClick={() => { setSelectedKey(key); setInspectorCollapsed(false); }}>
                       <td className="select-col" onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
@@ -566,7 +821,20 @@ export function ActionsPage() {
                           onChange={e => setChecked({ ...checked, [key]: e.target.checked })}
                         />
                       </td>
-                      <td><strong>{a.title}</strong></td>
+                      <td>
+                        <div className="action-title-cell">
+                          <strong>{a.title}</strong>
+                          {related.length > 0 && (
+                            <div className="related-chip-row">
+                              {related.map(item => (
+                                <span key={`${item.group}:${item.value}`} className="related-chip" title={`${item.group}: ${item.value}`}>
+                                  {relatedChipText(item.value)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td><span className="source-path">{a.slug.replace(/^state\/actions\//, '')}</span></td>
                       <td>{statusBadge(a.status)}</td>
                       <td>{riskBadge(a.risk_level)}</td>
@@ -590,15 +858,6 @@ export function ActionsPage() {
             </footer>
           </div>
 
-          <div className="score-formula">
-            <span>Score =</span>
-            <strong>Risk (20%)</strong>
-            <span>+</span>
-            <strong>Deadline (45%)</strong>
-            <span>+</span>
-            <strong>Priority (35%)</strong>
-            <em>Higher score rises first.</em>
-          </div>
         </section>
 
         <aside className="action-inspector">
@@ -613,7 +872,7 @@ export function ActionsPage() {
           ) : (
             <>
               <div className="inspector-nav">
-                <button className="back-link" onClick={() => setSelectedKey(null)}>Back to list</button>
+                <button className="back-link" onClick={() => setInspectorCollapsed(true)}><Icon name="arrow-right" />Back to list</button>
               </div>
               <div className="inspector-heading">
                 <h2>{current.title}</h2>
@@ -628,6 +887,22 @@ export function ActionsPage() {
                   <input readOnly value={current.next_step || 'No next step captured yet.'} />
                 </label>
               </div>
+
+              {relatedEntries(current).length > 0 && (
+                <div className="related-context-panel">
+                  <h3>Related Context</h3>
+                  {relatedEntries(current).map(group => (
+                    <div className="related-context-group" key={group.label}>
+                      <span>{group.label}</span>
+                      <div className="related-chip-row">
+                        {group.values.map(value => (
+                          <span key={value} className="related-chip" title={value}>{relatedChipText(value)}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="review-grid">
                 <label>Mode (Review)
@@ -672,13 +947,39 @@ export function ActionsPage() {
                 </label>
               </div>
 
-              <div className="inspector-facts">
-                <div><small>Risk</small><span className={`fact-risk-${current.risk_level}`}>{current.risk_level}</span></div>
-                <div><small>Priority</small><span>{priorityLabels[current.priority || 'none'] || '-'}</span></div>
-                <div><small>Due</small><span>{formatDue(current.due_at)}</span></div>
-                <div><small>Remaining</small><span>{remaining(current.due_at)}</span></div>
-                <div><small>Score</small><span className={`fact-score-${selectedTone}`}>{selectedScore || '-'}</span></div>
-              </div>
+              {current.mode !== 'manual' && (
+                <div className="tool-route-panel">
+                  <label className="tool-route-select">Tool
+                    <select
+                      value={toolRouteDraft.selectedPlugins[0] || ''}
+                      onChange={e => void saveSelectedToolRoute(e.target.value)}
+                      disabled={pluginsLoading || availablePlugins.length === 0}
+                    >
+                      <option value="" disabled>{pluginsLoading ? 'Scanning plugins...' : 'Choose a plugin tool'}</option>
+                      {availablePlugins.map(candidate => (
+                        <option key={candidate.plugin} value={candidate.plugin}>
+                          {candidate.display_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {selectedToolCandidate && (
+                    <div className="tool-route-selected">
+                      <span className="tool-route-icon">
+                        {selectedToolCandidate.icon_data_url
+                          ? <img src={selectedToolCandidate.icon_data_url} alt="" />
+                          : <Icon name={routePluginIcon(selectedToolCandidate.plugin)} />}
+                      </span>
+                      <span className="tool-route-plugin-body">
+                        <strong>@{selectedToolCandidate.plugin}</strong>
+                        <small>{selectedToolCandidate.display_name} · {selectedToolCandidate.category}</small>
+                        {selectedToolCandidate.description && <em>{selectedToolCandidate.description}</em>}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="plan-container">
                 <div className="plan-header-row">
@@ -689,27 +990,43 @@ export function ActionsPage() {
                   <button className="btn btn-primary" onClick={() => handleGeneratePlan(Boolean(plan))} disabled={planLoading || (Boolean(plan) && !wholePlanInstructions.trim())}>Apply</button>
                 </div>
                 {planLoading && <div className="plan-loading">Generating...</div>}
+                {planContextWarnings.length > 0 && (
+                  <div className="plan-context-warning">
+                    {planContextWarnings.map(warning => <div key={warning}>{warning}</div>)}
+                  </div>
+                )}
                 {plan && (
                   <>
                     <div className="plan-list">
                       {plan.plan.map((phase, pi) => (
                         <div key={`${phase.phase}:${pi}`} className="plan-phase-block">
-                          {plan.plan.length > 1 && <div className="plan-phase">{phase.phase}</div>}
+                          {plan.plan.length > 1 && (
+                            <div className="plan-phase">
+                              <span>{phase.phase}</span>
+                              <em>{phase.steps.length} steps</em>
+                            </div>
+                          )}
                           {phase.steps.map((step, si) => (
-                            <div key={step.id} className="plan-item">
-                              <span className="drag-handle">::</span>
-                              <input className="plan-item-checkbox" type="checkbox" checked={step.done} onChange={() => updatePlanStep(pi, si, { done: !step.done })} />
-                              <div className="plan-item-main">
-                                <span className={`plan-item-text${step.done ? ' plan-item-done' : ''}`}>{step.text}</span>
+                            <div key={step.id} className={`plan-item${step.done ? ' plan-item-complete' : ''}`}>
+                              <span className="plan-step-index">{pi + 1}.{si + 1}</span>
+                              <label className="plan-check-shell" title={step.done ? 'Mark step open' : 'Mark step done'}>
+                                <input className="plan-item-checkbox" type="checkbox" checked={step.done} onChange={() => updatePlanStep(pi, si, { done: !step.done })} />
+                              </label>
+                              <div className="plan-item-body">
+                                <div className="plan-item-main">
+                                  <span className={`plan-item-text${step.done ? ' plan-item-done' : ''}`}>{step.text}</span>
+                                </div>
+                                <div className="plan-item-tools">
+                                  <input
+                                    className="step-note"
+                                    value={step.note}
+                                    onChange={e => patchPlanStepLocal(pi, si, { note: e.target.value })}
+                                    onBlur={() => plan && persistPlan(plan)}
+                                    placeholder="Add feedback..."
+                                  />
+                                  <button className="icon-btn" title="Regenerate this step" onClick={() => regenerateStep(pi, si)} disabled={planLoading}><Icon name="refresh" /></button>
+                                </div>
                               </div>
-                              <input
-                                className="step-note"
-                                value={step.note}
-                                onChange={e => patchPlanStepLocal(pi, si, { note: e.target.value })}
-                                onBlur={() => plan && persistPlan(plan)}
-                                placeholder="Add feedback..."
-                              />
-                              <button className="icon-btn" title="Regenerate this step" onClick={() => regenerateStep(pi, si)} disabled={planLoading}><Icon name="refresh" /></button>
                             </div>
                           ))}
                         </div>
@@ -733,19 +1050,23 @@ export function ActionsPage() {
                 </div>
               )}
 
-              {current.mode === 'manual' ? (
-                <div className="manual-archive-panel">
-                  <span>{allPlanDone ? 'Plan complete. Ready to archive this manual action.' : 'Manual actions archive after every generated plan checkbox is complete.'}</span>
-                  <button className="btn btn-primary" onClick={archiveManual} disabled={!allPlanDone || saving === 'archive'}><Icon name="check" />Archive action</button>
-                </div>
-              ) : (
-                <div className="action-detail-actions">
-                  <button className="btn btn-success" onClick={approve}><Icon name="check" />Approve Plan</button>
-                  <button className="btn btn-primary" onClick={run}><Icon name="play" />Start</button>
-                  <button className="btn btn-warning" onClick={() => api.setActionStatus(current.slug, current.source_id, 'blocked').then(() => load(statusFilter))}><Icon name="block" />Block</button>
-                  <button className="btn btn-secondary" onClick={markDone} disabled={saving === 'archive'}><Icon name="check" />Mark Done</button>
-                </div>
-              )}
+              <div className="action-detail-actions">
+                {current.status === 'open' && (
+                  <button className="btn btn-success" onClick={approve} disabled={saving === 'approve'}><Icon name="check" />Approve Plan</button>
+                )}
+                {(current.status === 'open' || current.status === 'on_schedule') && (
+                  <button className="btn btn-primary" onClick={run} disabled={saving === 'start'}><Icon name="play" />Start</button>
+                )}
+                {current.status === 'in_progress' && (
+                  <button className="btn btn-warning" onClick={blockCurrent} disabled={saving === 'block'}><Icon name="block" />Blocked</button>
+                )}
+                {(current.status === 'open' || current.status === 'on_schedule' || (current.mode === 'manual' && current.status === 'in_progress')) && (
+                  <button className="btn btn-secondary" onClick={markDone} disabled={saving === 'archive'}><Icon name="check" />Done</button>
+                )}
+                {['open', 'on_schedule', 'in_progress'].includes(current.status) && (
+                  <button className="btn btn-danger" onClick={cancelCurrent} disabled={saving === 'cancel'}><Icon name="x" />Cancel</button>
+                )}
+              </div>
 
               <p className="execution-note">{current.mode === 'manual' ? 'Agent will not execute. You use the plan as guidance.' : 'Agent will not execute until the action is approved and started.'}</p>
             </>

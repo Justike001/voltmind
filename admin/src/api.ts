@@ -63,10 +63,60 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ source_id: sourceId, approved_by: 'admin-ui' }),
     }),
-  runAction: (slug: string, sourceId = 'default', userPrompt = '') =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/run`, {
+  runAction: (
+    slug: string,
+    sourceId = 'default',
+    options: string | {
+      userPrompt?: string;
+      execute?: boolean;
+      interactive?: boolean;
+      confirmed?: boolean;
+      force?: boolean;
+      dryRun?: boolean;
+    } = '',
+  ) => {
+    const body = typeof options === 'string'
+      ? { source_id: sourceId, now: true, user_prompt: options }
+      : {
+          source_id: sourceId,
+          now: true,
+          user_prompt: options.userPrompt || '',
+          execute: options.execute === true,
+          interactive: options.interactive === true,
+          confirmed: options.confirmed === true,
+          force: options.force === true,
+          dry_run: options.dryRun === true,
+        };
+    return apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/run`, {
       method: 'POST',
-      body: JSON.stringify({ source_id: sourceId, now: true, user_prompt: userPrompt }),
+      body: JSON.stringify(body),
+    });
+  },
+  listAvailableToolPlugins: () => apiFetch('/admin/api/plugins/available-tool-plugins', { method: 'POST', body: '{}' }),
+
+  regenerateActionToolRoute: (slug: string, sourceId = 'default', pluginProviders?: readonly string[], includeAllPlugins = false) =>
+    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/tool-route`, {
+      method: 'POST',
+      body: JSON.stringify({
+        source_id: sourceId,
+        plugin_providers: pluginProviders && pluginProviders.length ? pluginProviders : undefined,
+        include_all_plugins: includeAllPlugins,
+      }),
+    }),
+  saveActionToolRoute: (
+    slug: string,
+    sourceId = 'default',
+    route: { selectedPlugins: string[]; selectedTools: string[]; blockedTools: string[]; notes?: string },
+  ) =>
+    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/tool-route/save`, {
+      method: 'POST',
+      body: JSON.stringify({
+        source_id: sourceId,
+        selected_plugins: route.selectedPlugins,
+        selected_tools: route.selectedTools,
+        blocked_tools: route.blockedTools,
+        notes: route.notes,
+      }),
     }),
   saveActionPlan: (slug: string, sourceId = 'default', plan: any) =>
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/plan/save`, {

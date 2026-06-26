@@ -6,12 +6,22 @@ import { operations } from '../core/operations.ts';
 import { VERSION } from '../version.ts';
 import { buildToolDefs } from './tool-defs.ts';
 import { dispatchToolCall, validateParams, buildOperationContext } from './dispatch.ts';
+import type { DispatchOpts, ToolResult } from './dispatch.ts';
 import { getBrainHotMemoryMeta } from '../core/facts/meta-hook.ts';
 import { filterVoltMindMvpOperations, isVoltMindMvpOperationName } from '../core/mvp-surface.ts';
 
 const mvpOperations = filterVoltMindMvpOperations(operations);
 
-export async function startMcpServer(engine: BrainEngine) {
+export type McpToolDispatcher = (
+  name: string,
+  params: Record<string, unknown> | undefined,
+  opts: DispatchOpts,
+) => Promise<ToolResult>;
+
+export async function startMcpServer(
+  engine: BrainEngine,
+  opts: { toolDispatcher?: McpToolDispatcher } = {},
+) {
   const server = new Server(
     { name: 'voltmind', version: VERSION },
     { capabilities: { tools: {} } },
@@ -36,7 +46,9 @@ export async function startMcpServer(engine: BrainEngine) {
     // see private hunches via takes_list / takes_search / query. Operators
     // who want stdio to see everything should call ops directly via
     // `voltmind call <op>` (sets remote=false in src/cli.ts).
-    return dispatchToolCall(engine, name, params, {
+    const dispatch = opts.toolDispatcher ?? ((toolName, toolParams, dispatchOpts) =>
+      dispatchToolCall(engine, toolName, toolParams, dispatchOpts));
+    return dispatch(name, params, {
       remote: true,
       takesHoldersAllowList: ['world'],
       // v0.31: source defaults to 'default' for stdio (no per-token scope).

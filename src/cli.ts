@@ -1288,6 +1288,36 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
+  if (command === 'serve') {
+    const { runServe } = await import('./commands/serve.ts');
+    if (process.env.VOLTMIND_DAEMON_BYPASS !== '1') {
+      const { resolveDaemonBackedServeRuntime } = await import('./core/daemon-engine.ts');
+      const daemon = await resolveDaemonBackedServeRuntime();
+      if (daemon.kind === 'compatible') {
+        process.stderr.write(
+          `[voltmind serve] using local daemon pid ${daemon.runtime.state.pid} on port ${daemon.runtime.state.port} for DB access\n`,
+        );
+        await runServe(daemon.runtime.engine, args, {
+          toolDispatcher: daemon.runtime.toolDispatcher,
+          queueAdd: daemon.runtime.queueAdd,
+        });
+        return;
+      }
+      if (daemon.kind === 'incompatible') {
+        console.error(
+          `A local VoltMind daemon is already running (pid ${daemon.state.pid}, port ${daemon.state.port}) ` +
+          `but cannot serve daemon-backed \`voltmind serve\`: ${daemon.reason}.`,
+        );
+        console.error('Restart it with this VoltMind version: voltmind daemon stop && voltmind daemon start');
+        process.exit(1);
+      }
+    }
+
+    const engine = await connectEngine();
+    await runServe(engine, args);
+    return; // serve doesn't disconnect
+  }
+
   // v0.41.6.0 D3 (per outside-voice F1): connect-time + dispatch-time wallclock
   // timeouts for read-only commands whose hang would otherwise spin at 100% CPU
   // (the production "10-day zombie voltmind search ping" bug class). The wrap
@@ -1367,11 +1397,6 @@ async function handleCliOnly(command: string, args: string[]) {
         const { runEmbed } = await import('./commands/embed.ts');
         await runEmbed(engine, args);
         break;
-      }
-      case 'serve': {
-        const { runServe } = await import('./commands/serve.ts');
-        await runServe(engine, args);
-        return; // serve doesn't disconnect
       }
       case 'call': {
         const { runCall } = await import('./commands/call.ts');
