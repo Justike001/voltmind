@@ -115,6 +115,7 @@ If you are writing or reviewing an operation, consult:
 - **Embed content:** `voltmind embed --stale`
 - **Search:** `voltmind search "keyword"` or `voltmind query "question"`
 - **Serve MCP:** `voltmind serve` for stdio or `voltmind serve --http --port 7331`
+- **Launch Admin UI:** `$env:VOLTMIND_ADMIN_AUTO_LOGIN_LOCAL='1'; voltmind serve --http --port 7331` — opens `http://127.0.0.1:7331/admin` without bootstrap token. If a compatible local daemon is already running, `serve --http` uses daemon-backed DB access and does not acquire the PGLite lock itself; otherwise it owns PGLite directly. See daemon section below for coexistence rules.
 - **Inspect tools:** `voltmind --tools-json`
 - **Check providers:** `voltmind providers list`, `voltmind providers test`
 - **Check health:** `voltmind status`, `voltmind doctor --fast`, `voltmind health`
@@ -182,7 +183,82 @@ voltmind storage unlock-pglite --stale-only
 lock. `VOLTMIND_PGLITE_STALE_MS` controls when a lock is considered stale; raise
 it explicitly for long `import`/`embed` runs.
 
-Prefer the local daemon for interactive Personal Brain sessions:
+The preferred coexistence model is: exactly one process owns PGLite, and
+everyone else talks to that owner over local authenticated RPC. When a compatible
+local daemon is already running, the daemon owns the PGLite lock. CLI commands,
+`serve --http`, stdio MCP serve, Admin/OAuth readouts, MCP tool execution, and
+webhook job submission should route DB work through the daemon instead of
+opening PGLite directly.
+
+`serve` intentionally remains `CLI_ONLY`; do not add it to
+`LOCAL_DAEMON_COMMANDS`. It must keep hosting its own HTTP/Admin/OAuth/MCP
+surface, while borrowing daemon DB execution through the daemon protocol v2
+structured RPC calls.
+
+**Mode A: daemon-backed Admin UI (recommended when CLI and browser sessions share one brain)**
+Start the daemon first, then start `serve --http`. The serve process should log
+that it is using the local daemon for DB access and should not acquire the
+PGLite lock itself.
+
+```bash
+voltmind daemon start
+$env:VOLTMIND_ADMIN_AUTO_LOGIN_LOCAL='1'
+voltmind serve --http --port 7331
+# Admin dashboard: http://127.0.0.1:7331/admin
+```
+
+When daemon-backed mode is active:
+
+- CLI commands keep forwarding to the daemon automatically.
+- `serve --http` owns the public HTTP/Admin/OAuth/MCP surface, but DB work runs
+  in the daemon.
+- HTTP MCP auth, scope checks, and request logging stay in `serve-http.ts`.
+- Actual MCP operation execution runs through daemon RPC `tool_call`.
+- Webhook/ingest/sync job submission runs through daemon RPC `queue_add`, so
+  `MinionQueue.add()` keeps its transaction semantics inside the daemon.
+- Admin/OAuth readouts that need SQL use daemon RPC `raw_sql`.
+
+The daemon protocol v2 is local-only: `127.0.0.1` plus the state-file bearer
+token. Structured daemon RPC kinds are `tool_call`, `raw_sql`, `engine_stats`,
+`engine_health`, and `queue_add`. `raw_sql` is for trusted local
+daemon-authenticated callers only; never expose it through public MCP.
+
+If `serve` finds a live daemon that is too old for protocol v2, it should refuse
+to start with restart guidance. Restart the daemon with the same build, then
+start serve again:
+
+```bash
+voltmind daemon stop
+voltmind daemon start
+voltmind serve --http --port 7331
+```
+
+Do not work around an incompatible live daemon by starting direct serve; the old
+daemon may still be holding the PGLite lock. Restart it cleanly instead.
+
+`VOLTMIND_DAEMON_BYPASS=1` is an explicit debugging escape hatch. It disables
+daemon-backed serve detection and makes `serve` try direct PGLite access. Use it
+only when intentionally testing direct-engine behavior and after checking that no
+other process owns the brain.
+
+**Mode B: direct Admin UI (no daemon running)**
+If no local daemon is running, `serve --http` keeps the historical behavior and
+owns PGLite directly:
+
+```bash
+$env:VOLTMIND_ADMIN_AUTO_LOGIN_LOCAL='1'
+voltmind serve --http --port 7331
+# Admin dashboard: http://127.0.0.1:7331/admin
+```
+
+While direct serve owns PGLite, do not run DB-backed direct CLI commands in
+parallel against the same `VOLTMIND_HOME`. Either use the Admin UI/MCP surface,
+or stop direct serve cleanly before starting the daemon.
+
+**Mode C: CLI daemon (terminal-only sessions)**
+Start the background daemon, then all core CLI commands forward to it
+automatically. Browser UI can be added later by starting `serve --http` in
+daemon-backed mode.
 
 ```bash
 voltmind daemon start
@@ -190,10 +266,25 @@ voltmind daemon status
 voltmind daemon stop
 ```
 
-When running, the daemon owns the PGLite connection and core DB commands such as
-`get`, `list`, `search`, `query`, `stats`, `health`, `import`, `embed`, `status`,
-`config`, and `sources` forward to it automatically. Use
-`VOLTMIND_DAEMON_BYPASS=1` only for debugging direct PGLite CLI access.
+When the daemon is running, these commands forward to it: `get`, `list`,
+`search`, `query`, `stats`, `health`, `import`, `embed`, `status`, `config`,
+`sources`, `capture`, `sync`, `tag`, `link`, `timeline-add`, `actions`,
+and their variants. Use `VOLTMIND_DAEMON_BYPASS=1` only for debugging
+direct PGLite CLI access.
+
+**If you see "Timed out waiting for PGLite lock"**
+Do NOT kill processes blindly. Check what's already running first:
+
+```bash
+voltmind daemon status
+netstat -ano | Select-String "7331|3131"
+```
+
+If the daemon is running and protocol v2 compatible, start or use
+`serve --http` normally so it routes through the daemon. If direct
+`serve --http` is already serving the admin and owns PGLite, use that Admin UI
+or stop it cleanly before starting the daemon. Avoid deleting locks or killing
+processes until you know which process owns the brain.
 
 Do not run `voltmind autopilot --install` on Windows/PGLite. The inherited
 autopilot installer only has macOS launchd, Linux systemd, ephemeral-container,
@@ -280,7 +371,7 @@ Use the focused MVP gate first:
 ```bash
 bun run typecheck
 bun run build
-bun test test/cli-help-discoverability.test.ts test/mvp-surface.test.ts test/mcp-tool-defs.test.ts test/operations-descriptions.test.ts
+bun test test/daemon-engine.test.ts test/cli-help-discoverability.test.ts test/mvp-surface.test.ts test/mcp-tool-defs.test.ts test/operations-descriptions.test.ts
 ```
 
 `bun run verify` is the broader inherited gate. On Windows, shell-script line endings
