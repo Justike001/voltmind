@@ -884,7 +884,9 @@ describe('VoltMind actions DB index', () => {
       expect(String(calls[0].params?.query)).toContain('people/alice-example');
       expect(capturedPrompt).toContain('Use related brain context.');
       expect(capturedPrompt).toContain('Alice owns the relevant admin planning workflow.');
-      expect((result.related_runtime_context as { warnings: string[] }).warnings).toEqual([]);
+      const enrichedWarnings = (result.related_runtime_context as { warnings: string[] }).warnings;
+      const runtimeWarnings = enrichedWarnings.filter((w: string) => !w.startsWith("Identity context not found:"));
+      expect(runtimeWarnings).toEqual([]);
       expect(result.plan).toEqual([{ phase: 'Phase 1', steps: [{ id: 'p1s1', text: 'Read related context', done: false, note: '' }] }]);
     } finally {
       await engine.disconnect().catch(() => {});

@@ -583,11 +583,18 @@ export async function generateAdminActionPlan(
   const identityContext = await loadActionIdentityContext(engine, action);
   const actionBody = await loadActionBodyContext(action);
   const relatedRuntimeContext = await loadActionRelatedRuntimeContext(action, input.toolDispatcher);
+  const enrichedRelatedRuntimeContext = {
+    ...relatedRuntimeContext,
+    warnings: [
+      ...(relatedRuntimeContext.warnings || []),
+      ...identityContext.missing.map((m: string) => `Identity context not found: ${m}`),
+    ],
+  };
   const prompt = buildActionPlanPromptWithContext(action, {
     userPrompt: input.userPrompt || null,
     identityContext,
     actionBody,
-    relatedRuntimeContext,
+    relatedRuntimeContext: enrichedRelatedRuntimeContext,
     previousPlan,
     regenerateInstructions: input.regenerateInstructions || null,
   });
@@ -600,7 +607,7 @@ export async function generateAdminActionPlan(
     done: plan.done,
     raw: result.raw,
     identity: identityContext,
-    related_runtime_context: relatedRuntimeContext,
+    related_runtime_context: enrichedRelatedRuntimeContext,
   };
 }
 

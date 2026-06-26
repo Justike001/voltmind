@@ -995,11 +995,11 @@ function extractSection(body: string, heading: string): string | null {
 function normalizeRelatedContext(fm: Record<string, unknown>): ActionRelatedContext {
   return {
     related_people: arrayOfStringsFlexible(fm.related_people),
-    related_project: stringOrNull(fm.related_project),
+    related_project: scalarOrFirstString(fm.related_project),
     related_systems: arrayOfStringsFlexible(fm.related_systems),
     related_entities: arrayOfStringsFlexible(fm.related_entities),
     related_projects: arrayOfStringsFlexible(fm.related_projects),
-    related_workstream: stringOrNull(fm.related_workstream),
+    related_workstream: scalarOrFirstString(fm.related_workstream),
   };
 }
 
@@ -1445,14 +1445,7 @@ function objectValue(value: unknown): Record<string, unknown> {
 
 function normalizeActionRelatedContext(value: unknown): ActionRelatedContext {
   const obj = objectValue(value);
-  return {
-    related_people: arrayOfStringsFlexible(obj.related_people),
-    related_project: stringOrNull(obj.related_project),
-    related_systems: arrayOfStringsFlexible(obj.related_systems),
-    related_entities: arrayOfStringsFlexible(obj.related_entities),
-    related_projects: arrayOfStringsFlexible(obj.related_projects),
-    related_workstream: stringOrNull(obj.related_workstream),
-  };
+  return normalizeRelatedContext(obj);
 }
 
 function stringValue(value: unknown): string {
@@ -1460,6 +1453,15 @@ function stringValue(value: unknown): string {
 }
 
 function stringOrNull(value: unknown): string | null {
+  const str = stringValue(value);
+  return str || null;
+}
+
+function scalarOrFirstString(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    const first = value.find((v: unknown) => typeof v === "string" && v.trim());
+    return first ? String(first).trim() : null;
+  }
   const str = stringValue(value);
   return str || null;
 }
@@ -1515,6 +1517,7 @@ function renderRelatedRuntimeContextForPrompt(context: ActionRelatedRuntimeConte
       `- ${hit.slug} (${hit.type}) score=${hit.score ?? 'n/a'}`,
       `  Source field: ${hit.field} = ${hit.value}`,
       `  Title: ${hit.title}`,
+      hit.source_id ? `  Source: ${hit.source_id}` : '',
       hit.snippet ? `  Snippet: ${hit.snippet}` : '',
     ].filter(Boolean).join('\n')),
   ].join('\n');
