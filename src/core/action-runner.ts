@@ -21,7 +21,12 @@ import {
   ensureActionSchema,
   type ActionRecord,
 } from './actions.ts';
-import { resolveExecutor, type ActionExecutor, type ActionExecutionResult } from './action-executor.ts';
+import {
+  resolveExecutor,
+  type ActionExecutor,
+  type ActionExecutionResult,
+  type InteractiveActionRunEnvelope,
+} from './action-executor.ts';
 import { resolveHarnessAgent, type HarnessAgent, type ToolScope } from './harness-agent.ts';
 import { buildActionExecutionPacket } from './action-execution-packet.ts';
 
@@ -49,6 +54,8 @@ export interface ActionRunOptions {
   force?: boolean;
   /** Override the action's runtime field. Use 'codex-interactive' for TUI mode. */
   runtimeOverride?: string;
+  /** Stable writeback envelope for Admin-started Codex interactive runs. */
+  interactiveRun?: InteractiveActionRunEnvelope;
 }
 
 export interface OutcomeSummary {
@@ -184,6 +191,7 @@ export class DefaultActionRunner implements ActionRunner {
         prompt,
         toolScope,
         timeoutMs: 600_000,
+        interactiveRun: options.interactiveRun,
       });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -219,13 +227,16 @@ export class DefaultActionRunner implements ActionRunner {
         success: execResult.exitCode === 0,
         diagnosticCode: execResult.exitCode === 0 ? undefined : 'codex_interactive_failed',
         summary: execResult.exitCode === 0
-          ? 'Interactive Codex session ended. Review the session and mark the action complete or blocked manually.'
+          ? 'Interactive Codex session started. VoltMind is waiting for the writeback result file.'
           : 'Interactive Codex session exited with a non-zero status.',
         artifactRefs: [],
         errors: execResult.exitCode === 0 ? [] : [`codex interactive exited with code ${execResult.exitCode}`],
         rawTruncated: '',
         stderrTruncated: undefined,
       };
+      if (execResult.exitCode !== 0) {
+        await writeOutcome(engine, action, outcome, 'failed');
+      }
       return {
         status: execResult.exitCode === 0 ? 'interactive_handoff' : 'failed',
         allowed: true,

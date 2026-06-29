@@ -14,7 +14,7 @@
 
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -34,6 +34,7 @@ export interface ActionExecutionRequest {
   workDir?: string;
   toolScope: ToolScope;
   timeoutMs?: number;
+  interactiveRun?: InteractiveActionRunEnvelope;
 }
 
 export interface ActionExecutionResult {
@@ -43,6 +44,24 @@ export interface ActionExecutionResult {
   stdout: string;
   stderr: string;
   wallMs: number;
+  actionRunId?: number;
+  writebackStatus?: string;
+  actionDir?: string;
+  requestPath?: string;
+  resultPath?: string;
+  promptPath?: string;
+}
+
+export interface InteractiveActionRunEnvelope {
+  runId: number;
+  sourceId: string;
+  slug: string;
+  nonce: string;
+  actionDir: string;
+  requestPath: string;
+  resultPath: string;
+  promptPath: string;
+  initiator?: 'admin-ui' | 'cli' | 'daemon' | 'mcp' | string;
 }
 
 /* ── Executor interface ──────────────────────────────────── */
@@ -144,21 +163,29 @@ export class CodexInteractiveExecutor implements ActionExecutor {
   readonly kind = 'codex_interactive';
 
   async execute(req: ActionExecutionRequest): Promise<ActionExecutionResult> {
-    const workDir = await mkdtemp(join(process.cwd(), '.voltmind-codex-interactive-'));
-    const promptPath = join(workDir, 'action-prompt.md');
-    await writeFile(promptPath, req.prompt, 'utf-8');
+    const workDir = req.interactiveRun?.actionDir ?? await mkdtemp(join(process.cwd(), '.voltmind-codex-interactive-'));
+    const promptPath = req.interactiveRun?.promptPath ?? join(workDir, 'action-prompt.md');
+    const shouldCleanup = !req.interactiveRun;
 
     try {
+      if (req.interactiveRun) {
+        await writeInteractiveActionPromptFiles(req.prompt, req.interactiveRun);
+      } else {
+        await mkdir(workDir, { recursive: true });
+        await writeFile(promptPath, req.prompt, 'utf-8');
+      }
+
       const args = buildCodexInteractiveArgs(process.cwd(), promptPath);
       const hasTTY = process.stdin.isTTY && process.stdout.isTTY;
+      const childEnv = buildCodexInteractiveEnv(process.env, req.interactiveRun);
 
       if (hasTTY) {
         // Path A: real terminal — inherit stdio, Codex TUI opens inline
-        const launch = buildCodexInteractiveLaunch(args, process.env);
+        const launch = buildCodexInteractiveLaunch(args, childEnv);
         const start = Date.now();
         const child = spawn(launch.command, launch.args, {
           cwd: process.cwd(),
-          env: process.env,
+          env: childEnv,
           shell: false,
           stdio: 'inherit',
           windowsHide: false,
@@ -176,6 +203,12 @@ export class CodexInteractiveExecutor implements ActionExecutor {
           stdout: '',
           stderr: '',
           wallMs: Date.now() - start,
+          actionRunId: req.interactiveRun?.runId,
+          writebackStatus: req.interactiveRun ? 'interactive_pending' : undefined,
+          actionDir: req.interactiveRun?.actionDir,
+          requestPath: req.interactiveRun?.requestPath,
+          resultPath: req.interactiveRun?.resultPath,
+          promptPath,
         };
       }
 
@@ -194,16 +227,9 @@ export class CodexInteractiveExecutor implements ActionExecutor {
       // - Must NOT pass exec/sandbox/approval_policy params (rely on user config)
       // - The prompt (last arg) must be double-quoted for cmd /c start
       if (process.platform === 'win32') {
-        // Get the prompt text (last arg) and quote it for cmd
         const promptText = args[args.length - 1] || '';
         const quotedPrompt = '"' + promptText + '"';
 
-        // cmd /c start "" /D "cwd" cmd /k codex "prompt"
-        // start ""  → empty window title, avoids argument misalignment
-        // /D "cwd"  → explicit working directory (codex uses this as --cd implicitly)
-        // cmd /k    → keep window open after codex exits (real interactive console)
-        // NO extra args: no --enable apps, no --sandbox, no -c overrides.
-        // Rely entirely on user's ~/.codex/config.toml for connector/sandbox config.
         const startArgs = [
           '/c', 'start', '""',
           '/D', '"' + process.cwd() + '"',
@@ -212,13 +238,21 @@ export class CodexInteractiveExecutor implements ActionExecutor {
           quotedPrompt,
         ];
 
+        // Sandbox note: on Codex sandboxed Windows, CreateProcessW may be
+        // blocked even with detached:true. The spawn itself is synchronous
+        // in Bun and the sandbox may hang it. If the Admin API /run handler
+        // is called from a non-escalated serve process, this spawn will time
+        // out the HTTP response. The pending interactive run is already
+        // persisted in action_runs by this point; the writeback result.json
+        // can be dropped in the action directory without Codex.
         spawn('cmd', startArgs, {
           cwd: process.cwd(),
-          shell: true,
+          env: childEnv,
+          shell: false,
           stdio: 'ignore',
           detached: true,
           windowsHide: false,
-        }).unref();
+        });
 
         return {
           kind: 'codex_interactive_detached',
@@ -227,6 +261,12 @@ export class CodexInteractiveExecutor implements ActionExecutor {
           stdout: 'Codex launched in a real interactive cmd console (cmd /k).',
           stderr: '',
           wallMs: 0,
+          actionRunId: req.interactiveRun?.runId,
+          writebackStatus: req.interactiveRun ? 'interactive_pending' : undefined,
+          actionDir: req.interactiveRun?.actionDir,
+          requestPath: req.interactiveRun?.requestPath,
+          resultPath: req.interactiveRun?.resultPath,
+          promptPath,
         };
       }
 
@@ -238,6 +278,12 @@ export class CodexInteractiveExecutor implements ActionExecutor {
         stdout: '',
         stderr: 'No TTY available. Prompt saved to: ' + promptPath + '\nRun: codex --cd "' + process.cwd() + '" --sandbox workspace-write "' + promptPath + '"',
         wallMs: 0,
+        actionRunId: req.interactiveRun?.runId,
+        writebackStatus: req.interactiveRun ? 'interactive_pending' : undefined,
+        actionDir: req.interactiveRun?.actionDir,
+        requestPath: req.interactiveRun?.requestPath,
+        resultPath: req.interactiveRun?.resultPath,
+        promptPath,
       };
     } catch (err) {
       return {
@@ -247,11 +293,111 @@ export class CodexInteractiveExecutor implements ActionExecutor {
         stdout: '',
         stderr: err instanceof Error ? err.message : String(err),
         wallMs: 0,
+        actionRunId: req.interactiveRun?.runId,
+        writebackStatus: req.interactiveRun ? 'interactive_pending' : undefined,
+        actionDir: req.interactiveRun?.actionDir,
+        requestPath: req.interactiveRun?.requestPath,
+        resultPath: req.interactiveRun?.resultPath,
+        promptPath,
       };
     } finally {
-      await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      if (shouldCleanup) {
+        await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      }
     }
   }
+}
+
+export async function writeInteractiveActionPromptFiles(
+  prompt: string,
+  envelope: InteractiveActionRunEnvelope,
+): Promise<void> {
+  await mkdir(envelope.actionDir, { recursive: true });
+  const request = {
+    version: 1,
+    protocol: 'voltmind-admin-action-writeback',
+    action_run_id: envelope.runId,
+    source_id: envelope.sourceId,
+    slug: envelope.slug,
+    nonce: envelope.nonce,
+    initiator: envelope.initiator ?? 'unknown',
+    prompt_path: envelope.promptPath,
+    request_path: envelope.requestPath,
+    result_path: envelope.resultPath,
+    status_values: ['done', 'blocked', 'failed'],
+    result_schema: {
+      action_run_id: 'number',
+      source_id: 'string',
+      slug: 'string',
+      nonce: 'string',
+      status: 'done | blocked | failed',
+      summary: 'string',
+      artifact_refs: 'string[]',
+      errors: 'string[]',
+      plan_done: 'optional object',
+    },
+  };
+  await writeFile(envelope.requestPath, JSON.stringify(request, null, 2) + '\n', 'utf-8');
+  await writeFile(envelope.promptPath, renderInteractiveWritebackPrompt(prompt, envelope), 'utf-8');
+}
+
+export function renderInteractiveWritebackPrompt(
+  prompt: string,
+  envelope: InteractiveActionRunEnvelope,
+): string {
+  const example = {
+    action_run_id: envelope.runId,
+    source_id: envelope.sourceId,
+    slug: envelope.slug,
+    nonce: envelope.nonce,
+    status: 'done',
+    summary: 'One concise summary of the completed action.',
+    artifact_refs: [] as string[],
+    errors: [] as string[],
+  };
+  return [
+    prompt.trimEnd(),
+    '',
+    '## VoltMind Interactive Writeback',
+    '',
+    'This action was started by VoltMind Admin. Before ending the Codex interactive session, write the final result as UTF-8 JSON to:',
+    '',
+    envelope.resultPath,
+    '',
+    'The JSON must match this shape exactly:',
+    '',
+    '```json',
+    JSON.stringify(example, null, 2),
+    '```',
+    '',
+    'Rules:',
+    '- Keep action_run_id, source_id, slug, and nonce exactly as shown.',
+    '- Use status "done" only when the action is complete and safe to archive.',
+    '- Use status "blocked" when user input or an external approval is needed.',
+    '- Use status "failed" when execution ended with an error.',
+    '- Include artifact_refs as file paths, slugs, URLs, or connector object IDs created during the run.',
+    '- Include errors as an empty array for done, and a non-empty array for blocked or failed.',
+    '- You may include optional plan_done metadata if you updated a persisted plan.',
+    '',
+    'VoltMind will validate this file and write the outcome back to the action database.',
+    '',
+  ].join('\n');
+}
+
+function buildCodexInteractiveEnv(
+  env: NodeJS.ProcessEnv,
+  envelope?: InteractiveActionRunEnvelope,
+): NodeJS.ProcessEnv {
+  if (!envelope) return env;
+  return {
+    ...env,
+    VOLTMIND_ADMIN_ACTION_RUN_ID: String(envelope.runId),
+    VOLTMIND_ADMIN_ACTION_DIR: envelope.actionDir,
+    VOLTMIND_ADMIN_ACTION_REQUEST: envelope.requestPath,
+    VOLTMIND_ADMIN_ACTION_RESULT: envelope.resultPath,
+    VOLTMIND_ADMIN_ACTION_SOURCE_ID: envelope.sourceId,
+    VOLTMIND_ADMIN_ACTION_SLUG: envelope.slug,
+  };
 }
 
 /* ── Executor factory ────────────────────────────────────── */

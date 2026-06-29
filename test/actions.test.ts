@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { existsSync } from 'fs';
 import { mkdtemp, mkdir, readFile, rm, unlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -10,6 +11,9 @@ import {
   computeActionUrgencyScore,
   dedupeAndCapActionRelatedHits,
   evaluateActionPolicy,
+  finalizeInteractiveActionRun,
+  getAction,
+  getActionRun,
   listArchivedActions,
   listActions,
   getActionPlan,
@@ -29,7 +33,9 @@ import {
   buildCodexInteractiveArgs,
   buildCodexInteractiveLaunch,
   resolveCodexInteractiveCommand,
+  writeInteractiveActionPromptFiles,
   type ActionExecutionResult,
+  type InteractiveActionRunEnvelope,
 } from '../src/core/action-executor.ts';
 import { parseExecutionOutcome } from '../src/core/action-runner.ts';
 import { routeActionToolsFromRegistry } from '../src/core/action-tool-router.ts';
@@ -294,6 +300,218 @@ describe('VoltMind Codex Apps connector execution', () => {
     });
 
     expect(outcome.success).toBe(true);
+  });
+});
+
+describe('VoltMind interactive action writeback', () => {
+  function envelopeFor(dir: string, runId = 77): InteractiveActionRunEnvelope {
+    return {
+      runId,
+      sourceId: 'default',
+      slug: 'state/actions/interactive-writeback',
+      nonce: `nonce-${runId}`,
+      actionDir: dir,
+      promptPath: join(dir, 'prompt.md'),
+      requestPath: join(dir, 'request.json'),
+      resultPath: join(dir, 'result.json'),
+      initiator: 'admin-ui',
+    };
+  }
+
+  async function writeActionFile(repo: string, name: string): Promise<string> {
+    const actionsDir = join(repo, 'state', 'actions');
+    await mkdir(actionsDir, { recursive: true });
+    const file = join(actionsDir, `${name}.md`);
+    await writeFile(file, [
+      '---',
+      `title: ${name}`,
+      'status: in_progress',
+      'priority: medium',
+      'due: 2026-06-15T17:30',
+      'automation:',
+      '  eligible: true',
+      '  mode: agent_assisted',
+      '  runtime: codex',
+      '  trigger: due_time',
+      '  risk_level: low',
+      '  requires_confirmation: false',
+      'agent_contract:',
+      `  objective: Complete ${name}`,
+      '---',
+      '',
+      '## Action',
+      '',
+      `Complete ${name}.`,
+    ].join('\n'), 'utf-8');
+    return file;
+  }
+
+  async function createPendingRun(
+    engine: PGLiteEngine,
+    slug: string,
+    paths: InteractiveActionRunEnvelope,
+  ): Promise<number> {
+    const rows = await engine.executeRaw<{ id: number }>(
+      `INSERT INTO action_runs (source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt, result, error_text, finished_at)
+       VALUES ('default', $1, $2, 'interactive_pending', false, '', NULL, '{}'::jsonb, NULL, NULL)
+       RETURNING id`,
+      [slug, `${slug}|interactive-test|${Date.now()}|${Math.random()}`],
+    );
+    const runId = rows[0].id;
+    const meta = {
+      kind: 'interactive_writeback',
+      writeback_status: 'interactive_pending',
+      action_run_id: runId,
+      source_id: 'default',
+      slug,
+      nonce: paths.nonce,
+      action_dir: paths.actionDir,
+      prompt_path: paths.promptPath,
+      request_path: paths.requestPath,
+      result_path: paths.resultPath,
+      initiator: 'admin-ui',
+    };
+    await engine.executeRaw(
+      `UPDATE action_runs SET result = $2::jsonb WHERE id = $1`,
+      [runId, JSON.stringify(meta)],
+    );
+    return runId;
+  }
+
+  test('interactive prompt files persist with request metadata', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'voltmind-writeback-files-'));
+    try {
+      const envelope = envelopeFor(dir);
+      await writeInteractiveActionPromptFiles('Base action prompt', envelope);
+      const request = await readFile(envelope.requestPath, 'utf-8');
+      const prompt = await readFile(envelope.promptPath, 'utf-8');
+
+      expect(request).toContain('"protocol": "voltmind-admin-action-writeback"');
+      expect(request).toContain('"action_run_id": 77');
+      expect(request).toContain('"nonce": "nonce-77"');
+      expect(prompt).toContain('Base action prompt');
+      expect(prompt).toContain('VoltMind Interactive Writeback');
+      expect(prompt).toContain(envelope.resultPath);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('finalizer rejects nonce mismatch without changing pending run', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-writeback-nonce-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      await writeActionFile(repo, 'nonce-mismatch');
+      await scanActions(engine, { repo });
+      const actionDir = join(repo, '.voltmind-action-runs', 'nonce-mismatch');
+      await mkdir(actionDir, { recursive: true });
+      const envelope = envelopeFor(actionDir);
+      const slug = 'state/actions/nonce-mismatch';
+      const runId = await createPendingRun(engine, slug, { ...envelope, slug });
+      await writeFile(envelope.resultPath, JSON.stringify({
+        action_run_id: runId,
+        source_id: 'default',
+        slug,
+        nonce: 'wrong-nonce',
+        status: 'done',
+        summary: 'Should not write back.',
+        artifact_refs: [],
+        errors: [],
+      }, null, 2), 'utf-8');
+
+      await expect(finalizeInteractiveActionRun(engine, runId)).rejects.toThrow(/nonce mismatch/);
+      expect((await getActionRun(engine, runId))?.status).toBe('interactive_pending');
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('missing result keeps interactive run pending', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-writeback-missing-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      await writeActionFile(repo, 'missing-result');
+      await scanActions(engine, { repo });
+      const actionDir = join(repo, '.voltmind-action-runs', 'missing-result');
+      await mkdir(actionDir, { recursive: true });
+      const envelope = envelopeFor(actionDir);
+      const slug = 'state/actions/missing-result';
+      const runId = await createPendingRun(engine, slug, { ...envelope, slug });
+
+      const result = await finalizeInteractiveActionRun(engine, runId, { allowMissing: true });
+
+      expect(result.finalized).toBe(false);
+      expect(result.missing_result).toBe(true);
+      expect(result.writeback_status).toBe('interactive_pending');
+      expect((await getActionRun(engine, runId))?.status).toBe('interactive_pending');
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('finalizer maps done blocked and failed writebacks', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-writeback-finalize-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      const cases: Array<{
+        name: string;
+        resultStatus: 'done' | 'blocked' | 'failed';
+        actionStatus: string;
+        runStatus: string;
+      }> = [
+        { name: 'writeback-done', resultStatus: 'done', actionStatus: 'done', runStatus: 'completed' },
+        { name: 'writeback-blocked', resultStatus: 'blocked', actionStatus: 'blocked', runStatus: 'blocked' },
+        { name: 'writeback-failed', resultStatus: 'failed', actionStatus: 'failed', runStatus: 'failed' },
+      ];
+      const files = new Map<string, string>();
+      for (const item of cases) {
+        files.set(item.name, await writeActionFile(repo, item.name));
+      }
+      await scanActions(engine, { repo });
+
+      for (const item of cases) {
+        const slug = `state/actions/${item.name}`;
+        const actionDir = join(repo, '.voltmind-action-runs', item.name);
+        await mkdir(actionDir, { recursive: true });
+        const envelope = envelopeFor(actionDir);
+        const runId = await createPendingRun(engine, slug, { ...envelope, slug });
+        await writeFile(envelope.resultPath, JSON.stringify({
+          action_run_id: runId,
+          source_id: 'default',
+          slug,
+          nonce: envelope.nonce,
+          status: item.resultStatus,
+          summary: `Interactive ${item.resultStatus} summary.`,
+          artifact_refs: [`artifact://${item.name}`],
+          errors: item.resultStatus === 'done' ? [] : [`${item.resultStatus} reason`],
+        }, null, 2), 'utf-8');
+
+        const finalized = await finalizeInteractiveActionRun(engine, runId);
+        const actions = await listActions(engine, { limit: 20 });
+        const updated = actions.find(row => row.slug === slug);
+        const run = await getActionRun(engine, runId);
+        const markdown = await readFile(files.get(item.name)!, 'utf-8');
+
+        expect(finalized.finalized).toBe(true);
+        expect(finalized.writeback_status).toBe(item.runStatus);
+        expect(updated?.status).toBe(item.actionStatus);
+        expect(run?.status).toBe(item.runStatus);
+        expect(markdown).toContain(`status: ${item.actionStatus}`);
+        expect(markdown).toContain('## Outcome');
+        expect(markdown).toContain(`Interactive ${item.resultStatus} summary.`);
+      }
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
   });
 });
 
@@ -919,17 +1137,20 @@ describe('VoltMind actions DB index', () => {
 
       await scanActions(engine, { repo });
       const updated = await saveUserActionToolRoute(engine, 'state/actions/route-target', {
-        selectedPlugins: ['teams'],
-        selectedTools: ['send_chat_message'],
+        selectedPlugins: ['teams', 'outlook-email'],
+        selectedTools: ['send_chat_message', 'search_messages'],
         blockedTools: ['send_email'],
       });
 
       expect(updated.tool_route?.source).toBe('user');
-      expect(updated.allowed_tools).toEqual(['send_chat_message']);
+      expect(updated.tool_route?.selected_plugins).toEqual(['teams', 'outlook-email']);
+      expect(updated.allowed_tools).toEqual(['send_chat_message', 'search_messages']);
       expect(updated.blocked_tools).toEqual(['send_email']);
+      expect(buildActionPrompt(updated, null)).toContain('Selected route: @teams, @outlook-email');
       const text = await readFile(file, 'utf-8');
       expect(text).toContain('allowed_tools:');
       expect(text).toContain('- send_chat_message');
+      expect(text).toContain('- search_messages');
       expect(text).toContain('blocked_tools:');
       expect(text).toContain('- send_email');
     } finally {
@@ -1197,3 +1418,233 @@ describe('VoltMind actions DB index', () => {
     }
   });
 });
+
+// Auto-generated content for test/actions.test.ts
+
+describe('VoltMind end-to-end action pipeline', () => {
+  test('full pipeline: draft message to Zi Ye via Teams and Email — tool router, plan generation with VoltMind query, context assembly, and interactive writeback', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-e2e-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+
+      const pageId = await insertTestPage(engine, 'people/zi-ye', 'Zi Ye', [
+        '# Zi Ye',
+        '',
+        'Zi Ye is a product manager responsible for VoltMind integrations.',
+        '',
+        '## Contact',
+        '- Email: zi.ye@example.com',
+        '- Teams: @Zi Ye',
+        '',
+        '## Current Work',
+        '- Owns the Teams and Email connector integration roadmap.',
+        '- Reviews all customer-facing draft messages before send.',
+        '- Preferred communication style: concise and structured, with bullet-point summaries.',
+      ].join('\n'));
+
+      const actionsDir = join(repo, 'state', 'actions');
+      await mkdir(actionsDir, { recursive: true });
+      const slug = 'state/actions/draft-zi-ye-message';
+      await writeFile(join(actionsDir, 'draft-zi-ye-message.md'), [
+        '---',
+        'title: Draft message to Zi Ye via Teams and Email',
+        'status: in_progress',
+        'priority: high',
+        'due: 2026-07-01T10:00',
+        'automation:',
+        '  eligible: true',
+        '  mode: agent_executable',
+        '  runtime: codex',
+        '  trigger: manual',
+        '  risk_level: low',
+        '  requires_confirmation: false',
+        'related_people:',
+        '  - people/zi-ye',
+        'agent_contract:',
+        '  objective: Draft a coordinated message to Zi Ye via both Teams and Email about the VoltMind writeback feature rollout.',
+        '  success_criteria:',
+        '    - Teams message drafted in Zi Ye\'s preferred tone',
+        '    - Email drafted with full context',
+        '    - Both messages reference Zi Ye\'s current work from their vault page',
+        '  output_target:',
+        '    type: draft',
+        'allowed_tools:',
+        '  - outlook_email',
+        '  - teams',
+        'max_autonomy: draft_only',
+        '---',
+        '',
+        '## Action',
+        '',
+        'Coordinate with Zi Ye about the new interactive writeback feature in VoltMind Admin Actions.',
+        'Zi Ye owns the Teams and Email connectors, so the message should be tailored to their expertise.',
+        '',
+        '1. Check Zi Ye\'s vault page for current work and preferred communication style',
+        '2. Draft a Teams message with the key points',
+        '3. Draft an email with full context',
+      ].join('\n'), 'utf-8');
+
+      await scanActions(engine, { repo });
+
+      // Phase 3: Tool Router selects email + teams
+      const fakeRegistry = registry([
+        { name: 'outlook-email', displayName: 'Outlook Email', description: 'Triage Outlook mail.', category: 'Communication', skills: [{ name: 'outlook-email-reply-drafting', description: 'Draft Outlook email replies.', tools: ['search_messages', 'create_reply_draft'] }] },
+        { name: 'teams', displayName: 'Teams', description: 'Review and send Teams messages.', category: 'Communication', skills: [{ name: 'teams-messages', description: 'Compose Teams messages.', tools: ['send_chat_message', 'search'] }] },
+        { name: 'outlook-calendar', displayName: 'Outlook Calendar', description: 'Schedule meetings.', category: 'Calendar', skills: [{ name: 'outlook-calendar-group-scheduler', description: 'Find meeting times.', tools: ['get_schedule', 'create_event'] }] },
+      ]);
+
+      const toolRoute = await routeActionToolsFromRegistry(action({
+        slug, title: 'Draft message to Zi Ye via Teams and Email',
+        allowed_tools: ['outlook_email', 'teams'],
+        agent_contract: { objective: 'Draft a coordinated message to Zi Ye via both Teams and Email.' },
+      }), fakeRegistry, { allowLlm: false });
+
+      expect(toolRoute.selected_plugins).toContain('outlook-email');
+      expect(toolRoute.selected_plugins).toContain('teams');
+      await saveUserActionToolRoute(engine, slug, { sourceId: 'default', selectedPlugins: toolRoute.selected_plugins, selectedTools: [...new Set(toolRoute.selected_tools)], blockedTools: toolRoute.blocked_tools, notes: 'Dual-channel: Teams + Email' });
+
+      // Phase 4: Generate Plan with real VoltMind query for Zi Ye page
+      const dispatcherCalls: Array<{ name: string; query: string }> = [];
+      const toolDispatcher = async (name: string, params: Record<string, unknown> | undefined, _opts: unknown) => {
+        dispatcherCalls.push({ name, query: String(params?.query || '') });
+        if (name === 'query' && params?.query) {
+          const rows = await engine.executeRaw<{ slug: string; title: string; compiled_truth: string }>(
+            `SELECT p.slug, p.title, p.compiled_truth FROM pages p WHERE p.slug LIKE $1 OR p.title LIKE $1 LIMIT 3`,
+            [`%${String(params.query)}%`],
+          );
+          const hits = rows.map(r => ({ slug: r.slug, page_id: 0, title: r.title, type: 'person', chunk_text: (r.compiled_truth || '').slice(0, 500), chunk_source: 'compiled_truth', chunk_id: 0, chunk_index: 0, score: 0.95, stale: false, source_id: 'default', snippet: (r.compiled_truth || '').slice(0, 300) }));
+          return { content: [{ type: 'text', text: JSON.stringify(hits) }] };
+        }
+        return { content: [{ type: 'text', text: '[]' }] };
+      };
+
+      let capturedPlanPrompt = '';
+      const planResult = await generateAdminActionPlan(engine, slug, {
+        sourceId: 'default',
+        userPrompt: 'Focus on the writeback feature.',
+        toolDispatcher,
+        generatePlan: async (prompt: string) => {
+          capturedPlanPrompt = prompt;
+          return { raw: JSON.stringify({ plan: [
+            { phase: 'Research', steps: ['Query Zi Ye vault page for preferences'] },
+            { phase: 'Draft Teams', steps: ['Draft Teams message with writeback points', 'Align tone with vault'] },
+            { phase: 'Draft Email', steps: ['Draft email with full context', 'Reference Zi Ye connector expertise'] },
+          ] }), plan: [
+            { phase: 'Research', steps: ['Query Zi Ye vault page for preferences'] },
+            { phase: 'Draft Teams', steps: ['Draft Teams message with writeback points', 'Align tone with vault'] },
+            { phase: 'Draft Email', steps: ['Draft email with full context', 'Reference Zi Ye connector expertise'] },
+          ] };
+        },
+      });
+
+      // Phase 5: Verify context assembly
+      expect(dispatcherCalls.length).toBeGreaterThan(0);
+      const qCall = dispatcherCalls.find(c => c.name === 'query');
+      expect(qCall).toBeDefined();
+      expect(qCall!.query).toContain('zi-ye');
+      expect(capturedPlanPrompt).toContain('Draft message to Zi Ye');
+      expect(capturedPlanPrompt).toContain('people/zi-ye');
+      expect(capturedPlanPrompt).toContain('preferred communication');
+
+      const savedPlan = await getActionPlan(engine, slug);
+      expect(savedPlan).not.toBeNull();
+      expect(savedPlan!.plan.length).toBeGreaterThanOrEqual(2);
+
+      // Phase 6: Build full execution prompt
+      const actionRecord = await getAction(engine, slug);
+      expect(actionRecord).not.toBeNull();
+      const executionPrompt = buildActionPrompt(actionRecord!, 'Focus on writeback.');
+      expect(executionPrompt).toContain('## Action Tool Route');
+      expect(executionPrompt).toContain('outlook-email');
+      expect(executionPrompt).toContain('teams');
+      expect(executionPrompt).toContain('writeback feature rollout');
+
+      // Phase 7: Interactive writeback pipeline
+      const actionDir = join(repo, '.voltmind-action-runs', 'e2e-writeback');
+      await mkdir(actionDir, { recursive: true });
+      const envelope: InteractiveActionRunEnvelope = {
+        runId: 0, sourceId: 'default', slug,
+        nonce: 'e2e-nonce-' + Date.now(),
+        actionDir, promptPath: join(actionDir, 'prompt.md'),
+        requestPath: join(actionDir, 'request.json'),
+        resultPath: join(actionDir, 'result.json'),
+        initiator: 'admin-ui',
+      };
+
+      const ikey = `${slug}|e2e|${Date.now()}|${Math.random()}`;
+      const rrows = await engine.executeRaw<{ id: number }>(
+        `INSERT INTO action_runs (source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt, result, error_text, finished_at) VALUES ('default',$1,$2,'interactive_pending',false,'',NULL,'{}'::jsonb,NULL,NULL) RETURNING id`,
+        [slug, ikey],
+      );
+      const runId = rrows[0].id;
+      const meta = { kind: 'interactive_writeback', writeback_status: 'interactive_pending', action_run_id: runId, source_id: 'default', slug, nonce: envelope.nonce, action_dir: actionDir, prompt_path: envelope.promptPath, request_path: envelope.requestPath, result_path: envelope.resultPath, initiator: 'admin-ui' };
+      await engine.executeRaw(`UPDATE action_runs SET result=$2::jsonb WHERE id=$1`, [runId, JSON.stringify(meta)]);
+      envelope.runId = runId;
+
+      await writeInteractiveActionPromptFiles(executionPrompt, envelope);
+      expect(existsSync(envelope.promptPath)).toBe(true);
+      expect(existsSync(envelope.requestPath)).toBe(true);
+
+      const reqJson = JSON.parse(await readFile(envelope.requestPath, 'utf-8'));
+      expect(reqJson.protocol).toBe('voltmind-admin-action-writeback');
+      expect(reqJson.action_run_id).toBe(runId);
+
+      const promptMd = await readFile(envelope.promptPath, 'utf-8');
+      expect(promptMd).toContain('VoltMind Interactive Writeback');
+
+      // Phase 8: Simulate Codex writeback → finalize
+      await writeFile(envelope.resultPath, JSON.stringify({
+        action_run_id: runId, source_id: 'default', slug, nonce: envelope.nonce,
+        status: 'done',
+        summary: 'Drafted Teams message and email to Zi Ye about the VoltMind writeback feature. Both drafts reference Zi Ye connector expertise and preferred communication style from vault page.',
+        artifact_refs: ['teams://draft/to-zi-ye-writeback-rollout', 'email://draft/to-zi-ye-writeback-feature'],
+        errors: [],
+        plan_done: { '0:0': true, '1:0': true, '1:1': true, '2:0': true, '2:1': true },
+      }, null, 2), 'utf-8');
+
+      const finalized = await finalizeInteractiveActionRun(engine, runId);
+      expect(finalized.finalized).toBe(true);
+      expect(finalized.writeback_status).toBe('completed');
+      expect(finalized.outcome?.success).toBe(true);
+      expect(finalized.outcome?.summary).toContain('Zi Ye');
+
+      const updatedAction = await getAction(engine, slug);
+      expect(updatedAction).not.toBeNull();
+      expect(updatedAction!.status).toBe('done');
+      expect(updatedAction!.outcome).toContain('Zi Ye');
+      expect(updatedAction!.completed_at).not.toBeNull();
+      expect(updatedAction!.archived_at).not.toBeNull();
+
+      const run = await getActionRun(engine, runId);
+      expect(run).not.toBeNull();
+      expect(run!.status).toBe('completed');
+      expect(run!.finished_at).not.toBeNull();
+
+      const updatedFile = await readFile(join(actionsDir, 'draft-zi-ye-message.md'), 'utf-8');
+      expect(updatedFile).toContain('status: done');
+      expect(updatedFile).toContain('## Outcome');
+      expect(updatedFile).toContain('Zi Ye');
+
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+async function insertTestPage(engine: PGLiteEngine, slug: string, title: string, body: string): Promise<number> {
+  const rows = await engine.executeRaw<{ id: number }>(
+    `INSERT INTO pages (source_id, slug, title, type, page_kind, compiled_truth, frontmatter, content_hash, updated_at)
+     VALUES ('default', $1, $2, 'person', 'markdown', $3, '{}'::jsonb, '', now())
+     ON CONFLICT (source_id, slug) DO NOTHING
+     RETURNING id`,
+    [slug, title, body],
+  );
+  if (rows.length > 0 && rows[0].id) return rows[0].id;
+  const existing = await engine.executeRaw<{ id: number }>(
+    `SELECT id FROM pages WHERE source_id = 'default' AND slug = $1 LIMIT 1`, [slug],
+  );
+  return existing[0]?.id ?? 0;
+}

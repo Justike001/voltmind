@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { existsSync } from 'fs';
 import { mkdir, readFile, readdir, writeFile } from 'fs/promises';
 import { basename, dirname, join, relative } from 'path';
@@ -10,9 +10,11 @@ import { parseMarkdown } from './markdown.ts';
 import { resolveSourceId } from './source-resolver.ts';
 import {
   DefaultActionRunner,
+  writeOutcome,
   type ActionRunStatus as RunnerActionRunStatus,
   type OutcomeSummary,
 } from './action-runner.ts';
+import type { ActionExecutionResult, InteractiveActionRunEnvelope } from './action-executor.ts';
 import {
   buildUserActionToolRoute,
   normalizeActionToolRoute,
@@ -24,7 +26,7 @@ import { scanPluginRegistry, type PluginRegistry } from './plugin-registry.ts';
 
 export type ActionRiskLevel = 'low' | 'medium' | 'high' | 'restricted';
 export type ActionMode = 'manual' | 'agent_assisted' | 'agent_executable';
-export type ActionRunStatus = 'prepared' | 'blocked' | 'failed';
+export type ActionRunStatus = 'prepared' | 'interactive_pending' | 'completed' | 'blocked' | 'failed';
 
 export interface ActionRelatedContext {
   related_people: string[];
@@ -98,6 +100,23 @@ export interface RunActionResult {
   prompt?: string;
   status?: ActionRunStatus | RunnerActionRunStatus;
   outcome?: OutcomeSummary | null;
+  action_run_id?: number;
+  writeback_status?: string;
+  interactive?: {
+    action_dir: string;
+    prompt_path: string;
+    request_path: string;
+    result_path: string;
+  };
+}
+
+export interface FinalizeInteractiveActionRunResult {
+  finalized: boolean;
+  writeback_status: string;
+  missing_result?: boolean;
+  run: ActionRunRecord;
+  action: ActionRecord | null;
+  outcome?: OutcomeSummary;
 }
 
 interface ParsedAction {
@@ -533,7 +552,17 @@ export async function saveUserActionToolRoute(
 export async function runAction(
   engine: BrainEngine,
   slug: string,
-  opts: { sourceId?: string; dryRun?: boolean; now?: boolean; userPrompt?: string | null; execute?: boolean; force?: boolean; confirmed?: boolean; interactive?: boolean } = {},
+  opts: {
+    sourceId?: string;
+    dryRun?: boolean;
+    now?: boolean;
+    userPrompt?: string | null;
+    execute?: boolean;
+    force?: boolean;
+    confirmed?: boolean;
+    interactive?: boolean;
+    initiator?: 'admin-ui' | 'cli' | 'daemon' | 'mcp';
+  } = {},
 ): Promise<RunActionResult> {
   await ensureActionSchema(engine);
   const sourceId = opts.sourceId || 'default';
@@ -547,6 +576,21 @@ export async function runAction(
     const actionForRun = opts.interactive
       ? { ...action, runtime: 'codex_interactive' }
       : action;
+    let interactiveRun: InteractiveActionRunEnvelope | null = null;
+    if (opts.interactive && !opts.dryRun && opts.initiator === 'admin-ui') {
+      const policy = evaluateActionPolicy(actionForRun, { force: opts.force ?? false });
+      const canStartInteractive =
+        !policy.requiresApproval &&
+        !(policy.requiresConfirmation && !opts.confirmed) &&
+        (policy.allowed || Boolean(opts.force));
+      if (canStartInteractive) {
+        interactiveRun = await createInteractiveActionRun(engine, actionForRun, {
+          sourceId: resolvedSourceId,
+          userPrompt: opts.userPrompt ?? null,
+          initiator: opts.initiator ?? 'cli',
+        });
+      }
+    }
     const runnerResult = await runner.run({
       action: actionForRun,
       engine,
@@ -556,8 +600,65 @@ export async function runAction(
        userPrompt: opts.userPrompt ?? undefined,
        force: opts.force ?? false,
        confirmed: opts.confirmed ?? false,
+       interactiveRun: interactiveRun ?? undefined,
       },
     });
+
+    if (interactiveRun) {
+      const pending = runnerResult.status === 'interactive_handoff' && (runnerResult.execution?.exitCode ?? 1) === 0;
+      const dbStatus = pending
+        ? 'interactive_pending'
+        : runnerResult.status === 'executed'
+          ? 'completed'
+          : runnerResult.status;
+      const prompt = runnerResult.prompt ?? buildActionPrompt(actionForRun, opts.userPrompt || action.user_prompt || null);
+      const result = buildInteractiveLaunchResult(interactiveRun, runnerResult, pending);
+      await engine.executeRaw(
+        `UPDATE action_runs
+            SET status = $1,
+                prompt = $2,
+                user_prompt = $3,
+                result = $4::jsonb,
+                error_text = $5,
+                finished_at = CASE WHEN $6::boolean THEN NULL ELSE now() END
+          WHERE id = $7`,
+        [
+          dbStatus,
+          prompt,
+          opts.userPrompt || null,
+          JSON.stringify(result),
+          pending ? null : runnerResult.reason || runnerResult.outcome?.errors.join('\n') || null,
+          pending,
+          interactiveRun.runId,
+        ],
+      );
+      await engine.executeRaw(
+        `UPDATE action_index
+            SET last_run_at = now(), last_run_status = $3, user_prompt = COALESCE($4, user_prompt),
+                started_at = COALESCE(started_at, now()), updated_at = now()
+          WHERE source_id = $1 AND slug = $2`,
+        [resolvedSourceId, slug, dbStatus, opts.userPrompt || null],
+      );
+      const refreshedRun = await getActionRun(engine, interactiveRun.runId);
+      const runRecord = refreshedRun ?? await requireActionRun(engine, interactiveRun.runId);
+      return {
+        action,
+        run: runRecord,
+        allowed: runnerResult.allowed,
+        reason: runnerResult.reason,
+        status: pending ? 'interactive_pending' : runnerResult.status,
+        outcome: runnerResult.outcome ?? null,
+        prompt: runnerResult.prompt ?? undefined,
+        action_run_id: interactiveRun.runId,
+        writeback_status: dbStatus,
+        interactive: {
+          action_dir: interactiveRun.actionDir,
+          prompt_path: interactiveRun.promptPath,
+          request_path: interactiveRun.requestPath,
+          result_path: interactiveRun.resultPath,
+        },
+      };
+    }
 
     // Build a compatible return value for the legacy caller
     const idempotencyKey = buildRunIdempotencyKey(action);
@@ -671,6 +772,124 @@ export async function listActionRuns(
     [opts.sourceId || 'default', slug, Math.max(1, Math.min(opts.limit ?? 20, 100))],
   );
   return rows;
+}
+
+export async function getActionRun(engine: BrainEngine, runId: number): Promise<ActionRunRecord | null> {
+  await ensureActionSchema(engine);
+  const rows = await engine.executeRaw<ActionRunRecord>(
+    `SELECT id, source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt,
+            result, error_text, created_at::text, finished_at::text
+       FROM action_runs
+      WHERE id = $1
+      LIMIT 1`,
+    [runId],
+  );
+  return rows[0] ?? null;
+}
+
+export async function finalizeInteractiveActionRun(
+  engine: BrainEngine,
+  runId: number,
+  opts: { allowMissing?: boolean } = {},
+): Promise<FinalizeInteractiveActionRunResult> {
+  await ensureActionSchema(engine);
+  const run = await requireActionRun(engine, runId);
+  const action = await getAction(engine, run.action_slug, run.source_id);
+  if (run.status !== 'interactive_pending') {
+    return {
+      finalized: false,
+      writeback_status: run.status,
+      run,
+      action,
+    };
+  }
+
+  const pending = readInteractivePendingMeta(run);
+  if (!existsSync(pending.result_path)) {
+    if (opts.allowMissing !== false) {
+      return {
+        finalized: false,
+        writeback_status: 'interactive_pending',
+        missing_result: true,
+        run,
+        action,
+      };
+    }
+    throw new Error(`Interactive writeback result is missing: ${pending.result_path}`);
+  }
+
+  const raw = await readFile(pending.result_path, 'utf-8');
+  const parsed = parseJsonObject(raw, pending.result_path);
+  const writeback = normalizeInteractiveWriteback(parsed, pending);
+  if (!action) {
+    throw new Error(`Action not found for interactive run ${runId}: ${run.source_id}:${run.action_slug}`);
+  }
+
+  const outcome: OutcomeSummary = {
+    success: writeback.status === 'done',
+    diagnosticCode: writeback.status === 'done'
+      ? undefined
+      : writeback.status === 'blocked'
+        ? 'interactive_blocked'
+        : 'interactive_failed',
+    summary: writeback.summary,
+    artifactRefs: writeback.artifact_refs,
+    errors: writeback.errors,
+    rawTruncated: raw.slice(0, 2000),
+    stderrTruncated: writeback.status === 'done' ? undefined : writeback.errors.join('\n').slice(0, 2000),
+  };
+  const runnerStatus: RunnerActionRunStatus = writeback.status === 'done'
+    ? 'executed'
+    : writeback.status === 'blocked'
+      ? 'blocked'
+      : 'failed';
+  await writeOutcome(engine, action, outcome, runnerStatus);
+
+  const dbRunStatus = writeback.status === 'done' ? 'completed' : writeback.status;
+  const finalResult = {
+    kind: 'interactive_writeback',
+    writeback_status: dbRunStatus,
+    action_run_id: runId,
+    source_id: pending.source_id,
+    slug: pending.slug,
+    status: writeback.status,
+    summary: writeback.summary,
+    artifact_refs: writeback.artifact_refs,
+    errors: writeback.errors,
+    plan_done: writeback.plan_done ?? null,
+    result_path: pending.result_path,
+    finalized_at: new Date().toISOString(),
+  };
+  await engine.executeRaw(
+    `UPDATE action_runs
+        SET status = $1,
+            result = $2::jsonb,
+            error_text = $3,
+            finished_at = now()
+      WHERE id = $4`,
+    [
+      dbRunStatus,
+      JSON.stringify(finalResult),
+      writeback.status === 'done' ? null : writeback.errors.join('\n') || writeback.summary,
+      runId,
+    ],
+  );
+  await engine.executeRaw(
+    `UPDATE action_index
+        SET last_run_at = now(),
+            last_run_status = $3,
+            updated_at = now()
+      WHERE source_id = $1 AND slug = $2`,
+    [pending.source_id, pending.slug, dbRunStatus],
+  );
+
+  return {
+    finalized: true,
+    writeback_status: dbRunStatus,
+    run: await requireActionRun(engine, runId),
+    action: await getAction(engine, pending.slug, pending.source_id),
+    outcome,
+  };
 }
 
 export async function listArchivedActions(
@@ -1331,6 +1550,222 @@ async function updateActionMarkdownTools(filePath: string, allowedTools: string[
   doc.data.updated = new Date().toISOString().slice(0, 10);
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, matter.stringify(doc.content, doc.data), 'utf-8');
+}
+
+interface InteractiveRunPendingMeta {
+  action_run_id: number;
+  source_id: string;
+  slug: string;
+  nonce: string;
+  action_dir: string;
+  prompt_path: string;
+  request_path: string;
+  result_path: string;
+  initiator: string;
+}
+
+interface InteractiveWritebackPayload {
+  status: 'done' | 'blocked' | 'failed';
+  summary: string;
+  artifact_refs: string[];
+  errors: string[];
+  plan_done?: unknown;
+}
+
+async function createInteractiveActionRun(
+  engine: BrainEngine,
+  action: ActionRecord,
+  opts: {
+    sourceId: string;
+    userPrompt: string | null;
+    initiator: 'admin-ui' | 'cli' | 'daemon' | 'mcp';
+  },
+): Promise<InteractiveActionRunEnvelope> {
+  const nonce = randomBytes(16).toString('hex');
+  const idempotencyKey = `${buildRunIdempotencyKey(action)}|interactive|${Date.now()}|${randomBytes(4).toString('hex')}`;
+  const initialResult = {
+    kind: 'interactive_writeback',
+    writeback_status: 'interactive_pending',
+    source_id: opts.sourceId,
+    slug: action.slug,
+    nonce,
+    initiator: opts.initiator,
+  };
+  const rows = await engine.executeRaw<ActionRunRecord>(
+    `INSERT INTO action_runs (source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt, result, error_text, finished_at)
+     VALUES ($1, $2, $3, 'interactive_pending', false, '', $4, $5::jsonb, NULL, NULL)
+     RETURNING id, source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt,
+               result, error_text, created_at::text, finished_at::text`,
+    [opts.sourceId, action.slug, idempotencyKey, opts.userPrompt, JSON.stringify(initialResult)],
+  );
+  const runId = rows[0].id;
+  const actionDir = join(process.cwd(), '.voltmind-action-runs', String(runId));
+  const envelope: InteractiveActionRunEnvelope = {
+    runId,
+    sourceId: opts.sourceId,
+    slug: action.slug,
+    nonce,
+    actionDir,
+    promptPath: join(actionDir, 'prompt.md'),
+    requestPath: join(actionDir, 'request.json'),
+    resultPath: join(actionDir, 'result.json'),
+    initiator: opts.initiator,
+  };
+  await engine.executeRaw(
+    `UPDATE action_runs
+        SET result = $2::jsonb
+      WHERE id = $1`,
+    [runId, JSON.stringify(interactivePendingMetaForResult(envelope))],
+  );
+  return envelope;
+}
+
+function interactivePendingMetaForResult(envelope: InteractiveActionRunEnvelope): Record<string, unknown> {
+  return {
+    kind: 'interactive_writeback',
+    writeback_status: 'interactive_pending',
+    action_run_id: envelope.runId,
+    source_id: envelope.sourceId,
+    slug: envelope.slug,
+    nonce: envelope.nonce,
+    action_dir: envelope.actionDir,
+    prompt_path: envelope.promptPath,
+    request_path: envelope.requestPath,
+    result_path: envelope.resultPath,
+    initiator: envelope.initiator ?? 'unknown',
+  };
+}
+
+function buildInteractiveLaunchResult(
+  envelope: InteractiveActionRunEnvelope,
+  runnerResult: {
+    status: RunnerActionRunStatus;
+    reason?: string;
+    execution?: ActionExecutionResult;
+    outcome?: OutcomeSummary;
+  },
+  pending: boolean,
+): Record<string, unknown> {
+  return {
+    ...interactivePendingMetaForResult(envelope),
+    writeback_status: pending ? 'interactive_pending' : 'failed',
+    launch_status: runnerResult.status,
+    launch_reason: runnerResult.reason ?? null,
+    execution: summarizeActionExecution(runnerResult.execution),
+    outcome: runnerResult.outcome ?? null,
+  };
+}
+
+function summarizeActionExecution(execution: ActionExecutionResult | undefined): Record<string, unknown> | null {
+  if (!execution) return null;
+  return {
+    kind: execution.kind,
+    exitCode: execution.exitCode,
+    args: execution.args ?? [],
+    stdout: execution.stdout.slice(0, 2000),
+    stderr: execution.stderr.slice(0, 2000),
+    wallMs: execution.wallMs,
+    actionRunId: execution.actionRunId,
+    writebackStatus: execution.writebackStatus,
+    actionDir: execution.actionDir,
+    requestPath: execution.requestPath,
+    resultPath: execution.resultPath,
+    promptPath: execution.promptPath,
+  };
+}
+
+async function requireActionRun(engine: BrainEngine, runId: number): Promise<ActionRunRecord> {
+  const run = await getActionRun(engine, runId);
+  if (!run) throw new Error(`Action run not found: ${runId}`);
+  return run;
+}
+
+function readInteractivePendingMeta(run: ActionRunRecord): InteractiveRunPendingMeta {
+  const result = objectValue(run.result);
+  const nested = objectValue(result.pending);
+  const source = Object.keys(nested).length > 0 ? nested : result;
+  const actionRunId = numberValue(source.action_run_id) ?? run.id;
+  const sourceId = stringValue(source.source_id) || run.source_id;
+  const slug = stringValue(source.slug) || run.action_slug;
+  const nonce = stringValue(source.nonce);
+  const actionDir = readStringField(source, 'action_dir', 'actionDir');
+  const promptPath = readStringField(source, 'prompt_path', 'promptPath');
+  const requestPath = readStringField(source, 'request_path', 'requestPath');
+  const resultPath = readStringField(source, 'result_path', 'resultPath');
+  const initiator = stringValue(source.initiator) || 'unknown';
+  if (!nonce || !actionDir || !promptPath || !requestPath || !resultPath) {
+    throw new Error(`Interactive run ${run.id} is missing writeback metadata`);
+  }
+  return {
+    action_run_id: actionRunId,
+    source_id: sourceId,
+    slug,
+    nonce,
+    action_dir: actionDir,
+    prompt_path: promptPath,
+    request_path: requestPath,
+    result_path: resultPath,
+    initiator,
+  };
+}
+
+function normalizeInteractiveWriteback(
+  payload: Record<string, unknown>,
+  pending: InteractiveRunPendingMeta,
+): InteractiveWritebackPayload {
+  const actionRunId = numberValue(payload.action_run_id);
+  if (actionRunId !== pending.action_run_id) {
+    throw new Error(`Interactive writeback action_run_id mismatch for run ${pending.action_run_id}`);
+  }
+  if (stringValue(payload.source_id) !== pending.source_id) {
+    throw new Error(`Interactive writeback source_id mismatch for run ${pending.action_run_id}`);
+  }
+  if (stringValue(payload.slug) !== pending.slug) {
+    throw new Error(`Interactive writeback slug mismatch for run ${pending.action_run_id}`);
+  }
+  if (stringValue(payload.nonce) !== pending.nonce) {
+    throw new Error(`Interactive writeback nonce mismatch for run ${pending.action_run_id}`);
+  }
+  const status = stringValue(payload.status);
+  if (status !== 'done' && status !== 'blocked' && status !== 'failed') {
+    throw new Error(`Interactive writeback status is invalid for run ${pending.action_run_id}`);
+  }
+  const summary = stringValue(payload.summary);
+  if (!summary) {
+    throw new Error(`Interactive writeback summary is required for run ${pending.action_run_id}`);
+  }
+  const artifactRefs = arrayOfStrings(payload.artifact_refs);
+  let errors = arrayOfStrings(payload.errors);
+  if (status !== 'done' && errors.length === 0) errors = [summary];
+  return {
+    status,
+    summary,
+    artifact_refs: artifactRefs,
+    errors,
+    ...(payload.plan_done !== undefined ? { plan_done: payload.plan_done } : {}),
+  };
+}
+
+function parseJsonObject(raw: string, path: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch (err) {
+    throw new Error(`Invalid interactive writeback JSON at ${path}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  throw new Error(`Invalid interactive writeback JSON at ${path}: expected an object`);
+}
+
+function readStringField(obj: Record<string, unknown>, snake: string, camel: string): string {
+  return stringValue(obj[snake]) || stringValue(obj[camel]);
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
 }
 
 function normalizeActionRow(row: ActionRecord): ActionRecord {
