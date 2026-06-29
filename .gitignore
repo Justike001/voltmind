@@ -49,5 +49,7 @@ test/fixtures/pglite-snapshot.version
 reports/network-intelligence/
 tmptxt/
 
-# VoltMind interactive action runner temp dirs.voltmind-codex-interactive-*
+# VoltMind interactive action runner temp dirs.
+.voltmind-codex-interactive-*
+.voltmind-action-runs/
 Codex

@@ -9,6 +9,15 @@ Use `voltmind`, `VOLTMIND_HOME`, `~/.voltmind`, and `voltmind.yml` for runtime
 paths and user-facing instructions. Keep `BrainEngine` as the canonical engine
 contract name.
 
+> [!WARNING]
+> This repo is worked on by Codex agents running inside a **sandbox** that
+> blocks all outbound network connections (including `127.0.0.1`) and injects
+> proxy env vars pointing to a black-hole port. See [AGENTS.md § Sandbox
+> operations](AGENTS.md#sandbox-operations) for the required escalation +
+> proxy-cleanup pattern. TL;DR: every `Invoke-WebRequest`, `git push/pull`,
+> `npm install`, or `voltmind serve` API call needs both
+> `require_escalated` AND all 7 proxy vars cleared.
+
 ## Two organizational axes (read this first)
 
 VoltMind inherits GBrain's two-axis mental model, but the MVP narrows the

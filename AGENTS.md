@@ -120,6 +120,106 @@ If you are writing or reviewing an operation, consult:
 - **Check providers:** `voltmind providers list`, `voltmind providers test`
 - **Check health:** `voltmind status`, `voltmind doctor --fast`, `voltmind health`
 
+## Sandbox operations
+
+The Codex agent runtime runs inside a sandbox that enforces two independent
+layers of restriction. Treat them separately:
+
+**File-system layer** (solved by workdir policy): the sandbox permits reads
+anywhere and writes under `E:\gbrain\VoltMind`. The user-facing setting
+"workspace-write" is sufficient for file edits.
+
+**Network layer** (must be handled explicitly): the sandbox blocks ALL outbound
+HTTP/HTTPS/Socket connections at the container level regardless of the
+file-system setting. This includes connections to `127.0.0.1` and `localhost`.
+On top of the container-level block, the sandbox injects proxy environment
+variables that route traffic to a black-hole port (`127.0.0.1:9`):
+
+- `HTTPS_PROXY=http://127.0.0.1:9`
+- `HTTP_PROXY=http://127.0.0.1:9`
+- `ALL_PROXY=http://127.0.0.1:9`
+- `GIT_HTTP_PROXY=http://127.0.0.1:9`
+- `GIT_HTTPS_PROXY=http://127.0.0.1:9`
+- `NO_PROXY=localhost,127.0.0.1,::1`
+- `npm_config_offline=true`
+
+### Required pattern for ANY network operation
+
+Every command that touches the network (including `localhost` API calls to
+`127.0.0.1:7331`, `git push/pull/clone`, `npm install`, `pip install`, and
+`Invoke-WebRequest` / `Invoke-RestMethod`) MUST do TWO things:
+
+1. Set `sandbox_permissions: "require_escalated"` with a brief `justification`.
+2. Clear ALL seven proxy/offline variables in the same command invocation:
+
+```powershell
+$env:HTTPS_PROXY=''; $env:HTTP_PROXY=''; $env:ALL_PROXY='';
+$env:GIT_HTTP_PROXY=''; $env:GIT_HTTPS_PROXY='';
+$env:npm_config_offline='false';
+$env:NO_PROXY='';
+# then the actual network command
+```
+
+Clearing only `HTTP_PROXY` + `HTTPS_PROXY` is not enough — leaving
+`GIT_HTTP_PROXY`, `GIT_HTTPS_PROXY`, or `ALL_PROXY` set will still route
+the relevant traffic through the black-hole proxy and cause timeouts or
+"connection refused" errors.
+
+### Common sandbox failure symptoms
+
+- `Invoke-RestMethod` / `Invoke-WebRequest` against `127.0.0.1:7331` returns
+  `Unable to connect` or hangs with `Connection refused`.
+- `git clone` / `git push` hangs for 30+ seconds then fails.
+- `bun install` / `npm install` reports network errors even for local packages.
+- CLI commands exiting with `Received: -1` — the sandbox blocks `Bun.spawn`
+  for child processes (not a network issue; escalate spawn commands too).
+
+### Local Admin API access
+
+Accessing `http://127.0.0.1:7331/admin/api/*` from within the sandbox ALWAYS
+requires escalation + proxy cleanup. If `serve` was started without
+`VOLTMIND_ADMIN_AUTO_LOGIN_LOCAL=1`, the API returns `Admin authentication
+required` — the agent cannot resolve this without the bootstrap token. The
+preferred pattern is to start `serve` with auto-login before making API calls:
+
+```powershell
+$env:VOLTMIND_HOME='C:\Users\justike.liu'
+$env:VOLTMIND_ADMIN_AUTO_LOGIN_LOCAL='1'
+bun run src/cli.ts serve --http --port 7331
+```
+
+When the agent needs to both start `serve` and call its API in a single turn,
+use a PowerShell background job so the server has time to bind:
+
+```powershell
+# In the agent command, with require_escalated + proxy cleanup:
+$job = Start-Job -ScriptBlock {
+  $env:VOLTMIND_HOME='C:\Users\justike.liu'
+  $env:VOLTMIND_ADMIN_AUTO_LOGIN_LOCAL='1'
+  Set-Location 'E:\gbrain\VoltMind'
+  bun run src/cli.ts serve --http --port 7331 2>&1
+}
+Start-Sleep 8
+# Now API calls work
+```
+
+### CLI vs serve lock conflict
+
+When `voltmind serve --http` owns the PGLite lock, no other process
+(including `voltmind status` or any CLI command) can access the brain
+directly. Workarounds in order of preference:
+
+1. Use Admin API endpoints instead of CLI commands (the API shares the
+   serve process's engine).
+2. Start the daemon (`voltmind daemon start`) and stop serve — CLI commands
+   then forward to the daemon automatically.
+3. Stop serve, run CLI commands, restart serve (disruptive; only for bulk
+   operations that have no API equivalent).
+
+Do NOT run `voltmind storage unlock-pglite` while serve is alive; that removes
+the lock file but leaves the serve process writing to the same database,
+risking corruption.
+
 ## Personal brain scaffold language
 
 The scaffold contract lives in `docs/drafts/personal-brain-scaffold/templates/`,
