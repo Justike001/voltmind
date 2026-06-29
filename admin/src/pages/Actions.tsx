@@ -27,6 +27,40 @@ interface ActionRecord {
   related_context?: ActionRelatedContext;
 }
 
+interface ActionRunRecord {
+  id: number;
+  source_id: string;
+  action_slug: string;
+  status: string;
+  created_at: string;
+  finished_at: string | null;
+}
+
+interface ActionRunStatusResponse {
+  finalized: boolean;
+  writeback_status: string;
+  missing_result?: boolean;
+  run?: ActionRunRecord;
+  action?: ActionRecord | null;
+  outcome?: { summary?: string };
+}
+
+interface RunActionResponse {
+  action_run_id?: number;
+  writeback_status?: string;
+  run?: ActionRunRecord;
+}
+
+interface PendingWritebackState {
+  runId: number;
+  sourceId: string;
+  slug: string;
+  status: string;
+  startedAt: number;
+  message: string;
+  timedOut?: boolean;
+}
+
 interface ActionRelatedContext {
   related_people: string[];
   related_project: string | null;
@@ -111,6 +145,12 @@ const validStatusFilters = new Set(['', 'open', 'on_schedule', 'in_progress', 'b
 const MIN_INSPECTOR_WIDTH = 360;
 const MAX_INSPECTOR_WIDTH = 760;
 const DEFAULT_INSPECTOR_WIDTH = 520;
+const WRITEBACK_POLL_MS = 3000;
+const WRITEBACK_TIMEOUT_MS = 10 * 60 * 1000;
+
+function uniqueList(values: string[]): string[] {
+  return Array.from(new Set(values.map(value => value.trim()).filter(Boolean)));
+}
 
 const priorityLabels: Record<string, string> = {
   urgent: 'P1',
@@ -122,6 +162,23 @@ const priorityLabels: Record<string, string> = {
 
 function actionKey(a: Pick<ActionRecord, 'source_id' | 'slug'>): string {
   return `${a.source_id}:${a.slug}`;
+}
+
+function pendingWritebackFromRunResponse(
+  response: RunActionResponse,
+  fallback: Pick<ActionRecord, 'source_id' | 'slug'>,
+): PendingWritebackState | null {
+  const runId = response.action_run_id ?? response.run?.id;
+  const status = response.writeback_status ?? response.run?.status;
+  if (status !== 'interactive_pending' || typeof runId !== 'number') return null;
+  return {
+    runId,
+    sourceId: fallback.source_id || 'default',
+    slug: fallback.slug,
+    status,
+    startedAt: Date.now(),
+    message: 'Waiting for Codex writeback.',
+  };
 }
 
 function modeLabel(value: string): string {
@@ -360,6 +417,7 @@ export function ActionsPage() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [inspectorWidth, setInspectorWidth] = useState(getSavedInspectorWidth);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(true);
+  const [pendingWriteback, setPendingWriteback] = useState<PendingWritebackState | null>(null);
 
   const load = async (status: string) => {
     setLoading(true);
@@ -418,6 +476,9 @@ export function ActionsPage() {
     return visibleActions.find(a => actionKey(a) === selectedKey) || null;
   }, [visibleActions, selectedKey]);
   const inspectorOpen = Boolean(current && !inspectorCollapsed);
+  const currentPendingWriteback = current && pendingWriteback?.sourceId === current.source_id && pendingWriteback.slug === current.slug
+    ? pendingWriteback
+    : null;
 
   useEffect(() => {
     setExecutionPrompt('');
@@ -452,12 +513,12 @@ export function ActionsPage() {
             score: 0,
             reason: '',
             skills: [],
-            tools: [],
+            tools: Array.isArray(p.tools) ? p.tools.filter((tool: unknown): tool is string => typeof tool === 'string' && tool.trim().length > 0) : [],
             icon_data_url: p.icon_data_url,
           }));
           setAvailablePlugins(normalized);
-          const savedPlugin = current.tool_route?.selected_plugins?.[0];
-          if (savedPlugin && !normalized.find((c: ActionToolRouteCandidate) => c.plugin === savedPlugin)) {
+          const savedPlugins = current.tool_route?.selected_plugins || [];
+          if (savedPlugins.length && savedPlugins.every((plugin: string) => !normalized.find((c: ActionToolRouteCandidate) => c.plugin === plugin))) {
             setToolRouteDraft(normalizeToolRouteDraft(null));
           }
         })
@@ -468,6 +529,68 @@ export function ActionsPage() {
     }
     return () => { cancelled = true; };
   }, [current?.source_id, current?.slug, current?.mode]);
+
+  useEffect(() => {
+    if (!current || current.last_run_status !== 'interactive_pending') return;
+    if (pendingWriteback?.sourceId === current.source_id && pendingWriteback.slug === current.slug) return;
+    let cancelled = false;
+    api.actionRuns(current.slug, current.source_id || 'default')
+      .then((runs: ActionRunRecord[]) => {
+        if (cancelled) return;
+        const pending = runs.find(run => run.status === 'interactive_pending');
+        if (!pending) return;
+        setPendingWriteback({
+          runId: pending.id,
+          sourceId: pending.source_id || current.source_id || 'default',
+          slug: pending.action_slug || current.slug,
+          status: 'interactive_pending',
+          startedAt: Date.now(),
+          message: 'Waiting for Codex writeback.',
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [current?.source_id, current?.slug, current?.last_run_status, pendingWriteback?.runId]);
+
+  useEffect(() => {
+    if (!pendingWriteback) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response: ActionRunStatusResponse = await api.actionRunStatus(pendingWriteback.runId);
+        if (cancelled) return;
+        const status = response.writeback_status || response.run?.status || 'interactive_pending';
+        if (status === 'interactive_pending') {
+          const timedOut = Date.now() - pendingWriteback.startedAt > WRITEBACK_TIMEOUT_MS;
+          setPendingWriteback(prev => prev?.runId === pendingWriteback.runId
+            ? {
+                ...prev,
+                status,
+                timedOut,
+                message: timedOut
+                  ? 'Still waiting for Codex writeback. You can mark this action Done or Blocked manually.'
+                  : 'Waiting for Codex writeback.',
+              }
+            : prev);
+          return;
+        }
+        setPendingWriteback(prev => prev?.runId === pendingWriteback.runId ? null : prev);
+        await load(statusFilter);
+        setError(null);
+      } catch (e) {
+        if (cancelled) return;
+        setPendingWriteback(prev => prev?.runId === pendingWriteback.runId
+          ? { ...prev, message: e instanceof Error ? e.message : String(e) }
+          : prev);
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), WRITEBACK_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [pendingWriteback?.runId, pendingWriteback?.startedAt, statusFilter]);
 
   const replaceAction = (updated: ActionRecord) => {
     const key = actionKey(updated);
@@ -570,13 +693,22 @@ export function ActionsPage() {
     await persistPlan(next);
   };
 
-  const saveSelectedToolRoute = async (pluginName: string) => {
+  const saveSelectedToolRoute = async (pluginName: string, selected: boolean) => {
     if (!current) return;
     const candidate = availablePlugins.find(c => c.plugin === pluginName);
     if (!candidate) return;
+    const selectedPlugins = selected
+      ? uniqueList([...toolRouteDraft.selectedPlugins, candidate.plugin])
+      : toolRouteDraft.selectedPlugins.filter(plugin => plugin !== candidate.plugin);
+    const selectedPluginSet = new Set(selectedPlugins);
+    const selectedTools = uniqueList(
+      availablePlugins
+        .filter(plugin => selectedPluginSet.has(plugin.plugin))
+        .flatMap(plugin => plugin.tools || []),
+    );
     const nextDraft: ToolRouteDraft = {
-      selectedPlugins: [candidate.plugin],
-      selectedTools: candidate.tools,
+      selectedPlugins,
+      selectedTools,
       blockedTools: [],
       notes: '',
     };
@@ -596,7 +728,8 @@ export function ActionsPage() {
   const checkedCount = Object.values(checked).filter(Boolean).length;
   const modeCounts = Object.fromEntries(modes.map(m => [m.value, actions.filter(a => a.mode === m.value).length]));
   const planStepCount = plan?.plan.reduce((sum, phase) => sum + phase.steps.length, 0) || 0;
-  const selectedToolCandidate = availablePlugins.find(candidate => candidate.plugin === toolRouteDraft.selectedPlugins[0]) || null;
+  const selectedToolPluginSet = new Set(toolRouteDraft.selectedPlugins);
+  const selectedToolCandidates = availablePlugins.filter(candidate => selectedToolPluginSet.has(candidate.plugin));
 
   const scan = async () => {
     setLoading(true);
@@ -651,13 +784,15 @@ export function ActionsPage() {
     try {
       await api.setActionStatus(current.slug, current.source_id || 'default', 'in_progress', 'Started from action cockpit.');
       if (current.mode !== 'manual') {
-        await api.runAction(current.slug, current.source_id, {
+        const response: RunActionResponse = await api.runAction(current.slug, current.source_id, {
           userPrompt: executionPrompt,
           execute: true,
           interactive: true,
           confirmed: true,
           force: true,
         });
+        const pending = pendingWritebackFromRunResponse(response, current);
+        if (pending) setPendingWriteback(pending);
       }
       await load(statusFilter);
       setError(null);
@@ -726,15 +861,19 @@ export function ActionsPage() {
 
   const runChecked = async () => {
     const rows = visibleActions.filter(a => checked[actionKey(a)] && a.mode !== 'manual');
+    let latestPending: PendingWritebackState | null = null;
     for (const a of rows) {
-     await api.runAction(a.slug, a.source_id, {
-       userPrompt: current && actionKey(a) === actionKey(current) ? executionPrompt : '',
-       execute: true,
-       interactive: true,
-       confirmed: true,
-       force: true,
-     });
+      const response: RunActionResponse = await api.runAction(a.slug, a.source_id, {
+        userPrompt: current && actionKey(a) === actionKey(current) ? executionPrompt : '',
+        execute: true,
+        interactive: true,
+        confirmed: true,
+        force: true,
+      });
+      const pending = pendingWritebackFromRunResponse(response, a);
+      if (pending) latestPending = pending;
     }
+    if (latestPending) setPendingWriteback(latestPending);
     await load(statusFilter);
     setChecked({});
   };
@@ -949,33 +1088,47 @@ export function ActionsPage() {
 
               {current.mode !== 'manual' && (
                 <div className="tool-route-panel">
-                  <label className="tool-route-select">Tool
-                    <select
-                      value={toolRouteDraft.selectedPlugins[0] || ''}
-                      onChange={e => void saveSelectedToolRoute(e.target.value)}
-                      disabled={pluginsLoading || availablePlugins.length === 0}
-                    >
-                      <option value="" disabled>{pluginsLoading ? 'Scanning plugins...' : 'Choose a plugin tool'}</option>
-                      {availablePlugins.map(candidate => (
-                        <option key={candidate.plugin} value={candidate.plugin}>
-                          {candidate.display_name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="tool-route-heading">
+                    <span>Tools</span>
+                    <small>{pluginsLoading ? 'Scanning...' : `${toolRouteDraft.selectedPlugins.length} selected`}</small>
+                  </div>
 
-                  {selectedToolCandidate && (
-                    <div className="tool-route-selected">
-                      <span className="tool-route-icon">
-                        {selectedToolCandidate.icon_data_url
-                          ? <img src={selectedToolCandidate.icon_data_url} alt="" />
-                          : <Icon name={routePluginIcon(selectedToolCandidate.plugin)} />}
-                      </span>
-                      <span className="tool-route-plugin-body">
-                        <strong>@{selectedToolCandidate.plugin}</strong>
-                        <small>{selectedToolCandidate.display_name} · {selectedToolCandidate.category}</small>
-                        {selectedToolCandidate.description && <em>{selectedToolCandidate.description}</em>}
-                      </span>
+                  <div className="tool-route-grid" aria-label="Select action tool routes">
+                    {availablePlugins.length === 0 ? (
+                      <div className="tool-route-empty">{pluginsLoading ? 'Scanning plugins...' : 'No plugin tools found.'}</div>
+                    ) : availablePlugins.map(candidate => {
+                      const selected = selectedToolPluginSet.has(candidate.plugin);
+                      return (
+                        <label key={candidate.plugin} className={`tool-route-option${selected ? ' selected' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={pluginsLoading || toolRouteLoading}
+                            onChange={e => void saveSelectedToolRoute(candidate.plugin, e.target.checked)}
+                          />
+                          <span className="tool-route-check" aria-hidden="true"><Icon name="check" /></span>
+                          <span className="tool-route-icon">
+                            {candidate.icon_data_url
+                              ? <img src={candidate.icon_data_url} alt="" />
+                              : <Icon name={routePluginIcon(candidate.plugin)} />}
+                          </span>
+                          <span className="tool-route-plugin-body">
+                            <strong>{candidate.display_name}</strong>
+                            <small>@{candidate.plugin} · {candidate.category}</small>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {selectedToolCandidates.length > 0 && (
+                    <div className="tool-route-selected-summary">
+                      <span>Route capsule</span>
+                      <div>
+                        {selectedToolCandidates.map(candidate => (
+                          <em key={candidate.plugin}>@{candidate.plugin}</em>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1047,6 +1200,16 @@ export function ActionsPage() {
                     onChange={e => setExecutionPrompt(e.target.value)}
                     placeholder="Add constraints, desired output format, or context for the agent run."
                   />
+                </div>
+              )}
+
+              {currentPendingWriteback && (
+                <div className={`interactive-writeback-panel${currentPendingWriteback.timedOut ? ' timed-out' : ''}`}>
+                  <div>
+                    <strong>Waiting for Codex writeback</strong>
+                    <span>Run #{currentPendingWriteback.runId}</span>
+                  </div>
+                  <p>{currentPendingWriteback.message}</p>
                 </div>
               )}
 

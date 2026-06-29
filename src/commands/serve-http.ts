@@ -1470,6 +1470,29 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     }
   });
 
+  app.get('/admin/api/action-runs/:id', requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { finalizeInteractiveActionRun, getActionRun } = await import('../core/actions.ts');
+      const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const runId = Number(rawId);
+      if (!Number.isInteger(runId) || runId <= 0) {
+        res.status(400).json({ error: 'invalid_action_run_id' });
+        return;
+      }
+      const run = await getActionRun(engine, runId);
+      if (!run) {
+        res.status(404).json({ error: `Action run not found: ${runId}` });
+        return;
+      }
+      const result = run.status === 'interactive_pending'
+        ? await finalizeInteractiveActionRun(engine, runId, { allowMissing: true })
+        : { finalized: false, writeback_status: run.status, run, action: null };
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
   app.get('/admin/api/actions/archive', requireAdmin, async (req: Request, res: Response) => {
     try {
       const { listArchivedActions } = await import('../core/actions.ts');
@@ -1629,6 +1652,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         description: plugin.description,
         category: plugin.category,
         icon_data_url: plugin.iconDataUrl,
+        tools: Array.from(new Set(plugin.skills.flatMap(skill => skill.referencedTools))).sort(),
       }));
       res.json({ plugins });
     } catch (e) {
@@ -1663,6 +1687,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         interactive: req.body?.interactive === true,
         force: req.body?.force === true,
         confirmed: req.body?.confirmed === true,
+        initiator: 'admin-ui',
       });
       res.json(result);
     } catch (e) {

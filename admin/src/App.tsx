@@ -6,6 +6,7 @@ import { ArchivePage } from './pages/Archive';
 import { JobsWatchPage } from './pages/JobsWatch';
 import { ActionsPage } from './pages/Actions';
 import { api } from './api';
+import voltageLogoV from './assets/voltage-logo-v.png';
 
 type Page = 'login' | 'dashboard' | 'agents' | 'archive' | 'jobs' | 'actions';
 
@@ -58,7 +59,7 @@ export function App() {
     <div className="app">
       <nav className="sidebar">
         <div className="sidebar-logo">
-          <span className="brand-mark">ϟ</span>
+          <img className="brand-mark" src={voltageLogoV} alt="Voltage" />
           <span>VoltMind</span>
           <span className="sidebar-logo-subtitle">Admin</span>
         </div>
@@ -77,8 +78,8 @@ export function App() {
         <div className="sidebar-footer">
           <div className="local-state"><span>Local First</span><i /> <em>v0.9.3</em></div>
           <div className="profile-strip">
-            <span className="avatar">JD</span>
-            <div><strong>Jane Doe</strong><small>Local Profile</small></div>
+            <span className="avatar">JL</span>
+            <div><strong>Justike Liu</strong><small>Local Profile</small></div>
             <span>⌄</span>
           </div>
           <button

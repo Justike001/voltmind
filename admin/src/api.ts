@@ -58,6 +58,8 @@ export const api = {
   actions: (qs = '') => apiFetch(`/admin/api/actions${qs}`),
   actionRuns: (slug: string, sourceId = 'default') =>
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/runs?source_id=${encodeURIComponent(sourceId)}`),
+  actionRunStatus: (runId: number) =>
+    apiFetch(`/admin/api/action-runs/${encodeURIComponent(String(runId))}`),
   approveAction: (slug: string, sourceId = 'default') =>
     apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/approve`, {
       method: 'POST',
