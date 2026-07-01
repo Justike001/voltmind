@@ -6,7 +6,7 @@ due: '2026-06-30T23:59'
 automation:
   eligible: true
   mode: agent_executable
-  runtime: codex_interactive
+  runtime: codex
   trigger: manual
   risk_level: low
   requires_confirmation: false

@@ -10,8 +10,8 @@ promotion: allowed
 publish_level: never
 source_refs: []
 related_entities: []
-created: 2026-06-25
-updated: 2026-06-25
+created: 2026-06-25T00:00:00.000Z
+updated: '2026-06-30'
 status: open
 priority: medium
 related_people: []
@@ -35,16 +35,25 @@ max_autonomy: single_step
 agent: default
 skill: null
 agent_contract:
-  objective: "Use @outlook-email to draft an email to Lida (search contacts for Lida). Subject: [VoltMind Test] Hello from Harness Agent. Body: Hi Lida, this is a test email drafted by the VoltMind Action Runner -> Codex Interactive pipeline. No action needed, just a pipeline verification. Do NOT send, only save as draft."
+  objective: >-
+    Use @outlook-email to draft an email to Lida (search contacts for Lida).
+    Subject: [VoltMind Test] Hello from Harness Agent. Body: Hi Lida, this is a
+    test email drafted by the VoltMind Action Runner -> Codex Interactive
+    pipeline. No action needed, just a pipeline verification. Do NOT send, only
+    save as draft.
   context_refs: []
   output_target:
     type: outlook_draft
   success_criteria:
-    - "Draft email to Lida exists in Outlook drafts"
+    - Draft email to Lida exists in Outlook drafts
 writeback:
   on_success: []
   on_failure: []
-tags: [test, lida, outlook, harness-agent]
+tags:
+  - test
+  - lida
+  - outlook
+  - harness-agent
 ---
 
 # Draft Test Email to Lida

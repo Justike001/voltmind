@@ -11,7 +11,7 @@ publish_level: never
 source_refs: []
 related_entities: []
 created: 2026-06-24T00:00:00.000Z
-updated: '2026-06-26'
+updated: '2026-06-30'
 status: open
 priority: medium
 related_people: []
@@ -38,7 +38,7 @@ agent_contract:
   objective: >-
     Use @outlook-email to send an email to justike001@163.com with subject
     [VoltMind Action Test 2026-06-24] and body: This email was sent by the
-    VoltMind Action Runner -> HarnessAgent -> CodexInteractiveExecutor pipeline.
+    VoltMind Action Runner -> HarnessAgent -> CodexExecutor pipeline.
     End-to-end test passed. Sent on 2026-06-24.
   context_refs: []
   output_target:

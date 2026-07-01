@@ -62,7 +62,7 @@ tags:
 
 ## Action
 
-End-to-end test: VoltMind Action -> ActionRunner -> ToolSearchBootstrap -> CodexInteractiveExecutor -> draft email via @outlook-email.
+End-to-end test: VoltMind Action -> ActionRunner -> ToolSearchBootstrap -> CodexExecutor -> draft email via @outlook-email.
 
 ## Execution
 
