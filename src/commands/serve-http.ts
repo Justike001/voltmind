@@ -599,7 +599,10 @@ export async function generateAdminActionPlan(
     regenerateInstructions: input.regenerateInstructions || null,
   });
   const result = await (input.generatePlan || generateActionPlanWithFallback)(prompt);
-  const plan = planFromGeneratedPlan(result.plan);
+  const plan = {
+    ...planFromGeneratedPlan(result.plan),
+    related_runtime_context: enrichedRelatedRuntimeContext,
+  };
   await saveActionPlan(engine, slug, plan, sourceId);
   return {
     plan: plan.plan,
@@ -1472,7 +1475,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
 
   app.get('/admin/api/action-runs/:id', requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { finalizeInteractiveActionRun, getActionRun } = await import('../core/actions.ts');
+      const { finalizeInteractiveActionRun, getActionRun, getInteractiveActionRunEvents } = await import('../core/actions.ts');
       const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const runId = Number(rawId);
       if (!Number.isInteger(runId) || runId <= 0) {
@@ -1486,7 +1489,13 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       }
       const result = run.status === 'interactive_pending'
         ? await finalizeInteractiveActionRun(engine, runId, { allowMissing: true })
-        : { finalized: false, writeback_status: run.status, run, action: null };
+        : {
+            finalized: false,
+            writeback_status: run.status,
+            run,
+            action: null,
+            events: await getInteractiveActionRunEvents(engine, runId, 20),
+          };
       res.json(result);
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
@@ -2855,6 +2864,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   // Start server
   // ---------------------------------------------------------------------------
   const clientCount = await sql`SELECT count(*)::int as count FROM oauth_clients`;
+  startInteractiveWritebackWatcher(engine);
 
   app.listen(port, bind, () => {
     console.error(`
@@ -2880,4 +2890,42 @@ ${suppressBootstrapPrint
     : `║  Admin Token (paste into /admin login):              ║\n║  ${bootstrapToken.substring(0, 50)}  ║\n║  ${bootstrapToken.substring(50).padEnd(50)}  ║\n╚══════════════════════════════════════════════════════╝`}
 `);
   });
+}
+
+function startInteractiveWritebackWatcher(engine: BrainEngine): () => void {
+  if (process.env.VOLTMIND_ACTION_WRITEBACK_WATCH === '0') {
+    console.error('[voltmind] interactive writeback watcher disabled by VOLTMIND_ACTION_WRITEBACK_WATCH=0');
+    return () => {};
+  }
+  const intervalMs = Math.max(1000, Number(process.env.VOLTMIND_ACTION_WRITEBACK_WATCH_MS || 3000) || 3000);
+  const processingRunIds = new Set<number>();
+  let stopped = false;
+  let inFlight = false;
+
+  const tick = async () => {
+    if (stopped || inFlight) return;
+    inFlight = true;
+    try {
+      const { scanPendingInteractiveActionRuns } = await import('../core/actions.ts');
+      const result = await scanPendingInteractiveActionRuns(engine, { processingRunIds });
+      if (result.finalized > 0 || result.errors.length > 0) {
+        console.error(`[voltmind] interactive writeback watcher checked=${result.checked} finalized=${result.finalized} missing=${result.missing} errors=${result.errors.length}`);
+        for (const item of result.errors.slice(0, 5)) {
+          console.error(`[voltmind] interactive writeback watcher run ${item.run_id}: ${item.error}`);
+        }
+      }
+    } catch (err) {
+      console.error(`[voltmind] interactive writeback watcher failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      inFlight = false;
+    }
+  };
+
+  const timer = setInterval(() => { void tick(); }, intervalMs);
+  timer.unref?.();
+  void tick();
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
 }

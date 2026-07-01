@@ -16,6 +16,11 @@ import {
 } from './action-runner.ts';
 import type { ActionExecutionResult, InteractiveActionRunEnvelope } from './action-executor.ts';
 import {
+  appendInteractiveActionEvent,
+  readInteractiveActionEvents,
+  type InteractiveActionEvent,
+} from './action-interactive-observability.ts';
+import {
   buildUserActionToolRoute,
   normalizeActionToolRoute,
   renderActionToolRouteForPrompt,
@@ -107,6 +112,12 @@ export interface RunActionResult {
     prompt_path: string;
     request_path: string;
     result_path: string;
+    events_path?: string;
+    launcher_path?: string;
+    execution_context_path?: string;
+    stdout_log_path?: string;
+    stderr_log_path?: string;
+    transcript_path?: string;
   };
 }
 
@@ -117,6 +128,7 @@ export interface FinalizeInteractiveActionRunResult {
   run: ActionRunRecord;
   action: ActionRecord | null;
   outcome?: OutcomeSummary;
+  events?: InteractiveActionEvent[];
 }
 
 interface ParsedAction {
@@ -576,8 +588,15 @@ export async function runAction(
     const actionForRun = opts.interactive
       ? { ...action, runtime: 'codex_interactive' }
       : action;
+    const usesWritebackRuntime = actionForRun.runtime === 'craft_headless'
+      || actionForRun.runtime === 'codex_interactive';
     let interactiveRun: InteractiveActionRunEnvelope | null = null;
-    if (opts.interactive && !opts.dryRun && opts.initiator === 'admin-ui') {
+    let planContextSnapshot: unknown = null;
+    const shouldCreateWritebackRun = !opts.dryRun && (
+      actionForRun.runtime === 'craft_headless'
+      || (opts.interactive && opts.initiator === 'admin-ui')
+    );
+    if (usesWritebackRuntime && shouldCreateWritebackRun) {
       const policy = evaluateActionPolicy(actionForRun, { force: opts.force ?? false });
       const canStartInteractive =
         !policy.requiresApproval &&
@@ -589,6 +608,8 @@ export async function runAction(
           userPrompt: opts.userPrompt ?? null,
           initiator: opts.initiator ?? 'cli',
         });
+        const runPlan = await getActionPlan(engine, actionForRun.slug, resolvedSourceId);
+        planContextSnapshot = runPlan?.related_runtime_context ?? null;
       }
     }
     const runnerResult = await runner.run({
@@ -601,18 +622,21 @@ export async function runAction(
        force: opts.force ?? false,
        confirmed: opts.confirmed ?? false,
        interactiveRun: interactiveRun ?? undefined,
+       planContextSnapshot,
       },
     });
 
     if (interactiveRun) {
-      const pending = runnerResult.status === 'interactive_handoff' && (runnerResult.execution?.exitCode ?? 1) === 0;
+      const pending = runnerResult.status === 'interactive_handoff'
+        && ((runnerResult.execution?.exitCode ?? 1) === 0
+          || runnerResult.execution?.writebackStatus === 'result_written');
       const dbStatus = pending
         ? 'interactive_pending'
         : runnerResult.status === 'executed'
           ? 'completed'
           : runnerResult.status;
       const prompt = runnerResult.prompt ?? buildActionPrompt(actionForRun, opts.userPrompt || action.user_prompt || null);
-      const result = buildInteractiveLaunchResult(interactiveRun, runnerResult, pending);
+      const result = buildInteractiveLaunchResult(interactiveRun, runnerResult, pending, planContextSnapshot);
       await engine.executeRaw(
         `UPDATE action_runs
             SET status = $1,
@@ -656,6 +680,12 @@ export async function runAction(
           prompt_path: interactiveRun.promptPath,
           request_path: interactiveRun.requestPath,
           result_path: interactiveRun.resultPath,
+          events_path: interactiveRun.eventsPath,
+          launcher_path: interactiveRun.launcherPath,
+          execution_context_path: interactiveRun.executionContextPath,
+          stdout_log_path: interactiveRun.stdoutLogPath,
+          stderr_log_path: interactiveRun.stderrLogPath,
+          transcript_path: interactiveRun.transcriptPath,
         },
       };
     }
@@ -787,6 +817,17 @@ export async function getActionRun(engine: BrainEngine, runId: number): Promise<
   return rows[0] ?? null;
 }
 
+export async function getInteractiveActionRunEvents(
+  engine: BrainEngine,
+  runId: number,
+  limit = 20,
+): Promise<InteractiveActionEvent[]> {
+  const run = await getActionRun(engine, runId);
+  if (!run) return [];
+  const pending = safeReadInteractivePendingMeta(run);
+  return pending ? readInteractiveActionEvents(pending.events_path, limit) : [];
+}
+
 export async function finalizeInteractiveActionRun(
   engine: BrainEngine,
   runId: number,
@@ -796,16 +837,27 @@ export async function finalizeInteractiveActionRun(
   const run = await requireActionRun(engine, runId);
   const action = await getAction(engine, run.action_slug, run.source_id);
   if (run.status !== 'interactive_pending') {
+    const existingMeta = safeReadInteractivePendingMeta(run);
     return {
       finalized: false,
       writeback_status: run.status,
       run,
       action,
+      events: existingMeta ? await readInteractiveActionEvents(existingMeta.events_path, 20) : [],
     };
   }
 
   const pending = readInteractivePendingMeta(run);
   if (!existsSync(pending.result_path)) {
+    const recentEvents = await readInteractiveActionEvents(pending.events_path, 20);
+    if (!recentEvents.some(event => event.event === 'watch_missing_result')) {
+      await appendInteractiveActionEvent(pending.events_path, 'watch_missing_result', {
+        run_id: runId,
+        source_id: pending.source_id,
+        slug: pending.slug,
+        result_path: pending.result_path,
+      });
+    }
     if (opts.allowMissing !== false) {
       return {
         finalized: false,
@@ -813,11 +865,18 @@ export async function finalizeInteractiveActionRun(
         missing_result: true,
         run,
         action,
+        events: await readInteractiveActionEvents(pending.events_path, 20),
       };
     }
     throw new Error(`Interactive writeback result is missing: ${pending.result_path}`);
   }
 
+  await appendInteractiveActionEvent(pending.events_path, 'finalizer_result_observed', {
+    run_id: runId,
+    source_id: pending.source_id,
+    slug: pending.slug,
+    result_path: pending.result_path,
+  });
   const raw = await readFile(pending.result_path, 'utf-8');
   const parsed = parseJsonObject(raw, pending.result_path);
   const writeback = normalizeInteractiveWriteback(parsed, pending);
@@ -882,6 +941,13 @@ export async function finalizeInteractiveActionRun(
       WHERE source_id = $1 AND slug = $2`,
     [pending.source_id, pending.slug, dbRunStatus],
   );
+  await appendInteractiveActionEvent(pending.events_path, 'finalizer_completed', {
+    run_id: runId,
+    source_id: pending.source_id,
+    slug: pending.slug,
+    writeback_status: dbRunStatus,
+    action_status: writeback.status === 'done' ? 'done' : writeback.status,
+  });
 
   return {
     finalized: true,
@@ -889,7 +955,148 @@ export async function finalizeInteractiveActionRun(
     run: await requireActionRun(engine, runId),
     action: await getAction(engine, pending.slug, pending.source_id),
     outcome,
+    events: await readInteractiveActionEvents(pending.events_path, 20),
   };
+}
+
+export interface InteractiveWritebackWatcherResult {
+  checked: number;
+  finalized: number;
+  missing: number;
+  errors: Array<{ run_id: number; error: string }>;
+}
+
+export async function scanPendingInteractiveActionRuns(
+  engine: BrainEngine,
+  opts: {
+    limit?: number;
+    processingRunIds?: Set<number>;
+  } = {},
+): Promise<InteractiveWritebackWatcherResult> {
+  await ensureActionSchema(engine);
+  const limit = Math.max(1, Math.min(opts.limit ?? 50, 200));
+  const rows = await engine.executeRaw<ActionRunRecord>(
+    `SELECT id, source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt,
+            result, error_text, created_at::text, finished_at::text
+       FROM action_runs
+      WHERE status = 'interactive_pending'
+      ORDER BY created_at ASC
+      LIMIT $1`,
+    [limit],
+  );
+  const result: InteractiveWritebackWatcherResult = {
+    checked: 0,
+    finalized: 0,
+    missing: 0,
+    errors: [],
+  };
+    for (const run of rows) {
+      if (opts.processingRunIds?.has(run.id)) continue;
+      result.checked += 1;
+      opts.processingRunIds?.add(run.id);
+      try {
+        const pending = readInteractivePendingMeta(run);
+        if (!existsSync(pending.result_path)) {
+          // Degradation: check elapsed time and event history
+          const events = await readInteractiveActionEvents(pending.events_path, 50);
+          const elapsed = Date.now() - new Date(run.created_at + 'Z').getTime();
+          const degraded = await degradeStaleInteractiveActionRun(
+            engine, run, pending, events, elapsed,
+          );
+          if (degraded) continue;
+
+          result.missing += 1;
+          const recentEvents = await readInteractiveActionEvents(pending.events_path, 20);
+          if (!recentEvents.some(event => event.event === 'watch_missing_result')) {
+          await appendInteractiveActionEvent(pending.events_path, 'watch_missing_result', {
+            run_id: run.id,
+            source_id: pending.source_id,
+            slug: pending.slug,
+            result_path: pending.result_path,
+          });
+        }
+        continue;
+      }
+      await appendInteractiveActionEvent(pending.events_path, 'watch_finalizing', {
+        run_id: run.id,
+        source_id: pending.source_id,
+        slug: pending.slug,
+        result_path: pending.result_path,
+      });
+      const finalized = await finalizeInteractiveActionRun(engine, run.id, { allowMissing: true });
+      if (finalized.finalized) result.finalized += 1;
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      result.errors.push({ run_id: run.id, error });
+      const pending = safeReadInteractivePendingMeta(run);
+      await appendInteractiveActionEvent(pending?.events_path, 'watch_finalize_failed', {
+        run_id: run.id,
+        source_id: run.source_id,
+        slug: run.action_slug,
+        error,
+      });
+    } finally {
+      opts.processingRunIds?.delete(run.id);
+    }
+  }
+  return result;
+}
+
+async function degradeStaleInteractiveActionRun(
+  engine: BrainEngine,
+  run: ActionRunRecord,
+  pending: InteractiveRunPendingMeta,
+  events: InteractiveActionEvent[],
+  elapsedMs: number,
+): Promise<boolean> {
+  const spawned = events.some(e => e.event === 'launcher_staging_spawned');
+  const runtimeDetected = events.some(e => e.event === 'runtime_process_detected');
+  const runtimeMissing = events.some(e => e.event === 'runtime_process_missing');
+  const degradedEvent = events.find(e =>
+    e.event === 'watch_runtime_timed_out' || e.event === 'watch_runtime_missing',
+  );
+
+  // Redundant guard: already degraded.
+  if (degradedEvent) return true;
+
+  const degrade = async (reason: string): Promise<boolean> => {
+    const idempotencyCheck = await getActionRun(engine, run.id);
+    if (!idempotencyCheck || idempotencyCheck.status !== 'interactive_pending') return true;
+    await engine.executeRaw(
+      `UPDATE action_runs SET status = 'failed', error_text = $2, finished_at = now() WHERE id = $1`,
+      [run.id, reason],
+    );
+    await engine.executeRaw(
+      `UPDATE action_index SET last_run_at = now(), last_run_status = 'failed', updated_at = now()
+        WHERE source_id = $1 AND slug = $2`,
+      [pending.source_id, pending.slug],
+    );
+    await appendInteractiveActionEvent(pending.events_path, 'watch_runtime_timed_out', {
+      run_id: run.id,
+      source_id: pending.source_id,
+      slug: pending.slug,
+      reason,
+    });
+    return true;
+  };
+
+  // Runtime was never spawned.
+  if (!spawned && elapsedMs > 5 * 60 * 1000) {
+    return degrade('Runtime was never spawned within 5 minutes.');
+  }
+
+  // Post-spawn scan confirmed the runtime process is missing.
+  if (runtimeMissing && !runtimeDetected && elapsedMs > 5 * 60 * 1000) {
+    return degrade('Runtime process was never detected after spawn.');
+  }
+
+  // Runtime was detected but timed out.
+  const timeoutMs = Number(process.env.VOLTMIND_ACTION_WRITEBACK_TIMEOUT_MS || 30 * 60 * 1000);
+  if (runtimeDetected && elapsedMs > timeoutMs) {
+    return degrade('Runtime was detected but timed out without writing result.json.');
+  }
+
+  return false;
 }
 
 export async function listArchivedActions(
@@ -1156,8 +1363,17 @@ export async function loadActionIdentityContext(
       candidates.add(sourcePath);
       candidates.add(join(sourcePath, 'brain'));
     }
-  } catch {
-    // Optional context: missing sources table/row should not block planning.
+  } catch (err) {
+    console.error(`[loadActionIdentityContext] sources table lookup for source_id=${action.source_id} failed, trying engine config fallback:`, err instanceof Error ? err.message : String(err));
+    try {
+      const homeFromConfig = await engine.getConfig('voltmind_home');
+      if (homeFromConfig) {
+        candidates.add(dirname(homeFromConfig));
+        candidates.add(join(dirname(homeFromConfig), 'brain'));
+      }
+    } catch {
+      // Config fallback also failed; identity context may be incomplete.
+    }
   }
   if (process.env.VOLTMIND_HOME) {
     const homeParent = dirname(process.env.VOLTMIND_HOME);
@@ -1561,6 +1777,12 @@ interface InteractiveRunPendingMeta {
   prompt_path: string;
   request_path: string;
   result_path: string;
+  events_path: string;
+  launcher_path: string;
+  execution_context_path: string;
+  stdout_log_path: string;
+  stderr_log_path: string;
+  transcript_path: string;
   initiator: string;
 }
 
@@ -1600,6 +1822,12 @@ async function createInteractiveActionRun(
   );
   const runId = rows[0].id;
   const actionDir = join(process.cwd(), '.voltmind-action-runs', String(runId));
+  // ── Capture runtime context snapshot at launch time ──
+  // The plan may contain related_runtime_context from the last /plan run.
+  // We freeze it into the interactive request (request.json) so the
+  // detached Codex doesn't need to re-query VoltMind.
+  const plan = await getActionPlan(engine, action.slug, opts.sourceId);
+  const planContextSnapshot = plan?.related_runtime_context ?? null;
   const envelope: InteractiveActionRunEnvelope = {
     runId,
     sourceId: opts.sourceId,
@@ -1609,18 +1837,27 @@ async function createInteractiveActionRun(
     promptPath: join(actionDir, 'prompt.md'),
     requestPath: join(actionDir, 'request.json'),
     resultPath: join(actionDir, 'result.json'),
+    eventsPath: join(actionDir, 'events.jsonl'),
+    launcherPath: join(actionDir, 'launcher.json'),
+    executionContextPath: join(actionDir, 'execution-context.json'),
+    stdoutLogPath: join(actionDir, 'stdout.log'),
+    stderrLogPath: join(actionDir, 'stderr.log'),
+    transcriptPath: join(actionDir, 'transcript.log'),
     initiator: opts.initiator,
   };
   await engine.executeRaw(
     `UPDATE action_runs
         SET result = $2::jsonb
       WHERE id = $1`,
-    [runId, JSON.stringify(interactivePendingMetaForResult(envelope))],
+    [runId, JSON.stringify(interactivePendingMetaForResult(envelope, planContextSnapshot))],
   );
   return envelope;
 }
 
-function interactivePendingMetaForResult(envelope: InteractiveActionRunEnvelope): Record<string, unknown> {
+function interactivePendingMetaForResult(
+  envelope: InteractiveActionRunEnvelope,
+  planContextSnapshot?: unknown,
+): Record<string, unknown> {
   return {
     kind: 'interactive_writeback',
     writeback_status: 'interactive_pending',
@@ -1632,6 +1869,13 @@ function interactivePendingMetaForResult(envelope: InteractiveActionRunEnvelope)
     prompt_path: envelope.promptPath,
     request_path: envelope.requestPath,
     result_path: envelope.resultPath,
+    events_path: envelope.eventsPath,
+    launcher_path: envelope.launcherPath,
+    execution_context_path: envelope.executionContextPath,
+    stdout_log_path: envelope.stdoutLogPath,
+    stderr_log_path: envelope.stderrLogPath,
+    transcript_path: envelope.transcriptPath,
+    plan_context_snapshot: planContextSnapshot ?? null,
     initiator: envelope.initiator ?? 'unknown',
   };
 }
@@ -1645,9 +1889,11 @@ function buildInteractiveLaunchResult(
     outcome?: OutcomeSummary;
   },
   pending: boolean,
+  planContextSnapshot?: unknown,
 ): Record<string, unknown> {
   return {
     ...interactivePendingMetaForResult(envelope),
+    plan_context_snapshot: planContextSnapshot ?? null,
     writeback_status: pending ? 'interactive_pending' : 'failed',
     launch_status: runnerResult.status,
     launch_reason: runnerResult.reason ?? null,
@@ -1671,6 +1917,9 @@ function summarizeActionExecution(execution: ActionExecutionResult | undefined):
     requestPath: execution.requestPath,
     resultPath: execution.resultPath,
     promptPath: execution.promptPath,
+    eventsPath: execution.eventsPath,
+    launcherPath: execution.launcherPath,
+    executionContextPath: execution.executionContextPath,
   };
 }
 
@@ -1692,6 +1941,12 @@ function readInteractivePendingMeta(run: ActionRunRecord): InteractiveRunPending
   const promptPath = readStringField(source, 'prompt_path', 'promptPath');
   const requestPath = readStringField(source, 'request_path', 'requestPath');
   const resultPath = readStringField(source, 'result_path', 'resultPath');
+  const eventsPath = readStringField(source, 'events_path', 'eventsPath') || join(actionDir, 'events.jsonl');
+  const launcherPath = readStringField(source, 'launcher_path', 'launcherPath') || join(actionDir, 'launcher.json');
+  const executionContextPath = readStringField(source, 'execution_context_path', 'executionContextPath') || join(actionDir, 'execution-context.json');
+  const stdoutLogPath = readStringField(source, 'stdout_log_path', 'stdoutLogPath') || join(actionDir, 'stdout.log');
+  const stderrLogPath = readStringField(source, 'stderr_log_path', 'stderrLogPath') || join(actionDir, 'stderr.log');
+  const transcriptPath = readStringField(source, 'transcript_path', 'transcriptPath') || join(actionDir, 'transcript.log');
   const initiator = stringValue(source.initiator) || 'unknown';
   if (!nonce || !actionDir || !promptPath || !requestPath || !resultPath) {
     throw new Error(`Interactive run ${run.id} is missing writeback metadata`);
@@ -1705,8 +1960,22 @@ function readInteractivePendingMeta(run: ActionRunRecord): InteractiveRunPending
     prompt_path: promptPath,
     request_path: requestPath,
     result_path: resultPath,
+    events_path: eventsPath,
+    launcher_path: launcherPath,
+    execution_context_path: executionContextPath,
+    stdout_log_path: stdoutLogPath,
+    stderr_log_path: stderrLogPath,
+    transcript_path: transcriptPath,
     initiator,
   };
+}
+
+function safeReadInteractivePendingMeta(run: ActionRunRecord): InteractiveRunPendingMeta | null {
+  try {
+    return readInteractivePendingMeta(run);
+  } catch {
+    return null;
+  }
 }
 
 function normalizeInteractiveWriteback(
@@ -1944,7 +2213,7 @@ function renderRelatedContextForPrompt(context: ActionRelatedContext): string {
   return lines.length ? `Action related frontmatter:\n${lines.join('\n')}` : '';
 }
 
-function renderRelatedRuntimeContextForPrompt(context: ActionRelatedRuntimeContext | null | undefined): string {
+export function renderRelatedRuntimeContextForPrompt(context: ActionRelatedRuntimeContext | null | undefined): string {
   if (!context || context.hits.length === 0) return '';
   return [
     'Related Context From VoltMind Query:',
@@ -1958,6 +2227,44 @@ function renderRelatedRuntimeContextForPrompt(context: ActionRelatedRuntimeConte
   ].join('\n');
 }
 
+function normalizeActionRelatedRuntimeContext(value: unknown): ActionRelatedRuntimeContext | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as { hits?: unknown; warnings?: unknown };
+  const hits = Array.isArray(raw.hits)
+    ? raw.hits.map((item): ActionRelatedQueryHit | null => {
+        const h = item && typeof item === 'object' ? item as Partial<ActionRelatedQueryHit> : {};
+        const field = typeof h.field === 'string' && isActionRelatedContextField(h.field)
+          ? h.field
+          : null;
+        if (!field || typeof h.value !== 'string' || typeof h.slug !== 'string' || typeof h.title !== 'string') return null;
+        return {
+          field,
+          value: h.value,
+          slug: h.slug,
+          title: h.title,
+          type: typeof h.type === 'string' ? h.type : 'unknown',
+          score: typeof h.score === 'number' ? h.score : null,
+          snippet: typeof h.snippet === 'string' ? h.snippet : '',
+          ...(typeof h.source_id === 'string' ? { source_id: h.source_id } : {}),
+        };
+      }).filter((hit): hit is ActionRelatedQueryHit => Boolean(hit))
+    : [];
+  const warnings = Array.isArray(raw.warnings) ? raw.warnings.map(String) : [];
+  if (hits.length === 0 && warnings.length === 0) return null;
+  return { hits, warnings };
+}
+
+function isActionRelatedContextField(value: string): value is keyof ActionRelatedContext {
+  return [
+    'related_people',
+    'related_project',
+    'related_systems',
+    'related_entities',
+    'related_projects',
+    'related_workstream',
+  ].includes(value);
+}
+
 
 /* ── Plan persistence ── */
 
@@ -1965,6 +2272,7 @@ export interface ActionPlan {
   version: 2;
   plan: ActionPlanPhase[];
   done: Record<string, boolean>;
+  related_runtime_context?: ActionRelatedRuntimeContext | null;
 }
 
 export interface ActionPlanPhase {
@@ -2015,7 +2323,7 @@ export async function getActionPlan(
 
 export function normalizeActionPlan(value: unknown): ActionPlan | null {
   const raw = value && typeof value === 'object'
-    ? value as { plan?: unknown; done?: Record<string, boolean> }
+    ? value as { plan?: unknown; done?: Record<string, boolean>; related_runtime_context?: unknown }
     : {};
   if (!Array.isArray(raw.plan)) return null;
   const legacyDone = raw.done || {};
@@ -2040,12 +2348,14 @@ export function normalizeActionPlan(value: unknown): ActionPlan | null {
       }).filter(step => step.text.trim()),
     };
   }).filter(phase => phase.steps.length > 0);
+  const normalizedContext = normalizeActionRelatedRuntimeContext(raw.related_runtime_context);
   return {
     version: 2,
     plan,
     done: Object.fromEntries(plan.flatMap((phase, phaseIndex) =>
       phase.steps.map((step, stepIndex) => [`${phaseIndex}:${stepIndex}`, step.done]),
     )),
+    ...(normalizedContext ? { related_runtime_context: normalizedContext } : {}),
   };
 }
 

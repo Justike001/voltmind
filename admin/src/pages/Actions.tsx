@@ -43,6 +43,7 @@ interface ActionRunStatusResponse {
   run?: ActionRunRecord;
   action?: ActionRecord | null;
   outcome?: { summary?: string };
+  events?: InteractiveActionEvent[];
 }
 
 interface RunActionResponse {
@@ -58,7 +59,15 @@ interface PendingWritebackState {
   status: string;
   startedAt: number;
   message: string;
+  lastEvent?: InteractiveActionEvent;
   timedOut?: boolean;
+}
+
+interface InteractiveActionEvent {
+  ts: string;
+  event: string;
+  message?: string;
+  [key: string]: unknown;
 }
 
 interface ActionRelatedContext {
@@ -177,8 +186,40 @@ function pendingWritebackFromRunResponse(
     slug: fallback.slug,
     status,
     startedAt: Date.now(),
-    message: 'Waiting for Codex writeback.',
+    message: 'Launch accepted. Waiting for runtime events.',
   };
+}
+
+function describeWritebackEvent(event: InteractiveActionEvent | undefined, fallbackStatus: string): string {
+  if (!event) {
+    return fallbackStatus === 'interactive_pending'
+      ? 'Launch accepted. Waiting for runtime events.'
+      : `Runtime status: ${fallbackStatus}.`;
+  }
+  const labels: Record<string, string> = {
+    launcher_prepared: 'Prompt and writeback envelope prepared.',
+    launcher_spawn_start: 'Launching Codex interactive runtime.',
+    launcher_staging_spawned: 'Staging console launched — verifying runtime process.',
+    runtime_process_detected: 'Codex runtime process detected.',
+    runtime_process_missing: 'Warning: runtime process was not detected after launch.',
+    capture_unavailable_real_console: 'Runtime is using a real console; stdout/stderr capture is not available without changing connector hydration.',
+    started: 'Codex runtime started.',
+    context_loaded: 'Runtime context loaded.',
+    tool_route_observed: 'Tool route observed.',
+    draft_created: 'Draft artifact created.',
+    writeback_written: 'Runtime wrote result.json.',
+    watch_missing_result: 'Waiting for result.json.',
+    watch_finalizing: 'Result observed. Finalizing writeback.',
+    finalizer_result_observed: 'Result observed. Finalizing writeback.',
+    finalizer_completed: 'Writeback finalized.',
+    watch_runtime_timed_out: 'Runtime timed out - run has been degraded to failed.',
+    watch_runtime_missing: 'Runtime was never detected - run has been degraded to failed.',
+    blocked: 'Runtime blocked.',
+    failed: 'Runtime failed.',
+    watch_finalize_failed: 'Finalizer failed.',
+    launcher_spawn_failed: 'Runtime launch failed.',
+  };
+  return event.message || labels[event.event] || `Runtime event: ${event.event}.`;
 }
 
 function modeLabel(value: string): string {
@@ -545,7 +586,7 @@ export function ActionsPage() {
           slug: pending.action_slug || current.slug,
           status: 'interactive_pending',
           startedAt: Date.now(),
-          message: 'Waiting for Codex writeback.',
+          message: 'Launch accepted. Waiting for runtime events.',
         });
       })
       .catch(() => {});
@@ -560,16 +601,18 @@ export function ActionsPage() {
         const response: ActionRunStatusResponse = await api.actionRunStatus(pendingWriteback.runId);
         if (cancelled) return;
         const status = response.writeback_status || response.run?.status || 'interactive_pending';
+        const lastEvent = response.events?.[response.events.length - 1];
         if (status === 'interactive_pending') {
           const timedOut = Date.now() - pendingWriteback.startedAt > WRITEBACK_TIMEOUT_MS;
           setPendingWriteback(prev => prev?.runId === pendingWriteback.runId
             ? {
                 ...prev,
                 status,
+                lastEvent,
                 timedOut,
                 message: timedOut
                   ? 'Still waiting for Codex writeback. You can mark this action Done or Blocked manually.'
-                  : 'Waiting for Codex writeback.',
+                  : describeWritebackEvent(lastEvent, status),
               }
             : prev);
           return;
@@ -1206,10 +1249,13 @@ export function ActionsPage() {
               {currentPendingWriteback && (
                 <div className={`interactive-writeback-panel${currentPendingWriteback.timedOut ? ' timed-out' : ''}`}>
                   <div>
-                    <strong>Waiting for Codex writeback</strong>
+                    <strong>Interactive runtime</strong>
                     <span>Run #{currentPendingWriteback.runId}</span>
                   </div>
                   <p>{currentPendingWriteback.message}</p>
+                  {currentPendingWriteback.lastEvent?.ts && (
+                    <p>Last event: {currentPendingWriteback.lastEvent.event} at {new Date(currentPendingWriteback.lastEvent.ts).toLocaleTimeString()}</p>
+                  )}
                 </div>
               )}
 

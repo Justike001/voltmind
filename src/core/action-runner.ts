@@ -52,10 +52,13 @@ export interface ActionRunOptions {
   confirmed?: boolean;
   /** Skip non-approval gates (eligibility/status/due/autonomy). NEVER skips approval. */
   force?: boolean;
-  /** Override the action's runtime field. Use 'codex-interactive' for TUI mode. */
+  /** Override the action's runtime field. Use 'codex_interactive' for TUI mode. */
   runtimeOverride?: string;
   /** Stable writeback envelope for Admin-started Codex interactive runs. */
   interactiveRun?: InteractiveActionRunEnvelope;
+  /** Runtime context frozen at Admin /plan time; injected into
+   *  request.json so detached Codex avoids a fresh VoltMind query. */
+  planContextSnapshot?: unknown;
 }
 
 export interface OutcomeSummary {
@@ -192,6 +195,7 @@ export class DefaultActionRunner implements ActionRunner {
         toolScope,
         timeoutMs: 600_000,
         interactiveRun: options.interactiveRun,
+        planRuntimeContext: options.planContextSnapshot,
       });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -239,6 +243,31 @@ export class DefaultActionRunner implements ActionRunner {
       }
       return {
         status: execResult.exitCode === 0 ? 'interactive_handoff' : 'failed',
+        allowed: true,
+        prompt,
+        execution: execResult,
+        outcome,
+      };
+    }
+
+    if (execResult.kind === 'craft_headless') {
+      const resultWritten = execResult.writebackStatus === 'result_written';
+      const outcome: OutcomeSummary = {
+        success: resultWritten,
+        diagnosticCode: resultWritten ? undefined : 'craft_headless_failed',
+        summary: resultWritten
+          ? 'Craft headless runner finished and wrote result.json. VoltMind is waiting for the writeback finalizer.'
+          : 'Craft headless runner exited without writing result.json.',
+        artifactRefs: execResult.resultPath ? [execResult.resultPath] : [],
+        errors: resultWritten ? [] : ['craft_headless result.json was not written'],
+        rawTruncated: execResult.stdout.slice(0, 2000),
+        stderrTruncated: execResult.stderr.slice(0, 2000),
+      };
+      if (!resultWritten) {
+        await writeOutcome(engine, action, outcome, 'failed');
+      }
+      return {
+        status: resultWritten ? 'interactive_handoff' : 'failed',
         allowed: true,
         prompt,
         execution: execResult,

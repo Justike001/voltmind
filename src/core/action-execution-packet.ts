@@ -1,6 +1,6 @@
 import type { BrainEngine } from './engine.ts';
 import type { ActionPlan, ActionRecord } from './actions.ts';
-import { getActionPlan } from './actions.ts';
+import { getActionPlan, renderRelatedRuntimeContextForPrompt } from './actions.ts';
 import type { ToolScope } from './action-executor.ts';
 import {
   normalizeActionToolRoute,
@@ -56,16 +56,19 @@ async function loadPersistedToolRoute(
 }
 
 function renderActionPlanForPrompt(plan: ActionPlan | null): string {
-  if (!plan?.plan.length) return '';
+  if (!plan?.plan.length && !plan?.related_runtime_context?.hits.length) return '';
+  const runtimeContext = renderRelatedRuntimeContextForPrompt(plan?.related_runtime_context);
   return [
     '## Persisted Action Plan',
     '',
-    ...plan.plan.flatMap((phase, index) => [
+    ...(plan?.plan ?? []).flatMap((phase, index) => [
       `${index + 1}. ${phase.phase.replace(/^\d+\.\s*/, '')}`,
       ...phase.steps.map(step => `- [${step.done ? 'x' : ' '}] ${step.text}${step.note ? `\n  Note: ${step.note}` : ''}`),
     ]),
+    runtimeContext ? `## Admin Plan Runtime Context\n\n${runtimeContext}` : '',
     '',
     'Use this persisted plan as the execution todo list. Checked steps are already complete unless the user asks you to revisit them.',
+    runtimeContext ? 'Use Admin Plan Runtime Context before attempting a fresh VoltMind query. Only query VoltMind again if this context is missing or insufficient.' : '',
   ].join('\n');
 }
 
