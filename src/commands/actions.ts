@@ -20,13 +20,12 @@ USAGE
   voltmind actions list [--status open|on_schedule|in_progress|blocked|canceled] [--risk low|medium|high|restricted] [--due] [--limit N] [--json]
   voltmind actions get <slug> [--json]
   voltmind actions approve <slug> [--by NAME]
-  voltmind actions run <slug> [--now] [--execute] [--interactive] [--force] [--dry-run] [--prompt TEXT] [--json]
+  voltmind actions run <slug> [--now] [--execute] [--force] [--dry-run] [--prompt TEXT] [--json]
   voltmind actions runs <slug> [--json]
   voltmind actions complete|block|cancel <slug> [--note TEXT]
 
 Without --execute, actions still prepare draft-only prompts. With --execute,
-eligible agent actions run through the configured runtime backend. Add
---interactive to hand off to the Codex TUI with inherited stdio.`);
+eligible agent actions run through the configured runtime backend.`);
 }
 
 function parseFlag(args: string[], flag: string): string | undefined {
@@ -186,7 +185,6 @@ export async function runActions(engine: BrainEngine, args: string[]): Promise<v
         dryRun: hasFlag(args, '--dry-run'),
         userPrompt: parseFlag(args, '--prompt') || null,
         execute: hasFlag(args, '--execute'),
-        interactive: hasFlag(args, '--interactive'),
         force: hasFlag(args, '--force'),
         confirmed: hasFlag(args, '--dry-run') ? true : undefined,
       });
@@ -207,7 +205,6 @@ export async function runActions(engine: BrainEngine, args: string[]): Promise<v
           dryRun: hasFlag(args, '--dry-run'),
           userPrompt: parseFlag(args, '--prompt') || null,
           execute: hasFlag(args, '--execute'),
-          interactive: hasFlag(args, '--interactive'),
           force: hasFlag(args, '--force'),
           confirmed: true,
         });

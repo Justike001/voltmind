@@ -2030,7 +2030,7 @@ ACTION SYSTEM
   actions scan                       Index state/actions/*.md
   actions list [--due]               List action tasks by risk/status
   actions approve <slug>             Approve a gated action
-  actions run <slug> [--execute]     Prepare or execute an agent action; add --interactive for Codex TUI
+  actions run <slug> [--execute]     Prepare or execute an agent action
 
 JOBS
   jobs list [--status S] [--limit N] List jobs

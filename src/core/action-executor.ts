@@ -88,37 +88,151 @@ export interface ActionExecutor {
 
 const DEFAULT_CODEX_TIMEOUT_MS = 600_000; // 10 minutes
 
+export type ActionWritebackStatus = 'done' | 'blocked' | 'failed';
+
+export interface ActionWriteback {
+  status: ActionWritebackStatus;
+  summary: string;
+  artifactRefs: string[];
+  errors: string[];
+}
+
+export interface CodexExecEvent {
+  type?: string;
+  item?: unknown;
+  [key: string]: unknown;
+}
+
+export interface CodexExecutorOptions {
+  command?: string;
+  baseArgs?: string[];
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+}
+
 export class CodexExecutor implements ActionExecutor {
   readonly kind = 'codex';
 
+  constructor(private readonly options: CodexExecutorOptions = {}) {}
+
   async execute(req: ActionExecutionRequest): Promise<ActionExecutionResult> {
     const workDir = await mkdtemp(join(tmpdir(), 'voltmind-action-run-'));
+    const envelope = req.interactiveRun;
+    const cwd = this.options.cwd ?? process.cwd();
+    const childEnv = buildActionWritebackEnv({ ...process.env, ...(this.options.env ?? {}) }, envelope);
+    const command = this.options.command ?? 'codex';
+    const args = [
+      ...(this.options.baseArgs ?? []),
+      ...buildCodexExecArgs(cwd, childEnv),
+    ];
+    const start = Date.now();
+
     try {
-      const args = [
-        ...buildCodexExecArgs(process.cwd(), process.env),
-      ];
-      const child = spawn('codex', args, {
-        cwd: process.cwd(),
-        env: process.env,
+      if (envelope) {
+        await writeInteractiveActionPromptFiles(req.prompt, envelope, req.planRuntimeContext);
+        await writeFile(envelope.promptPath, renderCodexExecWritebackPrompt(req.prompt, envelope), 'utf-8');
+        await appendInteractiveActionEvent(envelope.eventsPath, 'codex_exec_started', {
+          run_id: envelope.runId,
+          source_id: envelope.sourceId,
+          slug: envelope.slug,
+          command,
+          args,
+          cwd,
+        });
+        await writeInteractiveJsonFile(envelope.launcherPath, {
+          version: 1,
+          mode: 'codex_exec',
+          command,
+          args,
+          cwd,
+          started_at: new Date().toISOString(),
+          capture: {
+            stdout_log_path: envelope.stdoutLogPath,
+            stderr_log_path: envelope.stderrLogPath,
+            transcript_path: envelope.transcriptPath,
+            events_path: envelope.eventsPath,
+          },
+        });
+      }
+
+      const codexPrompt = envelope
+        ? renderCodexExecWritebackPrompt(req.prompt, envelope)
+        : req.prompt;
+      const codexEvents: CodexExecEvent[] = [];
+      const pendingWrites: Array<Promise<unknown>> = [];
+      let stdoutBuffer = '';
+      let timedOut = false;
+      let stdout = '';
+      let stderr = '';
+
+      const appendLog = (path: string | undefined, text: string) => {
+        if (!path) return;
+        pendingWrites.push(appendFile(path, text, 'utf-8').catch(() => {}));
+      };
+      const observeLine = (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        const event = parseCodexExecEvent(trimmed);
+        if (!event) {
+          appendLog(envelope?.transcriptPath, `[stdout] ${trimmed}\n`);
+          return;
+        }
+        codexEvents.push(event);
+        const type = codexExecEventType(event);
+        if (envelope) {
+          pendingWrites.push(appendInteractiveActionEvent(envelope.eventsPath, 'codex_exec_event_seen', {
+            run_id: envelope.runId,
+            source_id: envelope.sourceId,
+            slug: envelope.slug,
+            codex_event_type: type,
+            item_type: codexExecItemType(event) ?? null,
+          }).catch(() => {}));
+        }
+        const transcriptLine = codexExecTranscriptLine(event);
+        if (transcriptLine) appendLog(envelope?.transcriptPath, transcriptLine);
+      };
+      const observeStdout = (chunk: string) => {
+        stdout += chunk;
+        appendLog(envelope?.stdoutLogPath, chunk);
+        stdoutBuffer += chunk;
+        let newline = stdoutBuffer.indexOf('\n');
+        while (newline >= 0) {
+          observeLine(stdoutBuffer.slice(0, newline));
+          stdoutBuffer = stdoutBuffer.slice(newline + 1);
+          newline = stdoutBuffer.indexOf('\n');
+        }
+      };
+
+      const child = spawn(command, args, {
+        cwd,
+        env: childEnv,
         shell: true,
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
       });
 
-      let stdout = '';
-      let stderr = '';
       child.stdout.setEncoding('utf8');
-      child.stdout.on('data', (chunk: string) => { stdout += chunk; });
+      child.stdout.on('data', (chunk: string) => observeStdout(chunk));
       child.stderr.setEncoding('utf8');
-      child.stderr.on('data', (chunk: string) => { stderr += chunk; });
-      child.stdin.end(req.prompt, 'utf8');
+      child.stderr.on('data', (chunk: string) => {
+        stderr += chunk;
+        appendLog(envelope?.stderrLogPath, chunk);
+      });
+      child.stdin.end(codexPrompt, 'utf8');
 
       const timeoutMs = req.timeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS;
-      const start = Date.now();
       const exitCode = await new Promise<number>((resolve, reject) => {
         const timer = setTimeout(() => {
+          timedOut = true;
           child.kill();
-          reject(new Error('codex exec timed out while executing action'));
+          if (envelope) {
+            pendingWrites.push(appendInteractiveActionEvent(envelope.eventsPath, 'codex_exec_timeout', {
+              run_id: envelope.runId,
+              source_id: envelope.sourceId,
+              slug: envelope.slug,
+              timeout_ms: timeoutMs,
+            }).catch(() => {}));
+          }
         }, timeoutMs);
         child.on('error', (err: Error) => {
           clearTimeout(timer);
@@ -130,322 +244,85 @@ export class CodexExecutor implements ActionExecutor {
         });
       });
 
+      if (stdoutBuffer.trim()) observeLine(stdoutBuffer);
+      stdoutBuffer = '';
+      await Promise.allSettled(pendingWrites);
+
+      let writebackStatus: string | undefined;
+      if (envelope) {
+        const writeback = summarizeCodexExecEvents(codexEvents, {
+          exitCode,
+          timedOut,
+          stderr,
+        });
+        await writeCodexExecResult(envelope, writeback);
+        writebackStatus = 'result_written';
+        await appendInteractiveActionEvent(envelope.eventsPath, writeback.status === 'done' ? 'codex_exec_complete' : 'codex_exec_error', {
+          run_id: envelope.runId,
+          source_id: envelope.sourceId,
+          slug: envelope.slug,
+          status: writeback.status,
+          exit_code: exitCode,
+          wall_ms: Date.now() - start,
+          errors: writeback.errors,
+        });
+      }
+
       return {
         kind: 'codex_exec',
         exitCode,
-        args,
+        args: [command, ...args],
         stdout,
         stderr,
         wallMs: Date.now() - start,
-      };
-    } finally {
-      await rm(workDir, { recursive: true, force: true }).catch(() => {});
-    }
-  }
-}
-
-/* ── CodexInteractiveExecutor ────────────────────────────── */
-
-/**
- * Spawns Codex in interactive TUI mode.
- *
- * CRITICAL RULES (empirically validated 2026-06-24):
- *
- * 1. MUST use independent real console (Path B: cmd /k, not detached /c).
- *    Codex Apps MCP hydration (connector read vs write tool surface) depends
- *    on launch context. A detached pseudo-console may only hydrate read tools.
- *
- * 2. MUST specify working directory (Path B: /D "cwd"; Path A: --cd cwd).
- *    Codex resolves workspace trust, sandbox policy, and config from cwd.
- *
- * 3. MUST NOT pass --sandbox, --enable apps, -c overrides, or approval_policy.
- *    Rely entirely on user's ~/.codex/config.toml. Extra args interfere with
- *    connector initialization and can cause write tool surface to go missing.
- *
- * 4. MUST do capability preflight (via ToolSearchBootstrap) before spawning.
- *    The orchestrator should confirm the required plugin/skill is available.
- *
- * 5. MUST fail closed. If the connector surface is incomplete (read-only),
- *    report the gap rather than silently succeeding with degraded capability.
- *
- * Two paths:
- *   Path A (TTY available):      spawn codex with stdio:'inherit' — TUI inline
- *   Path B (no TTY, sandbox/CI): cmd /c start "" /D "cwd" cmd /k codex "prompt"
- */
-export class CodexInteractiveExecutor implements ActionExecutor {
-  readonly kind = 'codex_interactive';
-
-  async execute(req: ActionExecutionRequest): Promise<ActionExecutionResult> {
-    const workDir = req.interactiveRun?.actionDir ?? await mkdtemp(join(process.cwd(), '.voltmind-codex-interactive-'));
-    const promptPath = req.interactiveRun?.promptPath ?? join(workDir, 'action-prompt.md');
-    const shouldCleanup = !req.interactiveRun;
-
-  try {
-      if (req.interactiveRun) {
-        await writeInteractiveActionPromptFiles(req.prompt, req.interactiveRun, req.planRuntimeContext);
-        await appendInteractiveActionEvent(req.interactiveRun.eventsPath, 'launcher_prepared', {
-          run_id: req.interactiveRun.runId,
-          source_id: req.interactiveRun.sourceId,
-          slug: req.interactiveRun.slug,
-          prompt_path: req.interactiveRun.promptPath,
-          request_path: req.interactiveRun.requestPath,
-          result_path: req.interactiveRun.resultPath,
-        });
-      } else {
-        await mkdir(workDir, { recursive: true });
-        await writeFile(promptPath, req.prompt, 'utf-8');
-      }
-
-      const args = buildCodexInteractiveArgs(process.cwd(), promptPath);
-      const hasTTY = process.stdin.isTTY && process.stdout.isTTY;
-      const shouldUseInlineTTY = hasTTY && !req.interactiveRun;
-      const childEnv = buildCodexInteractiveEnv(process.env, req.interactiveRun);
-
-      if (shouldUseInlineTTY) {
-        // Path A: real terminal — inherit stdio, Codex TUI opens inline
-        const launch = buildCodexInteractiveLaunch(args, childEnv);
-        const start = Date.now();
-        await appendInteractiveActionEvent(req.interactiveRun?.eventsPath, 'launcher_spawn_start', {
-          run_id: req.interactiveRun?.runId,
-          source_id: req.interactiveRun?.sourceId,
-          slug: req.interactiveRun?.slug,
-          mode: 'inline_tty',
-          command: launch.command,
-          args: launch.args,
-          cwd: process.cwd(),
-        });
-        await writeInteractiveJsonFile(req.interactiveRun?.launcherPath, {
-          version: 1,
-          mode: 'inline_tty',
-          command: launch.command,
-          args: launch.args,
-          cwd: process.cwd(),
-          started_at: new Date().toISOString(),
-        });
-        const child = spawn(launch.command, launch.args, {
-          cwd: process.cwd(),
-          env: childEnv,
-          shell: false,
-          stdio: 'inherit',
-          windowsHide: false,
-        });
-
-        const exitCode = await new Promise<number>((resolve, reject) => {
-          child.on('error', (err: Error) => reject(err));
-          child.on('close', (code: number | null) => resolve(code ?? 1));
-        });
-        await appendInteractiveActionEvent(req.interactiveRun?.eventsPath, 'launcher_process_closed', {
-          run_id: req.interactiveRun?.runId,
-          source_id: req.interactiveRun?.sourceId,
-          slug: req.interactiveRun?.slug,
-          mode: 'inline_tty',
-          exit_code: exitCode,
-          wall_ms: Date.now() - start,
-        });
-
-        return {
-          kind: 'codex_interactive',
-          exitCode,
-          args: [launch.command, ...launch.args],
-          stdout: '',
-          stderr: '',
-          wallMs: Date.now() - start,
-          actionRunId: req.interactiveRun?.runId,
-          writebackStatus: req.interactiveRun ? 'interactive_pending' : undefined,
-          actionDir: req.interactiveRun?.actionDir,
-          requestPath: req.interactiveRun?.requestPath,
-          resultPath: req.interactiveRun?.resultPath,
-          promptPath,
-          eventsPath: req.interactiveRun?.eventsPath,
-          launcherPath: req.interactiveRun?.launcherPath,
-          executionContextPath: req.interactiveRun?.executionContextPath,
-        };
-      }
-
-      // Path B: no TTY (sandbox, CI, pipe). On Windows, launch Codex
-      // in a REAL interactive console via "cmd /k".
-      //
-      // CRITICAL: Codex Apps MCP hydration (connector read vs write tool
-      // surface) depends on launch context. A detached "cmd /c start codex"
-      // creates a pseudo-console that may only hydrate read tools.
-      // A proper "cmd /k" with explicit cwd gives the connector a real
-      // interactive channel, matching the user's manual test environment.
-      //
-      // Rules (empirically validated):
-      // - Must use independent real console (cmd /k, not detached /c)
-      // - Must specify cwd (/D flag)
-      // - Must NOT pass exec/sandbox/approval_policy params (rely on user config)
-      // - The prompt (last arg) must be double-quoted for cmd /c start
-      if (process.platform === 'win32') {
-        const codexBin = resolveCodexInteractiveCommand(childEnv);
-        const promptText = args[args.length - 1] || '';
-        const quotedPrompt = '"' + promptText + '"';
-        // Build the inner command for "cmd /k".  If Codex is installed as a
-        // .ps1 shim (npm global on Windows), wrap it through powershell so the
-        // real console honours VOLTMIND_CODEX_BIN.
-        let innerCmd: string;
-        if (codexBin.toLowerCase().endsWith('.ps1')) {
-          const psExe = (childEnv.ComSpec && childEnv.ComSpec.toLowerCase().endsWith('powershell.exe'))
-            ? childEnv.ComSpec
-            : 'powershell.exe';
-          innerCmd = `${psExe} -NoProfile -ExecutionPolicy Bypass -File "${codexBin}" ${quotedPrompt}`;
-        } else {
-          innerCmd = `${codexBin} ${quotedPrompt}`;
-        }
-
-        const startArgs = [
-          '/c', 'start', '""',
-          '/D', '"' + process.cwd() + '"',
-          'cmd', '/k',
-          innerCmd,
-        ];
-
-        // Sandbox note: on Codex sandboxed Windows, CreateProcessW may be
-        // blocked even with detached:true. The spawn itself is synchronous
-        // in Bun and the sandbox may hang it. If the Admin API /run handler
-        // is called from a non-escalated serve process, this spawn will time
-        // out the HTTP response. The pending interactive run is already
-        // persisted in action_runs by this point; the writeback result.json
-        // can be dropped in the action directory without Codex.
-        await appendInteractiveActionEvent(req.interactiveRun?.eventsPath, 'launcher_spawn_start', {
-          run_id: req.interactiveRun?.runId,
-          source_id: req.interactiveRun?.sourceId,
-          slug: req.interactiveRun?.slug,
-          mode: 'windows_detached_real_console',
-          command: 'cmd',
-          args: startArgs,
-          codex_binary: codexBin,
-          cwd: process.cwd(),
-        });
-        const startedAt = new Date().toISOString();
-        const child = spawn('cmd', startArgs, {
-          cwd: process.cwd(),
-          env: childEnv,
-          shell: false,
-          stdio: 'ignore',
-          detached: true,
-          windowsHide: false,
-        });
-        await writeInteractiveJsonFile(req.interactiveRun?.launcherPath, {
-          version: 1,
-          mode: 'windows_detached_real_console',
-          command: 'cmd',
-          args: startArgs,
-          codex_binary: codexBin,
-          cwd: process.cwd(),
-          pid: child.pid ?? null,
-          pid_note: 'pid of cmd /c start staging process; the real Codex runtime lives in a new console window and will be detected by a post-spawn scan.',
-          started_at: startedAt,
-          capture: {
-            stdout_log_path: req.interactiveRun?.stdoutLogPath,
-            stderr_log_path: req.interactiveRun?.stderrLogPath,
-            transcript_path: req.interactiveRun?.transcriptPath,
-            status: 'capture_unavailable_real_console',
-            reason: 'Codex TUI must run in an independent cmd /k console so connector write tools hydrate correctly.',
-          },
-        });
-        // The pid here is the short-lived "cmd /c start" wrapper — NOT the
-        // real Codex runtime.  A fire-and-forget post-spawn scan runs next
-        // and will emit runtime_process_detected / runtime_process_missing.
-        await appendInteractiveActionEvent(req.interactiveRun?.eventsPath, 'launcher_staging_spawned', {
-          run_id: req.interactiveRun?.runId,
-          source_id: req.interactiveRun?.sourceId,
-          slug: req.interactiveRun?.slug,
-          mode: 'windows_detached_real_console',
-          pid: child.pid ?? null,
-          pid_note: 'cmd /c start staging pid — not the Codex runtime',
-        });
-        await appendInteractiveActionEvent(req.interactiveRun?.eventsPath, 'capture_unavailable_real_console', {
-          run_id: req.interactiveRun?.runId,
-          source_id: req.interactiveRun?.sourceId,
-          slug: req.interactiveRun?.slug,
-          stdout_log_path: req.interactiveRun?.stdoutLogPath,
-          stderr_log_path: req.interactiveRun?.stderrLogPath,
-          transcript_path: req.interactiveRun?.transcriptPath,
-        });
-
-        // ── Post-spawn runtime scan (background, fire-and-forget) ──
-        const eventsPath = req.interactiveRun?.eventsPath;
-        const runId = req.interactiveRun?.runId;
-        if (eventsPath && runId != null) {
-          const scan = scanForCodexRuntimeProcess(promptPath, eventsPath, runId);
-          scan.catch(() => {
-            // Best-effort; failure must not crash the launcher.
-          });
-        }
-
-        return {
-          kind: 'codex_interactive_detached',
-          exitCode: 0,
-          args: [codexBin, quotedPrompt],
-          stdout: 'Codex launched in a real interactive cmd console (cmd /k).',
-          stderr: '',
-          wallMs: 0,
-          actionRunId: req.interactiveRun?.runId,
-          writebackStatus: req.interactiveRun ? 'interactive_pending' : undefined,
-          actionDir: req.interactiveRun?.actionDir,
-          requestPath: req.interactiveRun?.requestPath,
-          resultPath: req.interactiveRun?.resultPath,
-          promptPath,
-          eventsPath: req.interactiveRun?.eventsPath,
-          launcherPath: req.interactiveRun?.launcherPath,
-          executionContextPath: req.interactiveRun?.executionContextPath,
-        };
-      }
-
-      // Unix without TTY: prompt file available for manual run
-      return {
-        kind: 'codex_interactive_no_tty',
-        exitCode: 1,
-        args: args,
-        stdout: '',
-        stderr: 'No TTY available. Prompt saved to: ' + promptPath + '\nRun: codex --cd "' + process.cwd() + '" --sandbox workspace-write "' + promptPath + '"',
-        wallMs: 0,
-        actionRunId: req.interactiveRun?.runId,
-        writebackStatus: req.interactiveRun ? 'interactive_pending' : undefined,
-        actionDir: req.interactiveRun?.actionDir,
-        requestPath: req.interactiveRun?.requestPath,
-        resultPath: req.interactiveRun?.resultPath,
-        promptPath,
-        eventsPath: req.interactiveRun?.eventsPath,
-        launcherPath: req.interactiveRun?.launcherPath,
-        executionContextPath: req.interactiveRun?.executionContextPath,
+        actionRunId: envelope?.runId,
+        writebackStatus,
+        actionDir: envelope?.actionDir,
+        requestPath: envelope?.requestPath,
+        resultPath: envelope?.resultPath,
+        promptPath: envelope?.promptPath,
+        eventsPath: envelope?.eventsPath,
+        launcherPath: envelope?.launcherPath,
+        executionContextPath: envelope?.executionContextPath,
       };
     } catch (err) {
-      await appendInteractiveActionEvent(req.interactiveRun?.eventsPath, 'launcher_spawn_failed', {
-        run_id: req.interactiveRun?.runId,
-        source_id: req.interactiveRun?.sourceId,
-        slug: req.interactiveRun?.slug,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      await writeInteractiveJsonFile(req.interactiveRun?.launcherPath, {
-        version: 1,
-        mode: process.platform === 'win32' ? 'windows_detached_real_console' : 'unknown',
-        cwd: process.cwd(),
-        failed_at: new Date().toISOString(),
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return {
-        kind: 'codex_interactive_error',
-        exitCode: 1,
-        args: [],
-        stdout: '',
-        stderr: err instanceof Error ? err.message : String(err),
-        wallMs: 0,
-        actionRunId: req.interactiveRun?.runId,
-        writebackStatus: req.interactiveRun ? 'interactive_pending' : undefined,
-        actionDir: req.interactiveRun?.actionDir,
-        requestPath: req.interactiveRun?.requestPath,
-        resultPath: req.interactiveRun?.resultPath,
-        promptPath,
-        eventsPath: req.interactiveRun?.eventsPath,
-        launcherPath: req.interactiveRun?.launcherPath,
-        executionContextPath: req.interactiveRun?.executionContextPath,
-      };
-    } finally {
-      if (shouldCleanup) {
-        await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      if (envelope) {
+        const message = err instanceof Error ? err.message : String(err);
+        const writeback: ActionWriteback = {
+          status: 'failed',
+          summary: `Codex exec failed before completion: ${message}`.slice(0, 500),
+          artifactRefs: [],
+          errors: [message],
+        };
+        await writeCodexExecResult(envelope, writeback).catch(() => {});
+        await appendInteractiveActionEvent(envelope.eventsPath, 'codex_exec_error', {
+          run_id: envelope.runId,
+          source_id: envelope.sourceId,
+          slug: envelope.slug,
+          error: message,
+          wall_ms: Date.now() - start,
+        }).catch(() => {});
+        return {
+          kind: 'codex_exec',
+          exitCode: 1,
+          args: [command, ...args],
+          stdout: '',
+          stderr: message,
+          wallMs: Date.now() - start,
+          actionRunId: envelope.runId,
+          writebackStatus: 'result_written',
+          actionDir: envelope.actionDir,
+          requestPath: envelope.requestPath,
+          resultPath: envelope.resultPath,
+          promptPath: envelope.promptPath,
+          eventsPath: envelope.eventsPath,
+          launcherPath: envelope.launcherPath,
+          executionContextPath: envelope.executionContextPath,
+        };
       }
+      throw err;
+    } finally {
+      await rm(workDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 }
@@ -454,7 +331,7 @@ export class CodexInteractiveExecutor implements ActionExecutor {
 
 const DEFAULT_CRAFT_TIMEOUT_MS = 600_000; // 10 minutes
 
-export type CraftHeadlessWritebackStatus = 'done' | 'blocked' | 'failed';
+export type CraftHeadlessWritebackStatus = ActionWritebackStatus;
 
 export interface CraftHeadlessEvent {
   type?: string;
@@ -462,12 +339,7 @@ export interface CraftHeadlessEvent {
   [key: string]: unknown;
 }
 
-export interface CraftHeadlessWriteback {
-  status: CraftHeadlessWritebackStatus;
-  summary: string;
-  artifactRefs: string[];
-  errors: string[];
-}
+export type CraftHeadlessWriteback = ActionWriteback;
 
 export interface CraftHeadlessExecutorOptions {
   command?: string;
@@ -492,7 +364,7 @@ export class CraftHeadlessExecutor implements ActionExecutor {
     const baseEnv = { ...process.env, ...(this.options.env ?? {}) };
     const configDir = this.options.configDir ?? join(envelope.actionDir, '.craft-config');
     const childEnv = {
-      ...buildCodexInteractiveEnv(baseEnv, envelope),
+      ...buildActionWritebackEnv(baseEnv, envelope),
       CRAFT_CONFIG_DIR: configDir,
       VOLTMIND_ACTION_RUNTIME: 'craft_headless',
     };
@@ -727,6 +599,99 @@ export function parseCraftStreamEvent(line: string): CraftHeadlessEvent | null {
   }
 }
 
+export function parseCodexExecEvent(line: string): CodexExecEvent | null {
+  try {
+    const parsed = JSON.parse(line) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed as CodexExecEvent;
+  } catch {
+    return null;
+  }
+}
+
+export function summarizeCodexExecEvents(
+  events: CodexExecEvent[],
+  opts: { exitCode?: number; timedOut?: boolean; stderr?: string } = {},
+): ActionWriteback {
+  const markers = {
+    status: undefined as ActionWritebackStatus | undefined,
+    summary: '',
+    artifactRefs: [] as string[],
+    errors: [] as string[],
+  };
+  const textChunks: string[] = [];
+  const artifactRefs: string[] = [];
+  const errors: string[] = [];
+  let completed = false;
+  let failed = false;
+  let finalAgentMessage = '';
+
+  for (const event of events) {
+    const type = codexExecEventType(event);
+    if (type === 'turn.completed' || type === 'thread.completed') completed = true;
+    if (type === 'turn.failed' || type === 'error') failed = true;
+    const text = codexExecTextFromEvent(event);
+    if (text) {
+      textChunks.push(text);
+      mergeMarkers(markers, parseCraftResultMarkers(text));
+      if (codexExecItemType(event) === 'agent_message') finalAgentMessage = text;
+    }
+    artifactRefs.push(...artifactRefsFromUnknown(event.artifact_refs));
+    artifactRefs.push(...artifactRefsFromUnknown(event.artifactRefs));
+    artifactRefs.push(...artifactRefsFromUnknown(event.artifacts));
+    const item = objectField(event, 'item');
+    if (item) {
+      artifactRefs.push(...artifactRefsFromUnknown(item.artifact_refs));
+      artifactRefs.push(...artifactRefsFromUnknown(item.artifactRefs));
+      artifactRefs.push(...artifactRefsFromUnknown(item.artifacts));
+    }
+    const eventError = errorTextFromUnknown(event.error ?? event.message ?? item?.error);
+    if ((type === 'error' || type === 'turn.failed' || failed) && eventError) errors.push(eventError);
+  }
+
+  const stderr = (opts.stderr ?? '').trim();
+  if (stderr) errors.push(stderr.slice(0, 1000));
+
+  let status: ActionWritebackStatus;
+  if (markers.status) {
+    status = markers.status;
+  } else if (opts.timedOut || failed || (opts.exitCode != null && opts.exitCode !== 0)) {
+    status = 'failed';
+  } else if (finalAgentMessage || completed) {
+    status = 'done';
+  } else {
+    status = 'failed';
+  }
+
+  const summary = firstNonEmpty(
+    markers.summary,
+    finalAgentMessage.slice(0, 500),
+    lastNonEmpty(textChunks)?.slice(0, 500),
+    status === 'done'
+      ? 'Codex exec run completed.'
+      : 'Codex exec run failed before producing a final result.',
+  ).slice(0, 500);
+
+  const mergedArtifacts = uniqueStrings([
+    ...markers.artifactRefs,
+    ...artifactRefs,
+  ]);
+  const mergedErrors = uniqueStrings([
+    ...markers.errors,
+    ...errors,
+  ]).filter(Boolean);
+  if (status !== 'done' && mergedErrors.length === 0) {
+    mergedErrors.push(opts.timedOut ? 'codex_exec_timeout' : 'codex_exec_failed');
+  }
+
+  return {
+    status,
+    summary,
+    artifactRefs: mergedArtifacts,
+    errors: status === 'done' ? [] : mergedErrors,
+  };
+}
+
 export function summarizeCraftHeadlessEvents(
   events: CraftHeadlessEvent[],
   opts: { exitCode?: number; timedOut?: boolean; stderr?: string } = {},
@@ -807,9 +772,23 @@ export function summarizeCraftHeadlessEvents(
   };
 }
 
+export async function writeCodexExecResult(
+  envelope: InteractiveActionRunEnvelope,
+  writeback: ActionWriteback,
+): Promise<void> {
+  await writeActionWritebackResult(envelope, writeback);
+}
+
 export async function writeCraftHeadlessResult(
   envelope: InteractiveActionRunEnvelope,
   writeback: CraftHeadlessWriteback,
+): Promise<void> {
+  await writeActionWritebackResult(envelope, writeback);
+}
+
+async function writeActionWritebackResult(
+  envelope: InteractiveActionRunEnvelope,
+  writeback: ActionWriteback,
 ): Promise<void> {
   const result = {
     action_run_id: envelope.runId,
@@ -824,6 +803,40 @@ export async function writeCraftHeadlessResult(
   const tmpPath = `${envelope.resultPath}.tmp`;
   await writeFile(tmpPath, JSON.stringify(result, null, 2) + '\n', 'utf-8');
   await rename(tmpPath, envelope.resultPath);
+}
+
+export function renderCodexExecWritebackPrompt(
+  prompt: string,
+  envelope: InteractiveActionRunEnvelope,
+): string {
+  return [
+    prompt.trimEnd(),
+    '',
+    '## VoltMind Codex Exec Runtime Contract',
+    '',
+    'Codex is running non-interactively through `codex exec --json`. VoltMind is the writeback harness.',
+    'Do not write result.json directly. VoltMind will consume Codex JSONL events and atomically write result.json after the run.',
+    '',
+    'Read request.json when you need launch metadata, especially plan_context_snapshot:',
+    envelope.requestPath,
+    '',
+    'Prefer plan_context_snapshot over a fresh VoltMind query. Only query again if the snapshot is missing or insufficient.',
+    '',
+    'Create any reviewable drafts or files in the action workspace. Keep connector actions draft-only unless the prompt explicitly says a confirmed send/write is allowed.',
+    '',
+    'When you finish, include these short machine-readable lines in the final response so the adapter can summarize accurately:',
+    '',
+    'VOLTMIND_RESULT_STATUS: done | blocked | failed',
+    'VOLTMIND_RESULT_SUMMARY: one concise sentence',
+    'VOLTMIND_ARTIFACT_REF: optional artifact path, slug, URL, or connector draft id',
+    'VOLTMIND_ERROR: optional short error or blocking reason',
+    '',
+    'Status rules:',
+    '- Use done only when the requested draft/artifact was created and is safe for review.',
+    '- Use blocked when user input, missing credentials, or external approval is required.',
+    '- Use failed when execution hit an unrecoverable runtime or tool error.',
+    '',
+  ].join('\n');
 }
 
 export function renderCraftHeadlessPrompt(
@@ -867,6 +880,49 @@ function craftSourcesFromEnv(env: NodeJS.ProcessEnv): string[] {
     .filter(part => /^[A-Za-z0-9._-]+$/.test(part)));
 }
 
+function codexExecEventType(event: CodexExecEvent): string {
+  return stringField(event, 'type') ?? stringField(event, 'event') ?? 'unknown';
+}
+
+function codexExecItemType(event: CodexExecEvent): string | undefined {
+  const item = objectField(event, 'item');
+  return item ? stringField(item, 'type') : undefined;
+}
+
+function codexExecTranscriptLine(event: CodexExecEvent): string {
+  const type = codexExecEventType(event);
+  const itemType = codexExecItemType(event);
+  const text = codexExecTextFromEvent(event);
+  if (text) return `[${type}${itemType ? `:${itemType}` : ''}] ${text}\n`;
+  return `[${type}${itemType ? `:${itemType}` : ''}]\n`;
+}
+
+function codexExecTextFromEvent(event: CodexExecEvent): string {
+  const direct = stringField(event, 'delta')
+    ?? stringField(event, 'text')
+    ?? stringField(event, 'content')
+    ?? stringField(event, 'message');
+  if (direct) return direct;
+  const item = objectField(event, 'item');
+  if (item) {
+    const itemText = stringField(item, 'text')
+      ?? stringField(item, 'content')
+      ?? stringField(item, 'message')
+      ?? stringField(item, 'summary');
+    if (itemText) return itemText;
+    const itemResult = item.result;
+    if (typeof itemResult === 'string') return itemResult;
+    if (itemResult && typeof itemResult === 'object' && !Array.isArray(itemResult)) {
+      const nested = itemResult as Record<string, unknown>;
+      for (const key of ['text', 'content', 'summary', 'message']) {
+        const value = nested[key];
+        if (typeof value === 'string' && value.trim()) return value;
+      }
+    }
+  }
+  return '';
+}
+
 function craftEventType(event: CraftHeadlessEvent): string {
   return stringField(event, 'type') ?? stringField(event, 'event') ?? 'unknown';
 }
@@ -874,6 +930,13 @@ function craftEventType(event: CraftHeadlessEvent): string {
 function stringField(event: CraftHeadlessEvent, field: string): string | undefined {
   const value = event[field];
   return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function objectField(event: Record<string, unknown>, field: string): Record<string, unknown> | null {
+  const value = event[field];
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 function craftTranscriptLine(event: CraftHeadlessEvent): string {
@@ -1134,7 +1197,7 @@ export function renderInteractiveWritebackPrompt(
   ].join('\n');
 }
 
-function buildCodexInteractiveEnv(
+function buildActionWritebackEnv(
   env: NodeJS.ProcessEnv,
   envelope?: InteractiveActionRunEnvelope,
 ): NodeJS.ProcessEnv {
@@ -1160,13 +1223,11 @@ function buildCodexInteractiveEnv(
 
 /**
  * Resolve an ActionExecutor from the action's `runtime` field.
- * Phase 1 implements `codex` (or null/undefined → codex), `codex_interactive`,
- * and `craft_headless`.
+ * Phase 1 implements `codex` (or null/undefined → codex) and `craft_headless`.
  * Other runtimes throw; the caller (ActionRunner) catches and returns blocked.
  */
 export function resolveExecutor(runtime: string | null | undefined): ActionExecutor {
   if (!runtime || runtime === 'codex') return new CodexExecutor();
-  if (runtime === 'codex_interactive') return new CodexInteractiveExecutor();
   if (runtime === 'craft_headless') return new CraftHeadlessExecutor();
   throw new Error(`Runtime "${runtime}" is not implemented in Phase 1`);
 }
@@ -1175,119 +1236,13 @@ export function buildCodexExecArgs(cwd: string = process.cwd(), env: NodeJS.Proc
   return [
     'exec',
     '--enable', 'apps',
+    '--enable', 'plugins',
     '--json',
     ...codexConfigArgs(env),
     '--cd', cwd,
-    '--sandbox', 'read-only',
+    '--sandbox', 'danger-full-access',
     '-',
   ];
-}
-
-export function buildCodexInteractiveArgs(
-  cwd: string = process.cwd(),
-  promptPath: string,
-): string[] {
-  // The interactive executor deliberately does not pin --sandbox or --enable
-  // here. Codex's own config ( ~/.codex/config.toml or env) controls sandbox
-  // level and app enablement for the TUI session. Pinning them inline
-  // conflicted with connector hydration (apps._default.* config overrides)
-  // and prevented Codex from loading its own plugin/app runtime config.
-  // The non-interactive path (buildCodexExecArgs) still uses explicit flags.
-  return [
-    '--cd', cwd,
-    `Read and execute the VoltMind action prompt from this file: ${promptPath}`,
-  ];
-}
-
-export function resolveCodexInteractiveCommand(env: NodeJS.ProcessEnv = process.env): string {
-  if (env.VOLTMIND_CODEX_BIN) return env.VOLTMIND_CODEX_BIN;
-  return process.platform === 'win32' ? resolveWindowsCodexScript(env) : 'codex';
-}
-
-/** Post-spawn scan: wait a few seconds then search for the real Codex runtime
- *  process whose command line references the action prompt file.  Writes
- *  runtime_process_detected or runtime_process_missing to events.jsonl. */
-export async function scanForCodexRuntimeProcess(
-  promptPath: string,
-  eventsPath: string,
-  runId: number,
-): Promise<void> {
-  const initialDelayMs = positiveIntegerFromEnv('VOLTMIND_ACTION_RUNTIME_SCAN_DELAY_MS', 5000);
-  const attempts = positiveIntegerFromEnv('VOLTMIND_ACTION_RUNTIME_SCAN_ATTEMPTS', 3);
-  const retryMs = positiveIntegerFromEnv('VOLTMIND_ACTION_RUNTIME_SCAN_RETRY_MS', 3000);
-  await new Promise(resolve => setTimeout(resolve, initialDelayMs));
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    try {
-      const escaped = promptPath.replace(/\\/g, '\\\\');
-      const psScript = [
-        `$found = Get-CimInstance Win32_Process | Where-Object {`,
-        `  $_.CommandLine -like '*${escaped}*' -and (`,
-        `    $_.Name -like 'node.exe' -or`,
-        `    $_.Name -like 'codex.exe' -or`,
-        `    $_.Name -like 'codex.cmd'`,
-        `  )`,
-        `} | Select-Object -First 1 ProcessId, Name, CommandLine`,
-        `if ($found) {`,
-        `  ConvertTo-Json @{ pid = $found.ProcessId; name = $found.Name; cmd = $found.CommandLine }`,
-        `} else {`,
-        `  'null'`,
-        `}`,
-      ].join(' ');
-      const proc = Bun.spawn(['powershell', '-NoProfile', '-Command', psScript], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-      });
-      const stdout = await new Response(proc.stdout).text();
-      const trimmed = stdout.trim();
-      if (trimmed && trimmed !== 'null') {
-        const info = JSON.parse(trimmed) as { pid: number; name: string; cmd: string };
-        await appendInteractiveActionEvent(eventsPath, 'runtime_process_detected', {
-          run_id: runId,
-          pid: info.pid,
-          process_name: info.name,
-          command_line: info.cmd?.slice(0, 500) ?? null,
-        });
-        return;
-      }
-    } catch {
-      // Retry after a short wait.
-    }
-    if (attempt < attempts - 1) await new Promise(resolve => setTimeout(resolve, retryMs));
-  }
-  await appendInteractiveActionEvent(eventsPath, 'runtime_process_missing', {
-    run_id: runId,
-    prompt_path: promptPath,
-  });
-}
-
-function positiveIntegerFromEnv(name: string, fallback: number): number {
-  const raw = Number(process.env[name]);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
-}
-
-export function buildCodexInteractiveLaunch(
-  codexArgs: string[],
-  env: NodeJS.ProcessEnv = process.env,
-): { command: string; args: string[] } {
-  const command = resolveCodexInteractiveCommand(env);
-  if (process.platform === 'win32' && command.toLowerCase().endsWith('.ps1')) {
-    return {
-      command: env.ComSpec && env.ComSpec.toLowerCase().endsWith('powershell.exe')
-        ? env.ComSpec
-        : 'powershell.exe',
-      args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', command, ...codexArgs],
-    };
-  }
-  return { command, args: codexArgs };
-}
-
-function resolveWindowsCodexScript(env: NodeJS.ProcessEnv): string {
-  const appData = env.APPDATA;
-  if (appData) {
-    const ps1 = join(appData, 'npm', 'codex.ps1');
-    if (existsSync(ps1)) return ps1;
-  }
-  return 'codex.cmd';
 }
 
 export function codexConfigArgs(env: NodeJS.ProcessEnv = process.env): string[] {

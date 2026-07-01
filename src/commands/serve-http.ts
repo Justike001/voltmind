@@ -1693,7 +1693,6 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         dryRun: req.body?.dry_run === true,
         userPrompt: typeof req.body?.user_prompt === 'string' ? req.body.user_prompt : null,
         execute: req.body?.execute === true,
-        interactive: req.body?.interactive === true,
         force: req.body?.force === true,
         confirmed: req.body?.confirmed === true,
         initiator: 'admin-ui',

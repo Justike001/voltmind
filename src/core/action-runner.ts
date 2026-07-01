@@ -52,9 +52,9 @@ export interface ActionRunOptions {
   confirmed?: boolean;
   /** Skip non-approval gates (eligibility/status/due/autonomy). NEVER skips approval. */
   force?: boolean;
-  /** Override the action's runtime field. Use 'codex_interactive' for TUI mode. */
+  /** Override the action's runtime field. */
   runtimeOverride?: string;
-  /** Stable writeback envelope for Admin-started Codex interactive runs. */
+  /** Stable writeback envelope for writeback runtimes such as craft_headless. */
   interactiveRun?: InteractiveActionRunEnvelope;
   /** Runtime context frozen at Admin /plan time; injected into
    *  request.json so detached Codex avoids a fresh VoltMind query. */
@@ -226,23 +226,24 @@ export class DefaultActionRunner implements ActionRunner {
     }
 
     // ── Parse outcome ──
-    if (execResult.kind === 'codex_interactive' || execResult.kind === 'codex_interactive_detached') {
+    if (execResult.kind === 'codex_exec' && options.interactiveRun) {
+      const resultWritten = execResult.writebackStatus === 'result_written';
       const outcome: OutcomeSummary = {
-        success: execResult.exitCode === 0,
-        diagnosticCode: execResult.exitCode === 0 ? undefined : 'codex_interactive_failed',
-        summary: execResult.exitCode === 0
-          ? 'Interactive Codex session started. VoltMind is waiting for the writeback result file.'
-          : 'Interactive Codex session exited with a non-zero status.',
-        artifactRefs: [],
-        errors: execResult.exitCode === 0 ? [] : [`codex interactive exited with code ${execResult.exitCode}`],
-        rawTruncated: '',
-        stderrTruncated: undefined,
+        success: resultWritten,
+        diagnosticCode: resultWritten ? undefined : 'codex_exec_writeback_failed',
+        summary: resultWritten
+          ? 'Codex exec finished and wrote result.json. VoltMind is waiting for the writeback finalizer.'
+          : 'Codex exec exited without writing result.json.',
+        artifactRefs: execResult.resultPath ? [execResult.resultPath] : [],
+        errors: resultWritten ? [] : ['codex_exec result.json was not written'],
+        rawTruncated: execResult.stdout.slice(0, 2000),
+        stderrTruncated: execResult.stderr.slice(0, 2000),
       };
-      if (execResult.exitCode !== 0) {
+      if (!resultWritten) {
         await writeOutcome(engine, action, outcome, 'failed');
       }
       return {
-        status: execResult.exitCode === 0 ? 'interactive_handoff' : 'failed',
+        status: resultWritten ? 'interactive_handoff' : 'failed',
         allowed: true,
         prompt,
         execution: execResult,

@@ -572,7 +572,6 @@ export async function runAction(
     execute?: boolean;
     force?: boolean;
     confirmed?: boolean;
-    interactive?: boolean;
     initiator?: 'admin-ui' | 'cli' | 'daemon' | 'mcp';
   } = {},
 ): Promise<RunActionResult> {
@@ -585,17 +584,12 @@ export async function runAction(
   // ── New execution path: route to DefaultActionRunner ──
   if (opts.execute && ['agent_assisted', 'agent_executable'].includes(action.mode)) {
     const runner = new DefaultActionRunner();
-    const actionForRun = opts.interactive
-      ? { ...action, runtime: 'codex_interactive' }
-      : action;
+    const actionForRun = action;
     const usesWritebackRuntime = actionForRun.runtime === 'craft_headless'
-      || actionForRun.runtime === 'codex_interactive';
+      || (actionForRun.runtime === 'codex' && opts.initiator === 'admin-ui');
     let interactiveRun: InteractiveActionRunEnvelope | null = null;
     let planContextSnapshot: unknown = null;
-    const shouldCreateWritebackRun = !opts.dryRun && (
-      actionForRun.runtime === 'craft_headless'
-      || (opts.interactive && opts.initiator === 'admin-ui')
-    );
+    const shouldCreateWritebackRun = !opts.dryRun && usesWritebackRuntime;
     if (usesWritebackRuntime && shouldCreateWritebackRun) {
       const policy = evaluateActionPolicy(actionForRun, { force: opts.force ?? false });
       const canStartInteractive =
