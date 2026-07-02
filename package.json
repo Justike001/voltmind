@@ -63,6 +63,7 @@
     "ci:select-e2e": "bun run scripts/select-e2e.ts",
     "typecheck": "tsc --noEmit",
     "check:jsonb": "scripts/check-jsonb-pattern.sh",
+    "check:jsonb-params": "node scripts/check-jsonb-params.mjs",
     "check:no-double-retry": "scripts/check-no-double-retry.sh",
     "check:batch-audit-site": "scripts/check-batch-audit-site.sh",
     "check:source-id-projection": "scripts/check-source-id-projection.sh",
