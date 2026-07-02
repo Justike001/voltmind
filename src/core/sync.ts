@@ -17,6 +17,7 @@ import { CJK_SLUG_CHARS } from './cjk.ts';
 // import keeps the pruneDir helper's deps near its callsite.
 import { existsSync, statSync } from 'fs';
 import { join as pathJoin } from 'path';
+import * as syncFailureLedger from './sync-failure-ledger.ts';
 
 export interface SyncManifest {
   added: string[];
@@ -241,6 +242,10 @@ function matchesAnyGlob(path: string, patterns?: string[]): boolean {
  */
 const PRUNE_DIR_NAMES = new Set<string>([
   'node_modules',
+  'vendor',
+  'dist',
+  'build',
+  'venv',
   '.raw',
   'ops',
 ]);
@@ -467,6 +472,29 @@ export function resolveSlugForPath(filePath: string, repoPrefix?: string): strin
   return pathToSlug(filePath, repoPrefix, { pageKind });
 }
 
+export {
+  recordFailures,
+  clearFailures,
+  acknowledgeFailures,
+  autoSkipFailures,
+  withLedgerLock,
+  resolveAutoSkipThreshold,
+  isSkippablePath,
+  decideGateAction,
+  decideSyncFailureSeverity,
+  applySyncFailureGate,
+  DEFAULT_SOURCE_ID,
+  SENTINEL_PREFIX,
+  DEFAULT_AUTOSKIP_AFTER,
+} from './sync-failure-ledger.ts';
+export type {
+  SyncFailureState,
+  GateDecision,
+  SeverityResult,
+  SyncGateInput,
+  SyncGateOutcome,
+} from './sync-failure-ledger.ts';
+
 // ─────────────────────────────────────────────────────────────────
 // Sync failure tracking — Bug 9
 // ─────────────────────────────────────────────────────────────────
@@ -487,15 +515,20 @@ import { voltmindPath as _voltmindPath } from './config.ts';
 import { createHash as _createHash } from 'crypto';
 
 export interface SyncFailure {
+  source_id?: string;
   path: string;
   error: string;
   /** Structured error code extracted from the error message. */
   code?: string;
   commit: string;
   line?: number;
+  first_seen?: string;
   ts: string;
+  attempts?: number;
+  state?: syncFailureLedger.SyncFailureState;
+  resolved_at?: string;
   acknowledged?: boolean;
-  acknowledged_at?: string;
+  acknowledged_at?: string | null;
 }
 
 /**
@@ -510,6 +543,7 @@ export interface SyncFailure {
  * canonical messages emitted by `collectValidationErrors()` in markdown.ts.
  */
 export function classifyErrorCode(errorMsg: string): string {
+  if (syncFailureLedger) return syncFailureLedger.classifyErrorCode(errorMsg);
   // SLUG_MISMATCH: thrown by importFromFile() at src/core/import-file.ts:374.
   if (/slug.*does not match|SLUG_MISMATCH/i.test(errorMsg)) return 'SLUG_MISMATCH';
 
@@ -606,6 +640,7 @@ export function classifyErrorCode(errorMsg: string): string {
 export function summarizeFailuresByCode(
   failures: Array<{ error: string; code?: string }>,
 ): Array<{ code: string; count: number }> {
+  if (syncFailureLedger) return syncFailureLedger.summarizeFailuresByCode(failures);
   const counts: Record<string, number> = {};
   for (const f of failures) {
     const code = f.code ?? classifyErrorCode(f.error);
@@ -626,6 +661,7 @@ export function summarizeFailuresByCode(
 export function formatCodeBreakdown(
   input: Array<{ error: string; code?: string }> | Array<{ code: string; count: number }>,
 ): string {
+  if (syncFailureLedger) return syncFailureLedger.formatCodeBreakdown(input);
   // Distinguish by shape: summary entries have a numeric `count`. Empty array
   // returns '' from either branch — both paths produce a 0-length join.
   const summary =
@@ -640,6 +676,7 @@ function _failuresDir(): string {
 }
 
 export function syncFailuresPath(): string {
+  if (syncFailureLedger) return syncFailureLedger.syncFailuresPath();
   return _joinPath(_failuresDir(), 'sync-failures.jsonl');
 }
 
@@ -656,6 +693,7 @@ function _dedupKey(f: { path: string; commit: string; error: string }): string {
  * Returns empty array if the file doesn't exist.
  */
 export function loadSyncFailures(): SyncFailure[] {
+  if (syncFailureLedger) return syncFailureLedger.loadSyncFailures();
   const path = syncFailuresPath();
   if (!_existsSync(path)) return [];
   const raw = _readFileSync(path, 'utf-8');
@@ -681,6 +719,7 @@ export function recordSyncFailures(
   failures: Array<{ path: string; error: string; line?: number }>,
   commit: string,
 ): void {
+  if (syncFailureLedger) return syncFailureLedger.recordSyncFailures(failures, commit);
   if (failures.length === 0) return;
   const existing = loadSyncFailures();
   const seen = new Set(existing.map(f => _dedupKey(f)));
@@ -716,6 +755,7 @@ export interface AcknowledgeResult {
  * doctor can still show them under a "previously skipped" bucket.
  */
 export function acknowledgeSyncFailures(): AcknowledgeResult {
+  if (syncFailureLedger) return syncFailureLedger.acknowledgeSyncFailures();
   const entries = loadSyncFailures();
   if (entries.length === 0) return { count: 0, summary: [] };
   const now = new Date().toISOString();
@@ -742,5 +782,6 @@ export function acknowledgeSyncFailures(): AcknowledgeResult {
 
 /** Return only unacknowledged failures. */
 export function unacknowledgedSyncFailures(): SyncFailure[] {
+  if (syncFailureLedger) return syncFailureLedger.unacknowledgedSyncFailures();
   return loadSyncFailures().filter(f => !f.acknowledged);
 }
