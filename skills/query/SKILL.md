@@ -42,8 +42,9 @@ This skill guarantees:
 - Every answer is grounded in VoltMind content or explicitly marked as a gap.
 - Claims cite page slugs/source ids when available.
 - Conflicts are reported instead of silently resolved.
-- Relationship questions use MVP graph commands, not frozen inherited
-  `graph-query` or expert/salience flows.
+- Relationship questions use MVP graph commands. Use the public insight
+  commands when they fit: `voltmind whoknows`, `voltmind salience`, and
+  `voltmind anomalies`.
 
 ## Search Plan
 
@@ -57,7 +58,8 @@ This skill guarantees:
 
 If query reveals that a freshly curated page is missing obvious edges, switch to
 `skills/brain-ops/SKILL.md` and add MVP-safe explicit links with
-`voltmind link`; do not use frozen batch extraction.
+`voltmind link`, or run explicit retrieval enrichment with
+`voltmind extract --dry-run` before any write-mode `voltmind extract --source-id <id>`.
 
 ## Relationship Examples
 
@@ -67,8 +69,10 @@ voltmind timeline projects/voltmind
 voltmind graph people/alice --depth 2
 ```
 
-Do not use inherited commands such as `gbrain graph-query`, `find_experts`,
-trajectory/founder scorecards, anomaly detection, or search-mode evaluation.
+Do not use inherited commands such as `gbrain graph-query`,
+trajectory/founder scorecards, or search-mode evaluation. For expert and
+anomaly lookups, use the VoltMind MVP commands/tools rather than old GBrain
+names.
 
 ## Source Precedence
 

@@ -98,6 +98,17 @@ When sources conflict, note the contradiction with both citations.
 - Entities with no substantive connection to the user's work
 - Same page enriched within the past week (unless new signal warrants it)
 
+### Drain unresolved frontmatter names (v0.13+)
+
+If any `put_page` response includes `auto_links.unresolved` entries, the enrichment
+tier should pick up those (field, name) pairs and try to create the missing entity
+pages. Example flow:
+
+1. signal-detector captures a meeting with `attendees: [Alice Known, Unknown Person]`
+2. put_page returns `auto_links.unresolved = [{field: 'attendees', name: 'Unknown Person'}]`
+3. enrichment tier consumes `Unknown Person` -> web search -> creates `people/unknown-person.md`
+4. The next put_page (or a backfill run) wires up the `attended` edge automatically
+
 ## Enrichment Tiers
 
 Scale enrichment to importance. Don't waste API calls on low-value entities.

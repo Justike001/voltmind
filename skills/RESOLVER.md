@@ -70,10 +70,18 @@ explicitly working on VoltMind internals:
   `voltmind query`.
 - Ingestion: `voltmind import`, `voltmind capture`, `voltmind sync`,
   `voltmind embed`.
+- Retrieval enrichment: `voltmind extract`, `voltmind extract-conversation-facts`,
+  `voltmind transcripts`. Write-mode extraction must use explicit `--source-id`;
+  use `--dry-run` for previews. MCP may use read-only `get_recent_transcripts`
+  and `find_contradictions`.
 - Basic graph/context: `voltmind link`, `voltmind unlink`,
   `voltmind backlinks`, `voltmind tags`, `voltmind timeline`,
   `voltmind timeline-add`, `voltmind graph`. For outgoing-link inspection, use
   MCP `get_links` through `voltmind call`.
+- Knowledge insights: `voltmind salience`, `voltmind anomalies`,
+  `voltmind whoknows`, `voltmind calibration`. MCP may use
+  `get_recent_salience`, `find_anomalies`, `find_experts`, and
+  `get_calibration_profile`.
 - MCP: `voltmind serve`, `voltmind call`.
 - Jobs: `voltmind jobs list`, `voltmind jobs get`,
   `voltmind jobs cancel`, `voltmind jobs stats`.
@@ -87,9 +95,10 @@ of the MVP route.
 Keep these files/modules recoverable, but do not dispatch to them in MVP:
 
 - Autonomous or agentic systems: `agent`, `autopilot`, `dream`, `think`,
-  `recall`, `forget`, `onboard`, `founder`, `takes`, `transcripts`.
-- Advanced runtime analysis: `eval`, search-mode tuning, salience, anomaly,
-  calibration, experts, contradiction, trajectory, code intelligence.
+  `recall`, `forget`, `onboard`, `founder`, `takes`.
+- Advanced runtime analysis: `eval`, search-mode tuning, trajectory, code
+  intelligence. The narrow retrieval-enrichment and knowledge-insight commands
+  above are public in the MVP runtime.
 - Skill platform features: `skillpack`, `skillify`, skill harvesting,
   schema authoring/evolution, functional-area resolver compression.
 - Advanced ingestion: media/book/podcast/PDF pipelines,
@@ -112,6 +121,11 @@ When a frozen route is requested, prefer one of:
   `add_link` when the relationship is part of an agent-curated page.
 - Preserve raw enrichment evidence with MCP `put_raw_data` through
   `voltmind call`; retrieve it with `get_raw_data`.
+- Preview or run explicit retrieval enrichment with `voltmind extract --dry-run`,
+  `voltmind extract --source-id <id>`, or
+  `voltmind extract-conversation-facts --source-id <id>`.
+- Inspect cached contradiction readouts with MCP `find_contradictions`; do not
+  launch fresh eval probes as part of normal MVP routing.
 - Report "not included in VoltMind MVP yet" for anything outside that surface.
 
 ## Disambiguation rules

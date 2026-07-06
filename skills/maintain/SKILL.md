@@ -56,10 +56,12 @@ explicit corrections to agent-curated page relationships.
 Do not run or recommend inherited advanced maintenance in MVP:
 
 - `dream`, `autopilot`, remediation loops, feature scores.
-- Standalone historical `extract links`, `extract timeline`, or broad batch
-  graph backfill commands.
+- Unscoped broad extraction. Use explicit retrieval enrichment only:
+  `voltmind extract --dry-run` for preview, then
+  `voltmind extract --source-id <id>` for write-mode backfill.
 - Minion submit/shell/worker/supervisor flows.
-- Eval benchmarks, search-mode tuning, anomaly/salience/expert flows.
+- Eval benchmarks and search-mode tuning. Use the public insight commands for
+  anomaly, salience, expert, and calibration readouts.
 - Cloud file storage verification/migration.
 - Schema evolution or skillpack checks.
 

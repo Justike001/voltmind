@@ -79,6 +79,9 @@ Public CLI/MCP entrypoints are intentionally small:
 - Page CRUD: `get`, `put`, `delete`, `restore`, `list`.
 - Ingestion: `import`, `capture`, `sync`, `embed`.
 - Retrieval: `search`, `query`, `ask`.
+- Retrieval enrichment: `extract`, `extract-conversation-facts`, `transcripts`,
+  and read-only contradiction readouts.
+- Knowledge insights: `salience`, `anomalies`, `whoknows`, `calibration`.
 - Basic graph: `tag`, `untag`, `tags`, `link`, `unlink`, `backlinks`, `graph`,
   `timeline`, `timeline-add`.
 - MCP: `serve`, `serve --http`, `call`, `--tools-json`.
@@ -87,10 +90,10 @@ Public CLI/MCP entrypoints are intentionally small:
 
 Inherited GBrain commands such as `agent`, `autopilot`, `dream`, `eval`,
 `skillpack`, `skillify`, `think`, `recall`, `forget`, `onboard`, `schema`,
-`founder`, `takes`, `transcripts`, code-intelligence commands, salience/anomaly
-flows, publish/integrations/book-mirror, and advanced job worker/supervisor
-flows are frozen outside the MVP public surface. The code may remain in the
-repo, but agents should not advertise or call it.
+`founder`, `takes`, code-intelligence commands, trajectory flows,
+publish/integrations/book-mirror, and advanced job
+worker/supervisor flows are frozen outside the MVP public surface. The code may
+remain in the repo, but agents should not advertise or call it.
 
 ## Trust boundary
 

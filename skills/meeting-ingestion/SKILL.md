@@ -122,13 +122,29 @@ to each attendee whose page is referenced as `[Name](people/slug)`. You don't
 need to call `voltmind link` for attendees. You DO still need `voltmind timeline-add`
 for dated events (auto-link only handles links, not timeline entries).
 
+### Phase 3.5: Check for unresolved attendees (v0.13+)
+
+After `put_page`, inspect `response.auto_links.unresolved` — an array of frontmatter
+references that did not resolve to existing pages. For meetings, this usually means
+attendees you haven't created a person page for yet.
+
+If `unresolved.length > 0`:
+- Option 1 (create pages now): trigger an enrichment pass to build the missing people pages.
+- Option 2 (defer): log the unresolved names to the enrichment queue for later.
+- Option 3 (accept the gap): the attendee edge will not be created until a page exists.
+  Re-running `voltmind extract links --source db --include-frontmatter` after creating
+  the page fills in the missing edges.
+
 ### Phase 4: Entity propagation (MANDATORY)
 
 For each company, project, or concept discussed:
 1. Check brain for existing page
 2. Create/update as needed
 3. Add timeline entry referencing the meeting
-4. Back-link from entity page to meeting page
+4. Entity references in the meeting page body auto-create the link via auto-link.
+   For incoming references on the entity page (entity page -> meeting page), edit
+   the entity page to mention the meeting and `put_page` it — auto-link handles
+   the rest.
 
 ### Phase 5: Timeline merge
 

@@ -68,7 +68,10 @@ provenance. Avoid creating junk entity pages just because a name appeared once.
 
 ## Frozen For MVP
 
-Do not route lookup through cross-brain mounts, expert routing, salience,
-anomalies, schema evolution, autonomous subagents, dream cycles, or advanced
-eval/search-mode tools. If requested, say the capability is not included in
-VoltMind MVP yet.
+Do not route lookup through cross-brain mounts, schema evolution, autonomous
+subagents, dream cycles, or advanced eval/search-mode tools. The narrow
+knowledge insight commands (`whoknows`, `salience`, `anomalies`, and
+`calibration`) and retrieval-enrichment readouts (`transcripts`,
+`find_contradictions`) are available in the MVP runtime when they match the
+user's request. Write-mode extraction must be explicit and source-bound
+(`--source-id`); use `--dry-run` for preview.
