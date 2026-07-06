@@ -1,10 +1,10 @@
 /**
  * voltmind transcripts — Recent raw conversation transcripts.
  *
- * Local-only: this command reads `.txt` files from the dream-cycle corpus
+ * Read-only: this command reads `.txt` files from the dream-cycle corpus
  * directories. It exists as a CLI surface so humans can trigger the same
- * read path the v0.29 `get_recent_transcripts` MCP op uses (which is itself
- * gated on remote=false; subagents and MCP/HTTP callers cannot reach it).
+ * read path the `get_recent_transcripts` MCP op uses. Import/synthesis
+ * remains outside this command.
  *
  * Usage:
  *   voltmind transcripts recent              # last 7 days, summaries

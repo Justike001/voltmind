@@ -23,6 +23,9 @@ export const VOLTMIND_MVP_CLI_COMMANDS = new Set([
   'capture',
   'sync',
   'embed',
+  'extract',
+  'extract-conversation-facts',
+  'transcripts',
   'tags',
   'tag',
   'untag',
@@ -32,6 +35,10 @@ export const VOLTMIND_MVP_CLI_COMMANDS = new Set([
   'graph',
   'timeline',
   'timeline-add',
+  'salience',
+  'anomalies',
+  'whoknows',
+  'calibration',
   'actions',
   'serve',
   'call',
@@ -82,6 +89,12 @@ export const VOLTMIND_MVP_OPERATION_NAMES = new Set([
   'sources_list',
   'sources_remove',
   'sources_status',
+  'get_recent_salience',
+  'find_anomalies',
+  'find_experts',
+  'get_calibration_profile',
+  'get_recent_transcripts',
+  'find_contradictions',
 ]);
 
 const VOLTMIND_MVP_OPERATION_DESCRIPTIONS: Record<string, string> = {
@@ -119,6 +132,12 @@ const VOLTMIND_MVP_OPERATION_DESCRIPTIONS: Record<string, string> = {
   sources_list: 'List registered VoltMind sources.',
   sources_remove: 'Remove a VoltMind source and its indexed pages.',
   sources_status: 'Return diagnostic status for one VoltMind source.',
+  get_recent_salience: 'List recently salient VoltMind pages by activity, emotional weight, and active takes.',
+  find_anomalies: 'Find statistically unusual recent VoltMind page activity by cohort.',
+  find_experts: 'Rank people or companies in VoltMind that are relevant to a topic.',
+  get_calibration_profile: 'Read the latest VoltMind calibration profile for a holder.',
+  get_recent_transcripts: 'Read recent raw VoltMind conversation transcript summaries for retrieval grounding.',
+  find_contradictions: 'Read suspected contradiction findings from the latest cached VoltMind probe run without launching a new probe.',
 };
 
 const VOLTMIND_MVP_OPERATION_PARAMS: Record<string, string[]> = {
@@ -126,6 +145,12 @@ const VOLTMIND_MVP_OPERATION_PARAMS: Record<string, string[]> = {
   sync_brain: ['repo', 'dry_run', 'full', 'no_pull', 'no_embed'],
   sources_add: ['id', 'name', 'path'],
   sources_remove: ['id', 'confirm_destructive', 'dry_run', 'keep_storage'],
+  get_recent_salience: ['days', 'limit', 'slugPrefix'],
+  find_anomalies: ['since', 'lookback_days', 'sigma'],
+  find_experts: ['topic', 'limit', 'explain'],
+  get_calibration_profile: ['holder'],
+  get_recent_transcripts: ['days', 'summary', 'limit'],
+  find_contradictions: ['slug', 'severity', 'limit'],
 };
 
 export function isVoltMindMvpCliCommand(name: string): boolean {

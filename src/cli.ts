@@ -40,7 +40,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'transcripts', 'models', 'remote', 'recall', 'forget', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'autopilot',
@@ -68,6 +68,8 @@ const CLI_ONLY_SELF_HELP = new Set([
   'models',
   'cache',
   'brainstorm', 'lsd',
+  'salience', 'anomalies', 'whoknows', 'calibration',
+  'extract', 'transcripts',
   // v0.39.3.0 WARN-5: capture's detailed HELP constant
   // (src/commands/capture.ts:90+) was unreachable because the dispatcher's
   // generic short-circuit (printCliOnlyHelp at :204-208) fired before
@@ -143,14 +145,17 @@ async function main() {
 
   // Per-command --help
   if (hasHelpFlag(subArgs)) {
-    const op = cliOps.get(command);
-    if (op) {
-      printOpHelp(op);
-      return;
-    }
-    if (CLI_ONLY.has(command) && !CLI_ONLY_SELF_HELP.has(command)) {
-      printCliOnlyHelp(command);
-      return;
+    if (CLI_ONLY.has(command)) {
+      if (!CLI_ONLY_SELF_HELP.has(command)) {
+        printCliOnlyHelp(command);
+        return;
+      }
+    } else {
+      const op = cliOps.get(command);
+      if (op) {
+        printOpHelp(op);
+        return;
+      }
     }
   }
 
@@ -1251,9 +1256,51 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
+  if (command === 'extract' && (args.includes('--help') || args.includes('-h'))) {
+    const { runExtract } = await import('./commands/extract.ts');
+    await runExtract(null as any, args);
+    return;
+  }
+
+  if (command === 'extract-conversation-facts' && (args.includes('--help') || args.includes('-h'))) {
+    const { runExtractConversationFacts } = await import('./commands/extract-conversation-facts.ts');
+    await runExtractConversationFacts(null as any, args);
+    return;
+  }
+
+  if (command === 'transcripts' && (args.includes('--help') || args.includes('-h'))) {
+    const { runTranscripts } = await import('./commands/transcripts.ts');
+    await runTranscripts(null as any, args);
+    return;
+  }
+
   if (command === 'jobs' && (args.includes('--help') || args.includes('-h'))) {
     const { runJobs } = await import('./commands/jobs.ts');
     await runJobs(null as any, args);
+    return;
+  }
+
+  if (command === 'salience' && (args.includes('--help') || args.includes('-h'))) {
+    const { runSalience } = await import('./commands/salience.ts');
+    await runSalience(null as any, args);
+    return;
+  }
+
+  if (command === 'anomalies' && (args.includes('--help') || args.includes('-h'))) {
+    const { runAnomalies } = await import('./commands/anomalies.ts');
+    await runAnomalies(null as any, args);
+    return;
+  }
+
+  if (command === 'whoknows' && (args.includes('--help') || args.includes('-h'))) {
+    const { runWhoknows } = await import('./commands/whoknows.ts');
+    await runWhoknows(null as any, args);
+    return;
+  }
+
+  if (command === 'calibration' && (args.includes('--help') || args.includes('-h'))) {
+    const { runCalibration } = await import('./commands/calibration.ts');
+    await runCalibration(null as any, args, {} as any);
     return;
   }
 
@@ -2015,6 +2062,13 @@ INGESTION
   sync [--repo <path>] [flags]       Git-to-brain incremental sync
   embed [<slug>|--all|--stale]       Generate/refresh embeddings
 
+RETRIEVAL ENRICHMENT
+  extract <links|timeline|all>       Extract graph/timeline signals
+        --source-id <id> [--dry-run]
+  extract-conversation-facts         Extract facts from conversation pages
+        --source-id <id> [--dry-run]
+  transcripts recent [--days N]      Read recent raw transcript summaries
+
 GRAPH
   link <from> <to> [--type T]        Create typed link
   unlink <from> <to>                 Remove link
@@ -2025,6 +2079,12 @@ GRAPH
   untag <slug> <tag>                 Remove tag
   timeline [<slug>]                  View timeline
   timeline-add <slug> <date> <text>  Add timeline entry
+
+INSIGHTS
+  salience [--days N] [--json]       Recently salient pages
+  anomalies [--since YYYY-MM-DD]     Unusual recent activity
+  whoknows <topic> [--json]          Find relevant people or companies
+  calibration [--holder H] [--json]  Calibration profile and controls
 
 ACTION SYSTEM
   actions scan                       Index state/actions/*.md

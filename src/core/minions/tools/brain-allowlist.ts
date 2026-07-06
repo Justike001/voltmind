@@ -57,13 +57,11 @@ export const BRAIN_TOOL_ALLOWLIST: ReadonlySet<string> = new Set([
   'resolve_slugs',
   'get_ingest_log',
   'put_page',
-  // v0.29 — Salience + Anomaly Detection. Both read-only. `get_recent_transcripts`
-  // is intentionally NOT included: subagent calls always have ctx.remote=true,
-  // and the v0.29 trust gate rejects remote callers — adding it here would be
-  // a footgun (subagent calls op, gets permission_denied, looks like a bug).
-  // The cycle synthesize phase already calls discoverTranscripts directly.
+  // Retrieval-enrichment readouts. All are read-only; transcript mutation/import
+  // remains outside this registry.
   'get_recent_salience',
   'find_anomalies',
+  'get_recent_transcripts',
 ]);
 
 /**
@@ -94,6 +92,7 @@ export const BRAIN_TOOL_USAGE_HINTS: Readonly<Record<string, string>> = {
   put_page: 'Write a markdown page to the voltmind DATABASE (NOT the local filesystem). Page becomes searchable + linkable. Slug must match the agent\'s allowed namespace.',
   get_recent_salience: 'Read pages ranked by emotional + activity salience over a recency window. Use for "what\'s been on my mind lately".',
   find_anomalies: 'Read cohort-level activity outliers (e.g. tag-cohort or type-cohort with unusual recent volume). Use for "what\'s unusual lately".',
+  get_recent_transcripts: 'Read recent raw conversation transcript summaries for retrieval grounding. Read-only; does not import or synthesize.',
 };
 
 /** Matches Anthropic's tool-name constraint. No dots. */

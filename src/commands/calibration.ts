@@ -22,7 +22,7 @@ import type { BrainEngine } from '../core/engine.ts';
 import { runPhaseCalibrationProfile } from '../core/cycle/calibration-profile.ts';
 import { sourceScopeOpts, type OperationContext } from '../core/operations.ts';
 import type { VoltMindConfig } from '../core/config.ts';
-import { GBrainError } from '../core/types.ts';
+import { VoltMindError } from '../core/types.ts';
 
 export interface CalibrationProfileRow {
   id: number;
@@ -125,6 +125,7 @@ export interface RunCalibrationArgs {
   regenerate?: boolean;
   undoWave?: string;
   abReport?: boolean;
+  help?: boolean;
 }
 
 function parseArgs(args: string[]): { sub?: string; opts: RunCalibrationArgs } {
@@ -134,6 +135,10 @@ function parseArgs(args: string[]): { sub?: string; opts: RunCalibrationArgs } {
     const a = args[i];
     if (a === 'ab-report') {
       opts.abReport = true;
+      continue;
+    }
+    if (a === '--help' || a === '-h') {
+      opts.help = true;
       continue;
     }
     if (!a?.startsWith('--') && !sub) {
@@ -148,6 +153,21 @@ function parseArgs(args: string[]): { sub?: string; opts: RunCalibrationArgs } {
   return { sub, opts };
 }
 
+const HELP = `Usage: voltmind calibration [subcommand] [options]
+
+Read and manage the active calibration profile.
+
+Subcommands:
+  ab-report             Show the calibration A/B report
+
+Options:
+  --holder ID           Holder slug (default garry)
+  --json                JSON output
+  --regenerate          Run the calibration_profile phase now
+  --undo-wave VERSION   Reverse a calibration wave
+  --help, -h            Show this help
+`;
+
 /**
  * CLI entry point. The `config` param is forwarded so the calibration_profile
  * phase has access to the budget cap config key.
@@ -158,6 +178,10 @@ export async function runCalibration(
   config: VoltMindConfig,
 ): Promise<void> {
   const { opts } = parseArgs(args);
+  if (opts.help) {
+    process.stdout.write(HELP);
+    return;
+  }
   const holder = opts.holder ?? 'garry';
   const sourceId = 'default';
 
@@ -242,7 +266,7 @@ export async function getCalibrationProfileOp(
 ): Promise<CalibrationProfileRow | null> {
   const holder = params.holder ?? 'garry';
   if (typeof holder !== 'string' || holder.length === 0) {
-    throw new GBrainError(
+    throw new VoltMindError(
       'INVALID_HOLDER',
       'get_calibration_profile.holder must be a non-empty string',
       'pass holder="<slug>" or omit to default to "garry"',

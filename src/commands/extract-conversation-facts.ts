@@ -1234,10 +1234,10 @@ Options:
   --yes                  Auto-confirm cost preview in non-TTY contexts.
   --help, -h             Show this help.
 
-Multi-source: when --source-id is omitted, the command iterates ALL
-sources from voltmind sources list. Per-source budget cap defaults to
---max-cost-usd; the brain-wide cap when running via the autopilot cycle
-phase is cycle.conversation_facts_backfill.max_total_cost_usd.
+Write-mode safety: pass --source-id explicitly. When --source-id is omitted,
+only --dry-run may iterate all sources for preview. Per-source budget cap
+defaults to --max-cost-usd; the brain-wide cap when running via the cycle phase
+is cycle.conversation_facts_backfill.max_total_cost_usd.
 
 Resumability: per-page completion is durable via a terminal audit row
 in the facts table (source='${TERMINAL_AUDIT_SOURCE}'). voltmind doctor's
@@ -1276,6 +1276,17 @@ export async function runExtractConversationFacts(
     return;
   }
 
+  const parsed = parseArgs(args);
+  if (parsed.error) {
+    console.error(parsed.error);
+    console.error(HELP);
+    process.exit(2);
+  }
+  if (!parsed.dryRun && !parsed.sourceId) {
+    console.error('Write-mode extract-conversation-facts requires --source-id <id>. Use --dry-run to preview all sources without writing.');
+    process.exit(2);
+  }
+
   // --background path.
   const backgrounded = await maybeBackground({
     engine,
@@ -1284,13 +1295,6 @@ export async function runExtractConversationFacts(
     paramBuilder: buildJobParams,
   });
   if (backgrounded) return;
-
-  const parsed = parseArgs(args);
-  if (parsed.error) {
-    console.error(parsed.error);
-    console.error(HELP);
-    process.exit(1);
-  }
 
   // Chat gateway is required for non-dry-run.
   if (!parsed.dryRun && !isAvailable('chat')) {

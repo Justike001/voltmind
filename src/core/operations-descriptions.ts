@@ -48,8 +48,8 @@ export const GET_RECENT_TRANSCRIPTS_DESCRIPTION =
   "reflections). Use this FIRST for questions about 'what's going on with me', " +
   "'what have I been thinking about', or anything personal/emotional. Raw " +
   "transcripts are the canonical source for the user's own state — polished pages " +
-  "summarize and flatten. Local-only: rejects remote (MCP/HTTP) callers with a " +
-  "clear permission_denied; call via the voltmind CLI.";
+  "summarize and flatten. Read-only: this does not import, mutate, enrich, or " +
+  "launch background synthesis.";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Redirect hints appended to existing op descriptions
@@ -82,13 +82,12 @@ export const SEARCH_DESCRIPTION =
 
 export const FIND_CONTRADICTIONS_DESCRIPTION =
   "v0.32.6 — return suspected-contradiction findings from the most recent " +
-  "`voltmind eval suspected-contradictions` probe run, optionally filtered by slug " +
+  "cached contradiction probe run, optionally filtered by slug " +
   "and/or severity. Use this when the user asks 'what's inconsistent in my " +
   "brain', 'show me contradictions about Acme', 'high-severity issues only', or " +
   "wants to act on the probe's findings without re-running it. Returns " +
   "{contradictions: [{a, b, severity, axis, confidence, resolution_command}]}. " +
-  "Reads the cached run row — does NOT trigger a new probe; users run " +
-  "`voltmind eval suspected-contradictions` for that.";
+  "Reads the cached run row — does NOT trigger a new probe.";
 
 export const FIND_TRAJECTORY_DESCRIPTION =
   "v0.35.4 — return the chronological claim trajectory for an entity (typed " +

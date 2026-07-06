@@ -347,6 +347,8 @@ export interface ExtractOpts {
   mode: 'links' | 'timeline' | 'all';
   /** Brain directory to walk. */
   dir: string;
+  /** Source id for write-side provenance in fs-walk mode. */
+  sourceId?: string;
   /** Report what would change without writing. */
   dryRun?: boolean;
   /** Emit JSON (progress to stderr, result to stdout) instead of human text. */
@@ -409,7 +411,7 @@ export async function runExtractCore(engine: BrainEngine, opts: ExtractOpts): Pr
       // Nothing changed — skip entirely.
       return result;
     }
-    const r = await extractForSlugs(engine, opts.dir, opts.slugs, opts.mode, dryRun, jsonMode, workers);
+    const r = await extractForSlugs(engine, opts.dir, opts.slugs, opts.mode, dryRun, jsonMode, workers, opts.sourceId);
     result.links_created = r.links_created;
     result.timeline_entries_created = r.timeline_created;
     result.pages_processed = r.pages;
@@ -418,12 +420,12 @@ export async function runExtractCore(engine: BrainEngine, opts: ExtractOpts): Pr
 
   // Full walk path: CLI `voltmind extract` or first-run.
   if (opts.mode === 'links' || opts.mode === 'all') {
-    const r = await extractLinksFromDir(engine, opts.dir, dryRun, jsonMode, workers);
+    const r = await extractLinksFromDir(engine, opts.dir, dryRun, jsonMode, workers, opts.sourceId);
     result.links_created = r.created;
     result.pages_processed = r.pages;
   }
   if (opts.mode === 'timeline' || opts.mode === 'all') {
-    const r = await extractTimelineFromDir(engine, opts.dir, dryRun, jsonMode, workers);
+    const r = await extractTimelineFromDir(engine, opts.dir, dryRun, jsonMode, workers, opts.sourceId);
     result.timeline_entries_created = r.created;
     result.pages_processed = Math.max(result.pages_processed, r.pages);
   }
@@ -431,7 +433,40 @@ export async function runExtractCore(engine: BrainEngine, opts: ExtractOpts): Pr
   return result;
 }
 
+const HELP = `Usage: voltmind extract <links|timeline|all> [options]
+
+Extract deterministic retrieval signals from synced markdown or DB pages.
+
+Subcommands:
+  links                 Extract typed page links.
+  timeline              Extract dated timeline entries.
+  all                   Run both passes.
+
+Options:
+  --source fs|db        Read from local markdown files or DB pages. Default fs.
+  --source-id <id>      Bind writes to one source; defaults to engine default.
+  --dir <path>          Markdown directory for --source fs.
+  --dry-run             Preview extracted rows without writing.
+  --json                JSON result; progress/events go to stderr.
+  --type <type>         DB-source page type filter.
+  --since <date>        DB-source updated-after filter.
+  --include-frontmatter Include frontmatter-derived links.
+  --by-mention          DB-source links pass for body-text entity mentions.
+  --ner                 DB-source links pass using configured NER patterns.
+  --from-meetings       DB-source timeline pass from meeting pages.
+  --workers N           Parallel workers for fs-source parsing.
+  --help, -h            Show this help.
+
+Write-mode safety: prefer --source-id explicitly for multi-source brains. Use
+--dry-run to inspect a cross-source preview without writing.
+`;
+
 export async function runExtract(engine: BrainEngine, args: string[]) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(HELP);
+    return;
+  }
+
   const subcommand = args[0];
   const dirIdx = args.indexOf('--dir');
   const explicitDir = dirIdx >= 0 && dirIdx + 1 < args.length;
@@ -505,7 +540,7 @@ export async function runExtract(engine: BrainEngine, args: string[]) {
   }
 
   if (!subcommand || !['links', 'timeline', 'all'].includes(subcommand)) {
-    console.error('Usage: voltmind extract <links|timeline|all> [--source fs|db] [--source-id <id>] [--dir <brain-dir>] [--dry-run] [--json] [--type T] [--since DATE]');
+    console.error(HELP);
     process.exit(1);
   }
 
@@ -661,6 +696,7 @@ export async function runExtract(engine: BrainEngine, args: string[]) {
       result = await runExtractCore(engine, {
         mode: subcommand as 'links' | 'timeline' | 'all',
         dir: brainDir,
+        ...(sourceIdFilter ? { sourceId: sourceIdFilter } : {}),
         dryRun,
         jsonMode,
         workers,
@@ -701,6 +737,7 @@ async function extractForSlugs(
   // shared flush primitive; JS single-threaded event loop makes the
   // shared counter increments atomic.
   workers: number = 1,
+  sourceId?: string,
 ): Promise<{ links_created: number; timeline_created: number; pages: number }> {
   // Build the full slug set for link resolution (fast: just readdir, no file reads)
   const allFiles = walkMarkdownFiles(brainDir);
@@ -774,7 +811,12 @@ async function extractForSlugs(
               if (!jsonMode) console.log(`  ${link.from_slug} → ${link.to_slug} (${link.link_type})`);
               linksCreated++;
             } else {
-              linkBatch.push(link);
+              linkBatch.push(sourceId ? {
+                ...link,
+                from_source_id: sourceId,
+                to_source_id: sourceId,
+                origin_source_id: sourceId,
+              } : link);
               if (linkBatch.length >= BATCH_SIZE) await flushLinks();
             }
           }
@@ -787,7 +829,14 @@ async function extractForSlugs(
               if (!jsonMode) console.log(`  ${entry.slug}: ${entry.date} — ${entry.summary}`);
               timelineCreated++;
             } else {
-              timelineBatch.push({ slug: entry.slug, date: entry.date, source: entry.source, summary: entry.summary, detail: entry.detail });
+              timelineBatch.push({
+                slug: entry.slug,
+                date: entry.date,
+                source: entry.source,
+                summary: entry.summary,
+                detail: entry.detail,
+                ...(sourceId ? { source_id: sourceId } : {}),
+              });
               if (timelineBatch.length >= BATCH_SIZE) await flushTimeline();
             }
           }
@@ -815,6 +864,7 @@ async function extractLinksFromDir(
   engine: BrainEngine, brainDir: string, dryRun: boolean, jsonMode: boolean,
   // v0.41.15.0 (T7): in-process worker count. Default 1.
   workers: number = 1,
+  sourceId?: string,
 ): Promise<{ created: number; pages: number }> {
   const files = walkMarkdownFiles(brainDir);
   const allSlugs = new Set(files.map(f => pathToSlug(f.relPath)));
@@ -863,7 +913,12 @@ async function extractLinksFromDir(
             if (!jsonMode) console.log(`  ${link.from_slug} → ${link.to_slug} (${link.link_type})`);
             created++;
           } else {
-            batch.push(link);
+            batch.push(sourceId ? {
+              ...link,
+              from_source_id: sourceId,
+              to_source_id: sourceId,
+              origin_source_id: sourceId,
+            } : link);
             if (batch.length >= BATCH_SIZE) await flush();
           }
         }
@@ -885,6 +940,7 @@ async function extractTimelineFromDir(
   engine: BrainEngine, brainDir: string, dryRun: boolean, jsonMode: boolean,
   // v0.41.15.0 (T7): in-process worker count. Default 1.
   workers: number = 1,
+  sourceId?: string,
 ): Promise<{ created: number; pages: number }> {
   const files = walkMarkdownFiles(brainDir);
 
@@ -928,7 +984,14 @@ async function extractTimelineFromDir(
             if (!jsonMode) console.log(`  ${entry.slug}: ${entry.date} — ${entry.summary}`);
             created++;
           } else {
-            batch.push({ slug: entry.slug, date: entry.date, source: entry.source, summary: entry.summary, detail: entry.detail });
+            batch.push({
+              slug: entry.slug,
+              date: entry.date,
+              source: entry.source,
+              summary: entry.summary,
+              detail: entry.detail,
+              ...(sourceId ? { source_id: sourceId } : {}),
+            });
             if (batch.length >= BATCH_SIZE) await flush();
           }
         }

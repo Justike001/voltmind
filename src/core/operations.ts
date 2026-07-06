@@ -3030,7 +3030,7 @@ const find_contradictions: Operation = {
       : null;
     const rows = await ctx.engine.loadContradictionsTrend(30);
     if (rows.length === 0) {
-      return { contradictions: [], note: 'No probe runs in the last 30 days; run `voltmind eval suspected-contradictions` first.' };
+      return { contradictions: [], note: 'No cached contradiction probe runs in the last 30 days.' };
     }
     const latest = rows[0];
     const report = latest.report_json as Record<string, unknown> | null;
@@ -3162,10 +3162,8 @@ const get_recent_transcripts: Operation = {
   name: 'get_recent_transcripts',
   description: GET_RECENT_TRANSCRIPTS_DESCRIPTION,
   scope: 'read',
-  // Local-only: rejects HTTP-borne MCP traffic at tool-list time
-  // (serve-http.ts filters on `localOnly`) AND at runtime via the in-handler
-  // ctx.remote check. Defense in depth: hidden + rejected.
-  localOnly: true,
+  // Retrieval-enrichment readout. Public MCP surface is read-only and capped
+  // by listRecentTranscripts; transcript mutation/import remains CLI-only.
   params: {
     days: { type: 'number', description: 'Window in days. Default 7.' },
     summary: {
@@ -3175,17 +3173,6 @@ const get_recent_transcripts: Operation = {
     limit: { type: 'number', description: 'Max transcripts (default 50).' },
   },
   handler: async (ctx, p) => {
-    // Trust gate (eng review D2 + codex C3): MCP / HTTP callers (`remote=true`)
-    // are blocked. Local CLI callers (`remote=false`) and the trusted-workspace
-    // dream cycle pass through. This op is intentionally NOT in the subagent
-    // allow-list (subagents always run with remote=true; they would always be
-    // rejected, which is a footgun if the op is visible).
-    if (ctx.remote === true) {
-      throw new OperationError(
-        'permission_denied',
-        'get_recent_transcripts is local-only — call via the voltmind CLI.',
-      );
-    }
     const { listRecentTranscripts } = await import('./transcripts.ts');
     return listRecentTranscripts(ctx.engine, {
       days: typeof p.days === 'number' ? p.days : undefined,

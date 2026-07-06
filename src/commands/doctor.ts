@@ -2498,7 +2498,7 @@ export async function computeConversationFactsBacklogCheck(
 
     if (backlog > 10) {
       const fixHint =
-        'voltmind extract-conversation-facts --background --max-cost-usd 5';
+        'voltmind sources status <id>, then voltmind extract-conversation-facts --source-id <id> --background --max-cost-usd 5';
       return {
         name,
         status: 'warn',
@@ -4933,7 +4933,7 @@ export async function buildChecks(
       checks.push({
         name: 'contradictions',
         status: 'ok',
-        message: 'No probe runs in the last 7 days. Run `voltmind eval suspected-contradictions --query "..." --top-k 5` to populate.',
+        message: 'No cached contradiction probe runs in the last 7 days.',
       });
     } else {
       const latest = recent[0];
@@ -4976,7 +4976,7 @@ export async function buildChecks(
           lines.push(`    → ${f.cmd}`);
         }
         if (highFindings.length > 3) {
-          lines.push(`  …and ${highFindings.length - 3} more — see \`voltmind eval suspected-contradictions review\``);
+          lines.push(`  ...and ${highFindings.length - 3} more — inspect the cached readout with MCP find_contradictions`);
         }
         checks.push({
           name: 'contradictions',
