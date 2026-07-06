@@ -43,7 +43,7 @@ import type {
 import { validateSlug, contentHash, rowToPage, rowToChunk, rowToSearchResult, takeRowToTake } from './utils.ts';
 import { deriveResolutionTuple, finalizeScorecard } from './takes-resolution.ts';
 import { normalizeWeightForStorage } from './takes-fence.ts';
-import { GBrainError, PAGE_SORT_SQL } from './types.ts';
+import { VoltMindError, PAGE_SORT_SQL } from './types.ts';
 import { computeAnomaliesFromBuckets } from './cycle/anomaly.ts';
 import { resolveBoostMap, resolveHardExcludes } from './search/source-boost.ts';
 import { buildSourceFactorCase, buildHardExcludeClause, buildVisibilityClause, buildRecencyComponentSql } from './search/sql-ranking.ts';
@@ -3906,7 +3906,7 @@ export class PGLiteEngine implements BrainEngine {
       [pageId, rowNum, weight ?? null, fields.since_date ?? null, fields.source ?? null]
     );
     if (result.rows.length === 0) {
-      throw new GBrainError(
+      throw new VoltMindError(
         'TAKE_ROW_NOT_FOUND',
         `take not found at page_id=${pageId} row=${rowNum}`,
         'list takes for this page with `voltmind takes <slug>` to see valid row numbers',
@@ -3926,10 +3926,10 @@ export class PGLiteEngine implements BrainEngine {
       );
       const existing = existingRes.rows[0] as { resolved_at?: unknown } | undefined;
       if (!existing) {
-        throw new GBrainError('TAKE_ROW_NOT_FOUND', `take not found at page_id=${pageId} row=${oldRow}`, 'list takes with `voltmind takes <slug>`');
+        throw new VoltMindError('TAKE_ROW_NOT_FOUND', `take not found at page_id=${pageId} row=${oldRow}`, 'list takes with `voltmind takes <slug>`');
       }
       if (existing.resolved_at) {
-        throw new GBrainError('TAKE_RESOLVED_IMMUTABLE', `take ${pageId}#${oldRow} is resolved`, 'resolved bets are immutable; add a new take instead');
+        throw new VoltMindError('TAKE_RESOLVED_IMMUTABLE', `take ${pageId}#${oldRow} is resolved`, 'resolved bets are immutable; add a new take instead');
       }
       const maxRowRes = await tx.query(
         `SELECT COALESCE(MAX(row_num), 0) + 1 AS next FROM takes WHERE page_id = $1`,
@@ -3962,10 +3962,10 @@ export class PGLiteEngine implements BrainEngine {
     );
     const existing = existingRes.rows[0] as { resolved_at?: unknown } | undefined;
     if (!existing) {
-      throw new GBrainError('TAKE_ROW_NOT_FOUND', `take not found at page_id=${pageId} row=${rowNum}`, 'list takes with `voltmind takes <slug>`');
+      throw new VoltMindError('TAKE_ROW_NOT_FOUND', `take not found at page_id=${pageId} row=${rowNum}`, 'list takes with `voltmind takes <slug>`');
     }
     if (existing.resolved_at) {
-      throw new GBrainError('TAKE_ALREADY_RESOLVED', `take ${pageId}#${rowNum} already resolved`, 'resolution is immutable; add a new take to record a new outcome');
+      throw new VoltMindError('TAKE_ALREADY_RESOLVED', `take ${pageId}#${rowNum} already resolved`, 'resolution is immutable; add a new take to record a new outcome');
     }
     // v0.30.0: derive (quality, outcome) tuple. quality wins when both set.
     const { quality, outcome } = deriveResolutionTuple(resolution);

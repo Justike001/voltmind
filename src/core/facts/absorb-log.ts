@@ -26,7 +26,7 @@
  */
 
 import type { BrainEngine } from '../engine.ts';
-import { GBrainError } from '../types.ts';
+import { VoltMindError } from '../types.ts';
 
 export const FACTS_ABSORB_REASONS = [
   'gateway_error',
@@ -89,7 +89,7 @@ export async function writeFactsAbsorbLog(
     // CLI capture path. Per-capture noise is suppressed; CV13 prints
     // ONE first-occurrence stack trace so the next user reporting it
     // gives us the call site to fix in v0.38.4.
-    if (e instanceof GBrainError && e.problem === 'No database connection') {
+    if (e instanceof VoltMindError && e.problem === 'No database connection') {
       if (!_hasLoggedDisconnectedFactsAbsorb) {
         _hasLoggedDisconnectedFactsAbsorb = true;
         // eslint-disable-next-line no-console

@@ -58,7 +58,7 @@
  * - VOLTMIND_BULK_RETRY_BASE_MS — int > 0
  * - VOLTMIND_BULK_RETRY_MAX_MS  — int >= base
  *
- * Bad values throw `GBrainError` with a paste-ready fix hint. Doctor's
+ * Bad values throw `VoltMindError` with a paste-ready fix hint. Doctor's
  * `batch_retry_health` check also runs the validator at startup so misconfig
  * surfaces immediately, not at first retry.
  */
@@ -240,7 +240,7 @@ export async function withRetry<T>(
  * Resolve BULK_RETRY_OPTS from env vars. Called at boundaries that need
  * operator-tunable behavior: engine methods at first-use, doctor at startup.
  *
- * Throws GBrainError with paste-ready fix on bad input. Never silently
+ * Throws VoltMindError with paste-ready fix on bad input. Never silently
  * falls back to defaults — bad config should fail loud.
  */
 export function resolveBulkRetryOpts(

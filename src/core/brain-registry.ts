@@ -27,7 +27,7 @@ import { join, resolve } from 'path';
 import { homedir } from 'os';
 import type { BrainEngine } from './engine.ts';
 import type { EngineConfig } from './types.ts';
-import { GBrainError } from './types.ts';
+import { VoltMindError } from './types.ts';
 import { loadConfig, type VoltMindConfig } from './config.ts';
 
 /** Host brain id. Reserved — users cannot create a mount with this id. */
@@ -104,7 +104,7 @@ export interface BrainHandle {
 }
 
 /** Error thrown when two mounts resolve to the same local path. */
-export class DuplicateMountPathError extends GBrainError {
+export class DuplicateMountPathError extends VoltMindError {
   constructor(path: string, existingId: string, attemptedId: string) {
     super(
       `Duplicate mount path: "${path}"`,
@@ -116,7 +116,7 @@ export class DuplicateMountPathError extends GBrainError {
 }
 
 /** Error thrown when a caller requests an unknown or disabled brain id. */
-export class UnknownBrainError extends GBrainError {
+export class UnknownBrainError extends VoltMindError {
   constructor(id: string, available: string[]) {
     const list = available.length > 0 ? available.join(', ') : '(none registered)';
     super(
@@ -130,21 +130,21 @@ export class UnknownBrainError extends GBrainError {
 /** Validate a mount id (and optionally the alias). Throws with actionable msg. */
 export function validateMountId(id: unknown, fieldLabel = 'mount id'): string {
   if (typeof id !== 'string' || id.length === 0) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Invalid ${fieldLabel}`,
       `${fieldLabel} must be a non-empty string`,
       'Use a kebab-case id like "yc-media" or "garrys-list"',
     );
   }
   if (id === HOST_BRAIN_ID) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Reserved ${fieldLabel}: "${HOST_BRAIN_ID}"`,
       `"${HOST_BRAIN_ID}" is the host brain id and cannot be used for a mount`,
       'Choose a different id',
     );
   }
   if (!BRAIN_ID_RE.test(id)) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Invalid ${fieldLabel}: "${id}"`,
       `${fieldLabel} must match [a-z0-9-]{1,32}, start+end alphanumeric, interior dashes allowed`,
       'Use a kebab-case id like "yc-media"',
@@ -164,7 +164,7 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
   try {
     raw = readFileSync(mountsPath, 'utf-8');
   } catch (e) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Cannot read ${mountsPath}`,
       e instanceof Error ? e.message : String(e),
       `Check file permissions (expected 0600) and re-run`,
@@ -175,7 +175,7 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
   try {
     parsed = JSON.parse(raw);
   } catch (e) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Malformed mounts.json`,
       e instanceof Error ? e.message : String(e),
       `Fix the JSON syntax at ${mountsPath} or remove it and re-add mounts via 'voltmind mounts add'`,
@@ -183,7 +183,7 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
   }
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `mounts.json must be a JSON object`,
       `Got: ${Array.isArray(parsed) ? 'array' : typeof parsed}`,
       `Expected { version: 1, mounts: [...] }`,
@@ -192,7 +192,7 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
 
   const file = parsed as Partial<MountsFile>;
   if (file.version !== 1) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Unsupported mounts.json version: ${file.version}`,
       `This voltmind binary supports version 1`,
       `Upgrade voltmind or regenerate mounts.json`,
@@ -200,7 +200,7 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
   }
 
   if (!Array.isArray(file.mounts)) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `mounts.json: "mounts" must be an array`,
       `Got: ${typeof file.mounts}`,
       `Expected { version: 1, mounts: [...] }`,
@@ -214,7 +214,7 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
   for (let i = 0; i < file.mounts.length; i++) {
     const entry = file.mounts[i] as Partial<MountEntry> | undefined;
     if (!entry || typeof entry !== 'object') {
-      throw new GBrainError(
+      throw new VoltMindError(
         `mounts.json: entry ${i} must be an object`,
         `Got: ${typeof entry}`,
         `Each entry shape: { id, path, engine, db_url|database_path, enabled? }`,
@@ -222,7 +222,7 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
     }
     const id = validateMountId(entry.id, `mounts[${i}].id`);
     if (seenIds.has(id)) {
-      throw new GBrainError(
+      throw new VoltMindError(
         `mounts.json: duplicate id "${id}"`,
         `Two mounts share the id "${id}" (only one entry permitted per id)`,
         `Remove one of the entries or rename it`,
@@ -231,7 +231,7 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
     seenIds.add(id);
 
     if (typeof entry.path !== 'string' || entry.path.length === 0) {
-      throw new GBrainError(
+      throw new VoltMindError(
         `mounts[${i}] "${id}": path is required`,
         `path must be a non-empty absolute filesystem path`,
         `Add "path": "/absolute/path/to/${id}" to this mount entry`,
@@ -245,7 +245,7 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
     seenPaths.set(resolvedPath, id);
 
     if (entry.engine !== 'postgres' && entry.engine !== 'pglite') {
-      throw new GBrainError(
+      throw new VoltMindError(
         `mounts[${i}] "${id}": engine must be "postgres" or "pglite"`,
         `Got: ${JSON.stringify(entry.engine)}`,
         `Set "engine": "pglite" for a local embedded DB or "postgres" for Supabase/self-hosted`,
@@ -253,14 +253,14 @@ export function loadMounts(mountsPath: string = getMountsPath()): MountEntry[] {
     }
 
     if (entry.engine === 'postgres' && !entry.database_url) {
-      throw new GBrainError(
+      throw new VoltMindError(
         `mounts[${i}] "${id}": postgres mount requires database_url`,
         `database_url is missing`,
         `Add "database_url": "postgresql://..." or use engine: "pglite"`,
       );
     }
     if (entry.engine === 'pglite' && !entry.database_path && !entry.database_url) {
-      throw new GBrainError(
+      throw new VoltMindError(
         `mounts[${i}] "${id}": pglite mount requires database_path (or database_url)`,
         `Both database_path and database_url are missing`,
         `Add "database_path": "/path/to/${id}/.pglite"`,
@@ -396,7 +396,7 @@ export class BrainRegistry {
   private async initHostBrain(): Promise<BrainHandle> {
     const config = loadConfig();
     if (!config) {
-      throw new GBrainError(
+      throw new VoltMindError(
         'No host brain configured',
         '~/.voltmind/config.json is missing and VOLTMIND_DATABASE_URL is unset',
         "Run 'voltmind init' to configure the host brain",

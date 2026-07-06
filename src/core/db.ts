@@ -1,5 +1,5 @@
 import postgres from 'postgres';
-import { GBrainError, type EngineConfig } from './types.ts';
+import { VoltMindError, type EngineConfig } from './types.ts';
 import { SCHEMA_SQL } from './schema-embedded.ts';
 import type { BrainEngine } from './engine.ts';
 import { verifySchema } from './schema-verify.ts';
@@ -150,7 +150,7 @@ export async function setSessionDefaults(_sql: ReturnType<typeof postgres>): Pro
 
 export function getConnection(): ReturnType<typeof postgres> {
   if (!sql) {
-    throw new GBrainError(
+    throw new VoltMindError(
       'No database connection',
       'connect() has not been called',
       'Run voltmind init --supabase or voltmind init --url <connection_string>',
@@ -170,7 +170,7 @@ export async function connect(config: EngineConfig): Promise<void> {
 
   const url = config.database_url;
   if (!url) {
-    throw new GBrainError(
+    throw new VoltMindError(
       'No database URL',
       'database_url is missing from config',
       'Run voltmind init --supabase or voltmind init --url <connection_string>',
@@ -216,7 +216,7 @@ export async function connect(config: EngineConfig): Promise<void> {
     sql = null;
     connectedUrl = null;
     const msg = e instanceof Error ? e.message : String(e);
-    throw new GBrainError(
+    throw new VoltMindError(
       'Cannot connect to database',
       msg,
       'Check your connection URL in ~/.voltmind/config.json',

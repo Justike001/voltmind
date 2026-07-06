@@ -35,7 +35,7 @@ import {
 } from '../core/brain-registry.ts';
 import { findRepoRoot } from '../core/repo-root.ts';
 import { writeMountsCache, clearMountsCache } from '../core/mounts-cache.ts';
-import { GBrainError } from '../core/types.ts';
+import { VoltMindError } from '../core/types.ts';
 
 function getMountsDir(): string { return join(homedir(), '.voltmind'); }
 // v0.40.3.0: VOLTMIND_MOUNTS_PATH override exists for tests (libuv caches
@@ -88,7 +88,7 @@ interface AddArgs {
 
 function parseAddArgs(args: string[]): AddArgs {
   if (args.length === 0) {
-    throw new GBrainError(
+    throw new VoltMindError(
       'Missing mount id',
       'voltmind mounts add <id> --path <path> [flags]',
       'Provide a kebab-case id as the first argument',
@@ -105,25 +105,25 @@ function parseAddArgs(args: string[]): AddArgs {
     const a = args[i];
     const next = (flag: string): string => {
       const v = args[++i];
-      if (!v) throw new GBrainError(`Missing value for ${flag}`, '', `Pass a value: ${flag} <value>`);
+      if (!v) throw new VoltMindError(`Missing value for ${flag}`, '', `Pass a value: ${flag} <value>`);
       return v;
     };
     if (a === '--path') path = next('--path');
     else if (a === '--engine') {
       const v = next('--engine');
       if (v !== 'postgres' && v !== 'pglite') {
-        throw new GBrainError(`Invalid engine: "${v}"`, 'Must be "postgres" or "pglite"', 'Pass --engine pglite or --engine postgres');
+        throw new VoltMindError(`Invalid engine: "${v}"`, 'Must be "postgres" or "pglite"', 'Pass --engine pglite or --engine postgres');
       }
       engine = v;
     }
     else if (a === '--db-url' || a === '--database-url') database_url = next(a);
     else if (a === '--db-path' || a === '--database-path') database_path = next(a);
     else if (a === '--alias') alias = validateMountId(next('--alias'), '--alias value');
-    else throw new GBrainError(`Unknown flag: ${a}`, '', 'See `voltmind mounts add --help`');
+    else throw new VoltMindError(`Unknown flag: ${a}`, '', 'See `voltmind mounts add --help`');
   }
 
   if (!path) {
-    throw new GBrainError('Missing --path', 'Every mount needs a local clone path (for skills + handlers)', 'Add --path /absolute/path/to/mount');
+    throw new VoltMindError('Missing --path', 'Every mount needs a local clone path (for skills + handlers)', 'Add --path /absolute/path/to/mount');
   }
 
   // Engine inference: if user supplied db-url → postgres, if db-path → pglite.
@@ -131,7 +131,7 @@ function parseAddArgs(args: string[]): AddArgs {
     if (database_url) engine = 'postgres';
     else if (database_path) engine = 'pglite';
     else {
-      throw new GBrainError(
+      throw new VoltMindError(
         'Missing --engine',
         'Could not infer engine from flags',
         'Pass --engine pglite --db-path <path> OR --engine postgres --db-url <url>',
@@ -140,10 +140,10 @@ function parseAddArgs(args: string[]): AddArgs {
   }
 
   if (engine === 'postgres' && !database_url) {
-    throw new GBrainError('postgres mount requires --db-url', '', 'Pass --db-url postgresql://...');
+    throw new VoltMindError('postgres mount requires --db-url', '', 'Pass --db-url postgresql://...');
   }
   if (engine === 'pglite' && !database_path && !database_url) {
-    throw new GBrainError('pglite mount requires --db-path', '', 'Pass --db-path /path/to/mount/.pglite');
+    throw new VoltMindError('pglite mount requires --db-path', '', 'Pass --db-path /path/to/mount/.pglite');
   }
 
   return { id, path: resolve(path), engine, database_url, database_path, alias };
@@ -157,7 +157,7 @@ async function runAdd(args: string[]): Promise<void> {
   // Mount path must exist on disk — otherwise skill/handler loading will
   // fail later with a less-actionable error.
   if (!existsSync(parsed.path)) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Mount path does not exist: ${parsed.path}`,
       'The local clone directory must exist before registering a mount',
       `Clone the repo first (git clone <repo> ${parsed.path}) then re-run`,
@@ -168,7 +168,7 @@ async function runAdd(args: string[]): Promise<void> {
 
   // Duplicate id check.
   if (file.mounts.some(m => m.id === parsed.id)) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Mount id already exists: "${parsed.id}"`,
       `Use 'voltmind mounts list' to see registered mounts`,
       `Remove the existing mount first: voltmind mounts remove ${parsed.id}`,
@@ -268,7 +268,7 @@ function runList(args: string[]): void {
 
 function runRemove(args: string[]): void {
   if (args.length === 0) {
-    throw new GBrainError(
+    throw new VoltMindError(
       'Missing mount id',
       'voltmind mounts remove <id>',
       `Run 'voltmind mounts list' to see registered mounts`,
@@ -276,7 +276,7 @@ function runRemove(args: string[]): void {
   }
   const id = args[0];
   if (id === HOST_BRAIN_ID) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Cannot remove host brain`,
       `"host" is not a mount — it is the default brain from ~/.voltmind/config.json`,
       `Use 'voltmind init' to reconfigure the host brain`,
@@ -287,7 +287,7 @@ function runRemove(args: string[]): void {
   const before = file.mounts.length;
   file.mounts = file.mounts.filter(m => m.id !== id);
   if (file.mounts.length === before) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Mount "${id}" not found`,
       `No mount with id "${id}" is registered`,
       `Run 'voltmind mounts list' to see registered mounts`,
@@ -391,7 +391,7 @@ export async function runMounts(args: string[]): Promise<void> {
       runSetMountFlag(rest, 'trust_frontmatter_overrides', false, 'untrust-frontmatter');
       return;
     default:
-      throw new GBrainError(
+      throw new VoltMindError(
         `Unknown subcommand: voltmind mounts ${sub}`,
         `Supported: add, list, remove, enable, disable, trust-frontmatter, untrust-frontmatter`,
         `Run 'voltmind mounts --help' for usage`,
@@ -415,7 +415,7 @@ function runSetMountFlag(
   verb: string,
 ): void {
   if (args.length === 0) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Missing mount id`,
       `voltmind mounts ${verb} <id>`,
       `Run 'voltmind mounts list' to see registered mounts`,
@@ -423,7 +423,7 @@ function runSetMountFlag(
   }
   const id = args[0];
   if (id === HOST_BRAIN_ID) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Cannot ${verb} host brain`,
       `"host" is not a mount — it is the default brain from ~/.voltmind/config.json`,
       verb === 'trust-frontmatter' || verb === 'untrust-frontmatter'
@@ -435,7 +435,7 @@ function runSetMountFlag(
   const file = readMountsFile();
   const mount = file.mounts.find((m) => m.id === id);
   if (!mount) {
-    throw new GBrainError(
+    throw new VoltMindError(
       `Mount "${id}" not found`,
       `No mount with id "${id}" is registered`,
       `Run 'voltmind mounts list' to see registered mounts`,

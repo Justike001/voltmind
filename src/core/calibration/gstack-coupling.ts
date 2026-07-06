@@ -25,7 +25,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { GBrainError } from '../types.ts';
+import { VoltMindError } from '../types.ts';
 
 export interface IncorrectResolutionEvent {
   /** Take that resolved incorrect/partial. */
@@ -103,14 +103,14 @@ export function defaultGstackWriter(entry: GstackLearningEntry): void {
   try {
     binaryPath = execFileSync('which', ['gstack-learnings-log'], { encoding: 'utf8' }).trim();
   } catch {
-    throw new GBrainError(
+    throw new VoltMindError(
       'GSTACK_BINARY_NOT_FOUND',
       'gstack-learnings-log binary not on PATH',
       'install gstack (~/.claude/skills/gstack/setup) or set cycle.grade_takes.write_gstack_learnings: false to disable',
     );
   }
   if (!binaryPath) {
-    throw new GBrainError(
+    throw new VoltMindError(
       'GSTACK_BINARY_NOT_FOUND',
       'gstack-learnings-log resolved to empty path',
       'install gstack (~/.claude/skills/gstack/setup) or disable via config',

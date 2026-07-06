@@ -40,7 +40,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { BaseCyclePhase, type ScopedReadOpts, type BasePhaseOpts } from './base-phase.ts';
 import { chat as gatewayChat } from '../ai/gateway.ts';
-import { GBrainError } from '../types.ts';
+import { VoltMindError } from '../types.ts';
 import type { Page, PageFilters } from '../types.ts';
 import type { OperationContext } from '../operations.ts';
 import type { BrainEngine } from '../engine.ts';
@@ -287,7 +287,7 @@ class ProposeTakesPhase extends BaseCyclePhase {
   protected readonly budgetUsdDefault = 5.0;
 
   protected override mapErrorCode(err: unknown): string {
-    if (err instanceof GBrainError) return err.problem;
+    if (err instanceof VoltMindError) return err.problem;
     if (err instanceof Error) {
       if (err.message.includes('content_hash')) return 'CALIBRATION_PROPOSAL_DEDUP_FAIL';
       if (err.message.includes('budget') || err.message.includes('Budget')) return 'CALIBRATION_GRADE_BUDGET_EXHAUSTED';

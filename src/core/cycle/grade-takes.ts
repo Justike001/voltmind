@@ -37,7 +37,7 @@
 import { createHash } from 'node:crypto';
 import { BaseCyclePhase, type ScopedReadOpts, type BasePhaseOpts } from './base-phase.ts';
 import { chat as gatewayChat } from '../ai/gateway.ts';
-import { GBrainError } from '../types.ts';
+import { VoltMindError } from '../types.ts';
 import type { OperationContext } from '../operations.ts';
 import type { BrainEngine, Take, TakeResolution } from '../engine.ts';
 import type { PhaseStatus, CyclePhase } from '../cycle.ts';
@@ -373,7 +373,7 @@ class GradeTakesPhase extends BaseCyclePhase {
   protected readonly budgetUsdDefault = 3.0;
 
   protected override mapErrorCode(err: unknown): string {
-    if (err instanceof GBrainError) return err.problem;
+    if (err instanceof VoltMindError) return err.problem;
     if (err instanceof Error) {
       if (err.message.includes('budget') || err.message.includes('Budget')) return 'CALIBRATION_GRADE_BUDGET_EXHAUSTED';
       if (err.message.includes('parse')) return 'CALIBRATION_GRADE_PARSE_FAIL';
