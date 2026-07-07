@@ -24,6 +24,7 @@ import { stripTakesFence } from './takes-fence.ts';
 import { stripFactsFence } from './facts-fence.ts';
 import { bumpLastRetrievedAt } from './last-retrieved.ts';
 import { CJK_SLUG_CHARS } from './cjk.ts';
+import { readoutProvenance, withReadoutProvenance } from './readout-provenance.ts';
 import * as db from './db.ts';
 import { VERSION } from '../version.ts';
 import {
@@ -1483,7 +1484,7 @@ const takes_list: Operation = {
     offset: { type: 'number', description: 'Skip first N rows' },
   },
   handler: async (ctx, p) => {
-    return ctx.engine.listTakes({
+    const rows = await ctx.engine.listTakes({
       page_slug: p.page_slug as string | undefined,
       holder: p.holder as string | undefined,
       kind: p.kind as never,
@@ -1496,6 +1497,13 @@ const takes_list: Operation = {
       // Local CLI callers leave takesHoldersAllowList unset and see all holders.
       takesHoldersAllowList: ctx.takesHoldersAllowList,
     });
+    return rows.map(row => withReadoutProvenance(row, {
+      source_id: ctx.sourceId ?? null,
+      citation: row.resolved_source ?? row.source ?? null,
+      confidence: row.weight ?? null,
+      created_by: row.holder ?? null,
+      derived_from: `${row.page_slug}#take-${row.row_num}`,
+    }));
   },
   cliHints: { name: 'takes-list' },
 };
@@ -1509,10 +1517,17 @@ const takes_search: Operation = {
     limit: { type: 'number', description: 'Max results (default 30, cap 100)' },
   },
   handler: async (ctx, p) => {
-    return ctx.engine.searchTakes(p.query as string, {
+    const rows = await ctx.engine.searchTakes(p.query as string, {
       limit: p.limit as number | undefined,
       takesHoldersAllowList: ctx.takesHoldersAllowList,
     });
+    return rows.map(row => withReadoutProvenance(row, {
+      source_id: ctx.sourceId ?? null,
+      citation: null,
+      confidence: row.weight ?? null,
+      created_by: row.holder ?? null,
+      derived_from: `${row.page_slug}#take-${row.row_num}`,
+    }));
   },
   cliHints: { name: 'takes-search', positional: ['query'] },
 };
@@ -2770,6 +2785,120 @@ const get_job_progress: Operation = {
   },
 };
 
+const get_job_failure_report: Operation = {
+  name: 'get_job_failure_report',
+  description: 'Read recent failed/dead VoltMind jobs with error text and timing. Does not retry or mutate jobs.',
+  params: {
+    id: { type: 'number', description: 'Optional job id to inspect.' },
+    limit: { type: 'number', description: 'Max failures to return. Default 20, cap 100.' },
+  },
+  scope: 'admin',
+  handler: async (ctx, p) => {
+    const limit = typeof p.limit === 'number' ? Math.max(1, Math.min(100, Math.floor(p.limit))) : 20;
+    const params: unknown[] = [];
+    let where = `status IN ('failed','dead')`;
+    if (typeof p.id === 'number') {
+      where = `id = $1`;
+      params.push(p.id);
+    }
+    const rows = await ctx.engine.executeRaw<Record<string, unknown>>(
+      `SELECT id, name, queue, status, attempts_made, max_attempts, error_text,
+              stacktrace, created_at, started_at, finished_at, updated_at
+         FROM minion_jobs
+        WHERE ${where}
+        ORDER BY updated_at DESC
+        LIMIT ${limit}`,
+      params,
+    );
+    return { failures: rows };
+  },
+};
+
+const get_job_checkpoints: Operation = {
+  name: 'get_job_checkpoints',
+  description: 'Read long-running operation checkpoints. This is observability only and does not resume workers.',
+  params: {
+    op: { type: 'string', description: 'Optional operation name filter.' },
+    limit: { type: 'number', description: 'Max checkpoints to return. Default 20, cap 100.' },
+  },
+  scope: 'admin',
+  handler: async (ctx, p) => {
+    const limit = typeof p.limit === 'number' ? Math.max(1, Math.min(100, Math.floor(p.limit))) : 20;
+    const params: unknown[] = [];
+    let where = '';
+    if (typeof p.op === 'string' && p.op.trim()) {
+      where = 'WHERE op = $1';
+      params.push(p.op.trim());
+    }
+    const rows = await ctx.engine.executeRaw<Record<string, unknown>>(
+      `SELECT op, fingerprint, completed_keys, updated_at
+         FROM op_checkpoints
+         ${where}
+        ORDER BY updated_at DESC
+        LIMIT ${limit}`,
+      params,
+    );
+    return { checkpoints: rows };
+  },
+};
+
+const get_job_undo_report: Operation = {
+  name: 'get_job_undo_report',
+  description: 'Return a read-only undo report for a job result. It identifies likely reversible and manual items but performs no undo.',
+  params: {
+    id: { type: 'number', required: true, description: 'Job id to inspect.' },
+  },
+  scope: 'admin',
+  handler: async (ctx, p) => {
+    const { MinionQueue } = await import('./minions/queue.ts');
+    const queue = new MinionQueue(ctx.engine);
+    const job = await queue.getJob(p.id as number);
+    if (!job) throw new OperationError('invalid_params', `Job not found: ${p.id}`);
+    return {
+      id: job.id,
+      name: job.name,
+      status: job.status,
+      result: job.result ?? null,
+      reversible: [],
+      irreversible: [],
+      manual: [
+        {
+          kind: 'review_required',
+          note: 'No generic undo executor is public in the MVP runtime. Inspect job result and apply explicit compensating edits if needed.',
+        },
+      ],
+    };
+  },
+};
+
+const plan_job_batch: Operation = {
+  name: 'plan_job_batch',
+  description: 'Build a dry-run batch plan for an explicit job family without enqueueing worker/supervisor jobs.',
+  params: {
+    name: { type: 'string', required: true, description: 'Batch/job family name to plan.' },
+    source_id: { type: 'string', description: 'Source id the batch would target.' },
+    dry_run: { type: 'boolean', description: 'Must remain true; no queue enqueue occurs.' },
+    limit: { type: 'number', description: 'Optional planning cap.' },
+  },
+  scope: 'admin',
+  handler: async (_ctx, p) => {
+    const name = typeof p.name === 'string' ? p.name.trim() : '';
+    if (!name) throw new OperationError('invalid_params', '`name` is required.');
+    return {
+      dry_run: true,
+      name,
+      source_id: typeof p.source_id === 'string' ? p.source_id : null,
+      limit: typeof p.limit === 'number' ? p.limit : null,
+      enqueue: false,
+      steps: [
+        { action: 'inspect_inputs', status: 'planned' },
+        { action: 'preview_writes', status: 'planned' },
+        { action: 'explicit_apply_required', status: 'planned' },
+      ],
+    };
+  },
+};
+
 const pause_job: Operation = {
   name: 'pause_job',
   description: 'Pause a waiting, active, or delayed job',
@@ -2878,8 +3007,21 @@ const get_calibration_profile: Operation = {
   },
   handler: async (ctx, p) => {
     const { getCalibrationProfileOp } = await import('../commands/calibration.ts');
-    return getCalibrationProfileOp(ctx, {
+    const profile = await getCalibrationProfileOp(ctx, {
       ...(typeof p.holder === 'string' ? { holder: p.holder } : {}),
+    });
+    if (profile == null) return profile;
+    const safe = Object.fromEntries(
+      Object.entries(profile).filter(([, v]) => v !== undefined),
+    );
+    return withReadoutProvenance(safe as Record<string, unknown>, {
+      source_id: typeof profile.source_id === 'string' ? profile.source_id : null,
+      citation: typeof profile.generated_at === 'string'
+        ? `calibration profile generated at ${profile.generated_at}`
+        : null,
+      confidence: typeof profile.grade_completion === 'number' ? profile.grade_completion : null,
+      created_by: typeof profile.model_id === 'string' ? profile.model_id : null,
+      derived_from: typeof profile.wave_version === 'string' ? profile.wave_version : null,
     });
   },
 };
@@ -3059,7 +3201,13 @@ const find_contradictions: Operation = {
     return {
       run_id: latest.run_id,
       ran_at: latest.ran_at,
-      contradictions: filtered.slice(0, limit),
+      contradictions: filtered.slice(0, limit).map(f => withReadoutProvenance(f, {
+        source_id: null,
+        citation: `contradiction run ${latest.run_id}`,
+        confidence: typeof f.confidence === 'number' ? f.confidence : null,
+        created_by: latest.judge_model ?? null,
+        derived_from: `eval_contradictions_runs:${latest.run_id}`,
+      })),
       total_in_run: findings.length,
     };
   },
@@ -3146,6 +3294,13 @@ const find_trajectory: Operation = {
       text: pt.text,
       source_session: pt.source_session,
       source_markdown_slug: pt.source_markdown_slug,
+      provenance: readoutProvenance({
+        source_id: ctx.sourceId ?? null,
+        citation: pt.source_markdown_slug ?? pt.source_session ?? null,
+        confidence: null,
+        created_by: null,
+        derived_from: pt.fact_id != null ? `facts:${pt.fact_id}` : null,
+      }),
     }));
 
     return {
@@ -3548,10 +3703,18 @@ const recall: Operation = {
         superseded_by: r.superseded_by,
         consolidated_at: r.consolidated_at?.toISOString() ?? null,
         consolidated_into: r.consolidated_into,
+        source_id: r.source_id,
         source: r.source,
         source_session: r.source_session,
         confidence: r.confidence,
         created_at: r.created_at.toISOString(),
+        provenance: readoutProvenance({
+          source_id: r.source_id ?? null,
+          citation: r.source ?? r.source_session ?? null,
+          confidence: r.confidence ?? null,
+          created_by: 'facts-extraction',
+          derived_from: r.source_session ?? null,
+        }),
       })),
       total: rows.length,
       ...(pending_consolidation_count !== undefined ? { pending_consolidation_count } : {}),
@@ -3581,6 +3744,183 @@ const forget_fact: Operation = {
       throw new OperationError('fact_already_expired', `Fact id ${id} already expired.`);
     }
     return { id, expired: true, path: result.path, reason: result.reason };
+  },
+};
+
+const preview_forget_fact: Operation = {
+  name: 'preview_forget_fact',
+  description: 'Preview a controlled fact forget. Does not mutate DB or markdown.',
+  params: {
+    id: { type: 'number', required: true, description: 'Fact id to preview.' },
+  },
+  scope: 'read',
+  handler: async (ctx, p) => {
+    const id = p.id as number;
+    const rows = await ctx.engine.executeRaw<Record<string, unknown>>(
+      `SELECT id, source_id, entity_slug, fact, kind, visibility, source, source_session,
+              confidence, row_num, source_markdown_slug, expired_at
+         FROM facts
+        WHERE id = $1
+          ${ctx.remote === true ? "AND visibility = 'world'" : ''}`,
+      [id],
+    );
+    if (rows.length === 0) throw new OperationError('fact_not_found', `Fact id ${id} not found.`);
+    const row = rows[0]!;
+    const alreadyExpired = row.expired_at !== null && row.expired_at !== undefined;
+    return {
+      id,
+      fact: row.fact,
+      status: alreadyExpired ? 'already_expired' : 'preview',
+      path: row.row_num != null && row.source_markdown_slug != null ? 'fence_preferred' : 'legacy_db_fallback_possible',
+      diff: alreadyExpired
+        ? ''
+        : [
+            `--- facts:${id}`,
+            `+++ facts:${id} forgotten`,
+            `- ${String(row.fact ?? '')}`,
+            `+ ~~${String(row.fact ?? '')}~~`,
+          ].join('\n'),
+      warnings: row.row_num == null || row.source_markdown_slug == null
+        ? ['Legacy DB-only fallback may be used because this fact has no markdown fence coordinates.']
+        : [],
+      provenance: readoutProvenance({
+        source_id: typeof row.source_id === 'string' ? row.source_id : null,
+        citation: typeof row.source === 'string' ? row.source : (typeof row.source_session === 'string' ? row.source_session : null),
+        confidence: typeof row.confidence === 'number' ? row.confidence : null,
+        created_by: 'facts-extraction',
+        derived_from: typeof row.source_markdown_slug === 'string' ? row.source_markdown_slug : null,
+      }),
+    };
+  },
+};
+
+const apply_forget_fact: Operation = {
+  name: 'apply_forget_fact',
+  description: 'Apply a controlled fact forget. Requires confirm=true plus source_id and citation.',
+  params: {
+    id: { type: 'number', required: true, description: 'Fact id to forget.' },
+    reason: { type: 'string', required: true, description: 'Reason to record with the forget.' },
+    source_id: { type: 'string', required: true, description: 'Explicit source id authorizing this change.' },
+    citation: { type: 'string', required: true, description: 'Citation for the forget request.' },
+    confirm: { type: 'boolean', required: true, description: 'Must be true to mutate.' },
+  },
+  mutating: true,
+  scope: 'write',
+  handler: async (ctx, p) => {
+    const id = p.id as number;
+    const sourceId = typeof p.source_id === 'string' ? p.source_id.trim() : '';
+    const citation = typeof p.citation === 'string' ? p.citation.trim() : '';
+    const reason = typeof p.reason === 'string' && p.reason.trim() ? p.reason.trim() : 'forgotten';
+    if (p.confirm !== true) throw new OperationError('invalid_params', 'apply_forget_fact requires confirm=true.');
+    if (!sourceId) throw new OperationError('invalid_params', 'apply_forget_fact requires source_id.');
+    if (!citation) throw new OperationError('invalid_params', 'apply_forget_fact requires citation.');
+    if (ctx.dryRun) return { dry_run: true, action: 'apply_forget_fact', id };
+
+    const preview = await preview_forget_fact.handler(ctx, { id }) as Record<string, unknown>;
+    const { forgetFactInFence } = await import('./facts/forget.ts');
+    const result = await forgetFactInFence(ctx.engine, id, { reason });
+    if (!result.ok && result.path === 'not_found') {
+      throw new OperationError('fact_not_found', `Fact id ${id} not found.`);
+    }
+    if (!result.ok && result.path === 'already_expired') {
+      throw new OperationError('fact_already_expired', `Fact id ${id} already expired.`);
+    }
+    return {
+      id,
+      expired: true,
+      path: result.path,
+      reason: result.reason,
+      warning: result.path === 'legacy_db'
+        ? 'Legacy DB-only fallback was used; this forget may not survive a full markdown rebuild.'
+        : null,
+      planned_diff: preview.diff ?? null,
+      provenance: readoutProvenance({
+        source_id: sourceId,
+        citation,
+        confidence: null,
+        created_by: ctx.auth?.clientId ? `mcp:${ctx.auth.clientId}` : 'cli',
+        derived_from: `facts:${id}`,
+      }),
+    };
+  },
+};
+
+const propose_extraction_candidates: Operation = {
+  name: 'propose_extraction_candidates',
+  description: 'Create a reviewable extraction candidate from an explicit source. Does not write brain content.',
+  params: {
+    source_id: { type: 'string', required: true, description: 'Explicit source id.' },
+    page_slug: { type: 'string', required: true, description: 'Target page slug.' },
+    claim: { type: 'string', required: true, description: 'Candidate claim/fact text.' },
+    citation: { type: 'string', required: true, description: 'Source citation.' },
+    confidence: { type: 'number', description: 'Optional confidence 0..1.' },
+    holder: { type: 'string', description: 'Optional holder.' },
+    kind: { type: 'string', description: 'Optional candidate kind.' },
+    dry_run: { type: 'boolean', description: 'When true, return a non-persisted candidate envelope.' },
+  },
+  scope: 'write',
+  mutating: true,
+  handler: async (ctx, p) => {
+    const { proposeExtractionCandidate } = await import('./candidates.ts');
+    return proposeExtractionCandidate(ctx.engine, {
+      sourceId: p.source_id as string,
+      pageSlug: p.page_slug as string,
+      claim: p.claim as string,
+      citation: p.citation as string,
+      confidence: p.confidence as number | undefined,
+      holder: p.holder as string | undefined,
+      kind: p.kind as string | undefined,
+      dryRun: ctx.dryRun === true || p.dry_run === true,
+    });
+  },
+};
+
+const preview_candidate_apply: Operation = {
+  name: 'preview_candidate_apply',
+  description: 'Preview the diff and risks for applying a pending candidate. Does not mutate brain content.',
+  params: {
+    candidate_id: { type: 'number', required: true, description: 'Candidate id.' },
+  },
+  scope: 'read',
+  handler: async (ctx, p) => {
+    const { previewCandidateApply } = await import('./candidates.ts');
+    return previewCandidateApply(ctx.engine, p.candidate_id as number);
+  },
+};
+
+const apply_candidate: Operation = {
+  name: 'apply_candidate',
+  description: 'Apply a pending candidate. Requires candidate_id, source_id, citation, and confirm=true.',
+  params: {
+    candidate_id: { type: 'number', required: true, description: 'Candidate id.' },
+    source_id: { type: 'string', required: true, description: 'Explicit source id.' },
+    citation: { type: 'string', required: true, description: 'Citation authorizing the apply.' },
+    confirm: { type: 'boolean', required: true, description: 'Must be true to mutate.' },
+  },
+  scope: 'write',
+  mutating: true,
+  handler: async (ctx, p) => {
+    const { applyCandidate } = await import('./candidates.ts');
+    return applyCandidate(ctx.engine, {
+      candidateId: p.candidate_id as number,
+      sourceId: p.source_id as string,
+      citation: p.citation as string,
+      confirm: p.confirm === true,
+    });
+  },
+};
+
+const reject_candidate: Operation = {
+  name: 'reject_candidate',
+  description: 'Mark a pending candidate rejected. Does not change brain content.',
+  params: {
+    candidate_id: { type: 'number', required: true, description: 'Candidate id.' },
+  },
+  scope: 'write',
+  mutating: true,
+  handler: async (ctx, p) => {
+    const { rejectCandidate } = await import('./candidates.ts');
+    return rejectCandidate(ctx.engine, p.candidate_id as number);
   },
 };
 
@@ -4470,6 +4810,7 @@ export const operations: Operation[] = [
   file_list, file_upload, file_url,
   // Jobs (Minions)
   submit_job, get_job, list_jobs, cancel_job, retry_job, get_job_progress,
+  get_job_failure_report, get_job_checkpoints, get_job_undo_report, plan_job_batch,
   pause_job, resume_job, replay_job, send_job_message,
   // Actions
   action_scan, action_list, action_get, action_approve, action_run,
@@ -4488,7 +4829,8 @@ export const operations: Operation[] = [
   // v0.29: Salience + anomalies + recent transcripts
   get_recent_salience, find_anomalies, get_recent_transcripts,
   // v0.31: hot memory (facts table)
-  extract_facts, recall, forget_fact,
+  extract_facts, recall, forget_fact, preview_forget_fact, apply_forget_fact,
+  propose_extraction_candidates, preview_candidate_apply, apply_candidate, reject_candidate,
   // v0.32.6: contradiction probe MCP surface (M3)
   find_contradictions,
   // v0.33: expertise + relationship-proximity routing
