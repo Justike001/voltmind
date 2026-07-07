@@ -89,8 +89,9 @@ For a page the agent just整理/curated:
 4. Add dated evidence with `voltmind timeline-add` when useful.
 5. Re-run `voltmind graph <slug> --depth 2` to verify traversal.
 
-This per-page relationship materialization is MVP. Large historical graph
-backfills stay frozen until a later phase.
+This per-page relationship materialization is MVP. Unscoped or automatic
+historical graph backfills stay frozen until a later phase; explicit
+source-bound retrieval enrichment may use the public `extract` command.
 
 ## Jobs Flow
 

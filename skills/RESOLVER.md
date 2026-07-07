@@ -74,6 +74,9 @@ explicitly working on VoltMind internals:
   `voltmind transcripts`. Write-mode extraction must use explicit `--source-id`;
   use `--dry-run` for previews. MCP may use read-only `get_recent_transcripts`
   and `find_contradictions`.
+- Judgment readouts: `voltmind takes <slug>`, `voltmind takes search <query>`,
+  and `voltmind conversation-parser` diagnostics. MCP may use read-only
+  `find_trajectory`, `takes_list`, and `takes_search`.
 - Basic graph/context: `voltmind link`, `voltmind unlink`,
   `voltmind backlinks`, `voltmind tags`, `voltmind timeline`,
   `voltmind timeline-add`, `voltmind graph`. For outgoing-link inspection, use
@@ -82,9 +85,17 @@ explicitly working on VoltMind internals:
   `voltmind whoknows`, `voltmind calibration`. MCP may use
   `get_recent_salience`, `find_anomalies`, `find_experts`, and
   `get_calibration_profile`.
+- Provenance/review: `voltmind candidates list|get|preview|apply|reject`.
+  Apply requires explicit source, citation, and confirmation. MCP may use
+  candidate propose/preview/apply/reject ops with the same explicit-source
+  boundary.
+- Controlled memory: `voltmind recall` is one-shot/read-only. `voltmind forget`
+  is limited to `preview` and explicit `apply`; no direct legacy forget path.
 - MCP: `voltmind serve`, `voltmind call`.
 - Jobs: `voltmind jobs list`, `voltmind jobs get`,
-  `voltmind jobs cancel`, `voltmind jobs stats`.
+  `voltmind jobs cancel`, `voltmind jobs progress`, `voltmind jobs failures`,
+  `voltmind jobs checkpoints`, `voltmind jobs undo-report`,
+  `voltmind jobs plan --dry-run`, `voltmind jobs stats`.
 
 Use `VOLTMIND_HOME`, `VOLTMIND_SOURCE`, `.voltmind-source`, and
 `voltmind.yml`. Old `GBRAIN_*`, `.gbrain`, and `gbrain.yml` names are not part
@@ -95,9 +106,10 @@ of the MVP route.
 Keep these files/modules recoverable, but do not dispatch to them in MVP:
 
 - Autonomous or agentic systems: `agent`, `autopilot`, `dream`, `think`,
-  `recall`, `forget`, `onboard`, `founder`, `takes`.
-- Advanced runtime analysis: `eval`, search-mode tuning, trajectory, code
-  intelligence. The narrow retrieval-enrichment and knowledge-insight commands
+  recall watch/auto-briefing loops, direct legacy forget, `onboard`, `founder`.
+- Advanced runtime analysis: `eval`, search-mode tuning, code intelligence,
+  trajectory mutation/scorecard flows, and takes mutation/scorecard flows. The
+  narrow retrieval-enrichment, judgment-readout, and knowledge-insight commands
   above are public in the MVP runtime.
 - Skill platform features: `skillpack`, `skillify`, skill harvesting,
   schema authoring/evolution, functional-area resolver compression.
@@ -106,7 +118,7 @@ Keep these files/modules recoverable, but do not dispatch to them in MVP:
   publish/export flows.
 - Background orchestration beyond MVP visibility: Minion submit/shell/worker,
   subagent routing, webhook transforms, host scheduler installation, autopilot,
-  and dream maintenance. Jobs list/get/cancel/stats remain allowed.
+  and dream maintenance. Jobs readouts and dry-run plans remain allowed.
 - Multi-brain/topology flows: mounts, cross-brain federation, thin-client setup,
   remote artifact brains, cloud storage migration.
 
@@ -126,6 +138,11 @@ When a frozen route is requested, prefer one of:
   `voltmind extract-conversation-facts --source-id <id>`.
 - Inspect cached contradiction readouts with MCP `find_contradictions`; do not
   launch fresh eval probes as part of normal MVP routing.
+- Read active judgment context with `voltmind takes <slug>`,
+  `voltmind takes search <query>`, MCP `takes_list`, MCP `takes_search`, or
+  MCP `find_trajectory`; do not write back judgment changes automatically.
+- Use `voltmind candidates preview/apply` for reviewed enrichment writes and
+  `voltmind forget preview/apply` for explicit forgets; both require citations.
 - Report "not included in VoltMind MVP yet" for anything outside that surface.
 
 ## Disambiguation rules
@@ -135,7 +152,7 @@ When a frozen route is requested, prefer one of:
    what is frozen.
 3. If the user mentions a URL, PDF, video, podcast, or transcript, capture or
    import the text only unless they explicitly ask for a future design plan.
-4. If the user asks for background jobs, expose only list/get/cancel/stats.
+4. If the user asks for background jobs, expose only list/get/cancel/readout/dry-run plan commands.
 5. When in doubt, ask the user for the target source or whether to save content.
 
 ## Conventions

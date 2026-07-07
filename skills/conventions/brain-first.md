@@ -75,3 +75,6 @@ knowledge insight commands (`whoknows`, `salience`, `anomalies`, and
 `find_contradictions`) are available in the MVP runtime when they match the
 user's request. Write-mode extraction must be explicit and source-bound
 (`--source-id`); use `--dry-run` for preview.
+Judgment readouts (`takes`, `takes_search`, `find_trajectory`, and
+`conversation-parser` diagnostics) may explain existing facts/takes/timeline
+state, but must not auto-write new conclusions.

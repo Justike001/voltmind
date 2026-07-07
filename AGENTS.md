@@ -81,16 +81,24 @@ Public CLI/MCP entrypoints are intentionally small:
 - Retrieval: `search`, `query`, `ask`.
 - Retrieval enrichment: `extract`, `extract-conversation-facts`, `transcripts`,
   and read-only contradiction readouts.
+- Judgment readouts: `takes` read/search, `conversation-parser` diagnostics,
+  and MCP `find_trajectory`.
 - Knowledge insights: `salience`, `anomalies`, `whoknows`, `calibration`.
+- Provenance/review: `candidates` review/apply flow; apply requires explicit
+  source, citation, and confirmation.
+- Controlled memory: `recall` one-shot readout; `forget preview` and
+  `forget apply` only with source/citation/confirmation.
 - Basic graph: `tag`, `untag`, `tags`, `link`, `unlink`, `backlinks`, `graph`,
   `timeline`, `timeline-add`.
 - MCP: `serve`, `serve --http`, `call`, `--tools-json`.
-- Jobs: `jobs list`, `jobs get`, `jobs cancel`, `jobs stats`.
+- Jobs: `jobs list`, `jobs get`, `jobs cancel`, `jobs progress`,
+  `jobs failures`, `jobs checkpoints`, `jobs undo-report`,
+  `jobs plan --dry-run`, `jobs stats`.
 - Admin readouts: `stats`, `health`, `history`, `version`.
 
 Inherited GBrain commands such as `agent`, `autopilot`, `dream`, `eval`,
-`skillpack`, `skillify`, `think`, `recall`, `forget`, `onboard`, `schema`,
-`founder`, `takes`, code-intelligence commands, trajectory flows,
+`skillpack`, `skillify`, `think`, `onboard`, `schema`,
+`founder`, code-intelligence commands, trajectory mutation/scorecard flows,
 publish/integrations/book-mirror, and advanced job
 worker/supervisor flows are frozen outside the MVP public surface. The code may
 remain in the repo, but agents should not advertise or call it.

@@ -69,10 +69,10 @@ voltmind timeline projects/voltmind
 voltmind graph people/alice --depth 2
 ```
 
-Do not use inherited commands such as `gbrain graph-query`,
-trajectory/founder scorecards, or search-mode evaluation. For expert and
-anomaly lookups, use the VoltMind MVP commands/tools rather than old GBrain
-names.
+Do not use inherited commands such as `gbrain graph-query`, founder
+scorecards, trajectory mutation/scorecard flows, or search-mode evaluation.
+For trajectory readouts, expert, and anomaly lookups, use the VoltMind MVP
+commands/tools rather than old GBrain names.
 
 ## Source Precedence
 
@@ -92,5 +92,5 @@ Answer directly, cite pages inline, and include gap statements such as:
 
 - Hallucinating facts not present in VoltMind.
 - Loading many full pages before using snippets.
-- Treating frozen advanced analysis as available.
+- Treating frozen advanced analysis or judgment writeback as available.
 - Citing old GBrain command names in user-facing instructions.
