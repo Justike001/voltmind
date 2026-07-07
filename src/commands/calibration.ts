@@ -76,8 +76,7 @@ export function formatProfileText(profile: CalibrationProfileRow | null, holder:
     return (
       `No calibration profile yet for holder "${holder}".\n` +
       `Build one by resolving 5+ takes then running:\n` +
-      `  voltmind dream --phase calibration_profile\n` +
-      `Or wait for the next autopilot cycle.`
+      `  voltmind calibration --holder ${holder} --regenerate\n`
     );
   }
   const lines: string[] = [];

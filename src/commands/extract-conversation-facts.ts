@@ -199,6 +199,7 @@ export interface ExtractConversationFactsCoreOpts {
   slug?: string;
   /** Show would-do counts without writing facts or advancing checkpoint. */
   dryRun?: boolean;
+  propose?: boolean;
   /** Cap pages processed in this invocation. */
   limit?: number;
   /** ISO watermark; messages older than this are filtered out. */
@@ -619,6 +620,7 @@ interface ExtractCoreState {
   engine: BrainEngine;
   sourceId: string;
   dryRun: boolean;
+  propose: boolean;
   sleepMs: number;
   segmentLimit: number;
   types: AllowedType[];
@@ -754,30 +756,57 @@ async function processPage(
     state.result.facts_extracted += extracted.length;
 
     if (!state.dryRun && extracted.length > 0) {
-      // Eng-v2 C1 / E11: page-global row_num. Each fact in this batch gets
-      // a unique row_num within (source_id, source_markdown_slug); the
-      // accumulator increments across the segment loop.
-      const rows = extracted.map((fact, i) => ({
-        ...fact,
-        row_num: rowNum + i,
-        source_markdown_slug: page.slug,
-        source: PER_SEGMENT_SOURCE_PREFIX,
-        source_session: sessionId,
-        context:
-          fact.context ?? `from ${page.slug} segment ${seg.startIso}..${seg.endIso}`,
-      }));
-      try {
-        const ins = await state.engine.insertFacts(rows, { source_id: state.sourceId }); // voltmind-allow-direct-insert: canonical bulk extraction path for conversation pages — fences-as-system-of-record doesn't apply because conversations don't carry `## Facts` fences (the chat-log shape is the source-of-truth)
-        pageInsertedTotal += ins.inserted;
-        state.result.facts_inserted += ins.inserted;
-      } catch (err) {
-        if (isAbortError(err)) throw err;
-        // Batch failure is best-effort — segment is the transactional
-        // boundary, so a duplicate-key or constraint error rolls back
-        // this segment only. Loop continues.
-        process.stderr.write(
-          `[extract-conversation-facts] segment ${seg.startIso}..${seg.endIso} insertFacts failed: ${(err as Error).message}\n`,
-        );
+      if (state.propose) {
+        const { proposeExtractionCandidate: propose } = await import('../core/candidates.ts');
+        let proposed = 0;
+        for (const fact of extracted) {
+          try {
+            await propose(state.engine, {
+              sourceId: state.sourceId,
+              pageSlug: page.slug,
+              claim: fact.fact,
+              citation: `extracted from ${page.slug} segment ${seg.startIso}..${seg.endIso} via ${PER_SEGMENT_SOURCE_PREFIX}`,
+              confidence: fact.confidence,
+              holder: fact.entity_slug ?? 'brain',
+              kind: fact.kind,
+              dryRun: false,
+            });
+            proposed++;
+          } catch (err) {
+            if (isAbortError(err)) throw err;
+            process.stderr.write(
+              `[extract-conversation-facts] segment ${seg.startIso}..${seg.endIso} candidate proposal failed for "${(fact.fact).slice(0, 80)}": ${(err as Error).message}\n`,
+            );
+          }
+        }
+        pageInsertedTotal += proposed;
+        state.result.facts_inserted += proposed;
+      } else {
+        // Eng-v2 C1 / E11: page-global row_num. Each fact in this batch gets
+        // a unique row_num within (source_id, source_markdown_slug); the
+        // accumulator increments across the segment loop.
+        const rows = extracted.map((fact, i) => ({
+          ...fact,
+          row_num: rowNum + i,
+          source_markdown_slug: page.slug,
+          source: PER_SEGMENT_SOURCE_PREFIX,
+          source_session: sessionId,
+          context:
+            fact.context ?? `from ${page.slug} segment ${seg.startIso}..${seg.endIso}`,
+        }));
+        try {
+          const ins = await state.engine.insertFacts(rows, { source_id: state.sourceId }); // voltmind-allow-direct-insert: canonical bulk extraction path for conversation pages — fences-as-system-of-record doesn't apply because conversations don't carry `## Facts` fences (the chat-log shape is the source-of-truth)
+          pageInsertedTotal += ins.inserted;
+          state.result.facts_inserted += ins.inserted;
+        } catch (err) {
+          if (isAbortError(err)) throw err;
+          // Batch failure is best-effort — segment is the transactional
+          // boundary, so a duplicate-key or constraint error rolls back
+          // this segment only. Loop continues.
+          process.stderr.write(
+            `[extract-conversation-facts] segment ${seg.startIso}..${seg.endIso} insertFacts failed: ${(err as Error).message}\n`,
+          );
+        }
       }
       rowNum += extracted.length;
     } else {
@@ -795,18 +824,21 @@ async function processPage(
   const fullyProcessed =
     state.segmentLimit === 0 || segmentsThisPage < state.segmentLimit;
   if (!state.dryRun && fullyProcessed && newestEnd !== null) {
-    try {
-      await writeTerminalAuditRow(state.engine, state.sourceId, page.slug, rowNum);
-      rowNum++;
-    } catch (err) {
-      if (isAbortError(err)) throw err;
-      // Terminal-row write failure: page is NOT marked complete; next
-      // run resumes. Loud stderr so users see partial-success state.
-      process.stderr.write(
-        `[extract-conversation-facts] ${page.slug} terminal audit write failed: ${(err as Error).message}\n`,
-      );
-      // Suppress the resume-state update so doctor still flags this page.
-      newestEnd = null;
+    // Propose mode writes candidates, not facts — skip terminal audit row.
+    if (!state.propose) {
+      try {
+        await writeTerminalAuditRow(state.engine, state.sourceId, page.slug, rowNum);
+        rowNum++;
+      } catch (err) {
+        if (isAbortError(err)) throw err;
+        // Terminal-row write failure: page is NOT marked complete; next
+        // run resumes. Loud stderr so users see partial-success state.
+        process.stderr.write(
+          `[extract-conversation-facts] ${page.slug} terminal audit write failed: ${(err as Error).message}\n`,
+        );
+        // Suppress the resume-state update so doctor still flags this page.
+        newestEnd = null;
+      }
     }
   }
 
@@ -881,7 +913,8 @@ export async function runExtractConversationFactsCore(
   };
 
   // F2: honor brain-wide kill-switch unless overridden.
-  if (!opts.overrideDisabled) {
+  // In propose mode we write to take_proposals, not facts — skip.
+  if (!opts.overrideDisabled && !opts.propose) {
     const enabled = await isFactsExtractionEnabled(engine);
     if (!enabled) {
       throw new Error(
@@ -890,13 +923,9 @@ export async function runExtractConversationFactsCore(
     }
   }
 
-  // v0.41.15.0 (D15): preflight facts.embedding dim check. Throws a
-  // paste-ready ALTER hint BEFORE the first insert if the configured
-  // embedding_dimensions differs from the facts column width. Doctor
-  // also warns, but doctor-only doesn't close the bug class: new users
-  // who skip doctor crash on first insert with the opaque pgvector
-  // error. Preflight catches them up-front. Result cached per process.
-  if (!opts.dryRun) {
+  // Preflight checks: skip facts-specific checks in propose mode since we
+  // write to take_proposals, not facts.
+  if (!opts.dryRun && !opts.propose) {
     await assertFactsEmbeddingDimMatchesConfig(engine);
   }
 
@@ -923,6 +952,7 @@ export async function runExtractConversationFactsCore(
     engine,
     sourceId,
     dryRun,
+    propose: !!opts.propose,
     sleepMs,
     segmentLimit,
     types,
@@ -1118,6 +1148,7 @@ interface ParsedArgs {
   types?: AllowedType[];
   slug?: string;
   dryRun?: boolean;
+  propose?: boolean;
   limit?: number;
   sinceIso?: string;
   force?: boolean;
@@ -1138,6 +1169,7 @@ function parseArgs(args: string[]): ParsedArgs {
     const a = args[i];
     if (a === '--help' || a === '-h') { out.help = true; continue; }
     if (a === '--dry-run') { out.dryRun = true; continue; }
+    if (a === '--propose') { out.propose = true; continue; }
     if (a === '--force') { out.force = true; continue; }
     if (a === '--yes' || a === '-y') { out.yes = true; continue; }
     if (a === '--override-disabled') { out.overrideDisabled = true; continue; }
@@ -1214,6 +1246,7 @@ Options:
                          (falls back to the full allowlist).
   --slug <slug>          Process a single page (overrides multi-page enumeration).
   --dry-run              Show segmentation + counts; no DB writes, no checkpoint advance.
+  --propose              Candidate mode: requires --source-id and writes no facts.
   --limit <N>            Cap pages processed (default: all).
   --since <iso>          Only consider messages newer than this ISO timestamp.
   --force                Re-process the target page (clears its resume entry).
@@ -1251,6 +1284,7 @@ function buildJobParams(args: string[]): Record<string, unknown> {
     types: parsed.types,
     slug: parsed.slug,
     dryRun: parsed.dryRun,
+    propose: parsed.propose,
     limit: parsed.limit,
     sinceIso: parsed.sinceIso,
     force: parsed.force,
@@ -1280,6 +1314,10 @@ export async function runExtractConversationFacts(
   if (parsed.error) {
     console.error(parsed.error);
     console.error(HELP);
+    process.exit(2);
+  }
+  if (parsed.propose && !parsed.sourceId) {
+    console.error('Candidate proposal mode requires --source-id <id>; it never runs ambient/background enrichment.');
     process.exit(2);
   }
   if (!parsed.dryRun && !parsed.sourceId) {
@@ -1363,10 +1401,11 @@ export async function runExtractConversationFacts(
     progress.finish();
   }
 
-  const verb = parsed.dryRun ? '(dry run) would extract' : 'extracted';
+  const verb = parsed.propose ? '(propose) would generate candidates for' : (parsed.dryRun ? '(dry run) would extract' : 'extracted');
+  const noun = parsed.propose ? 'candidates proposed' : 'inserted';
   console.log(
     `\nDone: ${verb} ${aggregate.facts_extracted} facts ` +
-    `(${aggregate.facts_inserted} inserted) across ${aggregate.segments_processed} segments ` +
+    `(${aggregate.facts_inserted} ${noun}) across ${aggregate.segments_processed} segments ` +
     `from ${aggregate.pages_processed}/${aggregate.pages_considered} pages ` +
     `in ${sourceIds.length} source(s). ` +
     `Spent ~$${totalSpent.toFixed(4)}.`,

@@ -208,8 +208,25 @@ async function resolveSourceForRecall(
 }
 
 export async function runRecall(engine: BrainEngine, args: string[]): Promise<void> {
+  if (args.includes('--help') || args.includes('-h')) {
+    process.stdout.write(`voltmind recall - one-shot memory recall
+
+USAGE
+  voltmind recall [entity] [--since <time>] [--session-id <id>] [--grep text]
+  voltmind recall --supersessions [--since <time>]
+  voltmind recall [flags] --json
+
+PUBLIC MVP BOUNDS
+  --watch and --since-last-run are not included in the VoltMind MVP runtime.
+`);
+    return;
+  }
   const flags = parseFlags(args);
   validateAndNormalizeFlags(flags);
+  if (flags.watchSeconds !== null || flags.sinceLastRun) {
+    process.stderr.write('Error: recall --watch and --since-last-run are not included in the VoltMind MVP runtime yet.\n');
+    process.exit(1);
+  }
 
   const cfg = loadConfig();
   const thinClient = isThinClient(cfg);
@@ -494,7 +511,7 @@ function remoteFactToRow(o: Record<string, unknown>): FactRow {
   };
   return {
     id: Number(o.id),
-    source_id: typeof o.source === 'string' ? o.source : 'default',
+    source_id: typeof o.source_id === 'string' ? o.source_id : 'default',
     fact: String(o.fact ?? ''),
     kind: (o.kind as FactKind) ?? 'fact',
     entity_slug: typeof o.entity_slug === 'string' ? o.entity_slug : null,
@@ -530,63 +547,90 @@ function factRowToJson(r: FactRow): Record<string, unknown> {
     superseded_by: r.superseded_by,
     consolidated_at: r.consolidated_at?.toISOString() ?? null,
     consolidated_into: r.consolidated_into,
+    source_id: r.source_id,
     source: r.source,
     source_session: r.source_session,
     confidence: r.confidence,
     effective_confidence: Number(effectiveConfidence(r).toFixed(3)),
     created_at: r.created_at.toISOString(),
+    provenance: {
+      source_id: r.source_id ?? null,
+      citation: r.source || r.source_session || null,
+      confidence: r.confidence ?? null,
+      created_by: 'facts-extraction',
+      derived_from: r.source_session ?? null,
+    },
   };
 }
 
-export async function runForget(engine: BrainEngine, args: string[]): Promise<void> {
-  const idArg = args.find(a => /^\d+$/.test(a));
-  if (!idArg) {
-    process.stderr.write('Usage: voltmind forget <fact-id> [--reason <text>]\n');
+export async function runForget(engine: BrainEngine | null, args: string[]): Promise<void> {
+  if (!args[0] || args[0] === '--help' || args[0] === '-h') {
+    process.stdout.write(`voltmind forget - controlled fact forget
+
+USAGE
+  voltmind forget preview <fact-id>
+  voltmind forget apply <fact-id> --confirm --reason <text> --source-id <id> --citation <text>
+
+The direct legacy forget path is intentionally not public in the VoltMind MVP runtime.
+`);
+    return;
+  }
+  const sub = args[0];
+  if (sub !== 'preview' && sub !== 'apply') {
+    process.stderr.write('Usage: voltmind forget preview <fact-id> | voltmind forget apply <fact-id> --confirm --reason <text> --source-id <id> --citation <text>\n');
     process.exit(1);
   }
-  const id = parseInt(idArg, 10);
+  const idArg = args[1];
+  const id = parseInt(idArg ?? '', 10);
+  if (!Number.isFinite(id)) {
+    process.stderr.write(`Usage: voltmind forget ${sub} <fact-id>\n`);
+    process.exit(1);
+  }
 
-  // Optional --reason <text> passes through to the fence's "forgotten:
-  // <reason>" context cell so the markdown carries the rationale.
-  let reason: string | undefined = undefined;
-  const idx = args.indexOf('--reason');
-  if (idx >= 0 && idx + 1 < args.length) reason = args[idx + 1];
+  const valueAfter = (name: string): string | undefined => {
+    const idx = args.indexOf(name);
+    return idx >= 0 ? args[idx + 1] : undefined;
+  };
+  const reason = valueAfter('--reason');
+  const sourceId = valueAfter('--source-id');
+  const citation = valueAfter('--citation');
+  const confirm = args.includes('--confirm');
 
-  // v0.33: thin-client routing. Without this, `voltmind forget <id>` on a
-  // thin-client install would call the local fence helper against the empty
-  // local PGLite and report "No fact" while the real fact lives on the
-  // remote brain.
   const cfg = loadConfig();
   if (isThinClient(cfg)) {
+    const tool = sub === 'preview' ? 'preview_forget_fact' : 'apply_forget_fact';
     const params: Record<string, unknown> = { id };
-    if (reason !== undefined) params.reason = reason;
-    const raw = await callRemoteTool(cfg!, 'forget_fact', params, { timeoutMs: 30_000 });
-    const result = unpackToolResult<{ id: number; expired: boolean }>(raw);
-    if (!result.expired) {
-      process.stderr.write(`No active fact with id=${id}\n`);
-      process.exit(1);
+    if (sub === 'apply') {
+      params.reason = reason;
+      params.source_id = sourceId;
+      params.citation = citation;
+      params.confirm = confirm;
     }
-    process.stdout.write(`Forgot fact id=${id}\n`);
+    const raw = await callRemoteTool(cfg!, tool, params, { timeoutMs: 30_000 });
+    process.stdout.write(JSON.stringify(unpackToolResult(raw), null, 2) + '\n');
     return;
   }
 
-  // v0.32.2: route through forgetFactInFence so the forget rewrites the
-  // page's `## Facts` fence and survives `voltmind rebuild`. Legacy rows
-  // fall back to the legacy DB-only expire path; the helper handles
-  // the fallback internally.
-  const { forgetFactInFence } = await import('../core/facts/forget.ts');
-  const result = await forgetFactInFence(engine, id, { reason });
-
-  if (!result.ok && result.path === 'not_found') {
-    process.stderr.write(`No fact with id=${id}\n`);
-    process.exit(1);
+  if (!engine) throw new Error('A local brain is required for forget.');
+  const { operationsByName } = await import('../core/operations.ts');
+  const op = operationsByName[sub === 'preview' ? 'preview_forget_fact' : 'apply_forget_fact'];
+  if (!op) throw new Error(`Missing forget operation for ${sub}.`);
+  const params: Record<string, unknown> = { id };
+  if (sub === 'apply') {
+    params.reason = reason;
+    params.source_id = sourceId;
+    params.citation = citation;
+    params.confirm = confirm;
   }
-  if (!result.ok && result.path === 'already_expired') {
-    process.stderr.write(`Fact id=${id} is already expired\n`);
-    process.exit(1);
-  }
-  const suffix = result.path === 'fence' ? '' : ' (legacy DB-only — will not survive voltmind rebuild)';
-  process.stdout.write(`Forgot fact id=${id}${suffix}\n`);
+  const result = await op.handler({
+    engine,
+    config: loadConfig()!,
+    remote: false,
+    sourceId: sourceId ?? 'default',
+    logger: { info() {}, warn() {}, error() {} } as never,
+    dryRun: false,
+  }, params);
+  process.stdout.write(JSON.stringify(result, null, 2) + '\n');
 }
 
 function renderToday(rows: FactRow[]): string {

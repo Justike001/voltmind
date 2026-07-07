@@ -10,7 +10,7 @@ import type { MinionJob, MinionJobStatus } from '../core/minions/types.ts';
 import { loadConfig, isThinClient } from '../core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../core/mcp-client.ts';
 
-const MVP_JOB_SUBCOMMANDS = new Set(['list', 'get', 'cancel', 'stats', 'smoke']);
+const MVP_JOB_SUBCOMMANDS = new Set(['list', 'get', 'cancel', 'stats', 'smoke', 'progress', 'failures', 'checkpoints', 'undo-report', 'plan']);
 
 function parseFlag(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);
@@ -115,6 +115,18 @@ function formatJobDetail(job: MinionJob): string {
   return lines.join('\n');
 }
 
+async function runJobReadout(engine: BrainEngine, tool: string, params: Record<string, unknown>): Promise<unknown> {
+  const cfg = loadConfig();
+  if (isThinClient(cfg)) {
+    const raw = await callRemoteTool(cfg!, tool, params, { timeoutMs: 30_000 });
+    return unpackToolResult(raw);
+  }
+  const { operationsByName } = await import('../core/operations.ts');
+  const op = operationsByName[tool];
+  if (!op) throw new Error(`Unknown job readout op: ${tool}`);
+  return op.handler({ engine, config: cfg!, remote: false, sourceId: 'default', logger: { info() {}, warn() {}, error() {} } as never, dryRun: false }, params);
+}
+
 export async function runJobs(engine: BrainEngine, args: string[]): Promise<void> {
   const sub = args[0];
 
@@ -125,6 +137,11 @@ USAGE
   voltmind jobs list [--status S] [--queue Q] [--limit N]
   voltmind jobs get <id>
   voltmind jobs cancel <id>
+  voltmind jobs progress <id>
+  voltmind jobs failures [--limit N]
+  voltmind jobs checkpoints [--op name] [--limit N]
+  voltmind jobs undo-report <id>
+  voltmind jobs plan <name> --dry-run [--source-id id]
   voltmind jobs stats
 
 `);
@@ -420,6 +437,54 @@ USAGE
         console.error(`Could not cancel job #${id} (may already be completed/dead).`);
         process.exit(1);
       }
+      break;
+    }
+
+    case 'progress': {
+      const id = parseInt(args[1], 10);
+      if (isNaN(id)) { console.error('Error: job ID required. Usage: voltmind jobs progress <id>'); process.exit(1); }
+      console.log(JSON.stringify(await runJobReadout(engine, 'get_job_progress', { id }), null, 2));
+      break;
+    }
+
+    case 'failures': {
+      const idRaw = parseFlag(args, '--id');
+      const limit = parseInt(parseFlag(args, '--limit') ?? '20', 10);
+      const params: Record<string, unknown> = { limit };
+      if (idRaw !== undefined) params.id = parseInt(idRaw, 10);
+      console.log(JSON.stringify(await runJobReadout(engine, 'get_job_failure_report', params), null, 2));
+      break;
+    }
+
+    case 'checkpoints': {
+      const limit = parseInt(parseFlag(args, '--limit') ?? '20', 10);
+      const op = parseFlag(args, '--op');
+      console.log(JSON.stringify(await runJobReadout(engine, 'get_job_checkpoints', { limit, ...(op ? { op } : {}) }), null, 2));
+      break;
+    }
+
+    case 'undo-report': {
+      const id = parseInt(args[1], 10);
+      if (isNaN(id)) { console.error('Error: job ID required. Usage: voltmind jobs undo-report <id>'); process.exit(1); }
+      console.log(JSON.stringify(await runJobReadout(engine, 'get_job_undo_report', { id }), null, 2));
+      break;
+    }
+
+    case 'plan': {
+      const name = args[1];
+      if (!name) { console.error('Error: job batch name required. Usage: voltmind jobs plan <name> --dry-run'); process.exit(1); }
+      if (!hasFlag(args, '--dry-run')) {
+        console.error('Error: jobs plan is read-only and requires --dry-run.');
+        process.exit(1);
+      }
+      const sourceId = parseFlag(args, '--source-id');
+      const limitRaw = parseFlag(args, '--limit');
+      console.log(JSON.stringify(await runJobReadout(engine, 'plan_job_batch', {
+        name,
+        dry_run: true,
+        ...(sourceId ? { source_id: sourceId } : {}),
+        ...(limitRaw ? { limit: parseInt(limitRaw, 10) } : {}),
+      }), null, 2));
       break;
     }
 

@@ -40,7 +40,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'autopilot',
@@ -51,7 +51,7 @@ const INTERNAL_MIGRATION_CLI = new Set([
   'reindex',
   'reindex-code',
   'reindex-frontmatter',
-  'takes',
+  'takes', 'recall', 'forget', 'candidates',
 ]);
 // CLI-only commands whose handlers print their own --help text. These are
 // excluded from the generic short-circuit so detailed per-command and
@@ -69,7 +69,10 @@ const CLI_ONLY_SELF_HELP = new Set([
   'cache',
   'brainstorm', 'lsd',
   'salience', 'anomalies', 'whoknows', 'calibration',
+  'takes',
   'extract', 'transcripts',
+  'conversation-parser',
+  'recall', 'forget', 'candidates',
   // v0.39.3.0 WARN-5: capture's detailed HELP constant
   // (src/commands/capture.ts:90+) was unreachable because the dispatcher's
   // generic short-circuit (printCliOnlyHelp at :204-208) fired before
@@ -787,9 +790,8 @@ const THIN_CLIENT_REFUSED_COMMANDS = new Set([
   // v0.31.1 CDX-2 audit: takes/sources have multiple subcommands; some
   // (takes_list/takes_search, sources_list/sources_status) have MCP
   // equivalents and others are file-system bound (takes mutate commands
-  // edit local .md files). v0.31.1 refuses both at the top level with a
-  // hint pointing at the routable MCP tools; per-subcommand splits are
-  // a v0.31.x follow-up TODO.
+  // edit local .md files). Thin-client routing still refuses both at the
+  // top level and points read callers at the routable MCP tools.
   'takes', 'sources',
   // v0.32 thin-client routing audit (Codex round 2 findings #2, #4):
   // - `pages` purge-deleted is admin+localOnly (operations.ts:856-864)
@@ -824,7 +826,7 @@ const THIN_CLIENT_REFUSE_HINTS: Record<string, string> = {
   orphans: "orphans needs the host's brain. Run on the host or use the `find_orphans` MCP tool from your agent.",
   transcripts: 'transcripts is server-private (raw chat exports stay on the host). Read transcripts on the host machine.',
   storage: 'storage operates on the local repo on disk. Run on the host.',
-  takes: 'takes mutate subcommands edit local .md files; routing the read subcommands lands in v0.31.x. For now: use `takes_list` and `takes_search` MCP tools from your agent, or run on the host.',
+  takes: 'takes readouts are available on the host CLI; thin clients should use `takes_list` and `takes_search` MCP tools. Mutating/scorecard take flows remain outside the VoltMind MVP runtime.',
   sources: 'sources commands manage local DB + config rows. Per-subcommand thin-client routing lands in v0.31.x. For now: use `sources_list` / `sources_status` MCP tools, or run on the host.',
   // v0.32 audit additions
   pages: '`pages purge-deleted` is admin+localOnly (hard-deletes from the local DB). Run on the host.',
@@ -1280,6 +1282,19 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
+  if ((command === 'recall' || command === 'forget') && (args.includes('--help') || args.includes('-h'))) {
+    const mod = await import('./commands/recall.ts');
+    if (command === 'recall') await mod.runRecall(null as any, args);
+    else await mod.runForget(null as any, args);
+    return;
+  }
+
+  if (command === 'candidates' && (args.includes('--help') || args.includes('-h'))) {
+    const { runCandidates } = await import('./commands/candidates.ts');
+    await runCandidates(null as any, args);
+    return;
+  }
+
   if (command === 'salience' && (args.includes('--help') || args.includes('-h'))) {
     const { runSalience } = await import('./commands/salience.ts');
     await runSalience(null as any, args);
@@ -1302,6 +1317,23 @@ async function handleCliOnly(command: string, args: string[]) {
     const { runCalibration } = await import('./commands/calibration.ts');
     await runCalibration(null as any, args, {} as any);
     return;
+  }
+
+  if (command === 'takes') {
+    const takesArgs = args;
+    const sub = takesArgs[0];
+    if (sub && ['add', 'update', 'supersede', 'resolve', 'scorecard', 'calibration', 'revisit', 'extract'].includes(sub)) {
+      console.error(
+        `voltmind takes ${sub} is not included in the VoltMind MVP runtime yet. ` +
+        'This public surface exposes takes readouts only.',
+      );
+      process.exit(1);
+    }
+    if (args.includes('--help') || args.includes('-h')) {
+      const { runTakes } = await import('./commands/takes.ts');
+      await runTakes(null as any, takesArgs);
+      return;
+    }
   }
 
   if (command === 'actions' && (args.includes('--help') || args.includes('-h'))) {
@@ -1712,9 +1744,14 @@ async function handleCliOnly(command: string, args: string[]) {
         break;
       }
       case 'forget': {
-        // v0.31: shorthand for expireFact. `voltmind forget <fact-id>`.
+        // Controlled forget surface: preview first, explicit apply with source/citation.
         const { runForget } = await import('./commands/recall.ts');
         await runForget(engine, args);
+        break;
+      }
+      case 'candidates': {
+        const { runCandidates } = await import('./commands/candidates.ts');
+        await runCandidates(engine, args);
         break;
       }
       case 'notability-eval': {
@@ -2086,6 +2123,16 @@ INSIGHTS
   whoknows <topic> [--json]          Find relevant people or companies
   calibration [--holder H] [--json]  Calibration profile and controls
 
+JUDGMENT READOUTS
+  takes <slug> [--json]              Read active takes for a page
+  takes search <query> [--json]      Search takes without mutating them
+  recall [entity] [--json]           One-shot memory recall with provenance
+  forget preview <fact-id>           Preview a controlled fact forget
+  forget apply <fact-id> --confirm   Apply forget with source/citation
+  candidates list|preview|apply      Review/apply enrichment candidates
+  conversation-parser scan <slug>    Dry-run conversation parsing
+  conversation-parser list-builtins  Inspect built-in parser patterns
+
 ACTION SYSTEM
   actions scan                       Index state/actions/*.md
   actions list [--due]               List action tasks by risk/status
@@ -2096,6 +2143,11 @@ JOBS
   jobs list [--status S] [--limit N] List jobs
   jobs get <id>                      Job details + history
   jobs cancel <id>                   Cancel job
+  jobs progress <id>                 Structured progress readout
+  jobs failures [--limit N]          Recent failure report
+  jobs checkpoints [--op name]       Operation checkpoints
+  jobs undo-report <id>              Read-only undo report
+  jobs plan <name> --dry-run         Preview explicit batch plan
   jobs stats                         Job health dashboard
 
 MCP

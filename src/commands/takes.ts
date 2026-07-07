@@ -1,21 +1,12 @@
 /**
  * v0.28: `voltmind takes` CLI.
  *
- * Subcommands:
+ * Public MVP subcommands:
  *   takes <slug>                          — list takes for a page
  *   takes search "<query>" [--who h]       — keyword search across all takes
- *   takes add <slug> ...flags              — append a take (markdown + DB)
- *   takes update <slug> --row N ...flags   — update mutable fields
- *   takes supersede <slug> --row N ...     — strikethrough old + append new
- *   takes resolve <slug> --row N --outcome true|false [--value N --unit u]
  *
- * Markdown is canonical. Every mutate command:
- *   1. acquires the per-page file lock
- *   2. re-reads the .md file
- *   3. applies the edit via takes-fence (upsertTakeRow / supersedeRow)
- *   4. writes the .md file back
- *   5. mirrors to the DB via the engine method
- *   6. releases the lock (auto via withPageLock)
+ * Mutating and aggregate judgment subcommands remain implemented below for
+ * inherited/internal flows, but the public dispatcher gates them off.
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -536,21 +527,9 @@ Subcommands:
                                           List takes for a page
   takes search "<query>" [--limit N] [--json]
                                           Keyword search across all takes
-  takes add <slug> --claim "..." --kind <fact|take|bet|hunch> --who <holder>
-                   [--weight 0.5] [--source "..."] [--since YYYY-MM]
-                                          Append a take (markdown + DB)
-  takes update <slug> --row N [--weight 0.7] [--source "..."] [--since YYYY-MM]
-                                          Update mutable fields
-  takes supersede <slug> --row N --claim "..." [--kind k] [--who h] [--weight 0.5] [--source "..."]
-                                          Strikethrough old + append new
-  takes resolve <slug> --row N --quality correct|incorrect|partial
-                       [--evidence "..."] [--value N --unit usd|pct|count] [--by <slug>]
-                                          Record bet resolution (immutable, v0.30.0)
-                                          Back-compat: --outcome true|false (deprecated alias)
-  takes scorecard [<holder>] [--domain <prefix>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--json]
-                                          Aggregate calibration scorecard (v0.30.0)
-  takes calibration [<holder>] [--bucket-size 0.1] [--json]
-                                          Calibration curve binned by stated weight (v0.30.0)
+  Mutating and aggregate judgment subcommands are outside the VoltMind MVP
+  public runtime: add, update, supersede, resolve, scorecard, calibration,
+  revisit, extract.
 
 Common flags:
   --dir <path>    Override the brain directory (default: sync.repo_path config)
@@ -561,17 +540,30 @@ Common flags:
 
   const sub = args[0];
   const rest = args.slice(1);
+  const mutatingOrDeferred = new Set([
+    'add',
+    'update',
+    'supersede',
+    'resolve',
+    'scorecard',
+    'calibration',
+    'revisit',
+    'extract',
+  ]);
+  if (mutatingOrDeferred.has(sub)) {
+    console.error(
+      `voltmind takes ${sub} is not included in the VoltMind MVP runtime yet. ` +
+      'This public surface exposes takes readouts only.',
+    );
+    process.exit(1);
+  }
+  if (sub.startsWith('-')) {
+    console.error('Usage: voltmind takes <slug> [--json] or voltmind takes search "<query>" [--json]');
+    process.exit(2);
+  }
 
   switch (sub) {
     case 'search':      return cmdSearch(engine, rest);
-    case 'add':         return cmdAdd(engine, rest);
-    case 'update':      return cmdUpdate(engine, rest);
-    case 'supersede':   return cmdSupersede(engine, rest);
-    case 'resolve':     return cmdResolve(engine, rest);
-    case 'scorecard':   return cmdScorecard(engine, rest);
-    case 'calibration': return cmdCalibration(engine, rest);
-    case 'revisit':     return cmdRevisit(engine, rest);
-    case 'extract':     return cmdExtract(engine, rest);
     default:
       // No subcommand keyword → treat first arg as <slug> for the list path.
       return cmdList(engine, args);
