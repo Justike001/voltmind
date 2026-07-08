@@ -150,9 +150,10 @@ voltmind sync --no-pull --no-embed
 voltmind embed --stale
 ```
 
-Every write should include enough provenance for later retrieval. Do not silently
-create person/company pages as a background enrichment task; in MVP, ask or use a
-direct capture/page update.
+Every write should include enough provenance for later retrieval. Source-backed
+signals may automatically create or update person/company pages through the MVP
+signal-enrichment hook. Unsourced, low-confidence, or non-notable mentions must
+not create pages.
 
 ## Entity Graph Write Protocol
 
@@ -203,7 +204,8 @@ The key is `sources.id`, not display name.
 - Calling hidden inherited commands because they still exist in source files.
 - Answering from general knowledge when VoltMind has matching pages.
 - Writing facts without provenance.
-- Running autonomous enrichment, dream, autopilot, or schema-author workflows.
+- Running autonomous enrichment loops, dream, autopilot, social/web crawlers, or
+  schema-author workflows. Source-backed MVP signal enrichment is allowed.
 - Switching storage/topology away from local PGLite during MVP unless the user is
   explicitly designing a future phase.
 - Leaving curated entity relationships only in prose when they should be graph

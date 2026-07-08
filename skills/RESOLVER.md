@@ -20,8 +20,12 @@ just because the file still exists.
 |---------|-------|
 | Any VoltMind read/write/lookup/citation | `skills/brain-ops/SKILL.md` |
 
-`skills/signal-detector/SKILL.md` is frozen for MVP. Do not run ambient entity
-detection or background enrichment loops automatically.
+`skills/signal-detector/SKILL.md` is partially available for MVP as controlled
+signal enrichment. It may run only on explicit, source-backed write paths
+(`capture`, `import`, `sync`, `put_page`, meeting ingestion, and
+`extract-conversation-facts --source-id`). It must not run ambient web/social
+crawlers, monthly re-enrichment loops, autopilot, dream, or unsourced
+background page creation.
 
 ## MVP Routes
 
@@ -41,6 +45,7 @@ detection or background enrichment loops automatically.
 | "build the graph", "link these entities", "create relationship", "connect pages", "整理实体关系", "建链" | `skills/brain-ops/SKILL.md` |
 | "capture this", "save this thought", "remember this", "drop this in the inbox", "save to brain" | `skills/capture/SKILL.md` |
 | "ingest this", "import this folder", "sync this source", "embed stale chunks" | `skills/ingest/SKILL.md` |
+| "enrich signals", "signal enrichment", "run enrichment", "enrich this source" | `skills/enrich/SKILL.md` |
 | "cold start", "fill my brain", "bootstrap brain", "import my data", "what should I import first", "populate brain", "now what?", "离线导入", "初始化数据", "冷启动" | `skills/cold-start/SKILL.md` |
 | "Set up VoltMind", first boot, Bun install, local init | `skills/setup/SKILL.md` |
 | "brain health", "doctor", "status", "embedding freshness", "job status", "cancel job" | `skills/maintain/SKILL.md` |
@@ -69,7 +74,7 @@ explicitly working on VoltMind internals:
   `voltmind delete`, `voltmind restore`, `voltmind search`,
   `voltmind query`.
 - Ingestion: `voltmind import`, `voltmind capture`, `voltmind sync`,
-  `voltmind embed`.
+  `voltmind embed`, `voltmind enrich`.
 - Retrieval enrichment: `voltmind extract`, `voltmind extract-conversation-facts`,
   `voltmind transcripts`. Write-mode extraction must use explicit `--source-id`;
   use `--dry-run` for previews. MCP may use read-only `get_recent_transcripts`
@@ -89,6 +94,9 @@ explicitly working on VoltMind internals:
   Apply requires explicit source, citation, and confirmation. MCP may use
   candidate propose/preview/apply/reject ops with the same explicit-source
   boundary.
+- Signal enrichment: `voltmind enrich preview|apply --source-id <id>`.
+  MCP may use `preview_signal_enrichment` and `apply_signal_enrichment`.
+  Apply requires explicit source-backed signal and confirmation.
 - Controlled memory: `voltmind recall` is one-shot/read-only. `voltmind forget`
   is limited to `preview` and explicit `apply`; no direct legacy forget path.
 - MCP: `voltmind serve`, `voltmind call`.
@@ -117,8 +125,10 @@ Keep these files/modules recoverable, but do not dispatch to them in MVP:
   social/web research enrichers, archive crawler, academic verification,
   publish/export flows.
 - Background orchestration beyond MVP visibility: Minion submit/shell/worker,
-  subagent routing, webhook transforms, host scheduler installation, autopilot,
-  and dream maintenance. Jobs readouts and dry-run plans remain allowed.
+  subagent routing, host scheduler installation, autopilot, and dream
+  maintenance. Source-backed signal enrichment on explicit MVP write paths is
+  allowed; ambient webhook/social crawlers remain frozen. Jobs readouts and
+  dry-run plans remain allowed.
 - Multi-brain/topology flows: mounts, cross-brain federation, thin-client setup,
   remote artifact brains, cloud storage migration.
 

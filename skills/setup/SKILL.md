@@ -129,15 +129,13 @@ MVP public route.
 
 ### Phase D: Brain-first protocol
 
-Inject the VoltMind lookup protocol into `AGENTS.md` or the equivalent agent
-context:
+Inject the brain-first lookup protocol into the project's AGENTS.md (or equivalent). This replaces grep-based knowledge lookups with structured voltmind queries.
 
-1. `voltmind search "name"` for fast keyword lookup.
-2. `voltmind query "what do we know about name"` for hybrid lookup when
-   embeddings are configured.
-3. `voltmind get <slug>` for direct page reads.
-4. Grep only if VoltMind returns zero results and the file may sit outside the
-   indexed brain.
+
+1. `voltmind search "name"` -- keyword match, fast, works without embeddings
+2. `voltmind query "what do we know about name"` -- for hybrid lookup when embeddings are configured.
+3. `voltmind get <slug>` -- direct page read when you know the slug from steps 1-2
+4. grep fallback -- only if voltmind returns zero results AND the file may exist outside the indexed brain
 
 After creating or editing brain pages on disk, run:
 
