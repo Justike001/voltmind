@@ -19,10 +19,26 @@ export function generateToken(prefix: string): string {
 /**
  * Validate and normalize a slug. Slugs are lowercased repo-relative paths.
  * Rejects empty slugs, path traversal (..), and leading /.
+ *
+ * SECURITY (#1647-slug): also reject characters that can hide or alter the
+ * write-through filesystem target: NUL/control bytes, bidirectional overrides,
+ * Windows backslashes, and URL-encoded separators/traversal.
  */
 export function validateSlug(slug: string): string {
   if (!slug || /(^|\/)\.\.($|\/)/.test(slug) || /^\//.test(slug)) {
     throw new Error(`Invalid slug: "${slug}". Slugs cannot be empty, start with /, or contain path traversal.`);
+  }
+  if (/[\x00-\x1f\x7f-\x9f]/.test(slug)) {
+    throw new Error(`Invalid slug: "${slug}". Slugs cannot contain control characters.`);
+  }
+  if (/[\u202a-\u202e\u2066-\u2069]/.test(slug)) {
+    throw new Error(`Invalid slug: "${slug}". Slugs cannot contain bidirectional/RTL override characters.`);
+  }
+  if (slug.includes('\\')) {
+    throw new Error(`Invalid slug: "${slug}". Backslashes are not allowed in slugs.`);
+  }
+  if (/%2e|%2f|%5c/i.test(slug)) {
+    throw new Error(`Invalid slug: "${slug}". URL-encoded path separators are not allowed in slugs.`);
   }
   return slug.toLowerCase();
 }

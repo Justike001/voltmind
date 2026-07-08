@@ -22,7 +22,7 @@ import type {
 import type { OAuthServerProvider, AuthorizationParams } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/server/auth/clients.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
+import { InvalidTokenError, InvalidClientMetadataError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { hashToken, generateToken, isUndefinedColumnError } from './utils.ts';
 import { hasScope, assertAllowedScopes, parseScopeString, InvalidScopeError } from './scope.ts';
 import type { SqlQuery, SqlValue } from './sql-query.ts';
@@ -181,6 +181,7 @@ interface VoltMindOAuthProviderOptions {
    * before mcpAuthRouter ran).
    */
   dcrDisabled?: boolean;
+  allowClientCredentialsDcr?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +189,7 @@ interface VoltMindOAuthProviderOptions {
 // ---------------------------------------------------------------------------
 
 class GBrainClientsStore implements OAuthRegisteredClientsStore {
-  constructor(private sql: SqlQuery) {}
+  constructor(private sql: SqlQuery, private allowClientCredentialsDcr = false) {}
 
   async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
     const rows = await this.sql`
@@ -240,6 +241,16 @@ class GBrainClientsStore implements OAuthRegisteredClientsStore {
     // through the same `validateTokenEndpointAuthMethod` helper — all three
     // registration entry points share one allow-list.
     const authMethod = validateTokenEndpointAuthMethod(client.token_endpoint_auth_method);
+    const grantTypes = (client.grant_types && client.grant_types.length > 0)
+      ? client.grant_types
+      : ['authorization_code'];
+    if (!this.allowClientCredentialsDcr && grantTypes.includes('client_credentials')) {
+      throw new InvalidClientMetadataError(
+        'client_credentials grant is not permitted via dynamic client registration; ' +
+        'restart the server with --enable-dcr-insecure to allow it, or register ' +
+        'the client via the VoltMind CLI / admin API.',
+      );
+    }
 
     const clientId = generateToken('voltmind_cl_');
     // v0.34.1 (#909): RFC 7591 §2 — clients that authenticate at the token
@@ -271,7 +282,7 @@ class GBrainClientsStore implements OAuthRegisteredClientsStore {
                                     client_id_issued_at, source_id, federated_read)
         VALUES (${clientId}, ${secretHash}, ${client.client_name || 'unnamed'},
                 ${pgArray((client.redirect_uris || []).map(String))},
-                ${pgArray(client.grant_types || ['client_credentials'])},
+                ${pgArray(grantTypes)},
                 ${client.scope || ''}, ${authMethod},
                 ${now}, ${'default'}, ${pgArray(['default'])})
       `;
@@ -284,7 +295,7 @@ class GBrainClientsStore implements OAuthRegisteredClientsStore {
                                         client_id_issued_at, source_id)
             VALUES (${clientId}, ${secretHash}, ${client.client_name || 'unnamed'},
                     ${pgArray((client.redirect_uris || []).map(String))},
-                    ${pgArray(client.grant_types || ['client_credentials'])},
+                    ${pgArray(grantTypes)},
                     ${client.scope || ''}, ${authMethod},
                     ${now}, ${'default'})
           `;
@@ -296,7 +307,7 @@ class GBrainClientsStore implements OAuthRegisteredClientsStore {
                                           client_id_issued_at)
               VALUES (${clientId}, ${secretHash}, ${client.client_name || 'unnamed'},
                       ${pgArray((client.redirect_uris || []).map(String))},
-                      ${pgArray(client.grant_types || ['client_credentials'])},
+                      ${pgArray(grantTypes)},
                       ${client.scope || ''}, ${authMethod},
                       ${now})
             `;
@@ -311,7 +322,7 @@ class GBrainClientsStore implements OAuthRegisteredClientsStore {
                                       client_id_issued_at)
           VALUES (${clientId}, ${secretHash}, ${client.client_name || 'unnamed'},
                   ${pgArray((client.redirect_uris || []).map(String))},
-                  ${pgArray(client.grant_types || ['client_credentials'])},
+                  ${pgArray(grantTypes)},
                   ${client.scope || ''}, ${authMethod},
                   ${now})
         `;
@@ -348,7 +359,7 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
 
   constructor(options: VoltMindOAuthProviderOptions) {
     this.sql = options.sql;
-    this._clientsStore = new GBrainClientsStore(this.sql);
+    this._clientsStore = new GBrainClientsStore(this.sql, options.allowClientCredentialsDcr === true);
     this.dcrDisabled = options.dcrDisabled === true;
     this.tokenTtl = options.tokenTtl || 3600;
     this.refreshTtl = options.refreshTtl || 30 * 24 * 3600;

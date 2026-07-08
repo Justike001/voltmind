@@ -324,6 +324,11 @@ interface ServeHttpOptions {
   tokenTtl: number;
   enableDcr: boolean;
   /**
+   * Allow consent-bypassing client_credentials on the unauthenticated DCR path.
+   * Off by default; implies enableDcr in the CLI parser.
+   */
+  enableDcrInsecure?: boolean;
+  /**
    * Public URL the server is reachable at (e.g., https://brain.example.com).
    * Used as the OAuth issuer in discovery metadata. Defaults to
    * http://localhost:{port} when unset. Required for production deployments
@@ -784,7 +789,7 @@ export async function queryAgentClientSpend(engine: BrainEngine): Promise<AgentC
 }
 
 export async function runServeHttp(engine: BrainEngine, options: ServeHttpOptions) {
-  const { port, tokenTtl, enableDcr, publicUrl, logFullParams } = options;
+  const { port, tokenTtl, enableDcr, enableDcrInsecure, publicUrl, logFullParams } = options;
   // v0.34.1 (#864, D11): default bind flipped from 0.0.0.0 to 127.0.0.1.
   // voltmind's primary use case is a personal-knowledge brain on a laptop;
   // the pre-v0.34 default exposed brains on every interface. Server
@@ -824,7 +829,21 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     sql,
     tokenTtl,
     dcrDisabled: !enableDcr,
+    allowClientCredentialsDcr: enableDcrInsecure === true,
   });
+
+  if (enableDcr) {
+    console.error(
+      'SECURITY WARNING: Dynamic Client Registration (--enable-dcr) is ON. ' +
+      'Self-registered clients default to authorization_code consent flow.',
+    );
+    if (enableDcrInsecure) {
+      console.error(
+        'SECURITY WARNING: --enable-dcr-insecure is ON; self-registered clients ' +
+        'may request client_credentials and bypass /authorize consent.',
+      );
+    }
+  }
 
   // Sweep expired tokens on startup (non-blocking)
   try {
@@ -2875,7 +2894,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
 ║  Engine:    ${(config.engine || 'pglite').padEnd(40)}║
 ║  Issuer:    ${issuerUrl.origin.padEnd(40)}║
 ║  Clients:   ${String((clientCount[0] as any).count).padEnd(40)}║
-║  DCR:       ${(enableDcr ? 'enabled' : 'disabled').padEnd(40)}║
+║  DCR:       ${(enableDcr ? (enableDcrInsecure ? 'enabled (INSECURE: client_credentials)' : 'enabled') : 'disabled').padEnd(40)}║
 ║  Token TTL: ${(tokenTtl + 's').padEnd(40)}║
 ╠══════════════════════════════════════════════════════╣
 ║  Admin:     http://localhost:${port}/admin${' '.repeat(Math.max(0, 19 - String(port).length))}║

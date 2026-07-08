@@ -2,6 +2,7 @@ import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { isAbsolute, join, resolve as resolvePath } from 'path';
 import { RESOLVER_FILENAMES, hasResolverFile } from './resolver-filenames.ts';
+import { isPathContained } from './path-confine.ts';
 
 /**
  * Walk up from `startDir` looking for a `skills/` directory that
@@ -68,15 +69,16 @@ function resolveWorkspaceSkillsDir(
 ): SkillsDirDetection | null {
   // Preferred: workspace/skills with a resolver file inside it (voltmind-native).
   const subdir = join(workspace, 'skills');
+  const contained = isPathContained(subdir, workspace);
   if (hasResolverFile(subdir)) {
-    return { dir: subdir, source: sourceSubdir };
+    return contained ? { dir: subdir, source: sourceSubdir } : null;
   }
   // Fallback: resolver file at workspace root (OpenClaw-native layout).
   // The skills/ subtree still governs file layout even when routing lives
   // at workspace root. Return the skills subdir so downstream file lookups
   // work; the resolver parser knows how to look one level up.
   if (hasResolverFile(workspace) && existsSync(subdir)) {
-    return { dir: subdir, source: sourceRoot };
+    return contained ? { dir: subdir, source: sourceRoot } : null;
   }
   return null;
 }
@@ -152,7 +154,7 @@ export function autoDetectSkillsDir(
     let dir = startDir;
     for (let i = 0; i < 10; i++) {
       const candidate = join(dir, 'skills');
-      if (existsSync(candidate)) {
+      if (existsSync(candidate) && isPathContained(candidate, dir)) {
         return { dir: candidate, source: 'cwd_walk_up' };
       }
       const parent = join(dir, '..');
@@ -177,7 +179,10 @@ export function autoDetectSkillsDir(
   // 3. voltmind repo walk from cwd.
   const repoRoot = findRepoRoot(startDir);
   if (repoRoot && isGbrainRepoRoot(repoRoot)) {
-    return { dir: join(repoRoot, 'skills'), source: 'repo_root' };
+    const skillsDir = join(repoRoot, 'skills');
+    if (isPathContained(skillsDir, repoRoot)) {
+      return { dir: skillsDir, source: 'repo_root' };
+    }
   }
 
   // 4. ./skills fallback (with hasResolverFile gate). Functionally
@@ -187,7 +192,7 @@ export function autoDetectSkillsDir(
   // In practice this tier never fires after 1b — cwd_walk_up matches
   // the same path first. Kept in the type union for back-compat.
   const cwdSkills = join(startDir, 'skills');
-  if (hasResolverFile(cwdSkills)) {
+  if (hasResolverFile(cwdSkills) && isPathContained(cwdSkills, startDir)) {
     return { dir: cwdSkills, source: 'cwd_skills' };
   }
 
@@ -237,7 +242,10 @@ export function autoDetectSkillsDirReadOnly(
     const moduleDir = fileURLToPath(import.meta.url);
     const installRoot = findRepoRoot(moduleDir);
     if (installRoot && isGbrainRepoRoot(installRoot)) {
-      return { dir: join(installRoot, 'skills'), source: 'install_path' };
+      const skillsDir = join(installRoot, 'skills');
+      if (isPathContained(skillsDir, installRoot)) {
+        return { dir: skillsDir, source: 'install_path' };
+      }
     }
   } catch {
     // fileURLToPath can throw on malformed import.meta.url (rare; some

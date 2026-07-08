@@ -89,7 +89,8 @@ export async function runServe(
     const ttlIdx = args.indexOf('--token-ttl');
     const tokenTtl = ttlIdx >= 0 ? parseInt(args[ttlIdx + 1]) || 3600 : 3600;
 
-    const enableDcr = args.includes('--enable-dcr');
+    const enableDcrInsecure = args.includes('--enable-dcr-insecure');
+    const enableDcr = args.includes('--enable-dcr') || enableDcrInsecure;
 
     const publicUrlIdx = args.indexOf('--public-url');
     const publicUrl = publicUrlIdx >= 0 ? args[publicUrlIdx + 1] : undefined;
@@ -122,6 +123,7 @@ export async function runServe(
       port,
       tokenTtl,
       enableDcr,
+      enableDcrInsecure,
       publicUrl,
       logFullParams,
       bind,

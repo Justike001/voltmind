@@ -150,10 +150,15 @@ export function computeSnapshotSchemaHash(
  * errors). Match the literal `$$bunfs` marker OR ENOENT+pglite.data
  * co-occurrence.
  */
-export type PgliteInitFailure = 'bunfs' | 'macos-26-3' | 'unknown';
+export type PgliteInitFailure = 'bunfs' | 'macos-26-3' | 'corrupt' | 'unknown';
 
 export function classifyPgliteInitError(message: string): PgliteInitFailure {
   if (/\$\$bunfs|ENOENT[\s\S]*pglite\.data/i.test(message)) return 'bunfs';
+  // v0.42.57 sync (#2348): catalog/pgvector corruption from historical
+  // concurrent PGLite opens needs recovery guidance, not the generic WASM hint.
+  if (/58P01|internal_load_library|type "?vector"? does not exist|relation "?content_chunks"? does not exist/i.test(message)) {
+    return 'corrupt';
+  }
   if (/abort.*runtime|macos.*26\.3|wasm.*runtime/i.test(message)) {
     return 'macos-26-3';
   }
@@ -179,6 +184,18 @@ export function buildPgliteInitErrorMessage(
       hint =
         '  This is most commonly the macOS 26.3 WASM bug:\n' +
         '  https://github.com/garrytan/voltmind/issues/223';
+      break;
+    case 'corrupt':
+      hint =
+        '  Your PGLite store looks corrupted: the catalog or pgvector extension\n' +
+        '  cannot load. This can happen if two processes opened the same brain\n' +
+        '  at once. VoltMind now avoids stealing live PGLite locks, but an\n' +
+        '  already damaged store cannot be repaired in place. Recover by:\n' +
+        '    1. Restoring a backup of the brain.pglite directory, OR\n' +
+        '    2. Rebuilding from your brain repo:\n' +
+        '       voltmind reinit-pglite --embedding-model <id> --embedding-dimensions <N>\n' +
+        '       (wipes + re-inits + re-syncs; DB-only state is re-derived).\n' +
+        '  Deleting .voltmind-lock/ or postmaster.pid does NOT fix this.';
       break;
     case 'unknown':
     default:

@@ -13,10 +13,11 @@
  * commands (Steps 4/5), and the operation layer (Step 2+).
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, lstatSync, type Stats } from 'fs';
 import { join, dirname, resolve } from 'path';
 import type { BrainEngine } from './engine.ts';
 import { SOURCE_ID_RE, isValidSourceId } from './source-id.ts';
+import { isTrustedDotfile, realpathOrResolve, isPathContained } from './path-confine.ts';
 
 const DOTFILE = '.voltmind-source';
 // Canonical SOURCE_ID_RE imported from `source-id.ts` (single source of truth).
@@ -34,7 +35,9 @@ function readDotfileWalk(startDir: string): string | null {
   // Guard against infinite loops on malformed paths.
   for (let i = 0; i < 50; i++) {
     const candidate = join(dir, DOTFILE);
-    if (existsSync(candidate)) {
+    let st: Stats | null = null;
+    try { st = lstatSync(candidate); } catch { st = null; }
+    if (st && isTrustedDotfile(st)) {
       try {
         const content = readFileSync(candidate, 'utf8').trim().split('\n')[0].trim();
         // Silent-fallback tier per codex P1-F: invalid dotfile content
@@ -105,11 +108,11 @@ export async function resolveSourceId(
   const registered = await engine.executeRaw<{ id: string; local_path: string }>(
     `SELECT id, local_path FROM sources WHERE local_path IS NOT NULL`,
   );
-  const cwdResolved = resolve(cwd);
+  const cwdResolved = realpathOrResolve(cwd);
   let best: { id: string; pathLen: number } | null = null;
   for (const r of registered) {
-    const p = resolve(r.local_path);
-    if (cwdResolved === p || cwdResolved.startsWith(p + '/')) {
+    const p = realpathOrResolve(r.local_path);
+    if (isPathContained(cwdResolved, p)) {
       if (!best || p.length > best.pathLen) {
         best = { id: r.id, pathLen: p.length };
       }
@@ -303,11 +306,11 @@ export async function resolveSourceWithTier(
   const registered = await engine.executeRaw<{ id: string; local_path: string }>(
     `SELECT id, local_path FROM sources WHERE local_path IS NOT NULL`,
   );
-  const cwdResolved = resolve(cwd);
+  const cwdResolved = realpathOrResolve(cwd);
   let best: { id: string; path: string; pathLen: number } | null = null;
   for (const r of registered) {
-    const p = resolve(r.local_path);
-    if (cwdResolved === p || cwdResolved.startsWith(p + '/')) {
+    const p = realpathOrResolve(r.local_path);
+    if (isPathContained(cwdResolved, p)) {
       if (!best || p.length > best.pathLen) {
         best = { id: r.id, path: p, pathLen: p.length };
       }

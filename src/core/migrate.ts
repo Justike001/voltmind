@@ -862,7 +862,7 @@ export const MIGRATIONS: Migration[] = [
       DECLARE
         has_bypass BOOLEAN;
       BEGIN
-        SELECT rolbypassrls INTO has_bypass FROM pg_roles WHERE rolname = current_user;
+        SELECT EXISTS (SELECT 1 FROM pg_roles pr WHERE pg_has_role(current_user, pr.oid, 'USAGE') AND (pr.rolbypassrls OR pr.rolsuper)) INTO has_bypass;
         IF NOT has_bypass THEN
           -- Fail the migration loudly instead of WARNING + version-bump.
           -- The runner unconditionally records schema_version on success,
@@ -1151,7 +1151,7 @@ export const MIGRATIONS: Migration[] = [
         DECLARE
           has_bypass BOOLEAN;
         BEGIN
-          SELECT rolbypassrls INTO has_bypass FROM pg_roles WHERE rolname = current_user;
+          SELECT EXISTS (SELECT 1 FROM pg_roles pr WHERE pg_has_role(current_user, pr.oid, 'USAGE') AND (pr.rolbypassrls OR pr.rolsuper)) INTO has_bypass;
           IF NOT has_bypass THEN
             RAISE EXCEPTION 'v29 cathedral_ii_code_edges_rls: role % does not have BYPASSRLS privilege — cannot enable RLS safely. Re-run as postgres (or another BYPASSRLS role). The migration will retry automatically on the next initSchema call.', current_user;
           END IF;
@@ -1239,7 +1239,7 @@ export const MIGRATIONS: Migration[] = [
       DECLARE
         has_bypass BOOLEAN;
       BEGIN
-        SELECT rolbypassrls INTO has_bypass FROM pg_roles WHERE rolname = current_user;
+        SELECT EXISTS (SELECT 1 FROM pg_roles pr WHERE pg_has_role(current_user, pr.oid, 'USAGE') AND (pr.rolbypassrls OR pr.rolsuper)) INTO has_bypass;
         IF has_bypass THEN
           ALTER TABLE takes              ENABLE ROW LEVEL SECURITY;
           ALTER TABLE synthesis_evidence ENABLE ROW LEVEL SECURITY;
@@ -1341,7 +1341,7 @@ export const MIGRATIONS: Migration[] = [
       DECLARE
         has_bypass BOOLEAN;
       BEGIN
-        SELECT rolbypassrls INTO has_bypass FROM pg_roles WHERE rolname = current_user;
+        SELECT EXISTS (SELECT 1 FROM pg_roles pr WHERE pg_has_role(current_user, pr.oid, 'USAGE') AND (pr.rolbypassrls OR pr.rolsuper)) INTO has_bypass;
         IF has_bypass THEN
           ALTER TABLE dream_verdicts ENABLE ROW LEVEL SECURITY;
         END IF;
@@ -1380,7 +1380,7 @@ export const MIGRATIONS: Migration[] = [
         DECLARE
           has_bypass BOOLEAN;
         BEGIN
-          SELECT rolbypassrls INTO has_bypass FROM pg_roles WHERE rolname = current_user;
+          SELECT EXISTS (SELECT 1 FROM pg_roles pr WHERE pg_has_role(current_user, pr.oid, 'USAGE') AND (pr.rolbypassrls OR pr.rolsuper)) INTO has_bypass;
           IF NOT has_bypass THEN
             RAISE EXCEPTION 'v31 eval_capture_tables: role % does not have BYPASSRLS privilege — cannot enable RLS safely. Re-run as postgres (or another BYPASSRLS role). The migration will retry automatically on the next initSchema call.', current_user;
           END IF;
@@ -1499,7 +1499,7 @@ export const MIGRATIONS: Migration[] = [
       DECLARE
         has_bypass BOOLEAN;
       BEGIN
-        SELECT rolbypassrls INTO has_bypass FROM pg_roles WHERE rolname = current_user;
+        SELECT EXISTS (SELECT 1 FROM pg_roles pr WHERE pg_has_role(current_user, pr.oid, 'USAGE') AND (pr.rolbypassrls OR pr.rolsuper)) INTO has_bypass;
         IF has_bypass THEN
           ALTER TABLE oauth_clients ENABLE ROW LEVEL SECURITY;
           ALTER TABLE oauth_tokens ENABLE ROW LEVEL SECURITY;
@@ -1720,7 +1720,7 @@ export const MIGRATIONS: Migration[] = [
           has_bypass BOOLEAN;
           r record;
         BEGIN
-          SELECT rolbypassrls INTO has_bypass FROM pg_roles WHERE rolname = current_user;
+          SELECT EXISTS (SELECT 1 FROM pg_roles pr WHERE pg_has_role(current_user, pr.oid, 'USAGE') AND (pr.rolbypassrls OR pr.rolsuper)) INTO has_bypass;
           IF NOT has_bypass THEN
             -- Same posture as v24: raise to abort the migration so the runner
             -- leaves config.version unbumped and retries on the next call.
@@ -2112,7 +2112,7 @@ export const MIGRATIONS: Migration[] = [
       DECLARE
         has_bypass BOOLEAN;
       BEGIN
-        SELECT rolbypassrls INTO has_bypass FROM pg_roles WHERE rolname = current_user;
+        SELECT EXISTS (SELECT 1 FROM pg_roles pr WHERE pg_has_role(current_user, pr.oid, 'USAGE') AND (pr.rolbypassrls OR pr.rolsuper)) INTO has_bypass;
         IF has_bypass THEN
           ALTER TABLE drift_decisions ENABLE ROW LEVEL SECURITY;
         END IF;
@@ -2365,7 +2365,7 @@ export const MIGRATIONS: Migration[] = [
           DECLARE
             has_bypass BOOLEAN;
           BEGIN
-            SELECT rolbypassrls INTO has_bypass FROM pg_roles WHERE rolname = current_user;
+            SELECT EXISTS (SELECT 1 FROM pg_roles pr WHERE pg_has_role(current_user, pr.oid, 'USAGE') AND (pr.rolbypassrls OR pr.rolsuper)) INTO has_bypass;
             IF has_bypass THEN
               ALTER TABLE facts ENABLE ROW LEVEL SECURITY;
             END IF;
@@ -4389,7 +4389,7 @@ export const MIGRATIONS: Migration[] = [
       DECLARE
         has_bypass BOOLEAN;
       BEGIN
-        SELECT rolbypassrls INTO has_bypass FROM pg_roles WHERE rolname = current_user;
+        SELECT EXISTS (SELECT 1 FROM pg_roles pr WHERE pg_has_role(current_user, pr.oid, 'USAGE') AND (pr.rolbypassrls OR pr.rolsuper)) INTO has_bypass;
         IF has_bypass THEN
           ALTER TABLE take_domain_assignments ENABLE ROW LEVEL SECURITY;
         END IF;
@@ -4790,6 +4790,55 @@ export const MIGRATIONS: Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_action_runs_action ON action_runs (source_id, action_slug, created_at DESC);
     `,
+  },
+  {
+    version: 105,
+    name: 'schema_lint_hardening_search_path_security_invoker',
+    idempotent: true,
+    sql: '',
+    sqlFor: {
+      postgres: `
+        ALTER VIEW IF EXISTS page_links SET (security_invoker = on);
+
+        DO $$
+        DECLARE fn text;
+        BEGIN
+          FOREACH fn IN ARRAY ARRAY[
+            'bump_page_generation_fn',
+            'update_chunk_search_vector',
+            'update_page_search_vector',
+            'notify_minion_job_change',
+            'auto_enable_rls'
+          ] LOOP
+            IF EXISTS (
+              SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public' AND p.proname = fn
+            ) THEN
+              EXECUTE format('ALTER FUNCTION public.%I() SET search_path = pg_catalog, public', fn);
+            END IF;
+          END LOOP;
+        END $$;
+      `,
+      pglite: `
+        DO $$
+        DECLARE fn text;
+        BEGIN
+          FOREACH fn IN ARRAY ARRAY[
+            'bump_page_generation_fn',
+            'update_chunk_search_vector',
+            'update_page_search_vector',
+            'notify_minion_job_change'
+          ] LOOP
+            IF EXISTS (
+              SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public' AND p.proname = fn
+            ) THEN
+              EXECUTE format('ALTER FUNCTION public.%I() SET search_path = pg_catalog, public', fn);
+            END IF;
+          END LOOP;
+        END $$;
+      `,
+    },
   },
 ];
 

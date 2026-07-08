@@ -28,6 +28,8 @@ export interface LockHandle {
   acquired: boolean;
   deregisterCleanup?: () => void;
   heartbeat?: ReturnType<typeof setInterval>;
+  lockPath?: string;
+  ownerToken?: string;
 }
 
 export interface PgliteLockInfo {
@@ -142,7 +144,12 @@ export function inspectPgliteLock(dataDir: string | undefined, opts?: { nowMs?: 
     const ageMs = lastSeenAt == null ? null : Math.max(0, now - lastSeenAt);
     const processAlive = pid == null ? null : isProcessAlive(pid);
     const expired = ageMs != null && ageMs > staleMs;
-    const stale = processAlive === false || expired;
+    // v0.42.57 sync (#2348): a live holder is never stale, even if its
+    // heartbeat is old. Long PGLite/WASM work can block the JS event loop and
+    // pause heartbeats while the process is still actively writing. Reaping that
+    // holder lets a second process open the same data dir and can corrupt the
+    // catalog/pgvector state. Only a dead PID or unreadable lock is stale.
+    const stale = processAlive === false;
     return {
       ...base,
       exists: true,
@@ -213,31 +220,40 @@ export async function acquireLock(dataDir: string | undefined, opts?: { timeoutM
     // Try to acquire lock (atomic mkdir)
     try {
       mkdirSync(lockDir, { recursive: false });
-      // We got the lock — write our PID
+      // We got the lock — write our PID and owner token. The token prevents a
+      // resumed stale handle from refreshing or deleting a new owner's lock.
       const lockPath = join(lockDir, LOCK_FILE);
+      const ownerToken = `${process.pid}:${Date.now()}`;
       writeFileSync(lockPath, JSON.stringify({
         pid: process.pid,
         acquired_at: Date.now(),
         last_seen_at: Date.now(),
+        owner_token: ownerToken,
         command: process.argv.slice(1).join(' '),
       }), { mode: 0o644 });
 
-      const handle: LockHandle = { lockDir, acquired: true };
+      const handle: LockHandle = { lockDir, acquired: true, lockPath, ownerToken };
       const heartbeatMs = Math.max(5_000, Math.min(10_000, Math.floor(getPgliteLockStaleThresholdMs() / 3)));
       handle.heartbeat = setInterval(() => {
         try {
           const raw = readFileSync(lockPath, 'utf-8');
           const data = JSON.parse(raw);
-          if (data?.pid !== process.pid) return;
+          if (data?.pid !== process.pid || data?.owner_token !== ownerToken) return;
           data.last_seen_at = Date.now();
           writeFileSync(lockPath, JSON.stringify(data), { mode: 0o644 });
         } catch {
-          /* The lock may already be released or stolen as stale. */
+          /* The lock may already be released or reaped after process death. */
         }
       }, heartbeatMs);
       handle.heartbeat.unref?.();
       handle.deregisterCleanup = registerCleanup(`pglite-lock:${lockDir}`, async () => {
-        try { rmSync(lockDir, { recursive: true, force: true }); } catch { /* best-effort abnormal-exit cleanup */ }
+        try {
+          const raw = readFileSync(lockPath, 'utf-8');
+          const data = JSON.parse(raw);
+          if (data?.pid === process.pid && data?.owner_token === ownerToken) {
+            rmSync(lockDir, { recursive: true, force: true });
+          }
+        } catch { /* best-effort abnormal-exit cleanup */ }
       });
       debugLog(`acquired ${lockDir}`);
       return handle;
@@ -277,6 +293,11 @@ export async function releaseLock(lock: LockHandle): Promise<void> {
     if (lock.heartbeat) {
       clearInterval(lock.heartbeat);
       lock.heartbeat = undefined;
+    }
+    if (lock.lockPath && lock.ownerToken) {
+      const raw = readFileSync(lock.lockPath, 'utf-8');
+      const data = JSON.parse(raw);
+      if (data?.pid !== process.pid || data?.owner_token !== lock.ownerToken) return;
     }
     rmSync(lock.lockDir, { recursive: true, force: true });
     debugLog(`released ${lock.lockDir}`);
