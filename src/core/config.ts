@@ -675,6 +675,10 @@ export const KNOWN_CONFIG_KEYS: readonly string[] = [
   'content_sanity.bytes_block',
   'content_sanity.junk_patterns_enabled',
   'content_sanity.disabled',
+  // MVP signal enrichment
+  'enrich.external.enabled',
+  'enrich.external.provider',
+  'enrich.external.daily_cap_usd',
   // Misc
   'artifacts_sync_mode',
   'cross_project_learnings',
@@ -693,6 +697,7 @@ export const KNOWN_CONFIG_KEY_PREFIXES: readonly string[] = [
   'embedding_columns.', // per-column overrides
   'provider_base_urls.', // per-provider base URL overrides
   'content_sanity.',    // v0.41 content-sanity tunables
+  'enrich.',            // MVP signal enrichment
 ];
 
 export function saveConfig(config: VoltMindConfig): void {

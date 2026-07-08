@@ -40,7 +40,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'autopilot',
@@ -70,7 +70,7 @@ const CLI_ONLY_SELF_HELP = new Set([
   'brainstorm', 'lsd',
   'salience', 'anomalies', 'whoknows', 'calibration',
   'takes',
-  'extract', 'transcripts',
+  'extract', 'transcripts', 'enrich',
   'conversation-parser',
   'recall', 'forget', 'candidates',
   // v0.39.3.0 WARN-5: capture's detailed HELP constant
@@ -1295,6 +1295,12 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
+  if (command === 'enrich' && (args.includes('--help') || args.includes('-h'))) {
+    const { runEnrich } = await import('./commands/enrich.ts');
+    await runEnrich(null as any, args);
+    return;
+  }
+
   if (command === 'salience' && (args.includes('--help') || args.includes('-h'))) {
     const { runSalience } = await import('./commands/salience.ts');
     await runSalience(null as any, args);
@@ -1546,6 +1552,11 @@ async function handleCliOnly(command: string, args: string[]) {
       case 'extract-conversation-facts': {
         const { runExtractConversationFacts } = await import('./commands/extract-conversation-facts.ts');
         await runExtractConversationFacts(engine, args);
+        break;
+      }
+      case 'enrich': {
+        const { runEnrich } = await import('./commands/enrich.ts');
+        await runEnrich(engine, args);
         break;
       }
       case 'features': {
@@ -2096,6 +2107,7 @@ INGESTION
   import <dir> [--no-embed]          Import markdown directory
   capture [content] [--file PATH]    Capture content into the brain
         [--stdin] [--slug s] [--type t]
+  enrich preview|apply --source-id   Signal-triggered entity enrichment
   sync [--repo <path>] [flags]       Git-to-brain incremental sync
   embed [<slug>|--all|--stale]       Generate/refresh embeddings
 
@@ -2153,6 +2165,8 @@ JOBS
 MCP
   serve                              MCP server (stdio)
   serve --http [--port N]            HTTP MCP server
+    --enable-dcr                     Enable DCR; defaults to authorization_code
+    --enable-dcr-insecure            Also allow DCR client_credentials
   call <tool> '<json>'               Raw MVP tool invocation
         tools: get_links, put_raw_data, get_raw_data
 

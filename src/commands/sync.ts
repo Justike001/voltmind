@@ -57,6 +57,7 @@ export interface SyncResult {
   /** Pages re-embedded during this sync's auto-embed step. 0 if --no-embed or skipped. */
   embedded: number;
   pagesAffected: string[];
+  signal_enrichment?: unknown;
   failedFiles?: number; // count of parse failures (Bug 9)
   /**
    * v0.41.13.0 partial-sync fields (only set when status === 'partial').
@@ -1608,6 +1609,24 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
     }
   }
 
+  let signalEnrichment: unknown;
+  if (pagesAffected.length > 0) {
+    try {
+      const { applySignalEnrichmentForPages } = await import('../core/enrichment-service.ts');
+      signalEnrichment = await applySignalEnrichmentForPages(engine, {
+        sourceId: opts.sourceId ?? 'default',
+        pageSlugs: pagesAffected,
+        limit: 100,
+      });
+      const s = signalEnrichment as { created?: unknown[]; updated?: unknown[]; skipped?: unknown[]; pages_skipped_due_to_limit?: number };
+      if ((s.created?.length ?? 0) > 0 || (s.updated?.length ?? 0) > 0 || (s.pages_skipped_due_to_limit ?? 0) > 0) {
+        slog(`  Enriched: created=${s.created?.length ?? 0} updated=${s.updated?.length ?? 0} skipped=${s.skipped?.length ?? 0} page_limit_skipped=${s.pages_skipped_due_to_limit ?? 0}`);
+      }
+    } catch (e) {
+      signalEnrichment = { error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
   // Auto-embed (skip for large syncs — embedding calls OpenAI).
   // Thread sourceId so incremental source syncs embed the page row they just
   // imported instead of falling back to the default source.
@@ -1650,6 +1669,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
     chunksCreated,
     embedded,
     pagesAffected,
+    signal_enrichment: signalEnrichment,
   };
 }
 

@@ -263,6 +263,7 @@ export interface ExtractConversationFactsResult {
   segments_processed: number;
   facts_extracted: number;
   facts_inserted: number;
+  signal_enrichment?: unknown;
   budget_exhausted?: boolean;
   spent_usd?: number;
 }
@@ -851,6 +852,33 @@ async function processPage(
     state.cpMap.set(cpMapKey(state.sourceId, page.slug), newestEnd);
   }
 
+  if (!state.dryRun && !state.propose && newestEnd !== null) {
+    try {
+      const { applySignalEnrichment } = await import('../core/enrichment-service.ts');
+      const summary = await applySignalEnrichment(state.engine, {
+        sourceId: state.sourceId,
+        sourceSlug: page.slug,
+        pageSlug: page.slug,
+        limit: 100,
+        external: false,
+        confirm: true,
+      });
+      mergeSignalEnrichmentResult(state.result, summary);
+    } catch (err) {
+      mergeSignalEnrichmentResult(state.result, {
+        detected: [],
+        created: [],
+        updated: [],
+        timeline_added: 0,
+        links_added: 0,
+        external_calls: [],
+        skipped: [],
+        warnings: [`signal_enrichment_error:${err instanceof Error ? err.message : String(err)}`],
+        budget: [],
+      });
+    }
+  }
+
   process.stderr.write(
     `[extract-conversation-facts] ${page.slug}: ${pageInsertedTotal} facts inserted across ${segmentsThisPage} segments\n`,
   );
@@ -1111,6 +1139,53 @@ export async function runExtractConversationFactsCore(
   }
 
   return result;
+}
+
+function mergeSignalEnrichmentResult(
+  result: ExtractConversationFactsResult,
+  summary: {
+    detected: unknown[];
+    created: string[];
+    updated: string[];
+    timeline_added: number;
+    links_added: number;
+    external_calls: unknown[];
+    skipped: unknown[];
+    warnings: string[];
+    budget: unknown[];
+  },
+): void {
+  const existing = (result.signal_enrichment ?? {
+    detected: [],
+    created: [],
+    updated: [],
+    timeline_added: 0,
+    links_added: 0,
+    external_calls: [],
+    skipped: [],
+    warnings: [],
+    budget: [],
+  }) as {
+    detected: unknown[];
+    created: string[];
+    updated: string[];
+    timeline_added: number;
+    links_added: number;
+    external_calls: unknown[];
+    skipped: unknown[];
+    warnings: string[];
+    budget: unknown[];
+  };
+  existing.detected.push(...summary.detected);
+  existing.created.push(...summary.created);
+  existing.updated.push(...summary.updated);
+  existing.timeline_added += summary.timeline_added;
+  existing.links_added += summary.links_added;
+  existing.external_calls.push(...summary.external_calls);
+  existing.skipped.push(...summary.skipped);
+  existing.warnings.push(...summary.warnings);
+  existing.budget.push(...summary.budget);
+  result.signal_enrichment = existing;
 }
 
 /**
@@ -1392,6 +1467,19 @@ export async function runExtractConversationFacts(
       aggregate.segments_processed += perSource.segments_processed;
       aggregate.facts_extracted += perSource.facts_extracted;
       aggregate.facts_inserted += perSource.facts_inserted;
+      if (perSource.signal_enrichment) {
+        mergeSignalEnrichmentResult(aggregate, perSource.signal_enrichment as {
+          detected: unknown[];
+          created: string[];
+          updated: string[];
+          timeline_added: number;
+          links_added: number;
+          external_calls: unknown[];
+          skipped: unknown[];
+          warnings: string[];
+          budget: unknown[];
+        });
+      }
       if (perSource.budget_exhausted) anyBudgetExhausted = true;
       if (perSource.spent_usd) totalSpent += perSource.spent_usd;
 
@@ -1424,6 +1512,10 @@ export async function runExtractConversationFacts(
   }
   if (aggregate.orphan_facts_cleaned > 0) {
     console.log(`  Cleaned ${aggregate.orphan_facts_cleaned} orphan fact(s) from prior partial runs (D11 replay safety).`);
+  }
+  if (aggregate.signal_enrichment && typeof aggregate.signal_enrichment === 'object') {
+    const s = aggregate.signal_enrichment as { created?: unknown[]; updated?: unknown[]; skipped?: unknown[]; warnings?: unknown[] };
+    console.log(`  Enrichment: created=${s.created?.length ?? 0} updated=${s.updated?.length ?? 0} skipped=${s.skipped?.length ?? 0} warnings=${s.warnings?.length ?? 0}`);
   }
   if (anyBudgetExhausted) {
     console.log(`  Budget cap reached. Re-run with a higher --max-cost-usd to continue.`);

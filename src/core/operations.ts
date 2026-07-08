@@ -25,6 +25,7 @@ import { stripFactsFence } from './facts-fence.ts';
 import { bumpLastRetrievedAt } from './last-retrieved.ts';
 import { CJK_SLUG_CHARS } from './cjk.ts';
 import { readoutProvenance, withReadoutProvenance } from './readout-provenance.ts';
+import { isWriteTargetContained } from './path-confine.ts';
 import * as db from './db.ts';
 import { VERSION } from '../version.ts';
 import {
@@ -736,6 +737,9 @@ const put_page: Operation = {
               },
             });
             const filePath = resolvePageFilePath(repoPath as string, result.slug, sourceId);
+            if (!isWriteTargetContained(filePath, repoPath as string)) {
+              throw new Error(`write-through target escapes repo path: ${filePath}`);
+            }
             mkdirSync(dirname(filePath), { recursive: true });
             writeFileSync(filePath, md, 'utf8');
             writeThrough = { written: true, path: filePath };
@@ -867,6 +871,37 @@ const put_page: Operation = {
       factsQueued = { skipped: 'backstop_error' };
     }
 
+    // MVP signal enrichment. Local/source-backed writes can create or update
+    // person/company pages as a deterministic post-hook. Remote MCP writes do
+    // not trigger this extra mutation surface; trusted workspace subagents are
+    // already bounded by allowedSlugPrefixes above.
+    let signalEnrichment: unknown | undefined;
+    try {
+      const canEnrich = (ctx.remote === false || trustedWorkspace)
+        && result.parsedPage
+        && !result.slug.startsWith('people/')
+        && !result.slug.startsWith('companies/');
+      if (canEnrich) {
+        const { applySignalEnrichment, buildSignalTextFromPage } = await import('./enrichment-service.ts');
+        signalEnrichment = await applySignalEnrichment(ctx.engine, {
+          sourceId: ctx.sourceId ?? 'default',
+          sourceSlug: result.slug,
+          pageSlug: result.slug,
+          text: buildSignalTextFromPage({
+            type: result.parsedPage!.type,
+            frontmatter: result.parsedPage!.frontmatter,
+            compiled_truth: result.parsedPage!.compiled_truth,
+            timeline: result.parsedPage!.timeline,
+          }),
+          limit: 25,
+          external: false,
+          confirm: true,
+        });
+      }
+    } catch (e) {
+      signalEnrichment = { error: e instanceof Error ? e.message : String(e) };
+    }
+
     // Post-write validator lint (PR 2.5): feature-flag-gated, non-blocking.
     // When `writer.lint_on_put_page` is enabled, runs the BrainWriter's
     // validators on the freshly-written page and logs findings to
@@ -896,6 +931,7 @@ const put_page: Operation = {
       ...(autoTimeline ? { auto_timeline: autoTimeline } : {}),
       ...(writerLint ? { writer_lint: writerLint } : {}),
       ...(factsQueued ? { facts_backstop: factsQueued } : {}),
+      ...(signalEnrichment ? { signal_enrichment: signalEnrichment } : {}),
       ...(writeThrough ? { write_through: writeThrough } : {}),
     };
   },
@@ -2146,6 +2182,57 @@ const get_raw_data: Operation = {
     return ctx.engine.getRawData(p.slug as string, p.source as string | undefined, sourceOpts);
   },
   scope: 'read',
+};
+
+const preview_signal_enrichment: Operation = {
+  name: 'preview_signal_enrichment',
+  description: 'Preview source-backed person/company signal enrichment without mutating brain content.',
+  params: {
+    source_id: { type: 'string', required: true, description: 'Explicit source id.' },
+    page_slug: { type: 'string', required: false, description: 'Optional page slug to scan.' },
+    text: { type: 'string', required: false, description: 'Optional raw signal text to scan.' },
+    limit: { type: 'number', required: false, description: 'Maximum entities to process, capped at 100.' },
+    external: { type: 'boolean', required: false, description: 'Preview external enrichment eligibility for Tier 1/2 entities.' },
+  },
+  scope: 'read',
+  handler: async (ctx, p) => {
+    const { previewSignalEnrichment } = await import('./enrichment-service.ts');
+    return previewSignalEnrichment(ctx.engine, {
+      sourceId: p.source_id as string,
+      pageSlug: p.page_slug as string | undefined,
+      text: p.text as string | undefined,
+      limit: p.limit as number | undefined,
+      external: p.external === true,
+      dryRun: true,
+    });
+  },
+};
+
+const apply_signal_enrichment: Operation = {
+  name: 'apply_signal_enrichment',
+  description: 'Apply source-backed person/company signal enrichment. Requires confirm=true.',
+  params: {
+    source_id: { type: 'string', required: true, description: 'Explicit source id.' },
+    page_slug: { type: 'string', required: false, description: 'Optional page slug to scan.' },
+    text: { type: 'string', required: false, description: 'Optional raw signal text to scan.' },
+    limit: { type: 'number', required: false, description: 'Maximum entities to process, capped at 100.' },
+    external: { type: 'boolean', required: false, description: 'Allow budget-gated external enrichment for Tier 1/2 entities.' },
+    confirm: { type: 'boolean', required: true, description: 'Must be true to mutate.' },
+  },
+  scope: 'write',
+  mutating: true,
+  handler: async (ctx, p) => {
+    if (p.confirm !== true) throw new OperationError('permission_denied', 'apply_signal_enrichment requires confirm=true.');
+    const { applySignalEnrichment } = await import('./enrichment-service.ts');
+    return applySignalEnrichment(ctx.engine, {
+      sourceId: p.source_id as string,
+      pageSlug: p.page_slug as string | undefined,
+      text: p.text as string | undefined,
+      limit: p.limit as number | undefined,
+      external: p.external === true,
+      confirm: true,
+    });
+  },
 };
 
 // --- Resolution & Chunks ---
@@ -4802,6 +4889,8 @@ export const operations: Operation[] = [
   sync_brain,
   // Raw data
   put_raw_data, get_raw_data,
+  // MVP signal enrichment
+  preview_signal_enrichment, apply_signal_enrichment,
   // Resolution & chunks
   resolve_slugs, get_chunks,
   // Ingest log

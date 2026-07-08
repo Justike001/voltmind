@@ -39,6 +39,7 @@ export interface RunImportResult {
   errors: number;
   chunksCreated: number;
   failures: Array<{ path: string; error: string }>;
+  signal_enrichment?: unknown;
 }
 
 export async function runImport(
@@ -362,6 +363,20 @@ export async function runImport(
     }
   }
 
+  let signalEnrichment: unknown;
+  if (importedSlugs.length > 0) {
+    try {
+      const { applySignalEnrichmentForPages } = await import('../core/enrichment-service.ts');
+      signalEnrichment = await applySignalEnrichmentForPages(engine, {
+        sourceId: sourceId ?? 'default',
+        pageSlugs: importedSlugs,
+        limit: 100,
+      });
+    } catch (e) {
+      signalEnrichment = { error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
   // Clear checkpoint on clean completion. On error, the path-based checkpoint
   // preserves only the successfully-completed paths, so the next run retries
   // failed files automatically (they never entered `completed`).
@@ -377,12 +392,17 @@ export async function runImport(
       status: 'success', duration_s: parseFloat(totalTime),
       imported, skipped, errors, chunks: chunksCreated,
       total_files: allFiles.length,
+      signal_enrichment: signalEnrichment,
     }));
   } else {
     console.log(`\nImport complete (${totalTime}s):`);
     console.log(`  ${imported} pages imported`);
     console.log(`  ${skipped} pages skipped (${skipped - errors} unchanged, ${errors} errors)`);
     console.log(`  ${chunksCreated} chunks created`);
+    if (signalEnrichment && typeof signalEnrichment === 'object') {
+      const s = signalEnrichment as { created?: unknown[]; updated?: unknown[]; skipped?: unknown[]; pages_skipped_due_to_limit?: number };
+      console.log(`  enrichment: created=${s.created?.length ?? 0} updated=${s.updated?.length ?? 0} skipped=${s.skipped?.length ?? 0} page_limit_skipped=${s.pages_skipped_due_to_limit ?? 0}`);
+    }
   }
 
   // v0.39 T7 — end-of-run schema mismatch warn. Fires ONCE per import,
@@ -459,7 +479,7 @@ export async function runImport(
     await engine.setConfig('sync.repo_path', dir);
   }
 
-  return { imported, skipped, errors, chunksCreated, failures };
+  return { imported, skipped, errors, chunksCreated, failures, signal_enrichment: signalEnrichment };
 }
 
 /**

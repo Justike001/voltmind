@@ -95,6 +95,7 @@ export const LOCAL_DAEMON_COMMANDS = new Set([
   'health',
   'import',
   'capture',
+  'enrich',
   'sync',
   'embed',
   'status',

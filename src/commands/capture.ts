@@ -314,6 +314,7 @@ interface CaptureResult {
   path?: string;
   source_kind: string;
   captured_at: string;
+  signal_enrichment?: unknown;
 }
 
 function printReceipt(result: CaptureResult, quiet: boolean, json: boolean): void {
@@ -331,6 +332,10 @@ function printReceipt(result: CaptureResult, quiet: boolean, json: boolean): voi
   console.log(`  content_hash:  ${result.content_hash.slice(0, 16)}…`);
   if (result.path) {
     console.log(`  file:          ${result.path}`);
+  }
+  if (result.signal_enrichment && typeof result.signal_enrichment === 'object') {
+    const s = result.signal_enrichment as { created?: unknown[]; updated?: unknown[]; skipped?: unknown[] };
+    console.log(`  enrichment:    created=${s.created?.length ?? 0} updated=${s.updated?.length ?? 0} skipped=${s.skipped?.length ?? 0}`);
   }
   console.log(`  captured_at:   ${result.captured_at}`);
 }
@@ -482,6 +487,7 @@ export async function runCapture(engine: BrainEngine | null, args: string[]): Pr
       status?: string;
       chunks?: number;
       write_through?: { written: boolean; path?: string };
+      signal_enrichment?: unknown;
     }>(raw);
     const result: CaptureResult = {
       slug: remoteResult.slug,
@@ -496,6 +502,7 @@ export async function runCapture(engine: BrainEngine | null, args: string[]): Pr
       // root cause of WARN-8's audit-trail labeling problem.
       source_kind: 'capture-cli',
       captured_at: capturedAt,
+      signal_enrichment: remoteResult.signal_enrichment,
     };
     printReceipt(result, parsed.quiet ?? false, parsed.json ?? false);
     return;
@@ -548,6 +555,7 @@ export async function runCapture(engine: BrainEngine | null, args: string[]): Pr
       status?: string;
       chunks?: number;
       write_through?: { written: boolean; path?: string; skipped?: string };
+      signal_enrichment?: unknown;
     };
     printReceipt(
       {
@@ -560,6 +568,7 @@ export async function runCapture(engine: BrainEngine | null, args: string[]): Pr
         // CV3: source_kind is the channel taxonomy, NOT the DB source FK.
         source_kind: 'capture-cli',
         captured_at: capturedAt,
+        signal_enrichment: result.signal_enrichment,
       },
       parsed.quiet ?? false,
       parsed.json ?? false,
