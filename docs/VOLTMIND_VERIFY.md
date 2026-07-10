@@ -33,12 +33,12 @@ check. See `skills/setup/SKILL.md` Error Recovery table.
 
 **Check:** Ask the agent: "What is the brain-agent loop?"
 
-**Expected:** The agent references GBRAIN_SKILLPACK.md Section 2 and describes
+**Expected:** The agent references VOLTMIND_SKILLPACK.md Section 2 and describes
 the read-write cycle: detect entities, read brain, respond with context, write
 brain, sync.
 
 **If it fails:** The agent hasn't loaded the skillpack. Run step 6 from the
-install paste (read `docs/GBRAIN_SKILLPACK.md`).
+install paste (read `docs/VOLTMIND_SKILLPACK.md`).
 
 ---
 
@@ -53,7 +53,7 @@ gbrain check-update --json
 **Expected:** Returns JSON with `current_version`, `latest_version`,
 `update_available` (boolean). The cron `gbrain-update-check` is registered.
 
-**If it fails:** Run step 7 from the install paste. See GBRAIN_SKILLPACK.md
+**If it fails:** Run step 7 from the install paste. See VOLTMIND_SKILLPACK.md
 Section 17.
 
 ---
