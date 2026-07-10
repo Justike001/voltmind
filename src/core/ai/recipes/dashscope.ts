@@ -22,11 +22,14 @@ export const dashscope: Recipe = {
     required: ['DASHSCOPE_API_KEY'],
     setup_url: 'https://help.aliyun.com/zh/model-studio/getting-started/',
   },
-  touchpoints: {
-    embedding: {
-      models: ['text-embedding-v3', 'text-embedding-v2'],
+ touchpoints: {
+   embedding: {
+      models: ['text-embedding-v4', 'text-embedding-v3', 'text-embedding-v2'],
       default_dims: 1024,
-      dims_options: [64, 128, 256, 512, 768, 1024],
+      // v4 supports [64, 128, 256, 512, 768, 1024, 1536, 2048, 3072];
+      // v3 supports [64, 128, 256, 512, 768, 1024]. Union listed here;
+      // the gateway validates per-model at embed time via dimsProviderOptions.
+      dims_options: [64, 128, 256, 512, 768, 1024, 1536, 2048, 3072],
       // Alibaba doesn't publish a hard batch-token cap for the OpenAI-compat
       // path. Conservative declaration so the gateway pre-splits before
       // hitting whatever undocumented server-side limit exists.

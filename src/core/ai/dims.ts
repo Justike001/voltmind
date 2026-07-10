@@ -106,27 +106,31 @@ export function isValidOpenAITextEmbedding3Dim(modelId: string, dims: number): b
  * emitted for symmetric providers; legacy hardcoded `type:'db'` for
  * embo-01). gateway.embedQuery() threads `'query'`; gateway.embed() threads
  * `'document'`. Per-model filtering happens INSIDE the switch — the field
- * is NEVER emitted for providers that don't accept it (OpenAI text-3,
- * DashScope, Zhipu) so the request body stays clean for those endpoints.
- */
+* is NEVER emitted for providers that don't accept it (OpenAI text-3,
+* DashScope, Zhipu) so the request body stays clean for those endpoints.
+*/
 export function dimsProviderOptions(
   implementation: Implementation,
   modelId: string,
   dims: number,
   inputType?: 'query' | 'document',
 ): Record<string, any> | undefined {
+  // OpenRouter fan-out uses `provider/model` IDs (e.g.
+  // `openai/text-embedding-3-small`). Strip the slash-separated prefix
+  // so text-embedding-3 detection + Matryoshka dimension validation work.
+  const baseModelId = modelId.includes('/') ? modelId.slice(modelId.lastIndexOf('/') + 1) : modelId;
   switch (implementation) {
     case 'native-openai': {
       // text-embedding-3-* supports dimensions; text-embedding-ada-002 does not.
       // OpenAI embeddings are symmetric — inputType ignored.
-      if (modelId.startsWith('text-embedding-3')) {
+      if (baseModelId.startsWith('text-embedding-3')) {
         // v0.36.0.0 (D13): fail-loud when configured dim is outside the
         // model's Matryoshka range. OpenAI returns HTTP 400 otherwise with
         // a generic message that misroutes as a network blip.
-        if (isOpenAITextEmbedding3Model(modelId) && !isValidOpenAITextEmbedding3Dim(modelId, dims)) {
-          const max = maxOpenAITextEmbedding3Dim(modelId)!;
+        if (isOpenAITextEmbedding3Model(baseModelId) && !isValidOpenAITextEmbedding3Dim(baseModelId, dims)) {
+          const max = maxOpenAITextEmbedding3Dim(baseModelId)!;
           throw new AIConfigError(
-            `OpenAI model "${modelId}" supports embedding_dimensions in 1..${max}, got ${dims}.`,
+            `OpenAI model "${baseModelId}" supports embedding_dimensions in 1..${max}, got ${dims}.`,
             `Set \`embedding_dimensions\` to a value between 1 and ${max} ` +
             `(\`voltmind config set embedding_dimensions ${Math.min(1024, max)}\` is a common default).`,
           );
@@ -201,11 +205,11 @@ export function dimsProviderOptions(
       // configured for a smaller width (e.g. 1536) hard-fail at first embed.
       // Azure/OpenAI-compat embeddings are symmetric — inputType ignored.
       // v0.36.0.0 (D13): same range validation as native-openai path.
-      if (modelId.startsWith('text-embedding-3')) {
-        if (isOpenAITextEmbedding3Model(modelId) && !isValidOpenAITextEmbedding3Dim(modelId, dims)) {
-          const max = maxOpenAITextEmbedding3Dim(modelId)!;
+      if (baseModelId.startsWith('text-embedding-3')) {
+        if (isOpenAITextEmbedding3Model(baseModelId) && !isValidOpenAITextEmbedding3Dim(baseModelId, dims)) {
+          const max = maxOpenAITextEmbedding3Dim(baseModelId)!;
           throw new AIConfigError(
-            `OpenAI model "${modelId}" supports embedding_dimensions in 1..${max}, got ${dims}.`,
+            `OpenAI model "${baseModelId}" supports embedding_dimensions in 1..${max}, got ${dims}.`,
             `Set \`embedding_dimensions\` to a value between 1 and ${max} ` +
             `(\`voltmind config set embedding_dimensions ${Math.min(1024, max)}\` is a common default).`,
           );
@@ -216,8 +220,8 @@ export function dimsProviderOptions(
       // embedding-3 (Matryoshka 256-2048) both accept `dimensions` on the
       // OpenAI-compat path. Without this, user-selected non-default dims are
       // silently ignored and the provider returns its default size.
-      // Symmetric retrieval — inputType ignored.
-      if (modelId === 'text-embedding-v3' || modelId === 'embedding-3') {
+     // Symmetric retrieval — inputType ignored.
+      if (baseModelId === 'text-embedding-v3' || baseModelId === 'text-embedding-v4' || baseModelId === 'embedding-3') {
         return { openaiCompatible: { dimensions: dims } };
       }
       // MiniMax embo-01 takes a `type: 'db' | 'query'` field for asymmetric
@@ -225,7 +229,7 @@ export function dimsProviderOptions(
       // into the new inputType seam is a follow-up (see plan's deferred
       // section "Fix MiniMax embo-01 asymmetry"). When fixed: map
       // inputType==='query' → type:'query', else 'db'.
-      if (modelId === 'embo-01') {
+      if (baseModelId === 'embo-01') {
         return { openaiCompatible: { type: 'db' } };
       }
       return undefined;

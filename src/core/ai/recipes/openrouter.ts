@@ -64,11 +64,13 @@ export const openrouter: Recipe = {
   touchpoints: {
     embedding: {
       models: ['openai/text-embedding-3-small'],
-      default_dims: 1536,
-      // text-embedding-3-small was trained at MRL breakpoints 512/1024/1536
-      // (Weaviate analysis); 768 is a practical intermediate. Users opt into
-      // a smaller dim via `voltmind config set embedding_dimensions <N>`.
-      dims_options: [512, 768, 1024, 1536],
+     default_dims: 1536,
+     // text-embedding-3-small was trained at MRL breakpoints 512/1024/1536
+     // (Weaviate analysis); 768 is a practical intermediate. Users opt into
+     // a smaller dim via `voltmind config set embedding_dimensions <N>`.
+      // 1280 added: matches VoltMind DEFAULT_EMBEDDING_DIMENSIONS so brains
+      // migrating from zembed-1 (1280d) can use OpenRouter without a schema resize.
+      dims_options: [512, 768, 1024, 1280, 1536],
       cost_per_1m_tokens_usd: 0.02,
       price_last_verified: '2026-05-20',
       // OpenAI's published per-request aggregate is ~300K tokens for embeddings
