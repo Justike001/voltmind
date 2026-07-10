@@ -63,7 +63,7 @@ export function formatEmbeddingCredsError(d: EmbeddingDiagnosis): string {
       return [
         'Embedding gateway is not configured.',
         'This is usually a startup-order bug. Re-run with --no-embed to import',
-        'without embedding, then file an issue at https://github.com/garrytan/voltmind/issues',
+        'without embedding, then file an issue at https://github.com/Justike001/voltmind/issues',
       ].join('\n');
 
     case 'no_model_configured':

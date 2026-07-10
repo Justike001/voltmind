@@ -395,7 +395,7 @@ export async function runUpgradeDriftCheck(config: VoltMindConfig): Promise<Remo
   } catch { /* state read is best-effort */ }
 
   const fixHint = priorFailed
-    ? `Prior \`voltmind upgrade\` did not advance the binary. See https://github.com/garrytan/voltmind/releases for manual install.`
+    ? `Prior \`voltmind upgrade\` did not advance the binary. See https://github.com/Justike001/voltmind/releases for manual install.`
     : `Run \`voltmind upgrade\` to install v${remoteVersion}.`;
 
   return {

@@ -200,7 +200,7 @@ export async function loadSkillpackSources(
             `against a different contract version. Fix: upgrade the ` +
             `skillpack (publisher needs to rebuild against the new ` +
             `IngestionSource contract) OR downgrade voltmind. Skillpack docs: ` +
-            `https://github.com/garrytan/voltmind/blob/master/docs/ingestion-source-skillpack.md`,
+            `https://github.com/Justike001/voltmind/blob/master/docs/ingestion-source-skillpack.md`,
         );
         continue;
       }

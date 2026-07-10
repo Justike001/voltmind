@@ -547,7 +547,7 @@ function requireConfig(): AIGatewayConfig {
   if (!_config) {
     throw new AIConfigError(
       'AI gateway is not configured. Call configureGateway() during engine connect.',
-      'This is a voltmind bug — file an issue at https://github.com/garrytan/voltmind/issues',
+      'This is a voltmind bug — file an issue at https://github.com/Justike001/voltmind/issues',
     );
   }
   return _config;

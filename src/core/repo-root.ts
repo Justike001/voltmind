@@ -224,7 +224,7 @@ function isGbrainRepoRoot(dir: string): boolean {
  * so the install-path fallback is safe for them.
  *
  * Closes the install-path footgun for hosted-CLI installs (`bun install -g
- * github:garrytan/voltmind && cd ~ && voltmind doctor`) without expanding the
+ * github:Justike001/voltmind && cd ~ && voltmind doctor`) without expanding the
  * blast radius to write-path callers.
  */
 export function autoDetectSkillsDirReadOnly(

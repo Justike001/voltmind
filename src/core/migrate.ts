@@ -485,7 +485,7 @@ export const MIGRATIONS: Migration[] = [
     version: 14,
     name: 'pages_updated_at_index',
     // v0.14.1 (fix wave): fixes the 14.6s "list pages newest-first" seqscan on 31k+ row brains.
-    // Original report: https://github.com/garrytan/voltmind/issues/170 (PR #215).
+    // Original report: https://github.com/Justike001/voltmind/issues/170 (PR #215).
     //
     // Engine-aware via handler (not SQL): Postgres uses CREATE INDEX CONCURRENTLY
     // to avoid the write-blocking SHARE lock on `pages`. CONCURRENTLY refuses to
@@ -797,7 +797,7 @@ export const MIGRATIONS: Migration[] = [
   {
     version: 15,
     name: 'minion_jobs_max_stalled_default_5',
-    // v0.14.1 (fix wave): fixes https://github.com/garrytan/voltmind/issues/219
+    // v0.14.1 (fix wave): fixes https://github.com/Justike001/voltmind/issues/219
     // Shipped default was 1 — first stall = dead-letter, contradicting the
     // "SIGKILL rescued" claim. New default 5. UPDATE backfills existing non-
     // terminal rows so upgrading brains don't keep dead-lettering queued work.

@@ -2804,7 +2804,7 @@ export async function buildChecks(
   // reachable via $OPENCLAW_WORKSPACE or ~/.openclaw/workspace, not just a
   // `skills/` walked up from cwd. Read-only variant adds the install-path
   // fallback so a hosted-CLI install run from `~` (e.g., `bun install -g
-  // github:garrytan/voltmind && cd ~ && voltmind doctor`) can still find the
+  // github:Justike001/voltmind && cd ~ && voltmind doctor`) can still find the
   // bundled skills/ dir without warning.
   const detected = scope === 'all' ? autoDetectSkillsDirReadOnly() : { dir: null, source: 'none' as const };
   const skillsDir = detected.dir;
@@ -3744,7 +3744,7 @@ export async function buildChecks(
         name: 'schema_version',
         status: 'fail',
         message: `No schema version recorded. Migrations never ran. Fix: voltmind apply-migrations --yes. ` +
-                 `If you installed via 'bun install -g github:...', see https://github.com/garrytan/voltmind/issues/218.`,
+                 `If you installed via 'bun install -g github:...', see https://github.com/Justike001/voltmind/issues/218.`,
       });
     } else {
       checks.push({

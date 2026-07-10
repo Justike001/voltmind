@@ -183,7 +183,7 @@ export function buildPgliteInitErrorMessage(
     case 'macos-26-3':
       hint =
         '  This is most commonly the macOS 26.3 WASM bug:\n' +
-        '  https://github.com/garrytan/voltmind/issues/223';
+        '  https://github.com/Justike001/voltmind/issues/223';
       break;
     case 'corrupt':
       hint =
@@ -201,7 +201,7 @@ export function buildPgliteInitErrorMessage(
     default:
       hint =
         '  Most common cause: the macOS 26.3 WASM bug\n' +
-        '  (https://github.com/garrytan/voltmind/issues/223).\n' +
+        '  (https://github.com/Justike001/voltmind/issues/223).\n' +
         '  Run `voltmind doctor` for a full diagnosis.';
       break;
   }
