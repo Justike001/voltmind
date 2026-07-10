@@ -187,4 +187,4 @@ search enrichment. No stubs. If you make a page, make it good.
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

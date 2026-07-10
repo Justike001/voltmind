@@ -82,4 +82,4 @@ thesis, he's interested in your take on AI agents."
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md). See also: [Brain-Agent Loop](brain-agent-loop.md), [Search Modes](search-modes.md)*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md). See also: [Brain-Agent Loop](brain-agent-loop.md), [Search Modes](search-modes.md)*

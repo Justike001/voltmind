@@ -75,6 +75,11 @@ explicitly working on VoltMind internals:
   `voltmind query`.
 - Ingestion: `voltmind import`, `voltmind capture`, `voltmind sync`,
   `voltmind embed`, `voltmind enrich`.
+- File migration: `voltmind files mirror`, `voltmind files redirect`,
+  `voltmind files restore`, `voltmind files clean`, `voltmind files status`,
+  `voltmind files upload-raw`, and related `voltmind files` host-local
+  subcommands. Run these on the machine that owns the files; do not route them
+  through thin-client or MCP tool calls.
 - Retrieval enrichment: `voltmind extract`, `voltmind extract-conversation-facts`,
   `voltmind transcripts`. Write-mode extraction must use explicit `--source-id`;
   use `--dry-run` for previews. MCP may use read-only `get_recent_transcripts`
@@ -84,8 +89,9 @@ explicitly working on VoltMind internals:
   `find_trajectory`, `takes_list`, and `takes_search`.
 - Basic graph/context: `voltmind link`, `voltmind unlink`,
   `voltmind backlinks`, `voltmind tags`, `voltmind timeline`,
-  `voltmind timeline-add`, `voltmind graph`. For outgoing-link inspection, use
-  MCP `get_links` through `voltmind call`.
+ `voltmind timeline-add`, `voltmind graph`. For outgoing-link inspection, use
+ MCP `get_links` through `voltmind call`.
+ For typed/directional graph traversal, use `voltmind graph-query`.
 - Knowledge insights: `voltmind salience`, `voltmind anomalies`,
   `voltmind whoknows`, `voltmind calibration`. MCP may use
   `get_recent_salience`, `find_anomalies`, `find_experts`, and
@@ -130,7 +136,8 @@ Keep these files/modules recoverable, but do not dispatch to them in MVP:
   allowed; ambient webhook/social crawlers remain frozen. Jobs readouts and
   dry-run plans remain allowed.
 - Multi-brain/topology flows: mounts, cross-brain federation, thin-client setup,
-  remote artifact brains, cloud storage migration.
+  remote artifact brains, and remote/cloud topology setup beyond host-local
+  `voltmind files` migration.
 
 When a frozen route is requested, prefer one of:
 

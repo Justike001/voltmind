@@ -23,7 +23,7 @@ Two bundled packs:
   `ALL_PAGE_TYPES` list).
 
 - **`gbrain-recommended`** — extends `gbrain-base` with the 13 additional
-  directories described in `docs/GBRAIN_RECOMMENDED_SCHEMA.md`: deal,
+  directories described in `docs/VOLTMIND_RECOMMENDED_SCHEMA.md`: deal,
   meeting, concept, project, source, daily, personal, civic, original,
   place, trip, conversation, writing. If you like the documented
   operational-brain pattern, activate this with:

@@ -84,4 +84,4 @@ on user_message(message):
 5. Run `gbrain search "ambition debt"`. Confirm the originals page appears in search results and is discoverable.
 
 ---
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

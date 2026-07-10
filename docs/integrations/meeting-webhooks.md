@@ -60,4 +60,4 @@ SMS, calls, voicemail, and AI transcripts.
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md). See also: [Getting Data In](README.md)*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md). See also: [Getting Data In](README.md)*

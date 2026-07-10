@@ -122,7 +122,7 @@ Read the skill file before acting. If two could match, read both. Non-the owner 
 - Brain planning, plan brain changes, schema planning → `brain-plan`
 - Conversation enrichment, enrich chat transcript → `conversation-enrichment`
 - Fact check, verify claim, "is this true", citation check → `fact-check`
-- Upgrade gbrain, update gbrain, gbrain version → `gbrain-upgrade`
+- Upgrade gbrain, update gbrain, gbrain version → `voltmind-upgrade`
 - "Review my Dropbox archive", Dropbox folder audit, old Dropbox files → `dropbox-archive-review`
 - Screenshot style, apply style to screenshot → `screenshot-style`
 - Signorelli letter, draft formal letter → `signorelli-letter`

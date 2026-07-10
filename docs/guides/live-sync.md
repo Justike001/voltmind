@@ -135,4 +135,4 @@ hashes match. If both a cron and `--watch` fire simultaneously, no conflict.
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

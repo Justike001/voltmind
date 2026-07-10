@@ -155,4 +155,4 @@ the search index current. The agent repo is never indexed by GBrain.
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

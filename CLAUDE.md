@@ -53,8 +53,9 @@ behavior when unset.
 ## MVP public surface
 
 The visible runtime is limited to local setup/config, Page CRUD, import/capture,
-sync/embed, search/query, basic tags/links/timeline graph traversal, MCP serve/call,
-basic jobs read/cancel/status, and health/status readouts. Advanced inherited
+host-local file migration, sync/embed, search/query, basic tags/links/timeline
+graph traversal, MCP serve/call, basic jobs read/cancel/status, and
+health/status readouts. Advanced inherited
 features such as agent/autopilot/dream/eval/skillpack/think/recall/forget/onboard/
 schema/founder/takes/transcripts/code-intelligence/salience/anomalies are frozen
 outside the public CLI/MCP surface for now.
@@ -1745,7 +1746,7 @@ Tests, etc.). Same rules as before:
 - Lead with what the user can now DO that they couldn't before
 - Frame as benefits and capabilities, not files changed or code written
 - Make the user think "hell yeah, I want that"
-- Bad: "Added GBRAIN_VERIFY.md installation verification runbook"
+- Bad: "Added VOLTMIND_VERIFY.md installation verification runbook"
 - Good: "Your agent now verifies the entire GBrain installation end-to-end, catching
   silent sync failures and stale embeddings before they bite you"
 - Bad: "Setup skill Phase H and Phase I added"

@@ -49,4 +49,4 @@ in the gateway config. Hermes's scheduled automations can run the same EA workfl
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md). See also: [Getting Data In](README.md)*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md). See also: [Getting Data In](README.md)*

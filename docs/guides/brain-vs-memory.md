@@ -72,4 +72,4 @@ on user_asks(question):
 5. After an agent reset, confirm GBrain knowledge is still accessible. Run `gbrain get <any_slug>` -- world knowledge should survive the reset.
 
 ---
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

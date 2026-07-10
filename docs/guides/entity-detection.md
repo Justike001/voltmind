@@ -187,4 +187,4 @@ to Pedro" only works if Pedro's page links back to every mention.
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

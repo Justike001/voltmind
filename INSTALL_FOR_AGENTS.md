@@ -68,7 +68,7 @@ Ask the user where their files are, or create a new brain repo:
 mkdir -p ~/brain && cd ~/brain && git init
 ```
 
-Read `~/gbrain/docs/GBRAIN_RECOMMENDED_SCHEMA.md` and set up the MECE directory
+Read `~/gbrain/docs/VOLTMIND_RECOMMENDED_SCHEMA.md` and set up the MECE directory
 structure (people/, companies/, concepts/, etc.) inside the user's brain repo,
 NOT inside ~/gbrain.
 
@@ -231,7 +231,7 @@ Verify: `gbrain integrations doctor` (after at least one is configured)
 
 ## Step 9: Verify
 
-Read `docs/GBRAIN_VERIFY.md` and run all 7 verification checks. Check #4 (live sync
+Read `docs/VOLTMIND_VERIFY.md` and run all 7 verification checks. Check #4 (live sync
 actually works) is the most important.
 
 ## Upgrade

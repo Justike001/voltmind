@@ -106,4 +106,4 @@ on schedule_request(meeting):
 5. Send a test email from someone with a brain page. Confirm the triage response references their relationship context, not just the email content.
 
 ---
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

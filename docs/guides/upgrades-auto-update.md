@@ -80,8 +80,8 @@ full_upgrade():
     read_and_internalize(skill)  // updated skills = better agent behavior
 
   // Step 3: Re-read production reference docs
-  read("docs/GBRAIN_SKILLPACK.md")
-  read("docs/GBRAIN_RECOMMENDED_SCHEMA.md")
+  read("docs/VOLTMIND_SKILLPACK.md")
+  read("docs/VOLTMIND_RECOMMENDED_SCHEMA.md")
 
   // Step 4: Check for version-specific migration directives
   for version in range(old_version, new_version):
@@ -130,11 +130,11 @@ Also persist in `~/.gbrain/update-state.json` so it survives agent context reset
 ### Standalone Skillpack Users
 
 If you loaded this SKILLPACK directly (copied or read from GitHub) without
-installing gbrain, you can still stay current. Both GBRAIN_SKILLPACK.md and
-GBRAIN_RECOMMENDED_SCHEMA.md have version markers:
+installing gbrain, you can still stay current. Both VOLTMIND_SKILLPACK.md and
+VOLTMIND_RECOMMENDED_SCHEMA.md have version markers:
 
 ```bash
-curl -s https://raw.githubusercontent.com/garrytan/gbrain/master/docs/GBRAIN_SKILLPACK.md | head -1
+curl -s https://raw.githubusercontent.com/garrytan/gbrain/master/docs/VOLTMIND_SKILLPACK.md | head -1
 # Returns: <!-- skillpack-version: X.Y.Z -->
 ```
 
@@ -179,4 +179,4 @@ copy. Set up a weekly cron to check automatically.
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

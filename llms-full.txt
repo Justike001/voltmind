@@ -68,7 +68,7 @@ writing or reviewing an operation, consult `src/core/operations.ts` for the cont
 - **Configure:** [`docs/ENGINES.md`](./docs/ENGINES.md),
   [`docs/guides/live-sync.md`](./docs/guides/live-sync.md),
   [`docs/mcp/DEPLOY.md`](./docs/mcp/DEPLOY.md).
-- **Debug:** [`docs/GBRAIN_VERIFY.md`](./docs/GBRAIN_VERIFY.md),
+- **Debug:** [`docs/VOLTMIND_VERIFY.md`](./docs/VOLTMIND_VERIFY.md),
   [`docs/guides/minions-fix.md`](./docs/guides/minions-fix.md), `gbrain doctor --fix`.
 - **Migrate / upgrade:** `gbrain upgrade` (binary self-update + schema migrations + post-upgrade prompts),
   [`docs/UPGRADING_DOWNSTREAM_AGENTS.md`](./docs/UPGRADING_DOWNSTREAM_AGENTS.md),
@@ -1863,7 +1863,7 @@ Tests, etc.). Same rules as before:
 - Lead with what the user can now DO that they couldn't before
 - Frame as benefits and capabilities, not files changed or code written
 - Make the user think "hell yeah, I want that"
-- Bad: "Added GBRAIN_VERIFY.md installation verification runbook"
+- Bad: "Added VOLTMIND_VERIFY.md installation verification runbook"
 - Good: "Your agent now verifies the entire GBrain installation end-to-end, catching
   silent sync failures and stale embeddings before they bite you"
 - Bad: "Setup skill Phase H and Phase I added"
@@ -2228,7 +2228,7 @@ Ask the user where their files are, or create a new brain repo:
 mkdir -p ~/brain && cd ~/brain && git init
 ```
 
-Read `~/gbrain/docs/GBRAIN_RECOMMENDED_SCHEMA.md` and set up the MECE directory
+Read `~/gbrain/docs/VOLTMIND_RECOMMENDED_SCHEMA.md` and set up the MECE directory
 structure (people/, companies/, concepts/, etc.) inside the user's brain repo,
 NOT inside ~/gbrain.
 
@@ -2391,7 +2391,7 @@ Verify: `gbrain integrations doctor` (after at least one is configured)
 
 ## Step 9: Verify
 
-Read `docs/GBRAIN_VERIFY.md` and run all 7 verification checks. Check #4 (live sync
+Read `docs/VOLTMIND_VERIFY.md` and run all 7 verification checks. Check #4 (live sync
 actually works) is the most important.
 
 ## Upgrade
@@ -2822,7 +2822,7 @@ Most personal-knowledge tools force one fixed layout: their idea of "notes" + "p
 **gbrain doesn't have a fixed layout.** It ships with two bundled schema packs and lets you author your own when neither fits:
 
 - **`gbrain-base`** (default) — the layout my production brain uses: `people/`, `companies/`, `concepts/`, `meetings/`, `deal/`, `daily/`, `originals/`, `writing/`, etc. Zero config. Drop a brain that fits this shape and everything works.
-- **`gbrain-recommended`** — extends `gbrain-base` with the 13 additional directories from `docs/GBRAIN_RECOMMENDED_SCHEMA.md` (source, place, trip, conversation, personal, civic, project, etc.). Activate with `gbrain schema use gbrain-recommended`.
+- **`gbrain-recommended`** — extends `gbrain-base` with the 13 additional directories from `docs/VOLTMIND_RECOMMENDED_SCHEMA.md` (source, place, trip, conversation, personal, civic, project, etc.). Activate with `gbrain schema use gbrain-recommended`.
 - **Your own pack** — `gbrain schema detect` clusters your actual filesystem into proposed types, `gbrain schema suggest` runs an LLM pass over them, and `gbrain schema review-candidates --apply` promotes the ones you like. Three commands and the brain knows your shape.
 
 ```bash
@@ -3783,7 +3783,7 @@ hashes match. If both a cron and `--watch` fire simultaneously, no conflict.
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*
 
 ---
 
@@ -3983,7 +3983,7 @@ echo "Dream cycle complete at $(date)"
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md). See also: [Quiet Hours](quiet-hours.md), [Operational Disciplines](operational-disciplines.md)*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md). See also: [Quiet Hours](quiet-hours.md), [Operational Disciplines](operational-disciplines.md)*
 
 ---
 
@@ -4155,7 +4155,7 @@ Set `enabled: false` to disable quiet hours entirely (e.g., for 24/7 monitoring)
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*
 
 ---
 
@@ -4771,9 +4771,9 @@ built-in server is the recommended path.
 
 # Debugging
 
-## docs/GBRAIN_VERIFY.md
+## docs/VOLTMIND_VERIFY.md
 
-Source: https://raw.githubusercontent.com/garrytan/gbrain/master/docs/GBRAIN_VERIFY.md
+Source: https://raw.githubusercontent.com/garrytan/gbrain/master/docs/VOLTMIND_VERIFY.md
 
 # GBrain Installation Verification Runbook
 
@@ -4810,12 +4810,12 @@ check. See `skills/setup/SKILL.md` Error Recovery table.
 
 **Check:** Ask the agent: "What is the brain-agent loop?"
 
-**Expected:** The agent references GBRAIN_SKILLPACK.md Section 2 and describes
+**Expected:** The agent references VOLTMIND_SKILLPACK.md Section 2 and describes
 the read-write cycle: detect entities, read brain, respond with context, write
 brain, sync.
 
 **If it fails:** The agent hasn't loaded the skillpack. Run step 6 from the
-install paste (read `docs/GBRAIN_SKILLPACK.md`).
+install paste (read `docs/VOLTMIND_SKILLPACK.md`).
 
 ---
 
@@ -4830,7 +4830,7 @@ gbrain check-update --json
 **Expected:** Returns JSON with `current_version`, `latest_version`,
 `update_available` (boolean). The cron `gbrain-update-check` is registered.
 
-**If it fails:** Run step 7 from the install paste. See GBRAIN_SKILLPACK.md
+**If it fails:** Run step 7 from the install paste. See VOLTMIND_SKILLPACK.md
 Section 17.
 
 ---

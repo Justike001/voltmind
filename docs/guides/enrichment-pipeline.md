@@ -100,4 +100,4 @@ on enrich(entity, trigger):
 5. Try to re-enrich the same person. Confirm the system checks the `fetched_at` timestamp and skips if less than a week old.
 
 ---
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

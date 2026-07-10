@@ -134,4 +134,4 @@ support that claim.
 
 ---
 
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md). See also: [Source Attribution](source-attribution.md), [Entity Detection](entity-detection.md)*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md). See also: [Source Attribution](source-attribution.md), [Entity Detection](entity-detection.md)*

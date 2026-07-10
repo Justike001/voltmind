@@ -117,4 +117,4 @@ on nightly_schedule("02:00"):
 5. After a dream cycle runs, check a page that had unlinked entity mentions. Confirm new links were added (`gbrain get_links <slug>`).
 
 ---
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

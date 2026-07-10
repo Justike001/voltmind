@@ -133,4 +133,4 @@ on user_shares_media(url_or_file):
 5. Run `gbrain search "{topic_from_video}"`. Confirm the media page appears in search results (verifies the content is indexed and searchable).
 
 ---
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

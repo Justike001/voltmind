@@ -289,7 +289,7 @@ No contributor hand-runs git. The skill drives:
      the `test/e2e/longmemeval` ephemeral-PGLite pattern at
      `src/eval/longmemeval/harness.ts`), assert `gbrain check-resolvable`
      stays clean and the skill rows appear in the managed block.
-   - Trial install runs with `GBRAIN_SKILLPACK_SANDBOX=1`, which disables
+   - Trial install runs with `VOLTMIND_SKILLPACK_SANDBOX=1`, which disables
      any operation that writes outside the workspace or hits the network.
 
 3. **Test + eval suite execution** (DX-review decision: run everything

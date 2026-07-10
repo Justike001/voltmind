@@ -185,4 +185,4 @@ can now access your Google services."
 
 ---
 
-*Part of the [GBrain Skillpack](../docs/GBRAIN_SKILLPACK.md). See also: [Email-to-Brain](email-to-brain.md), [Calendar-to-Brain](calendar-to-brain.md)*
+*Part of the [GBrain Skillpack](../docs/VOLTMIND_SKILLPACK.md). See also: [Email-to-Brain](email-to-brain.md), [Calendar-to-Brain](calendar-to-brain.md)*

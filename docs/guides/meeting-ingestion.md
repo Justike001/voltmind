@@ -77,4 +77,4 @@ on new_meeting_transcript(meeting):
 5. Run `gbrain search "{meeting_topic}"`. Confirm the meeting page appears in search results (verifies sync ran).
 
 ---
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*

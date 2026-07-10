@@ -72,4 +72,4 @@ SOURCE_PRIORITY = [
 5. Look for a page where the user stated something that contradicts an API result. Confirm the contradiction is noted, not silently resolved.
 
 ---
-*Part of the [GBrain Skillpack](../GBRAIN_SKILLPACK.md).*
+*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*
