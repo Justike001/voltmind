@@ -3,9 +3,9 @@ name: cold-start
 version: 2.0.0
 description: |
   Day-one data bootstrapping for a new VoltMind brain. Sequences the highest-
-  leverage Microsoft sources to go from empty brain to useful brain in one
-  session: Outlook Calendar, Outlook Email, and Microsoft Teams. Use when a
-  user has just finished VoltMind setup and asks "now what?"
+  leverage Microsoft sources first, then optional user-provided local exports
+  and markdown sources, to go from empty brain to useful brain in one session.
+  Use when a user has just finished VoltMind setup and asks "now what?"
 triggers:
   - "cold start"
   - "fill my brain"
@@ -39,7 +39,7 @@ writes_to:
   - concepts/
 ---
 
-# Cold Start — Microsoft Day-One Brain Bootstrapping
+# Cold Start — Microsoft-First Day-One Brain Bootstrapping
 
 You have a working VoltMind brain. Search works. Now what?
 
@@ -56,8 +56,10 @@ to get you from zero to useful in one session.
 - **Microsoft source access stays inside the connected app tools.** The agent
   never asks the user for raw OAuth tokens, Microsoft Graph tokens, cookies, or
   exported secrets.
-- The VoltMind MVP cold start uses only three live source families:
+- The VoltMind MVP cold start uses three live connector source families:
   Outlook Calendar, Outlook Email, and Microsoft Teams.
+- Optional offline phases may ingest user-provided local exports or local
+  markdown directories through the public VoltMind import/write surface.
 - Each phase is independently valuable — the user can stop after any phase and
   still have a useful brain.
 - Progress is tracked in `VOLTMIND_HOME/cold-start-state.json` so interrupted
@@ -79,17 +81,24 @@ to get you from zero to useful in one session.
 
 ## The Priority Stack
 
-Data sources ranked by **information density x ease of import**:
+Data sources ranked by **information density x ease of import**. The default
+phase order stays consent first, then Microsoft connectors, then optional local
+imports. If the user already has local exports or a notes vault ready, Phase 5
+or Phase 6 may be pulled forward after explicit approval.
 
-| Priority | Source | Why | Time | Pages Created |
-|----------|--------|-----|------|---------------|
-| 1 | Outlook Calendar (last 90 days) | Fastest map of people, meetings, projects, recurring work | 10-15 min | 30-90 daily/meeting/entity updates |
-| 2 | Outlook Email (smart sample) | Relationship context, active threads, commitments, org chart signals | 20 min | 30-150 thread/entity/project updates |
-| 3 | Microsoft Teams (recent chats/channels) | Decisions, coordination, informal context, open loops | 20 min | 20-100 conversation/project/entity updates |
+| Priority | Phase | Source | Why | Runtime path | Time | Pages Created |
+|----------|-------|--------|-----|--------------|------|---------------|
+| 1 | 1 | Outlook Calendar (last 90 days) | Fastest map of people, meetings, projects, recurring work | Outlook Calendar connector + VoltMind page writes | 10-15 min | 30-90 daily/meeting/entity updates |
+| 2 | 2 | Outlook Email (smart sample) | Relationship context, active threads, commitments, org chart signals | Outlook Email connector + VoltMind page writes | 20 min | 30-150 thread/entity/project updates |
+| 3 | 3 | Microsoft Teams (recent chats/channels) | Decisions, coordination, informal context, open loops | Microsoft Teams connector + VoltMind page writes | 20 min | 20-100 conversation/project/entity updates |
+| 4 | 4 | Cross-source reconciliation | Turns separate imports into one merged people/project graph | `voltmind search`, `voltmind get`, `voltmind put`, `voltmind link`, `voltmind timeline-add` | 10-30 min | Mostly updates |
+| 5 | 6 | Existing Markdown / Obsidian | Highest bulk leverage when the user already has structured notes | `voltmind import`, `voltmind extract`, `voltmind embed` after approval | 10-60 min | 100-10,000+ imported pages |
+| 6 | 5 | Conversation exports | Original thinking and research history, but requires user-provided files | local export staging + `voltmind import` or reviewed page writes | 20-60 min | 10-300 conversation/concept/project updates |
 
-Future non-Microsoft sources, generic web research, file/archive crawlers, and
-autonomous ingestion are outside the MVP cold-start route. Add them later only
-when their runtime and privacy boundaries are explicitly enabled.
+Generic web research, file/archive crawlers beyond local markdown import,
+ambient social crawlers, autonomous ingestion, and future non-Microsoft live
+connectors are outside the MVP cold-start route. Add them later only when their
+runtime and privacy boundaries are explicitly enabled.
 
 ## Phase 0: Microsoft Connector Scope And Consent
 
@@ -235,9 +244,12 @@ For each selected thread:
 
 - noreply@, no-reply@, notifications@, support@, mailer-daemon@
 - newsletters, marketing, vendor drip campaigns
-- GitHub/Jira/Linear/system notifications unless the user explicitly asks
+- Unsubscribe-heavy senders (marketing)
+- GitHub/Jira/Linear/system/Instagram notifications unless the user explicitly asks
 - raw calendar invites already represented in Calendar phase
-- receipts, shipping notices, security alerts, password resets
+- teams message remind already represented in Teams phase
+- VPMS update
+- New Hire Announcement / Work Anniversary / Birthday Announcement / Promotion Announcement / Employee Spotlight
 
 **Always import or review:**
 
@@ -439,6 +451,138 @@ Only create meeting pages for meetings with durable signal:
 
 Otherwise keep the event as a daily/calendar entry and timeline signal.
 
+## Phase 5: Conversation Exports (ChatGPT / Claude / Perplexity)
+
+**Your thinking, captured.** AI conversation exports reveal what the user
+was researching, building, and thinking about. This is original thinking
+preserved in dialog form.
+
+### Supported formats
+
+- **ChatGPT:** Settings → Data Controls → Export → `conversations.json`
+- **Claude:** Download from claude.ai conversation history
+- **Perplexity:** Export from settings
+
+### Runtime boundary
+
+This phase is available only when the user provides local export files or local
+export folders. Do not sign in to AI apps, scrape web sessions, request account
+cookies, or infer private conversation history from another source.
+
+Convert selected export records into reviewed Markdown pages in a local staging
+folder, then import those pages with:
+
+```bash
+voltmind import /path/to/staged-conversations --no-embed --source-id <source-id>
+```
+
+Use `voltmind extract-conversation-facts --source-id <source-id> --dry-run` only
+as a preview when the pages are already in VoltMind and the user wants fact
+extraction. Apply writes only after review and citation checks.
+
+### Processing
+
+For each conversation:
+1. **Assess significance** (1-5 scale):
+   - 1 = Pure utility (how-tos, quick lookups) → skip or minimal page
+   - 2 = Minor context → 1-paragraph note
+   - 3 = Notable (reveals interests, building something) → full page
+   - 4 = Important (deep personal processing, strategic thinking) → rich page
+   - 5 = Defining (identity work, breakthrough insights) → full treatment
+2. **Extract entities** — people, companies, concepts discussed
+3. **Capture original thinking** — the user's exact phrasing is the signal.
+   Never paraphrase.
+4. **File by primary subject** — not in a "conversations/" dump. A conversation
+   about a person goes to people/, about a concept goes to concepts/, etc.
+
+### Quality rule
+
+Only import conversations rated 3+. The brain is for signal, not noise.
+
+## Phase 6: Existing Markdown / Obsidian Import
+
+**The highest-leverage first import.** If the user already has a notes system, this
+is hundreds or thousands of structured pages ready to go.
+
+### Discovery
+
+Use platform-appropriate local file discovery. Prefer asking the user for the
+candidate notes/vault directory; if they want help finding it, scan likely local
+folders read-only and ignore `.git`, `.obsidian`, `node_modules`, and generated
+build directories. Do not run web, cloud-drive, or archive crawlers as part of
+MVP cold start.
+
+Before importing, confirm the target source:
+
+```bash
+voltmind sources current
+voltmind sources list
+```
+
+### Import
+
+```bash
+# For markdown directories, including Obsidian vaults treated as markdown
+voltmind import /path/to/dir --no-embed --workers 4 --source-id <source-id>
+
+# Verify
+voltmind stats
+voltmind search "<topic from the imported data>"
+```
+
+### Post-import
+
+- Preview link and timeline extraction before writing:
+  `voltmind extract all --source db --source-id <source-id> --dry-run`
+- Run extraction after review:
+  `voltmind extract all --source db --source-id <source-id>`
+- Start embeddings only after approval/provider readiness:
+  `voltmind embed --stale`
+
+> **Track progress** by writing `cold-start-state.json` under
+> `VOLTMIND_HOME` or the default `~/.voltmind` directory. Use the unified
+> schema below so resume picks up correctly:
+> ```json
+> {
+>   "started": "2026-06-11T10:00:00+08:00",
+>   "phases_completed": [0, 6],
+>   "phases_skipped": [],
+>   "total_pages_created": 0,
+>   "total_pages_updated": 0,
+>   "total_entities_linked": 0,
+>   "next_phase": 1
+> }
+> ```
+
+Set `next_phase` to the first missing approved phase id. Use `null` only when
+there are no remaining approved phases to run.
+
+Note: every phase writes the **same** file with an appended `phases_completed`
+entry and an updated numeric `next_phase`. Do not use a separate
+`phase_N_complete` field anywhere; that fragments state and lets two phases
+clobber each other.
+
+### Phase state ids
+
+Use one numbering convention in `cold-start-state.json`:
+
+| Phase id | Meaning |
+|----------|---------|
+| 0 | Microsoft connector scope and consent |
+| 1 | Outlook Calendar |
+| 2 | Outlook Email |
+| 3 | Microsoft Teams |
+| 4 | Cross-source reconciliation |
+| 5 | Conversation exports |
+| 6 | Existing Markdown / Obsidian import |
+
+`phases_completed` and `phases_skipped` are arrays of these numeric ids.
+`next_phase` is the next numeric id to run, or `null` when cold start is done.
+Do not write older string values such as `"cross_source_reconciliation"` into
+`next_phase`; the resume protocol should map any legacy string it encounters to
+the numeric id once, then rewrite the state file in the unified schema.
+
+
 ## Post-Bootstrap Checklist
 
 After completing available phases:
@@ -473,14 +617,14 @@ After completing available phases:
    voltmind embed --stale
    ```
 
-5. **Track state:**
+5. **Track state** (write the unified state file once, after all phases; resume
+   reads the same file):
 
    ```json
-   // VOLTMIND_HOME/cold-start-state.json
    {
      "started": "2026-06-11T10:00:00+08:00",
-     "sources_completed": ["outlook_calendar", "outlook_email", "teams"],
-     "sources_skipped": [],
+     "phases_completed": [0, 1, 2, 3, 4, 5, 6],
+     "phases_skipped": [],
      "calendar_window_days": 90,
      "email_strategy": "sent_flagged_active_threads",
      "teams_fetch": {
@@ -499,9 +643,18 @@ After completing available phases:
      "total_pages_created": 0,
      "total_pages_updated": 0,
      "total_entities_linked": 0,
-     "next_phase": "cross_source_reconciliation"
+     "next_phase": null
    }
    ```
+
+   This is the same file written after every phase (just with the smaller
+   `phases_completed` subset and the current numeric `next_phase`). The older
+   string-style `next_phase` and source-specific nested progress blocks are not
+   redundant with `phases_completed`: `phases_completed` decides which phases
+   are done, while nested blocks such as `teams_fetch` carry intra-phase resume
+   cursors. Keep those nested cursors only for phases that need them, and keep
+   `next_phase` numeric. VoltMind cold start uses Microsoft connectors directly;
+   there is no external orchestration field here.
 
 6. **Tell the user what to do next:**
 
@@ -540,14 +693,29 @@ After completing available phases:
 If the session is interrupted:
 
 1. Read `VOLTMIND_HOME/cold-start-state.json`.
-2. Skip completed sources and phases.
-3. Resume from `next_phase`.
+2. Skip any phase whose number is already in `phases_completed`; skip any phase
+   listed in `phases_skipped`.
+3. Resume from numeric `next_phase`, or compute the first missing phase id when
+   `next_phase` is null or absent.
 4. For Teams, resume each approved chat/channel from `teams_fetch.next_windows`
    and skip participants listed in `teams_profiles_completed`.
 5. Re-check user consent before reading any new mailbox, calendar, chat, or
    channel scope.
 6. Run `voltmind status`, `voltmind health`, and `voltmind stats` before
    continuing.
+
+If a legacy state file contains `next_phase` as a string, map it before
+continuing:
+
+| Legacy string | Numeric id |
+|---------------|------------|
+| `connector_scope` | 0 |
+| `outlook_calendar` | 1 |
+| `outlook_email` | 2 |
+| `microsoft_teams` | 3 |
+| `cross_source_reconciliation` | 4 |
+| `conversation_exports` | 5 |
+| `markdown_import` | 6 |
 
 The user should not have to repeat connector setup or re-import completed
 source windows.
@@ -582,15 +750,7 @@ Next: Phase N+1 — [description]. Ready to proceed?
 
 ## Tools Used
 
-- Outlook Calendar connector — list events, attendees, organizers, recurrence,
-  meeting metadata, and calendar windows approved by the user.
-- Outlook Email connector — search/list sampled messages and threads, inspect
-  sender/recipient/time/preview/body snippets, and extract actions from
-  approved mailbox scopes.
-- Microsoft Teams connector — inspect approved recent chats/channels with
-  bounded `day=5`, `top=100` loops for active rooms; fetch participant/contact
-  profile metadata where available; summarize threads; and extract decisions,
-  actions, people, projects, and blockers.
+
 - `search` / `voltmind search` — check for existing pages before creating.
 - `query` / `voltmind query` — hybrid search for entity and project
   deduplication after embeddings exist.
@@ -602,3 +762,12 @@ Next: Phase N+1 — [description]. Ready to proceed?
   entity and project timelines.
 - `sync_brain` / `voltmind sync --no-pull --no-embed` — sync changes to the
   index after each phase.
+- `voltmind import` — ingest reviewed local markdown/staged conversation pages.
+- `voltmind extract all --source db --source-id <source-id>` — rebuild links
+  and timeline entries for imported local pages after preview.
+- `voltmind extract-conversation-facts --source-id <source-id> --dry-run` —
+  preview fact extraction from imported conversation pages.
+- `voltmind embed --stale` — refresh embeddings after user approval and
+  provider readiness.
+- `voltmind status`, `voltmind health`, `voltmind stats`, and
+  `voltmind doctor --fast` — verify runtime health and import results.
