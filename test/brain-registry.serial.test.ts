@@ -12,7 +12,7 @@ import {
   type MountsFile,
   type MountEntry,
 } from '../src/core/brain-registry.ts';
-import { GBrainError } from '../src/core/types.ts';
+import { VoltMindError } from '../src/core/types.ts';
 
 /** Create a temp dir + write a mounts.json into it. Returns the path. */
 function tempMountsFile(contents: unknown): string {
@@ -46,10 +46,10 @@ describe('validateMountId', () => {
   });
 
   test('rejects empty / non-string', () => {
-    expect(() => validateMountId('')).toThrow(GBrainError);
-    expect(() => validateMountId(null as unknown as string)).toThrow(GBrainError);
-    expect(() => validateMountId(undefined as unknown as string)).toThrow(GBrainError);
-    expect(() => validateMountId(42 as unknown as string)).toThrow(GBrainError);
+    expect(() => validateMountId('')).toThrow(VoltMindError);
+    expect(() => validateMountId(null as unknown as string)).toThrow(VoltMindError);
+    expect(() => validateMountId(undefined as unknown as string)).toThrow(VoltMindError);
+    expect(() => validateMountId(42 as unknown as string)).toThrow(VoltMindError);
   });
 
   test('rejects reserved host id', () => {
@@ -231,7 +231,7 @@ describe('BrainRegistry — resolution', () => {
       throw new Error('expected throw');
     } catch (e) {
       expect(e).toBeInstanceOf(UnknownBrainError);
-      if (e instanceof GBrainError) {
+      if (e instanceof VoltMindError) {
         expect(e.cause_description).toContain('yc-media');
       }
     }

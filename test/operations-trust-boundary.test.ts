@@ -119,7 +119,7 @@ describe('mcpOperations filter — localOnly ops are excluded from the HTTP-expo
   //   const mcpOperations = operations.filter(op => !op.localOnly);
   // A localOnly op that leaks into mcpOperations is exposed via HTTP MCP
   // and bypasses the trust boundary. Pin the filter contract here so a
-  // regression surfaces as a structural test failure.
+    // regression surfaces as a structural test failure.
 
   test('the canonical filter excludes every localOnly op', () => {
     const mcpOps = operations.filter(op => !op.localOnly);
@@ -139,8 +139,9 @@ describe('mcpOperations filter — localOnly ops are excluded from the HTTP-expo
     // Pin every localOnly op by name so a refactor that flips localOnly off
     // on any of them fails this test even if the generic contract above
     // somehow regresses. Codex /ship review caught the original 4-name
-    // snapshot was missing purge_deleted_pages, get_recent_transcripts, and
-    // code_traversal_cache_clear — additions that already qualified.
+    // snapshot was missing purge_deleted_pages and code_traversal_cache_clear
+    // — additions that already qualified. get_recent_transcripts graduated to
+    // a public read-only retrieval-enrichment op.
     //
     // When adding a NEW localOnly op: add its name here too. The generic
     // contract above proves the filter rule applies; this list proves the
@@ -151,7 +152,6 @@ describe('mcpOperations filter — localOnly ops are excluded from the HTTP-expo
       'file_list',
       'file_url',
       'purge_deleted_pages',
-      'get_recent_transcripts',
       'code_traversal_cache_clear',
     ];
     const lookup = new Map(operations.map(op => [op.name, op] as const));

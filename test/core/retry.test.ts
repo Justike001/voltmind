@@ -33,9 +33,9 @@ import {
   RetryAbortError,
 } from '../../src/core/retry.ts';
 
-// Minimal GBrainError shape mirrors the typed problem/detail fields from
+// Minimal VoltMindError shape mirrors the typed problem/detail fields from
 // db.ts:getConnection so the retry-matcher extension recognizes it.
-class FakeGBrainError extends Error {
+class FakeVoltMindError extends Error {
   problem: string;
   detail: string;
   constructor(problem: string, detail: string) {
@@ -46,13 +46,13 @@ class FakeGBrainError extends Error {
 }
 
 describe('isRetryableConnError extension (v0.41.2.1, re-exported from retry.ts)', () => {
-  test('GBrainError with problem="No database connection" is retryable', () => {
-    const err = new FakeGBrainError('No database connection', 'connect() has not been called');
+  test('VoltMindError with problem="No database connection" is retryable', () => {
+    const err = new FakeVoltMindError('No database connection', 'connect() has not been called');
     expect(isRetryableConnError(err)).toBe(true);
   });
 
-  test('GBrainError with other problem is NOT retryable', () => {
-    const err = new FakeGBrainError('Schema mismatch', 'expected vector(1536), got vector(1024)');
+  test('VoltMindError with other problem is NOT retryable', () => {
+    const err = new FakeVoltMindError('Schema mismatch', 'expected vector(1536), got vector(1024)');
     expect(isRetryableConnError(err)).toBe(false);
   });
 
@@ -93,12 +93,12 @@ describe('withRetry primitive — v0.41.2.1 back-compat contract', () => {
     expect(calls).toBe(2);
   });
 
-  test('retries on GBrainError "No database connection"; second succeeds', async () => {
+  test('retries on VoltMindError "No database connection"; second succeeds', async () => {
     let calls = 0;
     const result = await withRetry(
       async () => {
         calls++;
-        if (calls === 1) throw new FakeGBrainError('No database connection', 'connect() has not been called');
+        if (calls === 1) throw new FakeVoltMindError('No database connection', 'connect() has not been called');
         return 'ok';
       },
       { delayMs: 0 },

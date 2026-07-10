@@ -35,7 +35,7 @@ interface ExpectedExport {
 const EXPECTED_EXPORTS: ExpectedExport[] = [
   { subpath: 'voltmind', canary: [] }, // root "." export; no single canary — just require import success
   { subpath: 'voltmind/engine', canary: ['clampSearchLimit', 'MAX_SEARCH_LIMIT'] },
-  { subpath: 'voltmind/types', canary: ['GBrainError'] },
+  { subpath: 'voltmind/types', canary: ['VoltMindError'] },
   { subpath: 'voltmind/operations', canary: ['operations', 'OperationError'] },
   { subpath: 'voltmind/minions', canary: [] }, // barrel module; re-exports many names
   { subpath: 'voltmind/engine-factory', canary: [] }, // factory exports a default creator

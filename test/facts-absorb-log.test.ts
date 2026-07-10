@@ -125,12 +125,12 @@ describe('writeFactsAbsorbLog — ingest_log row shape', () => {
 // v0.39.3.0 WARN-4 + CQ1 + CV13 — disconnected-engine suppression.
 // Pre-fix: '[facts:absorb] failed to log gateway_error for inbox/...: No
 // database connection' fired loudly after every voltmind capture. Per CQ1
-// suppress via typed access (instanceof GBrainError && .problem) NOT
+// suppress via typed access (instanceof VoltMindError && .problem) NOT
 // string-match on .message. CV13 prints ONE first-occurrence stack
 // trace so the next user report can diagnose the wiring bug in v0.38.4.
 describe('writeFactsAbsorbLog — WARN-4 disconnected-engine suppression (CQ1 + CV13)', () => {
   // Mock engine that simulates a disconnected state on logIngest. Uses
-  // the same GBrainError shape src/core/db.ts:151-158 throws.
+  // the same VoltMindError shape src/core/db.ts:151-158 throws.
   function makeDisconnectedEngine(): {
     engine: import('../src/core/engine.ts').BrainEngine;
     callCount: () => number;
@@ -142,8 +142,8 @@ describe('writeFactsAbsorbLog — WARN-4 disconnected-engine suppression (CQ1 + 
           calls++;
           // Throw the EXACT shape src/core/db.ts:151-158 throws when
           // `sql` is null (engine not connected yet).
-          const { GBrainError } = await import('../src/core/types.ts');
-          throw new GBrainError(
+          const { VoltMindError } = await import('../src/core/types.ts');
+          throw new VoltMindError(
             'No database connection',
             'connect() has not been called',
             'Run voltmind init --supabase or voltmind init --url <connection_string>',
@@ -160,7 +160,7 @@ describe('writeFactsAbsorbLog — WARN-4 disconnected-engine suppression (CQ1 + 
     } as unknown as import('../src/core/engine.ts').BrainEngine;
   }
 
-  test('GBrainError problem="No database connection" SUPPRESSED after first occurrence', async () => {
+  test('VoltMindError problem="No database connection" SUPPRESSED after first occurrence', async () => {
     const { _resetFactsAbsorbDisconnectedFlagForTests } = await import('../src/core/facts/absorb-log.ts');
     _resetFactsAbsorbDisconnectedFlagForTests();
 
@@ -192,7 +192,7 @@ describe('writeFactsAbsorbLog — WARN-4 disconnected-engine suppression (CQ1 + 
     }
   });
 
-  test('GBrainError with DIFFERENT problem still warns loudly (not the suppressed class)', async () => {
+  test('VoltMindError with DIFFERENT problem still warns loudly (not the suppressed class)', async () => {
     const { _resetFactsAbsorbDisconnectedFlagForTests } = await import('../src/core/facts/absorb-log.ts');
     _resetFactsAbsorbDisconnectedFlagForTests();
 
@@ -201,8 +201,8 @@ describe('writeFactsAbsorbLog — WARN-4 disconnected-engine suppression (CQ1 + 
     console.warn = (msg: unknown) => { warnSpy.push(String(msg)); };
 
     try {
-      const { GBrainError } = await import('../src/core/types.ts');
-      const otherError = new GBrainError(
+      const { VoltMindError } = await import('../src/core/types.ts');
+      const otherError = new VoltMindError(
         'Connection pool exhausted',
         'all connections in use',
         'Increase pool size or wait',
@@ -218,7 +218,7 @@ describe('writeFactsAbsorbLog — WARN-4 disconnected-engine suppression (CQ1 + 
     }
   });
 
-  test('non-GBrainError (plain Error) still warns loudly', async () => {
+  test('non-VoltMindError (plain Error) still warns loudly', async () => {
     const { _resetFactsAbsorbDisconnectedFlagForTests } = await import('../src/core/facts/absorb-log.ts');
     _resetFactsAbsorbDisconnectedFlagForTests();
 

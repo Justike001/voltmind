@@ -1,10 +1,10 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { writeFileSync, mkdirSync, rmSync, symlinkSync, mkdtempSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, symlinkSync, mkdtempSync } from 'fs';
 import { join, basename } from 'path';
 import { createHash } from 'crypto';
 import { extname } from 'path';
 import { tmpdir } from 'os';
-import { collectFiles } from '../src/commands/files.ts';
+import { collectFiles, runFiles } from '../src/commands/files.ts';
 
 const TMP = join(import.meta.dir, '.tmp-files-test');
 
@@ -31,6 +31,67 @@ function getMimeType(filePath: string): string | null {
 
 function fileHash(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex');
+}
+
+function createFilesHome() {
+  const home = mkdtempSync(join(tmpdir(), 'voltmind-files-home-'));
+  const storageRoot = join(home, 'storage');
+  const configDir = join(home, '.voltmind');
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(join(configDir, 'config.json'), JSON.stringify({
+    engine: 'pglite',
+    database_path: join(home, 'brain.db'),
+    storage: {
+      backend: 'local',
+      bucket: 'brain-files',
+      localPath: storageRoot,
+    },
+  }));
+  return { home, storageRoot };
+}
+
+async function withVoltmindHome<T>(home: string, fn: () => Promise<T> | T): Promise<T> {
+  const oldHome = process.env.VOLTMIND_HOME;
+  const oldDatabaseUrl = process.env.VOLTMIND_DATABASE_URL;
+  const oldDatabaseUrlGeneric = process.env.DATABASE_URL;
+  process.env.VOLTMIND_HOME = home;
+  delete process.env.VOLTMIND_DATABASE_URL;
+  delete process.env.DATABASE_URL;
+  try {
+    return await fn();
+  } finally {
+    if (oldHome === undefined) delete process.env.VOLTMIND_HOME;
+    else process.env.VOLTMIND_HOME = oldHome;
+    if (oldDatabaseUrl === undefined) delete process.env.VOLTMIND_DATABASE_URL;
+    else process.env.VOLTMIND_DATABASE_URL = oldDatabaseUrl;
+    if (oldDatabaseUrlGeneric === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = oldDatabaseUrlGeneric;
+  }
+}
+
+async function captureStdout<T>(fn: () => Promise<T> | T): Promise<{ stdout: string; result: T }> {
+  const oldLog = console.log;
+  const lines: string[] = [];
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(' '));
+  };
+  try {
+    const result = await fn();
+    return { stdout: lines.join('\n'), result };
+  } finally {
+    console.log = oldLog;
+  }
+}
+
+function trySymlink(target: string, path: string): boolean {
+  try {
+    symlinkSync(target, path);
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'EPERM' || code === 'EACCES') return false;
+    throw err;
+  }
 }
 
 beforeAll(() => {
@@ -161,7 +222,7 @@ describe('collectFiles (production import)', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-symlink-'));
     try {
       writeFileSync(join(tmpDir, 'real.txt'), 'content');
-      symlinkSync('/etc/passwd', join(tmpDir, 'evil.txt'));
+      if (!trySymlink('/etc/passwd', join(tmpDir, 'evil.txt'))) return;
       const files = collectFiles(tmpDir);
       expect(files.map(f => basename(f))).toContain('real.txt');
       expect(files.map(f => basename(f))).not.toContain('evil.txt');
@@ -174,7 +235,7 @@ describe('collectFiles (production import)', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-broken-'));
     try {
       writeFileSync(join(tmpDir, 'real.txt'), 'content');
-      symlinkSync('/nonexistent/path', join(tmpDir, 'broken.txt'));
+      if (!trySymlink('/nonexistent/path', join(tmpDir, 'broken.txt'))) return;
       const files = collectFiles(tmpDir);
       expect(files.map(f => basename(f))).toContain('real.txt');
       expect(files.map(f => basename(f))).not.toContain('broken.txt');
@@ -194,6 +255,72 @@ describe('collectFiles (production import)', () => {
       expect(files.map(f => basename(f))).not.toContain('pkg.js');
     } finally {
       rmSync(tmpDir, { recursive: true });
+    }
+  });
+});
+
+describe('runFiles migration lifecycle', () => {
+  test('mirror uploads files and redirect replaces them with pointers', async () => {
+    const { home, storageRoot } = createFilesHome();
+    const dir = join(home, 'source');
+    try {
+      mkdirSync(join(dir, 'sub'), { recursive: true });
+      writeFileSync(join(dir, 'photo.jpg'), 'fake-jpg');
+      writeFileSync(join(dir, 'sub', 'doc.pdf'), 'fake-pdf');
+      writeFileSync(join(dir, 'note.md'), '# stays local');
+
+      await withVoltmindHome(home, async () => {
+        await captureStdout(() => runFiles(null as never, ['mirror', dir]));
+        expect(existsSync(join(dir, '.supabase'))).toBe(true);
+        expect(readFileSync(join(storageRoot, 'photo.jpg'), 'utf8')).toBe('fake-jpg');
+        expect(readFileSync(join(storageRoot, 'sub', 'doc.pdf'), 'utf8')).toBe('fake-pdf');
+
+        await captureStdout(() => runFiles(null as never, ['redirect', dir]));
+        expect(existsSync(join(dir, 'photo.jpg'))).toBe(false);
+        expect(existsSync(join(dir, 'photo.jpg.redirect.yaml'))).toBe(true);
+        expect(existsSync(join(dir, 'sub', 'doc.pdf'))).toBe(false);
+        expect(existsSync(join(dir, 'sub', 'doc.pdf.redirect.yaml'))).toBe(true);
+        expect(existsSync(join(dir, 'note.md'))).toBe(true);
+      });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test('clean removes redirect breadcrumbs after confirmation', async () => {
+    const { home } = createFilesHome();
+    const dir = join(home, 'source');
+    try {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'photo.jpg.redirect.yaml'), 'target: supabase://brain-files/photo.jpg\n');
+      writeFileSync(join(dir, 'note.md'), '# stays local');
+
+      await withVoltmindHome(home, async () => {
+        await captureStdout(() => runFiles(null as never, ['clean', dir, '--yes']));
+      });
+
+      expect(existsSync(join(dir, 'photo.jpg.redirect.yaml'))).toBe(false);
+      expect(existsSync(join(dir, 'note.md'))).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test('upload-raw keeps small non-media files in git without requiring a DB', async () => {
+    const { home } = createFilesHome();
+    const file = join(home, 'raw.txt');
+    try {
+      writeFileSync(file, 'small text');
+      const { stdout } = await withVoltmindHome(home, () =>
+        captureStdout(() => runFiles(null as never, ['upload-raw', file, '--page', 'inbox/raw']))
+      );
+      const result = JSON.parse(stdout) as { success: boolean; storage: string; path: string };
+      expect(result.success).toBe(true);
+      expect(result.storage).toBe('git');
+      expect(result.path).toBe(file);
+      expect(existsSync(file + '.redirect.yaml')).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
     }
   });
 });

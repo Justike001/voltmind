@@ -74,9 +74,9 @@ describe('v0.29 — get_recent_transcripts description', () => {
     expect(GET_RECENT_TRANSCRIPTS_DESCRIPTION).toContain("canonical source");
   });
 
-  test('discloses the local-only constraint to the LLM', () => {
-    expect(GET_RECENT_TRANSCRIPTS_DESCRIPTION).toContain("Local-only");
-    expect(GET_RECENT_TRANSCRIPTS_DESCRIPTION).toContain("permission_denied");
+  test('discloses the read-only constraint to the LLM', () => {
+    expect(GET_RECENT_TRANSCRIPTS_DESCRIPTION).toContain("Read-only");
+    expect(GET_RECENT_TRANSCRIPTS_DESCRIPTION).toContain("does not import");
   });
 });
 
@@ -111,17 +111,14 @@ describe('v0.29 — subagent allow-list', () => {
     expect(BRAIN_TOOL_ALLOWLIST.has('find_anomalies')).toBe(true);
   });
 
-  test('excludes get_recent_transcripts (codex C3 — would be a remote=true footgun)', () => {
-    // The op throws permission_denied for remote=true callers, and all subagent
-    // calls run with remote=true. Including it in the allow-list would mean
-    // every subagent call to it returns an error — looks like a bug.
-    expect(BRAIN_TOOL_ALLOWLIST.has('get_recent_transcripts')).toBe(false);
+  test('includes get_recent_transcripts as a read-only retrieval enrichment tool', () => {
+    expect(BRAIN_TOOL_ALLOWLIST.has('get_recent_transcripts')).toBe(true);
   });
 
   test('all v0.29 ops in the allow-list resolve to a registered Operation', () => {
     // brain-allowlist invariant: every name maps to an entry in operations.ts
     // OPERATIONS array. This guard catches rename drift.
-    for (const name of ['get_recent_salience', 'find_anomalies']) {
+    for (const name of ['get_recent_salience', 'find_anomalies', 'get_recent_transcripts']) {
       expect(operationsByName[name]).toBeDefined();
     }
   });
@@ -134,7 +131,7 @@ describe('v0.29 — subagent allow-list', () => {
 });
 
 describe('v0.29 — operations array carries the three new ops', () => {
-  test('all three are registered (one allow-listed pair + one local-only)', () => {
+  test('all three are registered as retrieval readouts', () => {
     const names = operations.map(o => o.name);
     expect(names).toContain('get_recent_salience');
     expect(names).toContain('find_anomalies');

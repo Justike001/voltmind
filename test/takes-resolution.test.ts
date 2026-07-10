@@ -10,7 +10,7 @@ import {
   finalizeScorecard,
   PARTIAL_RATE_WARNING_THRESHOLD,
 } from '../src/core/takes-resolution.ts';
-import { GBrainError } from '../src/core/types.ts';
+import { VoltMindError } from '../src/core/types.ts';
 
 describe('deriveResolutionTuple', () => {
   test('quality=correct → (correct, true)', () => {
@@ -59,16 +59,16 @@ describe('deriveResolutionTuple', () => {
   test('contradictory quality + outcome throws TAKE_RESOLUTION_INVALID', () => {
     expect(() =>
       deriveResolutionTuple({ quality: 'correct', outcome: false, resolvedBy: 'garry' })
-    ).toThrow(GBrainError);
+    ).toThrow(VoltMindError);
     expect(() =>
       deriveResolutionTuple({ quality: 'partial', outcome: true, resolvedBy: 'garry' })
-    ).toThrow(GBrainError);
+    ).toThrow(VoltMindError);
   });
 
   test('neither field set throws TAKE_RESOLUTION_INVALID', () => {
     expect(() =>
       deriveResolutionTuple({ resolvedBy: 'garry' })
-    ).toThrow(GBrainError);
+    ).toThrow(VoltMindError);
   });
 
   // v0.36.1.1 R1-class: 'unresolvable' joins partial as null-outcome.
@@ -85,10 +85,10 @@ describe('deriveResolutionTuple', () => {
     // same shape as partial.
     expect(() =>
       deriveResolutionTuple({ quality: 'unresolvable', outcome: true, resolvedBy: 'garry' })
-    ).toThrow(GBrainError);
+    ).toThrow(VoltMindError);
     expect(() =>
       deriveResolutionTuple({ quality: 'unresolvable', outcome: false, resolvedBy: 'garry' })
-    ).toThrow(GBrainError);
+    ).toThrow(VoltMindError);
   });
 });
 

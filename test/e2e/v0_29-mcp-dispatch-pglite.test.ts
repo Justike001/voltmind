@@ -9,8 +9,8 @@
  *   2. buildOperationContext (ctx.remote, ctx.engine, ctx.config wiring)
  *   3. handler invocation + JSON serialization (ToolResult shape)
  *   4. Error path: OperationError → isError + JSON envelope
- *   5. Trust gate: ctx.remote === true on get_recent_transcripts must
- *      reach the handler and produce a permission_denied error.
+ *   5. Retrieval readout: ctx.remote === true on get_recent_transcripts
+ *      reaches the handler and succeeds as a read-only op.
  *
  * Runs against PGLite in-memory. No DATABASE_URL, no API keys.
  */
@@ -108,20 +108,14 @@ describe('v0.29 E2E — dispatchToolCall for the three new ops', () => {
     }
   });
 
-  test('get_recent_transcripts rejects with permission_denied when ctx.remote === true', async () => {
-    // Defense-in-depth: even though serve-http filters localOnly: true ops
-    // out of the MCP tool list, the in-handler ctx.remote check is the
-    // last line. dispatchToolCall defaults remote=true, which is what
-    // every MCP transport sets, so the reject must fire here.
+  test('get_recent_transcripts succeeds when ctx.remote === true', async () => {
     const result = await dispatchToolCall(engine, 'get_recent_transcripts', {
       days: 7,
     }, { remote: true });
 
-    expect(result.isError).toBe(true);
-    const err = JSON.parse(result.content[0].text);
-    // OperationError.toJSON() serializes the code as `error:`, not `code:`.
-    expect(err.error).toBe('permission_denied');
-    expect(err.message.toLowerCase()).toContain('local-only');
+    expect(result.isError).toBeFalsy();
+    const rows = JSON.parse(result.content[0].text);
+    expect(Array.isArray(rows)).toBe(true);
   });
 
   test('get_recent_transcripts succeeds when ctx.remote === false (CLI path)', async () => {

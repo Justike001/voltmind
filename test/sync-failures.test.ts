@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe('Bug 9 — sync-failures JSONL helpers', () => {
-  test('recordSyncFailures appends one line per failure with dedup', async () => {
+  test('recordSyncFailures upserts per path and tracks attempts', async () => {
     const { recordSyncFailures, loadSyncFailures, syncFailuresPath } = await import('../src/core/sync.ts');
 
     recordSyncFailures([
@@ -61,11 +61,15 @@ describe('Bug 9 — sync-failures JSONL helpers', () => {
     ], 'abc123def456');
     expect(loadSyncFailures().length).toBe(2);
 
-    // Different commit → new entry.
+    // Different commit for the same path updates the row and increments attempts.
     recordSyncFailures([
       { path: 'people/alice.md', error: 'YAML: unexpected colon in title' },
     ], 'zzz999');
-    expect(loadSyncFailures().length).toBe(3);
+    const updated = loadSyncFailures();
+    expect(updated.length).toBe(2);
+    const alice = updated.find(e => e.path === 'people/alice.md');
+    expect(alice?.commit).toBe('zzz999');
+    expect(alice?.attempts).toBe(3);
   });
 
   test('acknowledgeSyncFailures marks unacked entries, leaves acked alone', async () => {

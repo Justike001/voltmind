@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'fs';
-import { mkdtemp, mkdir, readFile, rm, unlink, writeFile } from 'fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, rm, unlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -19,8 +19,10 @@ import {
   getActionPlan,
   normalizeActionRelatedQueryHits,
   normalizeActionPlan,
+  runAction,
   saveUserActionToolRoute,
   saveActionPlan,
+  scanPendingInteractiveActionRuns,
   scanActions,
   updateActionFields,
   updateActionStatus,
@@ -30,14 +32,20 @@ import { runActions } from '../src/commands/actions.ts';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import {
   buildCodexExecArgs,
-  buildCodexInteractiveArgs,
-  buildCodexInteractiveLaunch,
-  resolveCodexInteractiveCommand,
+  buildCraftHeadlessArgs,
+  CodexExecutor,
+  CraftHeadlessExecutor,
+  summarizeCodexExecEvents,
+  parseCraftStreamEvent,
+  resolveExecutor,
+  summarizeCraftHeadlessEvents,
+  writeCodexExecResult,
+  writeCraftHeadlessResult,
   writeInteractiveActionPromptFiles,
   type ActionExecutionResult,
   type InteractiveActionRunEnvelope,
 } from '../src/core/action-executor.ts';
-import { parseExecutionOutcome } from '../src/core/action-runner.ts';
+import { DefaultActionRunner, parseExecutionOutcome } from '../src/core/action-runner.ts';
 import { routeActionToolsFromRegistry } from '../src/core/action-tool-router.ts';
 import type { PluginRegistry } from '../src/core/plugin-registry.ts';
 import { generateAdminActionPlan } from '../src/commands/serve-http.ts';
@@ -125,6 +133,43 @@ function registry(plugins: Array<{
   return { plugins: descriptors, skillIndex, toolIndex };
 }
 
+function codexEnvelopeFor(dir: string, runId = 188): InteractiveActionRunEnvelope {
+  return {
+    runId,
+    sourceId: 'default',
+    slug: 'state/actions/codex-exec',
+    nonce: `codex-nonce-${runId}`,
+    actionDir: dir,
+    promptPath: join(dir, 'prompt.md'),
+    requestPath: join(dir, 'request.json'),
+    resultPath: join(dir, 'result.json'),
+    eventsPath: join(dir, 'events.jsonl'),
+    launcherPath: join(dir, 'launcher.json'),
+    executionContextPath: join(dir, 'execution-context.json'),
+    stdoutLogPath: join(dir, 'stdout.log'),
+    stderrLogPath: join(dir, 'stderr.log'),
+    transcriptPath: join(dir, 'transcript.log'),
+    initiator: 'admin-ui',
+  };
+}
+
+async function installFakeCodexOnPath(dir: string, jsBody: string): Promise<{ pathKey: string; oldPath: string | undefined }> {
+  const fakeJs = join(dir, 'fake-codex-bin.js');
+  await writeFile(fakeJs, jsBody, 'utf-8');
+  const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
+  const oldPath = process.env[pathKey];
+  if (process.platform === 'win32') {
+    const cmd = join(dir, 'codex.cmd');
+    await writeFile(cmd, `@echo off\r\n"${process.execPath}" "${fakeJs}" %*\r\n`, 'utf-8');
+  } else {
+    const sh = join(dir, 'codex');
+    await writeFile(sh, `#!/bin/sh\n"${process.execPath}" "${fakeJs}" "$@"\n`, 'utf-8');
+    await chmod(sh, 0o755);
+  }
+  process.env[pathKey] = oldPath ? `${dir}${process.platform === 'win32' ? ';' : ':'}${oldPath}` : dir;
+  return { pathKey, oldPath };
+}
+
 describe('VoltMind actions policy', () => {
   test('allows low-risk draft-only agent-assisted action', () => {
     expect(evaluateActionPolicy(action()).allowed).toBe(true);
@@ -184,9 +229,11 @@ describe('VoltMind Codex Apps connector execution', () => {
     expect(args).toContain('exec');
     expect(args).toContain('--enable');
     expect(args).toContain('apps');
+    expect(args).toContain('plugins');
     expect(args).toContain('--json');
     expect(args).toContain('--sandbox');
-    expect(args).toContain('read-only');
+    expect(args).toContain('danger-full-access');
+    expect(args).not.toContain('read-only');
     expect(args).toContain('-c');
     expect(args).toContain('approval_policy="never"');
     expect(args).toContain('apps._default.enabled=true');
@@ -201,35 +248,106 @@ describe('VoltMind Codex Apps connector execution', () => {
     expect(args).not.toContain('apps._default.default_tools_approval_mode="approve"');
   });
 
-  test('Codex interactive args avoid connector-hydration overrides', () => {
-    const args = buildCodexInteractiveArgs('E:\\gbrain\\VoltMind', 'E:\\gbrain\\VoltMind\\.voltmind-codex-interactive-test\\action-prompt.md');
-
-    expect(args).toContain('--cd');
-    expect(args).toContain('E:\\gbrain\\VoltMind');
-    expect(args).not.toContain('--enable');
-    expect(args).not.toContain('apps');
-    expect(args).not.toContain('--sandbox');
-    expect(args).not.toContain('read-only');
-    expect(args).not.toContain('--json');
-    expect(args).not.toContain('exec');
-    expect(args).not.toContain('approval_policy="never"');
-    expect(args).not.toContain('apps.microsoft_outlook_email.default_tools_approval_mode="prompt"');
-    expect(args).not.toContain('--add-dir');
-    expect(args[args.length - 1]).toBe('Read and execute the VoltMind action prompt from this file: E:\\gbrain\\VoltMind\\.voltmind-codex-interactive-test\\action-prompt.md');
+  test('resolver no longer exposes a Codex interactive runtime', () => {
+    expect(() => resolveExecutor('codex_interactive')).toThrow('Runtime "codex_interactive" is not implemented in Phase 1');
   });
 
-  test('Codex interactive command can use an explicit binary path', () => {
-    expect(resolveCodexInteractiveCommand({ VOLTMIND_CODEX_BIN: 'C:\\Tools\\codex.exe' })).toBe('C:\\Tools\\codex.exe');
+  test('Codex exec JSONL events map to writeback status and markers', async () => {
+    const done = summarizeCodexExecEvents([
+      {
+        type: 'item.completed',
+        item: {
+          type: 'agent_message',
+          text: 'VOLTMIND_RESULT_STATUS: done\nVOLTMIND_RESULT_SUMMARY: Codex draft created.\nVOLTMIND_ARTIFACT_REF: artifact://codex-draft',
+        },
+      },
+      { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } },
+    ]);
+    expect(done.status).toBe('done');
+    expect(done.summary).toBe('Codex draft created.');
+    expect(done.artifactRefs).toContain('artifact://codex-draft');
+
+    const failed = summarizeCodexExecEvents([{ type: 'turn.failed', error: { message: 'boom' } }], { exitCode: 1 });
+    expect(failed.status).toBe('failed');
+    expect(failed.errors.join('\n')).toContain('boom');
+
+    const dir = await mkdtemp(join(tmpdir(), 'voltmind-codex-result-'));
+    try {
+      const envelope = codexEnvelopeFor(dir);
+      await mkdir(dir, { recursive: true });
+      await writeCodexExecResult(envelope, done);
+      expect(existsSync(`${envelope.resultPath}.tmp`)).toBe(false);
+      const result = JSON.parse(await readFile(envelope.resultPath, 'utf-8')) as Record<string, unknown>;
+      expect(result).toMatchObject({
+        action_run_id: 188,
+        source_id: 'default',
+        slug: 'state/actions/codex-exec',
+        nonce: 'codex-nonce-188',
+        status: 'done',
+        summary: 'Codex draft created.',
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
-  test('Codex interactive launch wraps PowerShell ps1 shims without shell splitting', () => {
-    const launch = buildCodexInteractiveLaunch(['--enable', 'apps', 'Read and execute file C:\\Temp\\action-prompt.md'], {
-      VOLTMIND_CODEX_BIN: 'C:\\Users\\example\\AppData\\Roaming\\npm\\codex.ps1',
-    });
-    expect(launch.command.toLowerCase()).toContain('powershell');
-    expect(launch.args).toContain('-File');
-    expect(launch.args).toContain('C:\\Users\\example\\AppData\\Roaming\\npm\\codex.ps1');
-    expect(launch.args[launch.args.length - 1]).toBe('Read and execute file C:\\Temp\\action-prompt.md');
+  test('fake Codex exec process writes done result for watcher finalization', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'voltmind-codex-fake-'));
+    try {
+      const fake = join(dir, 'fake-codex.js');
+      await writeFile(fake, [
+        "process.stdin.resume();",
+        "process.stdin.on('end', () => {",
+        "  console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'VOLTMIND_RESULT_STATUS: done\\nVOLTMIND_RESULT_SUMMARY: Fake Codex completed.\\nVOLTMIND_ARTIFACT_REF: artifact://fake-codex' } }));",
+        "  console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));",
+        "});",
+      ].join('\n'), 'utf-8');
+      const envelope = codexEnvelopeFor(dir);
+      const executor = new CodexExecutor({ command: process.execPath, baseArgs: [fake] });
+      const result = await executor.execute({
+        prompt: 'Create a draft artifact.',
+        toolScope: { allowed: [], blocked: [] },
+        interactiveRun: envelope,
+        timeoutMs: 5_000,
+      });
+      expect(result.kind).toBe('codex_exec');
+      expect(result.writebackStatus).toBe('result_written');
+      const writeback = JSON.parse(await readFile(envelope.resultPath, 'utf-8')) as Record<string, unknown>;
+      expect(writeback.status).toBe('done');
+      expect(writeback.summary).toBe('Fake Codex completed.');
+      expect(writeback.artifact_refs).toEqual(['artifact://fake-codex']);
+      const events = await readFile(envelope.eventsPath, 'utf-8');
+      expect(events).toContain('codex_exec_started');
+      expect(events).toContain('codex_exec_event_seen');
+      expect(events).toContain('codex_exec_complete');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fake Codex exec timeout writes failed result', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'voltmind-codex-timeout-'));
+    try {
+      const fake = join(dir, 'fake-codex-timeout.js');
+      await writeFile(fake, 'setTimeout(() => {}, 10000);\n', 'utf-8');
+      const envelope = codexEnvelopeFor(dir);
+      const executor = new CodexExecutor({ command: process.execPath, baseArgs: [fake] });
+      const result = await executor.execute({
+        prompt: 'This should time out.',
+        toolScope: { allowed: [], blocked: [] },
+        interactiveRun: envelope,
+        timeoutMs: 50,
+      });
+      expect(result.writebackStatus).toBe('result_written');
+      const writeback = JSON.parse(await readFile(envelope.resultPath, 'utf-8')) as Record<string, unknown>;
+      expect(writeback.status).toBe('failed');
+      expect(String((writeback.errors as string[]).join('\n'))).toContain('codex_exec_timeout');
+      const events = await readFile(envelope.eventsPath, 'utf-8');
+      expect(events).toContain('codex_exec_timeout');
+      expect(events).toContain('codex_exec_error');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   test('JSONL connector cancellation fails the action outcome', () => {
@@ -303,6 +421,147 @@ describe('VoltMind Codex Apps connector execution', () => {
   });
 });
 
+describe('VoltMind Craft headless executor', () => {
+  function craftEnvelopeFor(dir: string, runId = 88): InteractiveActionRunEnvelope {
+    return {
+      runId,
+      sourceId: 'default',
+      slug: 'state/actions/craft-headless',
+      nonce: `craft-nonce-${runId}`,
+      actionDir: dir,
+      promptPath: join(dir, 'prompt.md'),
+      requestPath: join(dir, 'request.json'),
+      resultPath: join(dir, 'result.json'),
+      eventsPath: join(dir, 'events.jsonl'),
+      launcherPath: join(dir, 'launcher.json'),
+      executionContextPath: join(dir, 'execution-context.json'),
+      stdoutLogPath: join(dir, 'stdout.log'),
+      stderrLogPath: join(dir, 'stderr.log'),
+      transcriptPath: join(dir, 'transcript.log'),
+      initiator: 'admin-ui',
+    };
+  }
+
+  test('resolver and args expose craft_headless runtime', () => {
+    expect(resolveExecutor('craft_headless').kind).toBe('craft_headless');
+    const args = buildCraftHeadlessArgs('C:\\tmp\\action', {
+      VOLTMIND_CRAFT_SOURCE_SLUGS: 'outlook-email,teams,bad source',
+    });
+    expect(args).toEqual([
+      'run',
+      '--workspace-dir', 'C:\\tmp\\action',
+      '--output-format', 'stream-json',
+      '--no-cleanup',
+      '--source', 'outlook-email',
+      '--source', 'teams',
+    ]);
+  });
+
+  test('stream events map to writeback status and machine markers', () => {
+    expect(parseCraftStreamEvent('{"type":"complete"}')?.type).toBe('complete');
+    const done = summarizeCraftHeadlessEvents([
+      { type: 'text_delta', delta: 'VOLTMIND_RESULT_STATUS: done\nVOLTMIND_RESULT_SUMMARY: Draft created.\nVOLTMIND_ARTIFACT_REF: artifact://draft-1' },
+      { type: 'complete' },
+    ]);
+    expect(done.status).toBe('done');
+    expect(done.summary).toBe('Draft created.');
+    expect(done.artifactRefs).toContain('artifact://draft-1');
+
+    const failed = summarizeCraftHeadlessEvents([{ type: 'error', error: { message: 'boom' } }], { exitCode: 1 });
+    expect(failed.status).toBe('failed');
+    expect(failed.errors.join('\n')).toContain('boom');
+
+    const interrupted = summarizeCraftHeadlessEvents([{ type: 'interrupted' }]);
+    expect(interrupted.status).toBe('blocked');
+  });
+
+  test('writes result.json through tmp rename shape', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'voltmind-craft-result-'));
+    try {
+      const envelope = craftEnvelopeFor(dir);
+      await mkdir(dir, { recursive: true });
+      await writeCraftHeadlessResult(envelope, {
+        status: 'done',
+        summary: 'Adapter wrote the result.',
+        artifactRefs: ['artifact://craft'],
+        errors: [],
+      });
+      expect(existsSync(`${envelope.resultPath}.tmp`)).toBe(false);
+      const result = JSON.parse(await readFile(envelope.resultPath, 'utf-8')) as Record<string, unknown>;
+      expect(result).toMatchObject({
+        action_run_id: 88,
+        source_id: 'default',
+        slug: 'state/actions/craft-headless',
+        nonce: 'craft-nonce-88',
+        status: 'done',
+        summary: 'Adapter wrote the result.',
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fake Craft process writes a done result for watcher finalization', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'voltmind-craft-fake-'));
+    try {
+      const fake = join(dir, 'fake-craft.js');
+      await writeFile(fake, [
+        "process.stdin.resume();",
+        "process.stdin.setEncoding('utf8');",
+        "process.stdin.on('end', () => {",
+        "  console.log(JSON.stringify({ type: 'text_delta', delta: 'VOLTMIND_RESULT_STATUS: done\\nVOLTMIND_RESULT_SUMMARY: Fake Craft completed.\\nVOLTMIND_ARTIFACT_REF: artifact://fake-craft' }));",
+        "  console.log(JSON.stringify({ type: 'complete', sessionId: 's1' }));",
+        "});",
+      ].join('\n'), 'utf-8');
+      const envelope = craftEnvelopeFor(dir);
+      const executor = new CraftHeadlessExecutor({ command: process.execPath, baseArgs: [fake] });
+      const result = await executor.execute({
+        prompt: 'Create a draft artifact.',
+        toolScope: { allowed: [], blocked: [] },
+        interactiveRun: envelope,
+        timeoutMs: 5_000,
+      });
+      expect(result.kind).toBe('craft_headless');
+      expect(result.writebackStatus).toBe('result_written');
+      const writeback = JSON.parse(await readFile(envelope.resultPath, 'utf-8')) as Record<string, unknown>;
+      expect(writeback.status).toBe('done');
+      expect(writeback.summary).toBe('Fake Craft completed.');
+      expect(writeback.artifact_refs).toEqual(['artifact://fake-craft']);
+      const events = await readFile(envelope.eventsPath, 'utf-8');
+      expect(events).toContain('craft_started');
+      expect(events).toContain('craft_event_seen');
+      expect(events).toContain('craft_complete');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fake Craft timeout writes failed result', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'voltmind-craft-timeout-'));
+    try {
+      const fake = join(dir, 'fake-craft-timeout.js');
+      await writeFile(fake, 'setTimeout(() => {}, 10000);\n', 'utf-8');
+      const envelope = craftEnvelopeFor(dir);
+      const executor = new CraftHeadlessExecutor({ command: process.execPath, baseArgs: [fake] });
+      const result = await executor.execute({
+        prompt: 'This should time out.',
+        toolScope: { allowed: [], blocked: [] },
+        interactiveRun: envelope,
+        timeoutMs: 50,
+      });
+      expect(result.writebackStatus).toBe('result_written');
+      const writeback = JSON.parse(await readFile(envelope.resultPath, 'utf-8')) as Record<string, unknown>;
+      expect(writeback.status).toBe('failed');
+      expect(String((writeback.errors as string[]).join('\n'))).toContain('craft_headless_timeout');
+      const events = await readFile(envelope.eventsPath, 'utf-8');
+      expect(events).toContain('craft_timeout');
+      expect(events).toContain('craft_error');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('VoltMind interactive action writeback', () => {
   function envelopeFor(dir: string, runId = 77): InteractiveActionRunEnvelope {
     return {
@@ -314,6 +573,12 @@ describe('VoltMind interactive action writeback', () => {
       promptPath: join(dir, 'prompt.md'),
       requestPath: join(dir, 'request.json'),
       resultPath: join(dir, 'result.json'),
+      eventsPath: join(dir, 'events.jsonl'),
+      launcherPath: join(dir, 'launcher.json'),
+      executionContextPath: join(dir, 'execution-context.json'),
+      stdoutLogPath: join(dir, 'stdout.log'),
+      stderrLogPath: join(dir, 'stderr.log'),
+      transcriptPath: join(dir, 'transcript.log'),
       initiator: 'admin-ui',
     };
   }
@@ -369,6 +634,13 @@ describe('VoltMind interactive action writeback', () => {
       prompt_path: paths.promptPath,
       request_path: paths.requestPath,
       result_path: paths.resultPath,
+      events_path: paths.eventsPath,
+      launcher_path: paths.launcherPath,
+      execution_context_path: paths.executionContextPath,
+      stdout_log_path: paths.stdoutLogPath,
+      stderr_log_path: paths.stderrLogPath,
+      transcript_path: paths.transcriptPath,
+      plan_context_snapshot: null,
       initiator: 'admin-ui',
     };
     await engine.executeRaw(
@@ -389,9 +661,14 @@ describe('VoltMind interactive action writeback', () => {
       expect(request).toContain('"protocol": "voltmind-admin-action-writeback"');
       expect(request).toContain('"action_run_id": 77');
       expect(request).toContain('"nonce": "nonce-77"');
+      expect(request).toContain('"events_path"');
+      expect(request).toContain('"plan_context_snapshot"');
       expect(prompt).toContain('Base action prompt');
       expect(prompt).toContain('VoltMind Interactive Writeback');
       expect(prompt).toContain(envelope.resultPath);
+      expect(existsSync(envelope.stdoutLogPath)).toBe(true);
+      expect(existsSync(envelope.stderrLogPath)).toBe(true);
+      expect(existsSync(envelope.transcriptPath)).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -449,7 +726,93 @@ describe('VoltMind interactive action writeback', () => {
       expect(result.missing_result).toBe(true);
       expect(result.writeback_status).toBe('interactive_pending');
       expect((await getActionRun(engine, runId))?.status).toBe('interactive_pending');
+      expect(result.events?.some(event => event.event === 'watch_missing_result')).toBe(true);
     } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('watcher finalizes pending run when result file appears', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-writeback-watcher-'));
+    const engine = new PGLiteEngine();
+    try {
+      await engine.connect({});
+      await engine.initSchema();
+      await writeActionFile(repo, 'watcher-done');
+      await scanActions(engine, { repo });
+      const actionDir = join(repo, '.voltmind-action-runs', 'watcher-done');
+      await mkdir(actionDir, { recursive: true });
+      const envelope = envelopeFor(actionDir);
+      const slug = 'state/actions/watcher-done';
+      const runId = await createPendingRun(engine, slug, { ...envelope, slug });
+
+      await writeFile(envelope.resultPath, JSON.stringify({
+        action_run_id: runId,
+        source_id: 'default',
+        slug,
+        nonce: envelope.nonce,
+        status: 'done',
+        summary: 'Watcher finalized this interactive action.',
+        artifact_refs: ['artifact://watcher-done'],
+        errors: [],
+      }, null, 2), 'utf-8');
+
+      const scan = await scanPendingInteractiveActionRuns(engine);
+      expect(scan.checked).toBeGreaterThanOrEqual(1);
+      expect(scan.finalized).toBe(1);
+      expect(scan.errors).toEqual([]);
+      expect((await getActionRun(engine, runId))?.status).toBe('completed');
+      expect((await getAction(engine, slug))?.status).toBe('done');
+      const events = await readFile(envelope.eventsPath, 'utf-8');
+      expect(events).toContain('watch_finalizing');
+      expect(events).toContain('finalizer_completed');
+    } finally {
+      await engine.disconnect().catch(() => {});
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('Admin codex run creates pending writeback and watcher finalizes it', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'voltmind-admin-codex-writeback-'));
+    const engine = new PGLiteEngine();
+    let pathRestore: { pathKey: string; oldPath: string | undefined } | null = null;
+    try {
+      pathRestore = await installFakeCodexOnPath(repo, [
+        "process.stdin.resume();",
+        "process.stdin.on('end', () => {",
+        "  console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'VOLTMIND_RESULT_STATUS: done\\nVOLTMIND_RESULT_SUMMARY: Admin Codex writeback completed.\\nVOLTMIND_ARTIFACT_REF: artifact://admin-codex' } }));",
+        "  console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));",
+        "});",
+      ].join('\n'));
+      await engine.connect({});
+      await engine.initSchema();
+      await writeActionFile(repo, 'admin-codex-writeback');
+      await scanActions(engine, { repo });
+
+      const run = await runAction(engine, 'state/actions/admin-codex-writeback', {
+        execute: true,
+        force: true,
+        confirmed: true,
+        initiator: 'admin-ui',
+      });
+      expect(run.status).toBe('interactive_pending');
+      expect(run.writeback_status).toBe('interactive_pending');
+      expect(run.interactive?.result_path).toBeTruthy();
+      expect(existsSync(run.interactive!.result_path)).toBe(true);
+
+      const scan = await scanPendingInteractiveActionRuns(engine);
+      expect(scan.finalized).toBe(1);
+      expect(scan.errors).toEqual([]);
+      const finalizedRun = await getActionRun(engine, run.action_run_id!);
+      expect(finalizedRun?.status).toBe('completed');
+      expect((await getAction(engine, 'state/actions/admin-codex-writeback'))?.status).toBe('done');
+      expect(JSON.stringify(finalizedRun?.result)).toContain('Admin Codex writeback completed.');
+    } finally {
+      if (pathRestore) {
+        if (pathRestore.oldPath === undefined) delete process.env[pathRestore.pathKey];
+        else process.env[pathRestore.pathKey] = pathRestore.oldPath;
+      }
       await engine.disconnect().catch(() => {});
       await rm(repo, { recursive: true, force: true });
     }
@@ -941,50 +1304,6 @@ describe('VoltMind actions DB index', () => {
       expect(text).toContain('You are executing a VoltMind Action as a harnessed agent.');
       expect(text).toContain('You may ONLY use these tools: outlook_email.');
       expect(text).toContain('Success criteria:');
-    } finally {
-      console.log = originalLog;
-      await engine.disconnect().catch(() => {});
-      await rm(repo, { recursive: true, force: true });
-    }
-  });
-
-  test('CLI --execute --interactive --dry-run uses codex_interactive runtime', async () => {
-    const repo = await mkdtemp(join(tmpdir(), 'voltmind-actions-cli-interactive-'));
-    const engine = new PGLiteEngine();
-    const originalLog = console.log;
-    const output: string[] = [];
-    try {
-      console.log = (...args: unknown[]) => { output.push(args.map(String).join(' ')); };
-      await engine.connect({});
-      await engine.initSchema();
-      const actionsDir = join(repo, 'state', 'actions');
-      await mkdir(actionsDir, { recursive: true });
-      await writeFile(join(actionsDir, 'interactive-test.md'), [
-        '---',
-        'title: Interactive test message',
-        'status: open',
-        'automation:',
-        '  eligible: true',
-        '  mode: agent_executable',
-        '  runtime: codex',
-        '  risk_level: low',
-        '  requires_confirmation: false',
-        'agent_contract:',
-        '  objective: Hand off to interactive Codex',
-        'allowed_tools:',
-        '  - outlook_email',
-        'max_autonomy: single_step',
-        '---',
-        '',
-      ].join('\n'), 'utf-8');
-
-      await scanActions(engine, { repo });
-      await runActions(engine, ['run', 'state/actions/interactive-test', '--execute', '--interactive', '--dry-run']);
-
-      const text = output.join('\n');
-      expect(text).toContain('[DRY RUN] state/actions/interactive-test');
-      expect(text).toContain('Runtime backend: codex_interactive');
-      expect(text).toContain('You may ONLY use these tools: outlook_email.');
     } finally {
       console.log = originalLog;
       await engine.disconnect().catch(() => {});
@@ -1510,14 +1829,19 @@ describe('VoltMind end-to-end action pipeline', () => {
       const toolDispatcher = async (name: string, params: Record<string, unknown> | undefined, _opts: unknown) => {
         dispatcherCalls.push({ name, query: String(params?.query || '') });
         if (name === 'query' && params?.query) {
+          const query = String(params.query).toLowerCase();
           const rows = await engine.executeRaw<{ slug: string; title: string; compiled_truth: string }>(
-            `SELECT p.slug, p.title, p.compiled_truth FROM pages p WHERE p.slug LIKE $1 OR p.title LIKE $1 LIMIT 3`,
-            [`%${String(params.query)}%`],
+            `SELECT p.slug, p.title, p.compiled_truth FROM pages p
+              WHERE ($1 LIKE '%zi-ye%' AND p.slug = 'people/zi-ye')
+                 OR p.slug LIKE $2
+                 OR lower(p.title) LIKE $2
+              LIMIT 3`,
+            [query, `%${query}%`],
           );
           const hits = rows.map(r => ({ slug: r.slug, page_id: 0, title: r.title, type: 'person', chunk_text: (r.compiled_truth || '').slice(0, 500), chunk_source: 'compiled_truth', chunk_id: 0, chunk_index: 0, score: 0.95, stale: false, source_id: 'default', snippet: (r.compiled_truth || '').slice(0, 300) }));
-          return { content: [{ type: 'text', text: JSON.stringify(hits) }] };
+          return { content: [{ type: 'text' as const, text: JSON.stringify(hits) }] };
         }
-        return { content: [{ type: 'text', text: '[]' }] };
+        return { content: [{ type: 'text' as const, text: '[]' }] };
       };
 
       let capturedPlanPrompt = '';
@@ -1551,15 +1875,24 @@ describe('VoltMind end-to-end action pipeline', () => {
       const savedPlan = await getActionPlan(engine, slug);
       expect(savedPlan).not.toBeNull();
       expect(savedPlan!.plan.length).toBeGreaterThanOrEqual(2);
+      expect(savedPlan!.related_runtime_context?.hits[0]?.slug).toBe('people/zi-ye');
 
       // Phase 6: Build full execution prompt
       const actionRecord = await getAction(engine, slug);
       expect(actionRecord).not.toBeNull();
-      const executionPrompt = buildActionPrompt(actionRecord!, 'Focus on writeback.');
+      const dryRun = await new DefaultActionRunner().run({
+        action: actionRecord!,
+        engine,
+        options: { execute: true, dryRun: true, userPrompt: 'Focus on writeback.', force: true },
+      });
+      const executionPrompt = dryRun.prompt || '';
       expect(executionPrompt).toContain('## Action Tool Route');
       expect(executionPrompt).toContain('outlook-email');
       expect(executionPrompt).toContain('teams');
       expect(executionPrompt).toContain('writeback feature rollout');
+      expect(executionPrompt).toContain('## Admin Plan Runtime Context');
+      expect(executionPrompt).toContain('people/zi-ye');
+      expect(executionPrompt).toContain('Use Admin Plan Runtime Context before attempting a fresh VoltMind query');
 
       // Phase 7: Interactive writeback pipeline
       const actionDir = join(repo, '.voltmind-action-runs', 'e2e-writeback');
@@ -1570,6 +1903,12 @@ describe('VoltMind end-to-end action pipeline', () => {
         actionDir, promptPath: join(actionDir, 'prompt.md'),
         requestPath: join(actionDir, 'request.json'),
         resultPath: join(actionDir, 'result.json'),
+        eventsPath: join(actionDir, 'events.jsonl'),
+        launcherPath: join(actionDir, 'launcher.json'),
+        executionContextPath: join(actionDir, 'execution-context.json'),
+        stdoutLogPath: join(actionDir, 'stdout.log'),
+        stderrLogPath: join(actionDir, 'stderr.log'),
+        transcriptPath: join(actionDir, 'transcript.log'),
         initiator: 'admin-ui',
       };
 
@@ -1579,20 +1918,22 @@ describe('VoltMind end-to-end action pipeline', () => {
         [slug, ikey],
       );
       const runId = rrows[0].id;
-      const meta = { kind: 'interactive_writeback', writeback_status: 'interactive_pending', action_run_id: runId, source_id: 'default', slug, nonce: envelope.nonce, action_dir: actionDir, prompt_path: envelope.promptPath, request_path: envelope.requestPath, result_path: envelope.resultPath, initiator: 'admin-ui' };
+      const meta = { kind: 'interactive_writeback', writeback_status: 'interactive_pending', action_run_id: runId, source_id: 'default', slug, nonce: envelope.nonce, action_dir: actionDir, prompt_path: envelope.promptPath, request_path: envelope.requestPath, result_path: envelope.resultPath, events_path: envelope.eventsPath, launcher_path: envelope.launcherPath, execution_context_path: envelope.executionContextPath, stdout_log_path: envelope.stdoutLogPath, stderr_log_path: envelope.stderrLogPath, transcript_path: envelope.transcriptPath, plan_context_snapshot: savedPlan!.related_runtime_context ?? null, initiator: 'admin-ui' };
       await engine.executeRaw(`UPDATE action_runs SET result=$2::jsonb WHERE id=$1`, [runId, JSON.stringify(meta)]);
       envelope.runId = runId;
 
-      await writeInteractiveActionPromptFiles(executionPrompt, envelope);
+      await writeInteractiveActionPromptFiles(executionPrompt, envelope, savedPlan!.related_runtime_context ?? null);
       expect(existsSync(envelope.promptPath)).toBe(true);
       expect(existsSync(envelope.requestPath)).toBe(true);
 
       const reqJson = JSON.parse(await readFile(envelope.requestPath, 'utf-8'));
       expect(reqJson.protocol).toBe('voltmind-admin-action-writeback');
       expect(reqJson.action_run_id).toBe(runId);
+      expect(reqJson.plan_context_snapshot.hits[0].slug).toBe('people/zi-ye');
 
       const promptMd = await readFile(envelope.promptPath, 'utf-8');
       expect(promptMd).toContain('VoltMind Interactive Writeback');
+      expect(promptMd).toContain('Prefer the plan_context_snapshot over running a fresh VoltMind query');
 
       // Phase 8: Simulate Codex writeback → finalize
       await writeFile(envelope.resultPath, JSON.stringify({

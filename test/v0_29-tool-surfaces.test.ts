@@ -4,19 +4,11 @@
  * Verifies two filter contracts that touch the v0.29 ops but live outside
  * the v0.29 source files (in serve-http.ts and brain-allowlist.ts):
  *
- * 1. `localOnly: true` on `get_recent_transcripts` is what hides it from
- *    the HTTP MCP tool-list. serve-http.ts:745 does
- *    `operations.filter(op => !op.localOnly)`. The v0.29 trust gate
- *    (in-handler `ctx.remote === true` reject) is defense-in-depth on top
- *    of this; if the filter ever drops the flag, the in-handler check is
- *    the last line. We assert both halves of the contract.
+ * 1. The retrieval-enrichment batch now keeps `get_recent_transcripts`
+ *    visible as a read-only MCP tool. It must not carry localOnly.
  *
- * 2. `buildBrainTools` (subagent registry) surfaces salience + anomalies
- *    as `brain_get_recent_salience` / `brain_find_anomalies` and EXCLUDES
- *    `brain_get_recent_transcripts`. The exclusion is intentional —
- *    subagent calls always run with `ctx.remote === true`, and the v0.29
- *    trust gate would always reject. Listing it would be a footgun
- *    (subagent calls op, gets permission_denied, looks like a bug).
+ * 2. `buildBrainTools` (subagent registry) surfaces salience, anomalies,
+ *    and recent transcript readouts.
  *
  * Both filters are pure-function checks; no DB / engine / network needed.
  */
@@ -31,9 +23,9 @@ describe('v0.29 — serve-http localOnly filter', () => {
   // serve-http.ts:745 is the canonical filter expression.
   const mcpVisible = operations.filter(op => !op.localOnly);
 
-  test('get_recent_transcripts is hidden from the HTTP MCP tool list', () => {
+  test('get_recent_transcripts is visible in the HTTP MCP tool list', () => {
     const names = mcpVisible.map(o => o.name);
-    expect(names).not.toContain('get_recent_transcripts');
+    expect(names).toContain('get_recent_transcripts');
   });
 
   test('get_recent_salience and find_anomalies stay visible', () => {
@@ -42,10 +34,10 @@ describe('v0.29 — serve-http localOnly filter', () => {
     expect(names).toContain('find_anomalies');
   });
 
-  test('get_recent_transcripts carries the localOnly: true flag', () => {
+  test('get_recent_transcripts does not carry localOnly', () => {
     const op = operations.find(o => o.name === 'get_recent_transcripts');
     expect(op).toBeDefined();
-    expect(op!.localOnly).toBe(true);
+    expect(op!.localOnly).toBeFalsy();
   });
 
   test('get_recent_salience and find_anomalies do NOT carry localOnly', () => {
@@ -88,24 +80,22 @@ describe('v0.29 — buildBrainTools subagent surfacing', () => {
     expect(names).toContain('brain_find_anomalies');
   });
 
-  test('subagent registry EXCLUDES brain_get_recent_transcripts (codex C3 footgun gate)', () => {
-    // All subagent calls run with ctx.remote === true; the v0.29 trust gate
-    // would always reject. Listing the op would be a footgun: subagent
-    // calls it, gets permission_denied, looks like a bug. The cycle's
-    // synthesize phase reaches transcripts via discoverTranscripts directly,
-    // not via the op.
+  test('subagent registry includes brain_get_recent_transcripts', () => {
     const tools = buildBrainTools({ subagentId: 1, engine: fakeEngine, config });
     const names = tools.map(t => t.name);
-    expect(names).not.toContain('brain_get_recent_transcripts');
+    expect(names).toContain('brain_get_recent_transcripts');
   });
 
   test('the v0.29 ops carry their description verbatim into the registry', () => {
     const tools = buildBrainTools({ subagentId: 1, engine: fakeEngine, config });
     const sal = tools.find(t => t.name === 'brain_get_recent_salience');
     const ano = tools.find(t => t.name === 'brain_find_anomalies');
+    const tx = tools.find(t => t.name === 'brain_get_recent_transcripts');
     const opSal = operations.find(o => o.name === 'get_recent_salience');
     const opAno = operations.find(o => o.name === 'find_anomalies');
+    const opTx = operations.find(o => o.name === 'get_recent_transcripts');
     expect(sal!.description).toBe(opSal!.description);
     expect(ano!.description).toBe(opAno!.description);
+    expect(tx!.description).toBe(opTx!.description);
   });
 });

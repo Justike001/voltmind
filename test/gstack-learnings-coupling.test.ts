@@ -24,7 +24,7 @@ import {
   type IncorrectResolutionEvent,
   type GstackLearningEntry,
 } from '../src/core/calibration/gstack-coupling.ts';
-import { GBrainError } from '../src/core/types.ts';
+import { VoltMindError } from '../src/core/types.ts';
 
 function buildEvent(overrides: Partial<IncorrectResolutionEvent> = {}): IncorrectResolutionEvent {
   return {
@@ -161,12 +161,12 @@ describe('writeIncorrectResolution', () => {
     expect(result.error).toContain('connection refused');
   });
 
-  test('writer throws GBrainError(GSTACK_BINARY_NOT_FOUND) → reason="binary_missing"', async () => {
+  test('writer throws VoltMindError(GSTACK_BINARY_NOT_FOUND) → reason="binary_missing"', async () => {
     const result = await writeIncorrectResolution({
       event: buildEvent(),
       enabled: true,
       writer: () => {
-        throw new GBrainError(
+        throw new VoltMindError(
           'GSTACK_BINARY_NOT_FOUND',
           'gstack-learnings-log binary not on PATH',
           'install gstack',
