@@ -1,5 +1,13 @@
 import { VERSION } from '../version.ts';
 import { detectInstallMethod } from './upgrade.ts';
+import {
+  isMinorOrMajorBump,
+  isValidVersionString,
+  parseSemver,
+  semverGt,
+  semverLte,
+} from '../core/semver.ts';
+import { writeUpdateCache, type UpdateMarker } from '../core/self-upgrade.ts';
 
 interface CheckUpdateResult {
   current_version: string;
@@ -13,36 +21,29 @@ interface CheckUpdateResult {
   error?: string;
 }
 
-export function parseSemver(v: string): [number, number, number] | null {
-  const clean = v.replace(/^v/, '');
-  const parts = clean.split('.');
-  if (parts.length < 3) return null;
-  const nums = parts.slice(0, 3).map(Number);
-  if (nums.some(isNaN)) return null;
-  return nums as [number, number, number];
+function safeWriteCache(marker: UpdateMarker): void {
+  try {
+    writeUpdateCache(marker);
+  } catch {
+    /* fail-open: no cache this run, next invocation re-checks */
+  }
 }
 
-export function isMinorOrMajorBump(current: string, latest: string): boolean {
-  const cur = parseSemver(current);
-  const lat = parseSemver(latest);
-  if (!cur || !lat) return false;
-  if (lat[0] > cur[0]) return true;
-  if (lat[0] === cur[0] && lat[1] > cur[1]) return true;
-  return false;
-}
+// Back-compat re-exports: these used to live here.
+export { parseSemver, isMinorOrMajorBump };
 
 function upgradeCommandForMethod(method: string): string {
   switch (method) {
     case 'bun': return 'bun update voltmind';
     case 'clawhub': return 'clawhub update voltmind';
-    case 'binary': return 'Download from https://github.com/garrytan/voltmind/releases';
+    case 'binary': return 'voltmind self-upgrade';
     default: return 'voltmind upgrade';
   }
 }
 
-async function fetchLatestRelease(): Promise<{ tag: string; published_at: string; url: string } | null> {
+export async function fetchLatestRelease(): Promise<{ tag: string; published_at: string; url: string } | null> {
   try {
-    const res = await fetch('https://api.github.com/repos/garrytan/voltmind/releases/latest', {
+    const res = await fetch('https://api.github.com/repos/Justike001/voltmind/releases/latest', {
       headers: { 'User-Agent': `voltmind/${VERSION}` },
       signal: AbortSignal.timeout(10_000),
     });
@@ -58,9 +59,9 @@ async function fetchLatestRelease(): Promise<{ tag: string; published_at: string
   }
 }
 
-async function fetchChangelog(currentVersion: string, latestVersion: string): Promise<string> {
+export async function fetchChangelog(currentVersion: string, latestVersion: string): Promise<string> {
   try {
-    const res = await fetch('https://raw.githubusercontent.com/garrytan/voltmind/master/CHANGELOG.md', {
+    const res = await fetch('https://raw.githubusercontent.com/Justike001/voltmind/master/CHANGELOG.md', {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return '';
@@ -69,16 +70,6 @@ async function fetchChangelog(currentVersion: string, latestVersion: string): Pr
   } catch {
     return '';
   }
-}
-
-function semverGt(a: [number, number, number], b: [number, number, number]): boolean {
-  if (a[0] !== b[0]) return a[0] > b[0];
-  if (a[1] !== b[1]) return a[1] > b[1];
-  return a[2] > b[2];
-}
-
-function semverLte(a: [number, number, number], b: [number, number, number]): boolean {
-  return !semverGt(a, b);
 }
 
 export function extractChangelogBetween(changelog: string, from: string, to: string): string {
@@ -117,9 +108,35 @@ export function extractChangelogBetween(changelog: string, from: string, to: str
   return entries.join('\n').trim();
 }
 
+export async function refreshUpdateCache(): Promise<void> {
+  const release = await fetchLatestRelease();
+  if (!release) {
+    safeWriteCache({ kind: 'up_to_date', current: VERSION });
+    return;
+  }
+  const latestVersion = release.tag.replace(/^v/, '');
+  if (!isValidVersionString(latestVersion) || !isMinorOrMajorBump(VERSION, latestVersion)) {
+    safeWriteCache({ kind: 'up_to_date', current: VERSION });
+    return;
+  }
+  safeWriteCache({ kind: 'upgrade_available', current: VERSION, latest: latestVersion });
+}
+
 export async function runCheckUpdate(args: string[]) {
   if (args.includes('--help') || args.includes('-h')) {
-    console.log('Usage: voltmind check-update [--json]\n\nCheck for new VoltMind versions.\n\nOnly reports minor/major version bumps (v0.X.0), not patches.\nFails silently on network errors.');
+    console.log('Usage: voltmind check-update [--json] [--refresh-cache]\n\nCheck for new VoltMind versions.\n\nOnly reports minor/major version bumps (v0.X.0), not patches.\nFails silently on network errors.\n\n--refresh-cache  Fetch + update the self-upgrade cache, print nothing (used by\n                 the CLI startup hook\'s detached refresh).');
+    return;
+  }
+
+  if (args.includes('--refresh-cache')) {
+    const { tryAcquireRefreshLock, releaseRefreshLock } = await import('../core/self-upgrade.ts');
+    const lock = tryAcquireRefreshLock();
+    if (!lock) return;
+    try {
+      await refreshUpdateCache();
+    } finally {
+      releaseRefreshLock(lock);
+    }
     return;
   }
 
@@ -130,6 +147,7 @@ export async function runCheckUpdate(args: string[]) {
   const release = await fetchLatestRelease();
 
   if (!release) {
+    safeWriteCache({ kind: 'up_to_date', current: VERSION });
     if (json) {
       console.log(JSON.stringify({
         current_version: VERSION,
@@ -149,7 +167,13 @@ export async function runCheckUpdate(args: string[]) {
   }
 
   const latestVersion = release.tag.replace(/^v/, '');
-  const updateAvailable = isMinorOrMajorBump(VERSION, latestVersion);
+  const updateAvailable = isValidVersionString(latestVersion) && isMinorOrMajorBump(VERSION, latestVersion);
+
+  safeWriteCache(
+    updateAvailable
+      ? { kind: 'upgrade_available', current: VERSION, latest: latestVersion }
+      : { kind: 'up_to_date', current: VERSION },
+  );
 
   let changelogDiff = '';
   if (updateAvailable) {

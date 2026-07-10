@@ -42,8 +42,29 @@ function fileHash(filePath: string): string {
   return createHash('sha256').update(content).digest('hex');
 }
 
+function printFilesHelp(write: (line: string) => void = console.log) {
+  write(`Usage: voltmind files <command> [args]`);
+  write(`  list [slug]                  List files for a page (or all)`);
+  write(`  upload <file> --page <slug>  Upload file linked to page`);
+  write(`  upload-raw <file> --page <slug> [--type <type>]  Smart upload with .redirect.yaml pointer`);
+  write(`  signed-url <path>            Generate signed URL for stored file`);
+  write(`  sync <dir>                   Upload directory to storage`);
+  write(`  verify                       Verify all uploads match local`);
+  write(`  mirror <dir> [--dry-run]     Mirror files to configured storage`);
+  write(`  unmirror <dir>               Remove mirror marker (files stay in storage)`);
+  write(`  redirect <dir> [--dry-run]   Replace files with .redirect.yaml pointers`);
+  write(`  restore <dir>                Download from storage, recreate local files`);
+  write(`  clean <dir> --yes            Delete redirect pointers (irreversible)`);
+  write(`  status [dir]                 Show migration status of directories`);
+}
+
 export async function runFiles(engine: BrainEngine, args: string[]) {
   const subcommand = args[0];
+
+  if (!subcommand || subcommand === '--help' || subcommand === '-h' || subcommand === 'help') {
+    printFilesHelp();
+    return;
+  }
 
   switch (subcommand) {
     case 'list':
@@ -83,19 +104,7 @@ export async function runFiles(engine: BrainEngine, args: string[]) {
       await filesStatus(args.slice(1));
       break;
     default:
-      console.error(`Usage: voltmind files <command> [args]`);
-      console.error(`  list [slug]               List files for a page (or all)`);
-      console.error(`  upload <file> --page <slug>  Upload file linked to page`);
-      console.error(`  upload-raw <file> --page <slug> [--type <type>]  Smart upload with .redirect.yaml pointer`);
-      console.error(`  signed-url <path>         Generate signed URL for stored file`);
-      console.error(`  sync <dir>                Upload directory to storage`);
-      console.error(`  verify                    Verify all uploads match local`);
-      console.error(`  mirror <dir> [--dry-run]  Mirror files to cloud storage`);
-      console.error(`  unmirror <dir>            Remove mirror marker (files stay in storage)`);
-      console.error(`  redirect <dir> [--dry-run]  Replace files with .redirect.yaml pointers`);
-      console.error(`  restore <dir>             Download from storage, recreate local files`);
-      console.error(`  clean <dir> [--yes]       Delete redirect pointers (irreversible)`);
-      console.error(`  status                    Show migration status of directories`);
+      printFilesHelp(console.error);
       process.exit(1);
   }
 }

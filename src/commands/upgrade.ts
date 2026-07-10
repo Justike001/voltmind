@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, rea
 import { basename, join, dirname, resolve } from 'path';
 import { VERSION } from '../version.ts';
 
-const VOLTMIND_GITHUB_REPO = 'garrytan/voltmind';
+const VOLTMIND_GITHUB_REPO = 'Justike001/voltmind';
 
 export async function runUpgrade(args: string[]) {
   if (args.includes('--help') || args.includes('-h')) {
@@ -53,7 +53,7 @@ export async function runUpgrade(args: string[]) {
     case 'binary':
       console.log('Binary self-update not yet implemented.');
       console.log('Download the latest binary from GitHub Releases:');
-      console.log('  https://github.com/garrytan/voltmind/releases');
+      console.log('  https://github.com/Justike001/voltmind/releases');
       break;
 
     case 'clawhub':
@@ -71,13 +71,21 @@ export async function runUpgrade(args: string[]) {
       console.log('Try one of:');
       console.log('  bun update voltmind');
       console.log('  clawhub update voltmind');
-      console.log('  Download from https://github.com/garrytan/voltmind/releases');
+      console.log('  Download from https://github.com/Justike001/voltmind/releases');
   }
 
   if (upgraded) {
     const newVersion = verifyUpgrade();
     // Save old version for post-upgrade migration detection
     saveUpgradeState(oldVersion, newVersion);
+    try {
+      const su = await import('../core/self-upgrade.ts');
+      su.writeJustUpgraded(oldVersion);
+      su.clearUpdateCache();
+      su.clearSnooze();
+    } catch {
+      /* best-effort: never block the upgrade on confirmation bookkeeping */
+    }
     // Run post-upgrade feature discovery (reads migration files from the NEW binary).
     // Timeout bumped 300s → 1800s (30 min) in v0.15.2 because v0.12.0 graph
     // backfill on 50K+ brains regularly exceeded the old ceiling. The heartbeat
@@ -513,7 +521,7 @@ export function detectInstallMethod(): 'bun' | 'bun-link' | 'binary' | 'clawhub'
   if (bunLinkResult) return 'bun-link';
 
   // Check if running from node_modules (bun/npm install). Could be canonical
-  // (we publish under garrytan/voltmind) OR the squatter (npm `voltmind@1.3.x`).
+  // (we publish under Justike001/voltmind) OR the squatter (npm `voltmind@1.3.x`).
   // Sub-classify and warn loudly on suspect installs (#658).
   if (execPath.includes('node_modules') || process.argv[1]?.includes('node_modules')) {
     const verdict = classifyBunInstall();
@@ -543,7 +551,7 @@ export function detectInstallMethod(): 'bun' | 'bun-link' | 'binary' | 'clawhub'
  * Detect bun-link source-clone installs (closes #656, fixes #368).
  *
  * Walk up from argv[1] looking for a `.git/config` whose remote url
- * contains `garrytan/voltmind` (case-insensitive substring).
+ * contains `Justike001/voltmind` (case-insensitive substring).
  *
  * v0.28.5 gated on lstatSync(argv1).isSymbolicLink(), but bun resolves
  * the entire symlink chain before setting process.argv[1], so the check
@@ -588,7 +596,7 @@ function detectBunLink(): { repoRoot: string } | null {
  * npm, the package is the squatter — an unrelated `voltmind@1.3.x` that
  * silently overwrites our binary. This function reads the install
  * directory's package.json and checks two non-spoofable signals:
- *   - `repository.url` contains `garrytan/voltmind` (case-insensitive)
+ *   - `repository.url` contains `Justike001/voltmind` (case-insensitive)
  *   - the install dir contains a `src/cli.ts` file (squatter ships
  *     compiled binary, not source)
  *
@@ -596,7 +604,7 @@ function detectBunLink(): { repoRoot: string } | null {
  * recovery message. Codex's plan-review noted these signals are spoofable
  * by a determined squatter — accepted; this is best-effort warning, not
  * an assertion. The right structural fix is publishing under a scoped
- * name like `@garrytan/voltmind` (tracked v0.29 follow-up).
+ * name like `@Justike001/voltmind` (tracked v0.29 follow-up).
  */
 function classifyBunInstall(): 'canonical' | 'suspect' {
   try {
@@ -638,18 +646,18 @@ function classifyBunInstall(): 'canonical' | 'suspect' {
 
 function printSquatterRecovery(): void {
   console.warn('');
-  console.warn('  WARNING: voltmind install does not appear to be from garrytan/voltmind.');
+  console.warn('  WARNING: voltmind install does not appear to be from Justike001/voltmind.');
   console.warn('  This is likely the npm-name collision tracked in issue #658:');
   console.warn('    https://www.npmjs.com/package/voltmind (an unrelated package).');
   console.warn('');
   console.warn('  Recovery options:');
   console.warn('    1. Install from source:');
   console.warn('         bun remove -g voltmind');
-  console.warn('         git clone https://github.com/garrytan/voltmind.git');
+  console.warn('         git clone https://github.com/Justike001/voltmind.git');
   console.warn('         cd voltmind && bun install && bun link');
   console.warn('');
   console.warn('    2. Download a release binary:');
-  console.warn('         https://github.com/garrytan/voltmind/releases');
+  console.warn('         https://github.com/Justike001/voltmind/releases');
   console.warn('');
   console.warn('  See docs/INSTALL_FOR_AGENTS.md for the canonical install paths.');
   console.warn('');

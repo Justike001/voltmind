@@ -43,6 +43,13 @@ export interface VoltMindConfig {
    * merge → buildGatewayConfig env dict → recipe reads ZEROENTROPY_API_KEY.
    */
   zeroentropy_api_key?: string;
+  /**
+   * OpenRouter API key. Single key fan-out to OpenAI/Anthropic/Google/etc.
+   * Same file-plane → env mapping pattern as zeroentropy_api_key:
+   * config.json → loadConfig merge → buildGatewayConfig env dict →
+   * recipe reads OPENROUTER_API_KEY.
+   */
+  openrouter_api_key?: string;
   /** AI gateway config (v0.14+). v0.36+ default: "zeroentropyai:zembed-1" / 1280 / "anthropic:claude-haiku-4-5-20251001". */
   embedding_model?: string;
   embedding_dimensions?: number;
@@ -98,6 +105,20 @@ export interface VoltMindConfig {
        */
       max_usd?: number;
     };
+  };
+  /**
+   * Invocation-riding self-upgrade notification state. This is file-plane only:
+   * the CLI hot path reads it before opening the DB, so thin clients and broken
+   * local databases can still suppress or enable update markers.
+   */
+  self_upgrade?: {
+    mode?: 'auto' | 'notify' | 'off';
+    mode_prompted?: boolean;
+    quiet_hours?: { start?: number; end?: number; tz?: string };
+    failed_versions?: string[];
+    attempting_version?: string;
+    last_check_ts?: number;
+    last_applied_version?: string;
   };
   eval?: {
     /** false disables capture entirely. Defaults to true. */
@@ -336,8 +357,9 @@ export function loadConfig(): VoltMindConfig | null {
     ...(process.env.OPENAI_API_KEY ? { openai_api_key: process.env.OPENAI_API_KEY } : {}),
     ...(process.env.ANTHROPIC_API_KEY ? { anthropic_api_key: process.env.ANTHROPIC_API_KEY } : {}),
     ...(process.env.DASHSCOPE_API_KEY ? { dashscope_api_key: process.env.DASHSCOPE_API_KEY } : {}),
-    ...(process.env.ZEROENTROPY_API_KEY ? { zeroentropy_api_key: process.env.ZEROENTROPY_API_KEY } : {}),
-    ...(process.env.VOLTMIND_EMBEDDING_MODEL ? { embedding_model: process.env.VOLTMIND_EMBEDDING_MODEL } : {}),
+   ...(process.env.ZEROENTROPY_API_KEY ? { zeroentropy_api_key: process.env.ZEROENTROPY_API_KEY } : {}),
+   ...(process.env.OPENROUTER_API_KEY ? { openrouter_api_key: process.env.OPENROUTER_API_KEY } : {}),
+   ...(process.env.VOLTMIND_EMBEDDING_MODEL ? { embedding_model: process.env.VOLTMIND_EMBEDDING_MODEL } : {}),
     ...(process.env.VOLTMIND_EMBEDDING_DIMENSIONS ? { embedding_dimensions: parseInt(process.env.VOLTMIND_EMBEDDING_DIMENSIONS, 10) } : {}),
     ...(process.env.VOLTMIND_EXPANSION_MODEL ? { expansion_model: process.env.VOLTMIND_EXPANSION_MODEL } : {}),
     ...(process.env.VOLTMIND_CHAT_MODEL ? { chat_model: process.env.VOLTMIND_CHAT_MODEL } : {}),
@@ -600,8 +622,9 @@ export const KNOWN_CONFIG_KEYS: readonly string[] = [
   'openai_api_key',
   'anthropic_api_key',
   'dashscope_api_key',
-  'zeroentropy_api_key',
-  'embedding_model',
+ 'zeroentropy_api_key',
+ 'openrouter_api_key',
+ 'embedding_model',
   'embedding_dimensions',
   'embedding_disabled',
   'expansion_model',
@@ -675,6 +698,14 @@ export const KNOWN_CONFIG_KEYS: readonly string[] = [
   'content_sanity.bytes_block',
   'content_sanity.junk_patterns_enabled',
   'content_sanity.disabled',
+  // Self-upgrade (file-plane hot path, but allow config set/show validation).
+  'self_upgrade.mode',
+  'self_upgrade.mode_prompted',
+  'self_upgrade.quiet_hours',
+  'self_upgrade.failed_versions',
+  'self_upgrade.attempting_version',
+  'self_upgrade.last_check_ts',
+  'self_upgrade.last_applied_version',
   // MVP signal enrichment
   'enrich.external.enabled',
   'enrich.external.provider',
@@ -697,6 +728,7 @@ export const KNOWN_CONFIG_KEY_PREFIXES: readonly string[] = [
   'embedding_columns.', // per-column overrides
   'provider_base_urls.', // per-provider base URL overrides
   'content_sanity.',    // v0.41 content-sanity tunables
+  'self_upgrade.',      // invocation-riding self-upgrade state
   'enrich.',            // MVP signal enrichment
 ];
 

@@ -9,8 +9,17 @@ installSigchldHandler();
 import { installSignalHandlers as installCleanupSignalHandlers } from './core/process-cleanup.ts';
 installCleanupSignalHandlers();
 
-import { readFileSync } from 'fs';
-import { loadConfig, loadConfigWithEngine, toEngineConfig, isThinClient } from './core/config.ts';
+import { readFileSync, existsSync, unlinkSync } from 'fs';
+import { spawn } from 'child_process';
+import {
+  readUpdateCache,
+  isCacheFresh,
+  readSnooze,
+  isSnoozeActive,
+  resolveSelfUpgradeMode,
+  justUpgradedPath,
+} from './core/self-upgrade.ts';
+import { loadConfig, loadConfigFileOnly, loadConfigWithEngine, toEngineConfig, isThinClient } from './core/config.ts';
 import type { VoltMindConfig } from './core/config.ts';
 import type { AIGatewayConfig } from './core/ai/types.ts';
 import type { BrainEngine } from './core/engine.ts';
@@ -40,7 +49,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'autopilot',
@@ -59,6 +68,7 @@ const INTERNAL_MIGRATION_CLI = new Set([
 const CLI_ONLY_SELF_HELP = new Set([
   'upgrade', 'post-upgrade', 'check-update',
   'embed', 'config',
+  'files',
   'daemon',
   'actions',
   'jobs',
@@ -73,6 +83,7 @@ const CLI_ONLY_SELF_HELP = new Set([
   'extract', 'transcripts', 'enrich',
   'conversation-parser',
   'recall', 'forget', 'candidates',
+  'self-upgrade',
   // v0.39.3.0 WARN-5: capture's detailed HELP constant
   // (src/commands/capture.ts:90+) was unreachable because the dispatcher's
   // generic short-circuit (printCliOnlyHelp at :204-208) fired before
@@ -96,8 +107,69 @@ const CLI_ONLY_SELF_HELP = new Set([
   // v0.41.11.0 — extract-conversation-facts ships its own detailed HELP
   // describing segment splitting + checkpointing + budget caps + the
   // unified types config story. Route around the generic short-circuit.
-  'extract-conversation-facts',
+ 'extract-conversation-facts',
+ // graph-query has its own printHelp() with type/direction/depth/foreign
+ // options. Route --help around the generic short-circuit stub.
+ 'graph-query',
 ]);
+
+const STARTUP_HOOK_SKIP_COMMANDS = new Set([
+  'upgrade', 'post-upgrade', 'check-update', 'self-upgrade',
+]);
+
+function maybeEmitUpdateMarker(command: string): void {
+  try {
+    if (process.env.VOLTMIND_SKIP_STARTUP_HOOKS) return;
+    if (process.env.NODE_ENV === 'test') return;
+    if (STARTUP_HOOK_SKIP_COMMANDS.has(command)) {
+      process.env.VOLTMIND_SKIP_STARTUP_HOOKS = '1';
+      return;
+    }
+    if (getCliOptions().quiet) return;
+
+    try {
+      const jpath = justUpgradedPath();
+      if (existsSync(jpath)) {
+        const from = String(readFileSync(jpath, 'utf8')).trim();
+        if (from) process.stderr.write(`JUST_UPGRADED ${from} ${VERSION}\n`);
+        unlinkSync(jpath);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const cfg = loadConfigFileOnly();
+    const mode = resolveSelfUpgradeMode(cfg);
+    if (mode === 'off') return;
+
+    const now = Date.now();
+    const entry = readUpdateCache();
+    if (entry && isCacheFresh(entry, now)) {
+      if (entry.marker.kind === 'upgrade_available' && entry.marker.latest) {
+        if (mode === 'notify' && isSnoozeActive(readSnooze(), entry.marker.latest, now)) return;
+        process.stderr.write(`UPGRADE_AVAILABLE ${entry.marker.current} ${entry.marker.latest}\n`);
+        process.stderr.write(
+          `voltmind ${entry.marker.current} -> ${entry.marker.latest} available. Run: voltmind self-upgrade\n`,
+        );
+      }
+      return;
+    }
+
+    try {
+      const child = spawn('voltmind', ['check-update', '--refresh-cache'], {
+        detached: true,
+        stdio: 'ignore',
+        env: { ...process.env, VOLTMIND_SKIP_STARTUP_HOOKS: '1' },
+      });
+      child.on('error', () => {});
+      child.unref();
+    } catch {
+      /* voltmind not on PATH / spawn failed: fail open */
+    }
+  } catch {
+    /* the update marker must never break a command */
+  }
+}
 
 async function main() {
   // Parse global flags (--quiet / --progress-json / --progress-interval)
@@ -124,6 +196,8 @@ async function main() {
     printToolsJson();
     return;
   }
+
+  maybeEmitUpdateMarker(command);
 
   const subArgs = args.slice(1);
 
@@ -915,6 +989,11 @@ async function handleCliOnly(command: string, args: string[]) {
     await runCheckUpdate(args);
     return;
   }
+  if (command === 'self-upgrade') {
+    const { runSelfUpgrade } = await import('./commands/self-upgrade.ts');
+    await runSelfUpgrade(args);
+    return;
+  }
   if (command === 'integrations') {
     const { runIntegrations } = await import('./commands/integrations.ts');
     await runIntegrations(args);
@@ -1247,6 +1326,12 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
+  if (command === 'files' && (args.length === 0 || args.includes('--help') || args.includes('-h') || args[0] === 'help')) {
+    const { runFiles } = await import('./commands/files.ts');
+    await runFiles(null as any, args);
+    return;
+  }
+
   // v0.39.3.0 WARN-5: same pattern for `capture --help`. CLI_ONLY_SELF_HELP
   // now includes 'capture' so the generic short-circuit at :101 stays out
   // of the way, but the dispatch case at :1229 still needs an engine. The
@@ -1298,6 +1383,12 @@ async function handleCliOnly(command: string, args: string[]) {
   if (command === 'enrich' && (args.includes('--help') || args.includes('-h'))) {
     const { runEnrich } = await import('./commands/enrich.ts');
     await runEnrich(null as any, args);
+    return;
+  }
+
+  if (command === 'graph-query' && (args.includes('--help') || args.includes('-h'))) {
+    const { runGraphQuery } = await import('./commands/graph-query.ts');
+    await runGraphQuery(null as any, args);
     return;
   }
 
@@ -1923,7 +2014,8 @@ export function buildGatewayConfig(c: VoltMindConfig): AIGatewayConfig {
   // zeroentropy_api_key X` wrote DB plane (ignored by gateway). The file-
   // plane field now exists (VoltMindConfig type) and gets mapped here, so
   // setting it via `~/.voltmind/config.json` propagates into the gateway.
-  if (c.zeroentropy_api_key) envFromConfig.ZEROENTROPY_API_KEY = c.zeroentropy_api_key;
+ if (c.zeroentropy_api_key) envFromConfig.ZEROENTROPY_API_KEY = c.zeroentropy_api_key;
+  if (c.openrouter_api_key) envFromConfig.OPENROUTER_API_KEY = c.openrouter_api_key;
 
   // v0.32 codex finding #4+#5 fix: thread local-server _BASE_URL env vars
   // into base_urls so the gateway hits the user's configured port. Without
@@ -2111,6 +2203,14 @@ INGESTION
   sync [--repo <path>] [flags]       Git-to-brain incremental sync
   embed [<slug>|--all|--stale]       Generate/refresh embeddings
 
+FILES
+  files mirror <dir> [--dry-run]     Mirror raw files to configured storage
+  files redirect <dir> [--dry-run]   Replace mirrored files with pointers
+  files restore <dir>                Recreate local files from storage
+  files clean <dir> --yes            Remove redirect pointers
+  files upload-raw <file> --page s   Smart raw-file upload/pointer route
+  files status [dir]                 Show migration status
+
 RETRIEVAL ENRICHMENT
   extract <links|timeline|all>       Extract graph/timeline signals
         --source-id <id> [--dry-run]
@@ -2122,8 +2222,10 @@ GRAPH
   link <from> <to> [--type T]        Create typed link
   unlink <from> <to>                 Remove link
   backlinks <slug>                   Incoming links
-  graph <slug> [--depth N]           Traverse link graph (returns nodes)
-  tags <slug>                        List tags
+ graph <slug> [--depth N]           Traverse link graph (returns nodes)
+ graph-query <slug> [--type T]      Typed/directional graph traversal
+         [--depth N] [--direction D]
+ tags <slug>                        List tags
   tag <slug> <tag>                   Add tag
   untag <slug> <tag>                 Remove tag
   timeline [<slug>]                  View timeline
@@ -2185,3 +2287,6 @@ main().catch(e => {
   console.error(e.message || e);
   process.exit(1);
 });
+
+
+
