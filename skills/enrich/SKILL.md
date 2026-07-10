@@ -30,33 +30,10 @@ writes_to:
 
 Enrich person and company pages from external sources. Scale effort to importance.
 
-## VoltMind MVP Personal Brain Override
-
-For `people/` pages, use the current Personal Brain template at
-`brain/templates/people.md` or
-`docs/drafts/personal-brain-scaffold/templates/people.md`. Do not use inherited
-profile/dossier sections that are not in that template.
-
-`Ownership And Expertise` is a durable routing section. It should only describe:
-
-- long-term ownership domains, systems, customers, workflows, or business areas
-- institutional history, policy/process context, or hard-to-find knowledge
-- which questions, reviews, decisions, or escalations should route to the person
-
-Do not put active projects, current actions, one-off Teams remarks, tool tips,
-API-key logistics, OA/admin errands, birthday/social chatter, or other short-term
-coordination in `Ownership And Expertise`. Do not create graph links from that
-section unless the link represents durable ownership or expertise.
-
-Put active projects, current delivery scope, and concrete next steps in
-`Current Work`. Put unresolved obligations, risks, decisions, and still-open
-questions in `Open Threads`. If a question was answered in the same source
-window, do not write it under `Questions`.
-
 ## Contract
 
 This skill guarantees:
-- Every enriched page has compiled truth with inline citations
+- Every enriched page has compiled truth (State section) with inline citations
 - Every enriched page has a timeline with dated entries
 - Back-links are created bidirectionally
 - Tiered enrichment: Tier 1 (full), Tier 2 (medium), Tier 3 (minimal) based on notability
@@ -72,10 +49,9 @@ broken brain. See `skills/_brain-filing-rules.md` for format.
 
 ## Philosophy
 
-A Personal Brain person page should behave like a routing surface: who this
-person is in the user's work context, what durable context they own, what current
-work connects to them, and what unresolved threads need follow-up. It is not a
-chat digest, personality profile, or LinkedIn scrape.
+A brain page should read like an intelligence dossier, not a LinkedIn scrape.
+Facts are table stakes. Texture is the value -- what do they believe, what are
+they building, what makes them tick, where are they headed.
 
 ## Citation Requirements (MANDATORY)
 
@@ -97,17 +73,6 @@ When sources conflict, note the contradiction with both citations.
 - Bot/spam accounts
 - Entities with no substantive connection to the user's work
 - Same page enriched within the past week (unless new signal warrants it)
-
-### Drain unresolved frontmatter names (v0.13+)
-
-If any `put_page` response includes `auto_links.unresolved` entries, the enrichment
-tier should pick up those (field, name) pairs and try to create the missing entity
-pages. Example flow:
-
-1. signal-detector captures a meeting with `attendees: [Alice Known, Unknown Person]`
-2. put_page returns `auto_links.unresolved = [{field: 'attendees', name: 'Unknown Person'}]`
-3. enrichment tier consumes `Unknown Person` -> web search -> creates `people/unknown-person.md`
-4. The next put_page (or a backfill run) wires up the `attended` edge automatically
 
 ## Enrichment Tiers
 
@@ -134,15 +99,17 @@ For each entity:
 
 ### Step 3: Extract signal from source
 
-Extract only source-backed signal that changes durable context:
+Don't just capture facts. Capture texture:
 
 | Signal Type | What to Extract |
 |-------------|----------------|
-| Durable ownership | `Ownership And Expertise` only when the source proves a long-term domain, system, customer, workflow, or routing responsibility |
-| Current projects and actions | `Current Work`, linked to canonical project/action pages when they exist |
-| Unresolved commitments, risks, decisions, questions | `Open Threads`, only when still open after reading the source |
-| Contact/profile facts | Frontmatter plus `Collaboration Notes` when the connector explicitly returns the field |
-| Social/chat noise | Do not write to the person page unless it changes durable work context |
+| Opinions, beliefs | What They Believe section |
+| Current projects, features shipped | What They're Building section |
+| Ambition, career arc, motivation | What Motivates Them section |
+| Topics they return to obsessively | Hobby Horses section |
+| Who they amplify, argue with, respect | Network / Relationships |
+| Ascending, plateauing, pivoting? | Trajectory section |
+| Role, company, funding, location | State section (hard facts) |
 
 ### Step 4: External data source lookups
 
@@ -214,9 +181,65 @@ the raw data shows exactly what the API returned.
 
 #### Person page template
 
-Use `brain/templates/people.md`. If the active brain does not have that file,
-use `docs/drafts/personal-brain-scaffold/templates/people.md`. The template file
-is the source of truth for frontmatter and section headings.
+```markdown
+---
+title: Full Name
+type: person
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+tags: []
+company: Current Company
+relationship: How the user knows them
+email:
+linkedin:
+twitter:
+location:
+---
+
+# Full Name
+
+> 1-paragraph executive summary: HOW do you know them, WHY do they matter,
+> what's the current state of the relationship.
+
+## State
+Role, company, key context. Hard facts only.
+
+## What They Believe
+Ideology, first principles, worldview. What hills do they die on?
+
+## What They're Building
+Current projects, recent launches, what they're focused on.
+
+## What Motivates Them
+Ambition, career arc, what drives them.
+
+## Hobby Horses
+Topics they return to obsessively. Recurring themes in their work/posts.
+
+## Assessment
+Your read on this person. Strengths, gaps, trajectory.
+
+## Trajectory
+Ascending, plateauing, pivoting, declining? Where are they headed?
+
+## Relationship
+History of interactions, shared context, relationship quality.
+
+## Contact
+Email, social handles, preferred communication channel.
+
+## Network
+Key connections, mutual contacts, organizational relationships.
+
+## Open Threads
+Active conversations, pending items, things to follow up on.
+
+---
+
+## Timeline
+Reverse chronological. Every entry has a date and [Source: ...] citation.
+- **YYYY-MM-DD** | Event description [Source: ...]
+```
 
 #### Company page template
 
@@ -296,13 +319,14 @@ This creates an audit trail for brain enrichment over time.
 ## Output Format
 
 An enriched person page contains:
-- **Frontmatter** with source-backed contact/profile fields
-- **Summary** explaining where the person fits in the user's work context
-- **Ownership And Expertise** only for durable ownership and routing knowledge
-- **Current Work** for active projects, actions, and current delivery scope
-- **Open Threads** only for unresolved commitments, risks, decisions, and questions
-- **Collaboration Notes** for factual work-relevant communication context
-- **Timeline** with dated, cited entries
+- **Frontmatter** with type, tags, company, relationship, and contact fields
+- **Executive summary** (1 paragraph: how you know them, why they matter, relationship state)
+- **State** section with hard facts and inline `[Source: ...]` citations
+- **Texture sections** (What They Believe, What They're Building, What Motivates Them, Hobby Horses)
+- **Assessment** with trajectory read
+- **Relationship** history and contact info
+- **Network** connections and mutual contacts
+- **Timeline** in reverse chronological order, every entry dated with source citation
 
 An enriched company page contains:
 - **Frontmatter** with type and tags

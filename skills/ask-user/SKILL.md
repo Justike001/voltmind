@@ -30,7 +30,7 @@ priority: 50
 
 A **formalized pattern** for presenting users with 2-4 options and **stopping
 execution** until they respond. This is the canonical way to gate on user input
-in any GBrain-powered agent.
+in any voltmind-powered agent.
 
 This is NOT a traditional async/await. In an LLM agent, "gating" means:
 1. Present the choices (buttons or numbered options)

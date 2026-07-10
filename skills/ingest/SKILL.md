@@ -32,7 +32,7 @@ Ingest meetings, articles, media, documents, and conversations into the brain.
 
 - Every fact written to a brain page carries an inline `[Source: ...]` citation with date and provenance.
 - Every entity mention creates a back-link from the entity's page to the page mentioning them (Iron Law).
-- Raw sources are preserved for provenance via `voltmind call put_raw_data` with automatic size routing.
+- Raw sources are preserved for provenance via `voltmind files upload-raw` with automatic size routing.
 - State sections are rewritten with current best understanding, never appended to.
 - Entity detection fires on every inbound message; notable entities get pages or updates.
 
@@ -220,9 +220,9 @@ if the post is primarily about a person/company.
 
 Every ingested item must have its raw source preserved for provenance.
 
-**Use `voltmind call put_raw_data` for automatic size routing:**
+**Use `voltmind files upload-raw` for automatic size routing:**
 ```bash
-voltmind call put_raw_data <file> --page <page-slug> --type <type>
+voltmind files upload-raw <file> --page <page-slug> --type <type>
 ```
 
 - **< 100 MB text/PDF**: stays in git (brain repo `.raw/` sidecar directories)

@@ -40,7 +40,7 @@ skill.
 
 ## Trust contract (read this before running)
 
-book-mirror runs as a CLI command (`gbrain book-mirror`), NOT as a pure
+book-mirror runs as a CLI command (`voltmind book-mirror`), NOT as a pure
 markdown skill that the agent dispatches via tools. The CLI is the trusted
 runtime; the skill is the orchestration prose around it.
 
@@ -63,7 +63,7 @@ What this means for the agent:
                not currently shipped — see "Acquiring the book" below).
 2. EXTRACT   → Pull chapter text from EPUB/PDF into one .txt per chapter.
 3. CONTEXT   → Gather everything the brain knows about the reader.
-4. ANALYZE   → `gbrain book-mirror` fans out N read-only subagents.
+4. ANALYZE   → `voltmind book-mirror` fans out N read-only subagents.
 5. ASSEMBLE  → CLI reads each child result and writes one put_page.
 6. PDF       → Optional: render via skills/brain-pdf for delivery.
 ```
@@ -83,7 +83,7 @@ ls path/to/book.pdf
 ls $BRAIN_DIR/media/books/
 ```
 
-Resolve `$BRAIN_DIR` from the gbrain config (`gbrain config get sync.repo_path`)
+Resolve `$BRAIN_DIR` from the voltmind config (`voltmind config get sync.repo_path`)
 or accept it from the user.
 
 ## 2. Text extraction
@@ -155,17 +155,17 @@ context fed to each chapter subagent.
 ### What to pull
 
 1. **Templates: USER.md and SOUL.md** if the user maintains them
-   (gbrain ships templates at `templates/USER.md` and `templates/SOUL.md`;
+   (voltmind ships templates at `templates/USER.md` and `templates/SOUL.md`;
    they live in the brain repo when populated). Read full.
 2. **Recent daily memory** — last 14 days of brain pages under
    `wiki/personal/reflections/` or wherever the user files daily notes.
 3. **Topic-relevant brain searches** tuned to the book's themes:
-   - `gbrain query "marriage"`, `gbrain query "couples therapy"` for a
+   - `voltmind query "marriage"`, `voltmind query "couples therapy"` for a
      marriage book.
-   - `gbrain query "founders"`, `gbrain query "fundraising"` for a
+   - `voltmind query "founders"`, `voltmind query "fundraising"` for a
      business book.
-   - `gbrain query "shame"`, `gbrain query "anger"` for a psychology book.
-4. **Brain pages for relevant entities** — `gbrain query "<name>"` for
+   - `voltmind query "shame"`, `voltmind query "anger"` for a psychology book.
+4. **Brain pages for relevant entities** — `voltmind query "<name>"` for
    people who will likely come up.
 5. **Standing patterns** — anything in the user's reflections or
    originals that's been recurring.
@@ -188,7 +188,7 @@ CONTEXT="$WORK/context.md"
   # ...
   echo
   echo "## Topic-relevant brain pages"
-  # gbrain query the book's key themes, embed top results
+  # voltmind query the book's key themes, embed top results
   # ...
   echo
   echo "## Themes & cruxes"
@@ -201,10 +201,10 @@ CONTEXT="$WORK/context.md"
 
 Make this dense. It's read by every chapter subagent.
 
-## 4. Analysis: invoke `gbrain book-mirror`
+## 4. Analysis: invoke `voltmind book-mirror`
 
 ```bash
-gbrain book-mirror \
+voltmind book-mirror \
   --chapters-dir "$WORK/chapters" \
   --context-file "$CONTEXT" \
   --slug "$SLUG" \
@@ -248,7 +248,7 @@ before submission.
 After the brain page is written, render to PDF using `skills/brain-pdf`:
 
 ```bash
-gbrain put_page  # already done by the CLI; nothing to add here
+voltmind put_page  # already done by the CLI; nothing to add here
 # Then invoke brain-pdf:
 # (see skills/brain-pdf/SKILL.md for the make-pdf invocation)
 ```
@@ -315,7 +315,7 @@ where the book's framing breaks down for this specific reader.
 - [ ] Book file exists locally (path known).
 - [ ] Chapter texts under `$WORK/chapters/*.txt` with sane word counts.
 - [ ] Context pack at `$WORK/context.md` is dense.
-- [ ] `gbrain book-mirror --chapters-dir … --context-file … --slug … --title …` returned exit 0.
+- [ ] `voltmind book-mirror --chapters-dir … --context-file … --slug … --title …` returned exit 0.
 - [ ] `media/books/<slug>-personalized.md` exists in the brain.
 - [ ] Fact-check pass complete (no errors against USER.md or other source-of-truth pages).
 - [ ] Cross-links added from referenced people/companies.

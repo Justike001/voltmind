@@ -1,83 +1,93 @@
 ---
 name: cron-scheduler
-version: 2.0.0
-description: VoltMind MVP scheduling guidance for Windows/PGLite.
+version: 1.0.0
+description: |
+  Schedule management with staggering, quiet hours, and wake-up override.
+  Validates schedules, prevents collisions, and gates delivery during quiet hours.
 triggers:
   - "schedule a job"
   - "cron"
-  - "recurring job"
-  - "autopilot schedule"
   - "quiet hours"
-  - "daily maintenance"
+  - "what jobs are running"
 tools:
-  - get_health
-  - list_jobs
-  - get_job
-  - cancel_job
+  - search
+  - get_page
+  - put_page
 mutating: true
 ---
 
-# Cron Scheduler - VoltMind MVP
+# Cron Scheduler
 
-Use this skill when the user asks about recurring maintenance, schedules, or
-autopilot-like behavior. In the Windows/PGLite MVP, do not install host
-schedulers. Convert the request into explicit, user-run maintenance commands.
+> **Convention:** See `skills/conventions/test-before-bulk.md` — test every cron job on 3-5 items first.
 
-## Allowed MVP Maintenance
+## Contract
 
-```bash
-voltmind status
-voltmind health
-voltmind apply-migrations --yes
-voltmind sync --no-pull --no-embed
-voltmind embed --stale
-voltmind jobs stats
-```
+This skill guarantees:
+- Schedule staggering: max 1 job per 5-minute slot, no collisions
+- Quiet hours gating: timezone-aware, with user-awake override
+- Thin job prompts: jobs say "Read skills/X/SKILL.md and run it" (no inline 3000-word prompts)
+- Idempotency: jobs can run twice without duplicate side effects
+- Results saved as reports: `reports/{job-name}/{YYYY-MM-DD-HHMM}.md`
 
-Use `voltmind jobs list`, `voltmind jobs get <job-id>`, and
-`voltmind jobs cancel <job-id>` for queue visibility and cancellation.
+## Phases
 
-## Windows/PGLite Boundary
+1. **Define job.** Name, schedule (cron expression), skill to run, timeout.
+2. **Validate schedule.** Check no collision with existing jobs (5-minute offset rule).
+   - Slots: :05, :10, :15, :20, :25, :30, :35, :40, :45, :50
+   - If collision detected, suggest the next available slot
+3. **Check quiet hours.** Default: 11 PM - 8 AM local time.
+   - Override: user-awake flag (if user is active, quiet hours suspended)
+   - During quiet hours: save output to held queue
+   - Morning contact releases the backlog
+4. **Register with host scheduler.** OpenClaw cron, Railway cron, crontab, or process manager. **Each registered entry should execute via Minions, not `agentTurn`.** See `skills/conventions/cron-via-minions.md` for the rewrite pattern (PGLite uses `--follow`, Postgres uses fire-and-forget + `--idempotency-key` on the cycle slot). voltmind's v0.11.0 migration auto-rewrites entries for built-in handlers; host-specific handlers need a code-level registration per `docs/guides/plugin-handlers.md`.
+5. **Write thin prompt.** Job prompt is one line: "Read skills/{name}/SKILL.md and run it."
 
-Do not install launchd, systemd, crontab, container startup scripts, or
-autopilot on Windows/PGLite. PGLite's local file lock makes separate worker
-processes risky for the MVP, and the inherited autopilot installer has no
-Windows service target.
+## Idempotency Requirement
 
-If a recurring workflow is needed, write a short runbook for the user with the
-explicit commands and the intended cadence. Do not mutate the host scheduler.
-
-## Suggested Manual Cadence
-
-After editing or importing markdown:
-
-```bash
-voltmind sync --no-pull --no-embed
-voltmind embed --stale
-voltmind health
-```
-
-Before data testing:
-
-```bash
-voltmind apply-migrations --yes
-voltmind status
-voltmind health
-```
-
-## Anti-Patterns
-
-- Calling inherited `gbrain` commands.
-- Installing a host scheduler without a Windows-safe VoltMind target.
-- Treating autopilot as required for first data testing.
-- Submitting shell jobs or subagent jobs through hidden Minion surfaces.
+Every cron job MUST be idempotent:
+- Running the same job twice produces the same result (no duplicate pages, no duplicate timeline entries)
+- Use checkpoint state files to track progress and resume interrupted runs
+- Check for existing output before creating new output
 
 ## Output Format
 
-```text
-VOLTMIND SCHEDULE PLAN
-Cadence: <manual or deferred>
-Commands: <explicit VoltMind commands>
-Reason: <why host scheduler was or was not used>
-Frozen: <autopilot/worker request if applicable>
+Job configuration saved. Report: "Job '{name}' scheduled at {cron expression}. Next run: {time}."
+
+## Multi-source brains: use `sync --all`, not per-source entries
+
+When the brain has 2+ active sources (anything `voltmind sources list` shows
+with a non-null `local_path` that isn't archived), use one consolidated
+cron line instead of N per-source entries.
+
+**Preferred (multi-source)**:
+
+```cron
+*/5 * * * * voltmind sync --all --parallel 4 --workers 4 --skip-failed
 ```
+
+This replaces N per-source lines AND auto-picks-up future sources without
+a crontab edit. Concurrency budget: `parallel × workers × 2 ≈ 32`
+connections during the wave (each per-file worker opens its own
+2-connection pool). Stay under your Postgres `max_connections` setting.
+
+**Avoid (legacy)**: separate `voltmind sync --source default` and
+`voltmind sync --source zion-brain` entries staggered by 5 minutes. They
+require manual deconfliction every time a new source is added, and a
+slow source can race a fast source on the legacy global `voltmind-sync`
+lock (v0.40.3.0+ uses per-source `voltmind-sync:<sourceId>` locks but the
+per-source cron pattern doesn't benefit from the parallelism that
+`--all --parallel` actually delivers).
+
+`voltmind doctor` surfaces the recommended line as a `sync_consolidation`
+check whenever it detects 2+ active sources. Paste-ready from there.
+
+## Anti-Patterns
+
+- Scheduling jobs at the same minute (:00 for everything)
+- Inline 3000-word prompts in cron jobs (use skill file references)
+- Running cron jobs without testing on 3-5 items first
+- Jobs that produce different output on re-run (not idempotent)
+- Sending notifications during quiet hours (save to held queue instead)
+- Separate per-source `voltmind sync --source <id>` cron entries when
+  `voltmind sync --all --parallel N --workers N` would replace them with
+  one line that auto-picks-up future sources.

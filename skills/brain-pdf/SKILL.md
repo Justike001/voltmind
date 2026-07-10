@@ -55,7 +55,7 @@ P="$HOME/.claude/skills/gstack/make-pdf/dist/pdf"
 ## Workflow
 
 ```
-1. RESOLVE  → Confirm the brain page exists (gbrain get <slug>).
+1. RESOLVE  → Confirm the brain page exists (voltmind get <slug>).
 2. STRIP    → Remove YAML frontmatter — the renderer would otherwise
               dump it as a full page of raw metadata text.
 3. RENDER   → Invoke make-pdf with sane defaults (no --cover, no --toc).
@@ -71,16 +71,16 @@ SLUG="path/to/page"
 P="$HOME/.claude/skills/gstack/make-pdf/dist/pdf"
 
 # 1. Confirm the page exists.
-gbrain get "$SLUG" > /dev/null || { echo "Page $SLUG not found" >&2; exit 1; }
+voltmind get "$SLUG" > /dev/null || { echo "Page $SLUG not found" >&2; exit 1; }
 
 # 2. Get the raw markdown. Two paths: read from the brain repo (if user
-#    syncs locally) OR ask gbrain for the body via the API.
-BRAIN_DIR=$(gbrain config get sync.repo_path 2>/dev/null || echo)
+#    syncs locally) OR ask voltmind for the body via the API.
+BRAIN_DIR=$(voltmind config get sync.repo_path 2>/dev/null || echo)
 if [ -n "$BRAIN_DIR" ] && [ -f "$BRAIN_DIR/$SLUG.md" ]; then
   RAW="$BRAIN_DIR/$SLUG.md"
 else
   RAW=$(mktemp /tmp/brain-page-XXXXXX.md)
-  gbrain get "$SLUG" --raw > "$RAW"   # whatever flag exposes raw body
+  voltmind get "$SLUG" --raw > "$RAW"   # whatever flag exposes raw body
 fi
 
 # 3. Strip YAML frontmatter — sed: skip the opening '---' through the

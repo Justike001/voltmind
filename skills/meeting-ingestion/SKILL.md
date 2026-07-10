@@ -28,18 +28,11 @@ writes_to:
 # Meeting Ingestion Skill
 
 > **Filing rule:** Read `skills/_brain-filing-rules.md` before creating any new page.
-> **Template rule:** Meeting pages must use the current Personal Brain meeting
-> scaffold from `brain/templates/meetings.md` or
-> `docs/drafts/personal-brain-scaffold/templates/meetings.md`. Keep the canonical
-> section headings stable:
-> `Attendees`, `Key Decisions`, `Action Items`, `Connections`,
-> `Candidate Contributions`, and `Transcript`.
 
 ## Contract
 
 This skill guarantees:
-- Meeting page created with attendees, key decisions, action items, connections,
-  candidate contributions, and transcript/source section
+- Meeting page created with attendees, summary, key decisions, action items
 - EVERY attendee gets a people page (created or updated)
 - EVERY company discussed gets entity propagation
 - Timeline entries on ALL mentioned entities (timeline merge)
@@ -51,34 +44,11 @@ This skill guarantees:
 Every attendee and company mentioned MUST get a back-link from their page to
 the meeting page. An unlinked mention is a broken brain.
 
-## Source Modes
-
-### Calendar-seeded meeting
-
-Use this mode when the only evidence is Outlook Calendar metadata: subject,
-time, organizer, attendees, location, response state, and body preview.
-
-- It may create a meeting page when the event is notable.
-- It must clearly say that no transcript or meeting notes were available.
-- It must not invent decisions, action items, risks, or project links.
-- It should create or update attendee people pages only with facts returned by
-  the connector.
-- It should add attendee timeline entries and graph links when attendees are
-  durable.
-
-Calendar-seeded pages are useful index pages, but they are not "fully ingested"
-meetings until transcript, notes, or follow-up evidence is added.
-
-### Transcript or notes meeting
-
-Use this mode when meeting notes, a transcript, or a meaningful summary is
-available. This is the full meeting-ingestion path.
-
 ## Phases
 
-### Phase 1: Parse the source
+### Phase 1: Parse the transcript
 
-Extract from the available source. For transcript/notes, extract:
+Extract from the transcript:
 - Attendees (names, roles if available)
 - Date, time, duration
 - Key topics discussed
@@ -86,26 +56,27 @@ Extract from the available source. For transcript/notes, extract:
 - Action items with owners
 - Companies and projects mentioned
 
-For calendar metadata only, extract only what the connector actually returned:
-- subject
-- start/end time and timezone
-- organizer
-- attendees and response states
-- location / Teams meeting marker
-- body preview or invite metadata
-
 ### Phase 2: Create meeting page
 
-Use the canonical meeting template from `brain/templates/meetings.md`. If that
-file is unavailable in the active brain, fall back to
-`docs/drafts/personal-brain-scaffold/templates/meetings.md`.
+```markdown
+# {Meeting Title} — {Date}
 
-Do not duplicate the template inside this skill. The template file is the source
-of truth for frontmatter keys, section headings, and Chinese body guidance.
+**Attendees:** {list with links to people pages}
+**Date:** {YYYY-MM-DD}
+**Duration:** {if available}
 
-For calendar-seeded meetings, keep the canonical headings but write "no
-confirmed decision/action yet" with a source citation instead of leaving
-sections blank.
+## Summary
+{3-5 bullet key outcomes}
+
+## Key Decisions
+{Decisions with context}
+
+## Action Items
+{Tasks with owners and deadlines}
+
+## Discussion Notes
+{Structured notes by topic}
+```
 
 ### Phase 3: Attendee enrichment (MANDATORY)
 
@@ -122,29 +93,13 @@ to each attendee whose page is referenced as `[Name](people/slug)`. You don't
 need to call `voltmind link` for attendees. You DO still need `voltmind timeline-add`
 for dated events (auto-link only handles links, not timeline entries).
 
-### Phase 3.5: Check for unresolved attendees (v0.13+)
-
-After `put_page`, inspect `response.auto_links.unresolved` — an array of frontmatter
-references that did not resolve to existing pages. For meetings, this usually means
-attendees you haven't created a person page for yet.
-
-If `unresolved.length > 0`:
-- Option 1 (create pages now): trigger an enrichment pass to build the missing people pages.
-- Option 2 (defer): log the unresolved names to the enrichment queue for later.
-- Option 3 (accept the gap): the attendee edge will not be created until a page exists.
-  Re-running `voltmind extract links --source db --include-frontmatter` after creating
-  the page fills in the missing edges.
-
 ### Phase 4: Entity propagation (MANDATORY)
 
 For each company, project, or concept discussed:
 1. Check brain for existing page
 2. Create/update as needed
 3. Add timeline entry referencing the meeting
-4. Entity references in the meeting page body auto-create the link via auto-link.
-   For incoming references on the entity page (entity page -> meeting page), edit
-   the entity page to mention the meeting and `put_page` it — auto-link handles
-   the rest.
+4. Back-link from entity page to meeting page
 
 ### Phase 5: Timeline merge
 
@@ -153,7 +108,7 @@ Acme Corp, the event goes on Alice's page, Bob's page, AND Acme Corp's page.
 
 ### Phase 6: Sync
 
-`voltmind sync --no-pull --no-embed` to update the index.
+`voltmind sync` to update the index.
 
 ## Output Format
 

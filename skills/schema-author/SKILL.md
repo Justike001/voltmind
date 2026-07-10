@@ -2,30 +2,30 @@
 name: schema-author
 description: Evolve your brain's schema pack. Add page types, propose new ones from corpus scans, backfill page.type on existing pages, audit pack health. Triggers when an agent notices untyped pages, custom domains needing typed entities (researcher, contract, deposition), or wants to see what types the pack declares.
 tools:
-  - gbrain schema active
-  - gbrain schema list
-  - gbrain schema stats
-  - gbrain schema review-orphans
-  - gbrain schema detect
-  - gbrain schema suggest
-  - gbrain schema lint
-  - gbrain schema graph
-  - gbrain schema explain
-  - gbrain schema fork
-  - gbrain schema use
-  - gbrain schema add-type
-  - gbrain schema remove-type
-  - gbrain schema update-type
-  - gbrain schema add-alias
-  - gbrain schema remove-alias
-  - gbrain schema add-prefix
-  - gbrain schema remove-prefix
-  - gbrain schema add-link-type
-  - gbrain schema remove-link-type
-  - gbrain schema set-extractable
-  - gbrain schema set-expert-routing
-  - gbrain schema sync
-  - gbrain schema reload
+  - voltmind schema active
+  - voltmind schema list
+  - voltmind schema stats
+  - voltmind schema review-orphans
+  - voltmind schema detect
+  - voltmind schema suggest
+  - voltmind schema lint
+  - voltmind schema graph
+  - voltmind schema explain
+  - voltmind schema fork
+  - voltmind schema use
+  - voltmind schema add-type
+  - voltmind schema remove-type
+  - voltmind schema update-type
+  - voltmind schema add-alias
+  - voltmind schema remove-alias
+  - voltmind schema add-prefix
+  - voltmind schema remove-prefix
+  - voltmind schema add-link-type
+  - voltmind schema remove-link-type
+  - voltmind schema set-extractable
+  - voltmind schema set-expert-routing
+  - voltmind schema sync
+  - voltmind schema reload
   - mcp:get_active_schema_pack
   - mcp:list_schema_packs
   - mcp:schema_stats
@@ -67,10 +67,10 @@ flags). For these adjacent jobs, route elsewhere:
   changes the rules at AUTHORING TIME ("what types and prefixes exist?").
 - **Schema-check as part of EIIRP iteration** → `skills/eiirp/SKILL.md`
   already has a schema-check phase. Don't duplicate.
-- **Just looking up a type's settings** → `gbrain schema explain <type>`
+- **Just looking up a type's settings** → `voltmind schema explain <type>`
   directly. This skill is for CHANGING the pack, not READING from it.
 - **Querying who knows about X** → `skills/expert-routing/SKILL.md` (or
-  `gbrain whoknows` directly). schema-author makes a type expert-routable;
+  `voltmind whoknows` directly). schema-author makes a type expert-routable;
   it does not run the query.
 
 ## Convention
@@ -90,29 +90,29 @@ Invoke when the user (or a sibling skill) says any of:
 - "Sync the new types to backfill existing pages"
 
 DON'T invoke for "where does THIS note go" (use brain-taxonomist) or
-"who knows about X" (use expert-routing / `gbrain whoknows`).
+"who knows about X" (use expert-routing / `voltmind whoknows`).
 
 ## Tutorial + vision
 
 - **Why this matters:** [`docs/what-schemas-unlock.md`](../../docs/what-schemas-unlock.md) — 7 killer use cases (4000 invisible meetings made queryable, founder ops brain, research brain, legal brain, team brain, agent-as-co-curator) plus the structural argument for why types matter at query time. Read this before pitching schema authoring to a user — it's the doc that explains the difference between a pile of notes and a brain with structure.
-- **5-minute walkthrough:** [`docs/schema-author-tutorial.md`](../../docs/schema-author-tutorial.md) — fork the bundled pack, add a researcher type, sync, prove the T1.5 wiring via `gbrain whoknows`. Use placeholder pages so it runs against any brain without affecting real content.
+- **5-minute walkthrough:** [`docs/schema-author-tutorial.md`](../../docs/schema-author-tutorial.md) — fork the bundled pack, add a researcher type, sync, prove the T1.5 wiring via `voltmind whoknows`. Use placeholder pages so it runs against any brain without affecting real content.
 
 ## Workflow
 
 ### Phase 1 — Brain (know which pack is active)
 
 ```
-gbrain schema active --json
+voltmind schema active --json
 ```
 
 Output gives you `pack_name`, `version`, `sha8`, `page_types_count`, `source_tier`.
-If `source_tier === "default"`, the user is on bundled `gbrain-base` and any
+If `source_tier === "default"`, the user is on bundled `voltmind-base` and any
 mutation will need a fork first (Phase 4).
 
 ### Phase 2 — Assess (what does the current pack cover?)
 
 ```
-gbrain schema stats --json
+voltmind schema stats --json
 ```
 
 Returns per-type page counts, untyped count, and `dead_prefixes` (pack-
@@ -120,7 +120,7 @@ declared prefixes with zero matching pages — probable mis-declarations).
 If coverage < 90%, there's untyped content worth typing.
 
 ```
-gbrain schema review-orphans --limit 50 --json
+voltmind schema review-orphans --limit 50 --json
 ```
 
 Untyped pages drilldown. Look for shared path prefixes (e.g. "12 of these
@@ -129,14 +129,14 @@ are under `research/papers/`") — those are candidates for a new type.
 ### Phase 3 — Propose (what types should the pack add?)
 
 ```
-gbrain schema detect --json
+voltmind schema detect --json
 ```
 
 Clusters pages by `source_path` and proposes candidate types. Heuristic
 only (no LLM call).
 
 ```
-gbrain schema suggest --json
+voltmind schema suggest --json
 ```
 
 LLM-refined candidates with confidence scores. Use the top-3 hit rate as
@@ -144,18 +144,18 @@ the signal for which to promote.
 
 ### Phase 4 — Apply (mutate the pack)
 
-If the active pack is bundled (`gbrain-base` or `gbrain-recommended`),
+If the active pack is bundled (`voltmind-base` or `voltmind-recommended`),
 fork it first:
 
 ```
-gbrain schema fork gbrain-base mine
-gbrain schema use mine
+voltmind schema fork voltmind-base mine
+voltmind schema use mine
 ```
 
 Then add the types one at a time:
 
 ```
-gbrain schema add-type researcher \
+voltmind schema add-type researcher \
   --primitive entity \
   --prefix people/researchers/ \
   --extractable \
@@ -175,7 +175,7 @@ batched `schema_apply_mutations` op:
 Validate before sync:
 
 ```
-gbrain schema lint --with-db
+voltmind schema lint --with-db
 ```
 
 The `--with-db` flag opts into the 2 DB-aware rules
@@ -187,14 +187,14 @@ mis-declared types you'd otherwise discover only at runtime.
 Dry-run first:
 
 ```
-gbrain schema sync --json
+voltmind schema sync --json
 ```
 
 Returns per-prefix `would_apply` counts + sample slugs. If the numbers
 look right:
 
 ```
-gbrain schema sync --apply
+voltmind schema sync --apply
 ```
 
 Chunked UPDATE in 1000-row batches; never wedges concurrent writers.
@@ -203,13 +203,13 @@ Idempotent on re-run (second `--apply` finds nothing to backfill).
 ### Phase 6 — Verify
 
 ```
-gbrain schema stats --json
+voltmind schema stats --json
 ```
 
 Coverage should be ≥95% now. Spot-check the new type:
 
 ```
-gbrain whoknows "machine learning"
+voltmind whoknows "machine learning"
 ```
 
 If `researcher` was declared `--expert`, results should include
@@ -222,28 +222,28 @@ expert-routed types.)
 If the pack is in source control, commit:
 
 ```
-cd ~/.gbrain/schema-packs/mine
+cd ~/.voltmind/schema-packs/mine
 git add pack.json
 git commit -m "schema: add researcher + paper types + authored link"
 git push
 ```
 
-If the brain daemon is running (`gbrain serve --http`), other processes
+If the brain daemon is running (`voltmind serve --http`), other processes
 pick up the change within 1 second (stat-mtime TTL gate in
 loadActivePack — v0.40.6.0 closed the cross-process invalidation gap).
 
 ## Outputs
 
-- Mutated pack file at `~/.gbrain/schema-packs/<name>/pack.{json,yaml}`.
-- Audit row in `~/.gbrain/audit/schema-mutations-YYYY-Www.jsonl` per mutation.
+- Mutated pack file at `~/.voltmind/schema-packs/<name>/pack.{json,yaml}`.
+- Audit row in `~/.voltmind/audit/schema-mutations-YYYY-Www.jsonl` per mutation.
 - `pages.type` backfilled on matching rows after `sync --apply`.
 - Query paths (`whoknows`, `find_experts`) now route through the new
   expert types.
 
 ## Contract
 
-- **Inputs:** a natural-language request that names a type / prefix / link verb / flag change, OR the result of `gbrain schema review-orphans` showing untyped pages that need a new type.
-- **Outputs:** mutated pack file at `~/.gbrain/schema-packs/<name>/pack.{json,yaml}` + an audit row in `~/.gbrain/audit/schema-mutations-YYYY-Www.jsonl` + (if `sync --apply` ran) backfilled `pages.type` on matching rows.
+- **Inputs:** a natural-language request that names a type / prefix / link verb / flag change, OR the result of `voltmind schema review-orphans` showing untyped pages that need a new type.
+- **Outputs:** mutated pack file at `~/.voltmind/schema-packs/<name>/pack.{json,yaml}` + an audit row in `~/.voltmind/audit/schema-mutations-YYYY-Www.jsonl` + (if `sync --apply` ran) backfilled `pages.type` on matching rows.
 - **Side effects:** invalidates the in-process pack cache + the query cache for the source. Other processes pick up the change within 1 second (stat-mtime TTL).
 - **Idempotency:** every primitive is idempotent. `add-alias`/`add-prefix` no-op on duplicate; `sync --apply` finds nothing to update on second run.
 - **Trust:** CLI = local trust (no scope check). MCP = OAuth `admin` scope (write ops). Audit log captures `actor: mcp:<clientId8>` per mutation.
@@ -251,7 +251,7 @@ loadActivePack — v0.40.6.0 closed the cross-process invalidation gap).
 
 ## Anti-Patterns
 
-- **Don't mutate `gbrain-base` or `gbrain-recommended`.** Fork first (`gbrain schema fork gbrain-base mine`). These are bundled packs; edits would be lost on upgrade. The mutation primitives refuse with `PACK_READONLY`.
+- **Don't mutate `voltmind-base` or `voltmind-recommended`.** Fork first (`voltmind schema fork voltmind-base mine`). These are bundled packs; edits would be lost on upgrade. The mutation primitives refuse with `PACK_READONLY`.
 - **Don't add a type for a directory you imported once for triage.** Pack types are permanent decisions; one-time imports are not. See `skills/conventions/schema-evolution.md` for the <20-pages-don't-pack-codify heuristic.
 - **Don't add `--expert` to a type with no `path_prefixes`.** The `expert_routing_without_prefix` lint warns about this — expert-routed types with no prefix never match a put_page inference, so `whoknows` silently never surfaces them.
 - **Don't promote a `schema suggest` candidate without verifying the prefix matches real content.** Run `lint --with-db` before `add-type` to catch prefix collisions pre-write.
@@ -292,7 +292,7 @@ On failure, the error envelope follows the standard `StructuredAgentError` shape
 
 ## Failure modes
 
-- `PACK_READONLY` → you tried to mutate `gbrain-base` or `gbrain-recommended`. Fork first.
+- `PACK_READONLY` → you tried to mutate `voltmind-base` or `voltmind-recommended`. Fork first.
 - `INVALID_RESULT` → the mutation would create a dangling reference or
   prefix collision. The pre-write lint gate caught it. Read the error
   message; the lint rule name names the problem.
@@ -302,4 +302,4 @@ On failure, the error envelope follows the standard `StructuredAgentError` shape
 - `LOCK_BUSY` → another process is mid-mutation. Wait 30s and retry, or
   pass `--force` if you know the holder is wedged.
 - `permission_denied` (MCP only) → your OAuth client doesn't have `admin`
-  scope. Re-register with `gbrain auth register-client --scopes admin`.
+  scope. Re-register with `voltmind auth register-client --scopes admin`.

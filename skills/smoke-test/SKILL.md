@@ -1,9 +1,9 @@
 ---
 name: smoke-test
 description: |
-  Post-restart smoke tests + auto-fix for gbrain and OpenClaw environments.
+  Post-restart smoke tests + auto-fix for voltmind and OpenClaw environments.
   Tests critical services, auto-fixes known issues, extensible via user-defined
-  test scripts in ~/.gbrain/smoke-tests.d/*.sh.
+  test scripts in ~/.voltmind/smoke-tests.d/*.sh.
 triggers:
   - "smoke test"
   - "run smoke tests"
@@ -19,15 +19,15 @@ mutating: true
 
 # Smoke Test Skillpack
 
-> Run `gbrain smoke-test` or `bash scripts/smoke-test.sh` after any container restart.
+> Run `voltmind smoke-test` or `bash scripts/smoke-test.sh` after any container restart.
 
 ## Contract
 
 This skill guarantees:
-- 8 core tests verify gbrain + OpenClaw health after restart
+- 8 core tests verify voltmind + OpenClaw health after restart
 - Known failures are auto-fixed before reporting
-- User-extensible via `~/.gbrain/smoke-tests.d/*.sh` drop-in scripts
-- Results logged to `/tmp/gbrain-smoke-test.log`
+- User-extensible via `~/.voltmind/smoke-tests.d/*.sh` drop-in scripts
+- Results logged to `/tmp/voltmind-smoke-test.log`
 - Exit code = number of unfixed failures (0 = all pass)
 
 ## Built-in Tests
@@ -35,9 +35,9 @@ This skill guarantees:
 | # | Test | Auto-Fix |
 |---|------|----------|
 | 1 | Bun runtime | Install from bun.sh |
-| 2 | GBrain CLI loads | Reinstall deps |
-| 3 | GBrain database (doctor) | — |
-| 4 | GBrain worker process | Start worker |
+| 2 | voltmind CLI loads | Reinstall deps |
+| 3 | voltmind database (doctor) | — |
+| 4 | voltmind worker process | Start worker |
 | 5 | OpenClaw Codex plugin (Zod CJS) | `npm install zod@4 --force` |
 | 6 | OpenClaw gateway | — (may not be started yet) |
 | 7 | Embedding API key | — (check .env) |
@@ -47,7 +47,7 @@ This skill guarantees:
 
 ### CLI
 ```bash
-gbrain smoke-test
+voltmind smoke-test
 ```
 
 ### Direct
@@ -58,20 +58,20 @@ bash scripts/smoke-test.sh
 ### From OpenClaw bootstrap
 Add to your `ensure-services.sh` or equivalent:
 ```bash
-bash /path/to/gbrain/scripts/smoke-test.sh >> /tmp/bootstrap.log 2>&1
+bash /path/to/voltmind/scripts/smoke-test.sh >> /tmp/bootstrap.log 2>&1
 ```
 
 ### From an agent
 ```
-exec: bash /data/gbrain/scripts/smoke-test.sh
+exec: bash /data/voltmind/scripts/smoke-test.sh
 ```
 
 ## Adding Custom Tests
 
-Create executable scripts in `~/.gbrain/smoke-tests.d/`:
+Create executable scripts in `~/.voltmind/smoke-tests.d/`:
 
 ```bash
-# ~/.gbrain/smoke-tests.d/check-redis.sh
+# ~/.voltmind/smoke-tests.d/check-redis.sh
 #!/bin/bash
 redis-cli ping | grep -q PONG
 ```
@@ -114,11 +114,11 @@ fi
 
 | Var | Default | Description |
 |-----|---------|-------------|
-| `GBRAIN_SMOKE_LOG` | `/tmp/gbrain-smoke-test.log` | Log file path |
-| `GBRAIN_DIR_OVERRIDE` | (auto-detect) | Force gbrain install path |
-| `GBRAIN_DATABASE_URL` | (from .env) | Database connection URL |
+| `voltmind_SMOKE_LOG` | `/tmp/voltmind-smoke-test.log` | Log file path |
+| `voltmind_DIR_OVERRIDE` | (auto-detect) | Force voltmind install path |
+| `voltmind_DATABASE_URL` | (from .env) | Database connection URL |
 | `OPENCLAW_GATEWAY_PORT` | `18789` | Gateway port to test |
-| `GBRAIN_BRAIN_PATH` | `/data/brain` | Brain repo path |
+| `voltmind_BRAIN_PATH` | `/data/brain` | Brain repo path |
 
 ## Known Issues & Their Auto-Fixes
 
@@ -129,10 +129,10 @@ fi
 - **Persistence:** Does NOT survive container restart (gateway reinstalls deps)
 - This is why smoke tests must run on every restart
 
-### GBrain Worker Auth Failure
+### voltmind Worker Auth Failure
 - **Symptom:** Worker can't connect to DB
-- **Cause:** `GBRAIN_DATABASE_URL` not propagated to worker subprocess
-- **Auto-fix:** Script explicitly passes both `DATABASE_URL` and `GBRAIN_DATABASE_URL`
+- **Cause:** `voltmind_DATABASE_URL` not propagated to worker subprocess
+- **Auto-fix:** Script explicitly passes both `DATABASE_URL` and `voltmind_DATABASE_URL`
 
 ## Anti-Patterns
 
@@ -147,14 +147,14 @@ fi
   no brain repo configured) are skips, not failures. Exit code = count of
   real failures, not skipped checks.
 - ❌ Hardcoding paths in a user drop-in. Read env vars
-  (`GBRAIN_DATABASE_URL`, `HOME`, etc.) so the script travels across
+  (`voltmind_DATABASE_URL`, `HOME`, etc.) so the script travels across
   container rebuilds.
 
 ## Output Format
 
 The script writes a one-line status per check to stdout (✅/❌/🔧/⏭️) plus a
 final summary line: `Results: N/M passed, F auto-fixed, S skipped`. A
-structured timestamped log appends to `$GBRAIN_SMOKE_LOG`
-(default `/tmp/gbrain-smoke-test.log`) for post-run forensics. Exit code
+structured timestamped log appends to `$voltmind_SMOKE_LOG`
+(default `/tmp/voltmind-smoke-test.log`) for post-run forensics. Exit code
 equals the count of unfixed failures (0 = all pass, positive integer =
 count of remaining failures).

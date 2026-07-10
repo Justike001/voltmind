@@ -1,10 +1,12 @@
 ---
 name: testing
-version: 2.0.0
+version: 1.1.0
 description: |
-  VoltMind MVP validation framework. Runs skill conformance checks, focused
-  runtime gates, project tests, and health readouts, then classifies failures
-  as regression, stale test, flake, new work, or infrastructure.
+  Skill validation framework PLUS daily test-suite health and regression
+  intelligence. Validates skill conformance (frontmatter, manifest coverage,
+  resolver coverage). Runs the project test suite in tiered phases (unit /
+  evals / integration / system health), classifies failures, and produces
+  a regression-aware report.
 triggers:
   - "validate skills"
   - "test skills"
@@ -17,116 +19,238 @@ triggers:
 tools:
   - search
   - list_pages
-  - get_health
-  - run_doctor
 mutating: false
 ---
 
-# Testing Skill
+# Testing Skill — Validation + Daily Health & Regression Intelligence
 
-Use this skill when the user wants to validate VoltMind skills, run tests, or
-understand current project health.
+> **Convention:** see [conventions/quality.md](../conventions/quality.md) for
+> the test-before-bulk pattern; this skill enforces it across the project's
+> own test suite.
 
-## Contract
+## Two modes
 
-This skill guarantees:
+This skill has two related but distinct modes:
 
-- Test scope is stated before broad runs.
-- Skill conformance, resolver coverage, and MVP runtime health are treated as
-  separate signals.
-- Failures are classified before suggesting fixes.
-- Security or trust-boundary failures are not auto-fixed.
-- Results preserve enough command output to be actionable.
+1. **Skill conformance validation** — voltmind's own conformance bar
+   (the original 1.0 scope). Validates every skill has SKILL.md with
+   frontmatter, every reference exists, manifest + resolver coverage
+   round-trips.
 
-## Mode 1: Skill Conformance
+2. **Project test-suite health (v0.25.1 extension)** — runs the
+   project's tiered test suite and produces a regression-classified
+   report. Used by daily cron, container-restart bootstrap, and
+   "how are the tests" prompts.
 
-Run focused skill validation when skills or routing changed:
+Pick the mode by trigger.
+
+## Mode 1: Skill conformance validation
+
+### Contract
+
+This mode guarantees:
+
+- Every skill directory has a `SKILL.md` file
+- Every `SKILL.md` has valid YAML frontmatter (`name`, `description`)
+- Every `SKILL.md` has required sections per
+  `test/skills-conformance.test.ts`
+- `skills/manifest.json` lists every skill directory
+- `skills/RESOLVER.md` references every skill in the manifest
+- `openclaw.plugin.json` `skills[]` round-trips with both
+- No MECE violations (duplicate triggers across skills)
+
+### Phases
+
+1. **Walk skills directory.** List all subdirs containing `SKILL.md`.
+2. **Validate frontmatter.** Parse YAML, check required fields.
+3. **Validate sections.** Check for the required headings.
+4. **Check manifest.** Every skill dir must be in `manifest.json`.
+5. **Check resolver.** Every manifest skill must have a RESOLVER row.
+6. **Check round-trip.** RESOLVER trigger ↔ frontmatter triggers.
+7. **Report results.**
+
+### Automation
 
 ```bash
 bun test test/skills-conformance.test.ts test/resolver.test.ts
 ```
 
-Check:
+The CI-gated check is the package.json `test` script.
 
-- every active skill has `SKILL.md`
-- frontmatter has required fields
-- `skills/manifest.json` references the right files
-- `skills/RESOLVER.md` routes active MVP skills
-- trigger text is not misleading
+### Output format
 
-## Mode 2: MVP Runtime Gate
+```
+Skill Validation Report
+========================
+Skills found:        N
+Conformance:         N/N pass
+Manifest coverage:   N/N
+Resolver coverage:   N/N
+Round-trip:          N/N
+MECE violations:     N
 
-Run the focused MVP gate before calling the runtime healthy:
-
-```bash
-bun run typecheck
-bun test test/cli-help-discoverability.test.ts test/mvp-surface.test.ts test/mcp-tool-defs.test.ts test/operations-descriptions.test.ts
-voltmind status
-voltmind health
-voltmind doctor --fast
+Issues:
+- <skill>: <issue>
 ```
 
-On Windows, if Bun subprocess tests return `status=-1` but the same CLI command
-works manually, report it as a harness issue and include the manual verification.
+## Mode 2: Project test-suite health (v0.25.1)
 
-MVP note: `doctor --fast` is a diagnostic signal, not the only readiness gate.
-While inherited GBrain skills remain frozen in the repository, doctor may report
-resolver/archive issues even when PGLite storage and the MVP command surface are
-usable. Treat `status`, `health`, `--tools-json`, import/search smoke, and the
-focused MVP tests as the initialization gate.
+### When to use
 
-## Mode 3: Project Test Health
+- Daily test cron fires
+- User asks "run the tests" / "how are the tests" / "what's broken"
+- After significant code changes (often via cross-modal-review)
+- After container restart (bootstrap)
+- When something seems off and you want to verify system health
 
-For broader health:
+### Test tiers
+
+| Tier | What it runs | Wall time | Gates |
+|------|--------------|-----------|-------|
+| **Unit** | `bun test` (deterministic, zero external calls) | <2s | Every commit |
+| **Evals** | LLM-judge or quality evals | ~60s | Daily |
+| **Integration** | E2E tests against real Postgres | ~5m | Pre-ship + nightly |
+| **System health** | Disk / memory / CPU / service liveness | <10s | Daily |
+
+### Daily run protocol
+
+When the cron fires (or the user asks), do ALL of this:
+
+#### 1. Run unit tests
 
 ```bash
-bun test
+bun test 2>&1
+```
+
+Parse: total passed, total failed, total skipped, file-level results.
+
+#### 2. Run evals (if the project has an evals config)
+
+```bash
+# Adapt to the project's eval config
+bun test --filter eval 2>&1
+```
+
+Parse: same format. Note any flakes (tests that fail due to API
+timeouts, not code bugs).
+
+#### 3. Run system health checks
+
+- Disk / memory / CPU
+- voltmind: `voltmind doctor --fast --json`
+- Database connection (if applicable)
+- Critical files exist (CLAUDE.md, AGENTS.md, etc.)
+
+#### 4. Git diff analysis (CRITICAL — regression intelligence)
+
+```bash
+# What changed since last test run?
 git log --oneline --since="24 hours ago"
 ```
 
-For each failing test, classify:
+For each failing test:
 
-| Classification | Meaning | Action |
-|---|---|---|
-| regression | code changed and behavior broke | flag likely change |
-| stale test | expected behavior changed intentionally | update test after review |
-| flake | timeout or external variance | retry once and report |
-| new work | newly added test not passing yet | confirm intent |
-| infra | local environment or dependency issue | fix environment or document |
+1. Check if the test itself was modified recently (test change, not
+   regression).
+2. Check if the code it tests was modified recently (possible
+   regression).
+3. Check if it's a known flake (API timeout, service down).
+4. Check if a dependency was updated (voltmind, bun, etc.).
 
-## State
+#### 5. Classify each failure
 
-If trend tracking is needed, store it in VoltMind, for example:
+| Classification | Marker | Action |
+|---------------|--------|--------|
+| **REGRESSION** — code changed, test broke | 🔴 | Flag with the commit that broke it |
+| **STALE** — test expects old behavior; code is correct | 🟡 | Fix the test, not the code |
+| **FLAKE** — API timeout, service down, LLM variance | ⚠️ | Note, don't alarm; retry once |
+| **NEW** — test was just added and isn't passing yet | 🟢 | Check if intentional |
+| **INFRA** — container restart wiped state | 🛠 | Run bootstrap, retest |
 
-- `state/indexes/test-state`
-- raw data source `test-state`
+#### 6. Report format
 
-Do not use old `~/.gbrain` paths.
-
-## Output Format
-
-```text
-VOLTMIND TEST REPORT
-Scope: <conformance / MVP gate / full>
-Commands run: <commands>
-Result: pass / fail / partial
-Failures: <classified failures>
-Manual verification: <if any>
-Next action: <recommended fix or review>
 ```
+🧪 Daily Tests — YYYY-MM-DD
+
+Unit:   X/Y passed (Z skipped)
+Evals:  X/Y passed
+System: [health summary]
+
+REGRESSIONS:
+  🔴 <test-name>: broke by commit <sha> "<commit message>"
+
+STALE TESTS:
+  🟡 <test-name>: expects X but code now does Y (commit <sha>)
+
+FLAKES:
+  ⚠️ <test-name>: timeout (retry passed)
+
+✅ ALL CLEAR  (when applicable)
+```
+
+#### 7. Auto-fix protocol
+
+**DO auto-fix:**
+
+- Test expects an old file path after a rename → update the test
+- Test expects an old version string → update
+- Test expects a file that was intentionally deleted → remove the test
+- Import path broke because file moved → fix the import
+
+**DO NOT auto-fix:**
+
+- Test expects behavior A but code now does B → ASK first. Maybe the
+  test is right and the code has a bug.
+- Security test failing → ALWAYS escalate, never auto-fix.
+- Test was skipped with a TODO → don't un-skip without understanding why.
+
+When uncertain: check the commit message that changed the code, check
+if there's a related PR or conversation, ask the user if still unclear.
+
+### State (regression history)
+
+Track results in `~/.voltmind/test-state.json` for trend tracking:
+
+```json
+{
+  "lastRun": "2026-04-16T13:37:00Z",
+  "unit": { "passed": 1262, "failed": 31, "skipped": 8 },
+  "evals": { "passed": 17, "failed": 0 },
+  "system": { "doctor": "ok", "voltmind": "0.25.1" },
+  "failureHistory": [
+    { "test": "<name>", "since": "2026-04-14", "classification": "stale" }
+  ]
+}
+```
+
+This enables:
+
+- Trend tracking (are we getting better or worse?)
+- Flake detection (same test fails intermittently)
+- Regression velocity (how fast do we break things after changes?)
 
 ## Anti-Patterns
 
-- Treating every red test as a regression before classification.
-- Auto-fixing security or trust-boundary tests.
-- Reporting all clear without running the stated commands.
-- Calling inherited `gbrain` commands.
-- Expanding to slow or external tests without user approval.
+- ❌ Skipping conformance validation after adding a new skill
+- ❌ Adding skills to `manifest.json` without adding to RESOLVER.md
+- ❌ Treating every red test as a regression. Classify first; many are
+  stale or flaky.
+- ❌ Auto-un-skipping a test without understanding why it was skipped
+- ❌ Auto-"fixing" a security test failure
+- ❌ Reporting "all clear" without actually running system health checks
 
-## Tools Used
 
-- Run project tests (`bun test`, repo-local command)
-- Run typecheck (`bun run typecheck`, repo-local command)
-- Read runtime health (`get_health`, CLI: `voltmind health`)
-- Run doctor (`run_doctor`, CLI: `voltmind doctor --fast`)
-- Search/list VoltMind pages when test state is stored in the brain (`search`, `list_pages`)
+## Contract
+
+This skill guarantees:
+
+- Routing matches the canonical triggers in the frontmatter.
+- Output written under the directories listed in `writes_to:` (when applicable).
+- Conventions referenced (`quality.md`, `brain-first.md`, `_brain-filing-rules.md`) are followed.
+- Privacy contract preserved: no real names, no fork-specific filesystem path literals, no upstream-fork references.
+
+The full behavior contract is documented in the body sections above; this section exists for the conformance test.
+
+## Output Format
+
+The skill's output shape is documented inline in the body sections above (see "Output", "Brain page format", or equivalent). The literal section header here exists for the conformance test (`test/skills-conformance.test.ts`).

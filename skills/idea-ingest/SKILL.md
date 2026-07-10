@@ -64,19 +64,6 @@ Format: `- **YYYY-MM-DD** | Referenced in [page title](path) — brief context`
    - A reusable framework → `concepts/`
    - Raw data dump → `sources/`
 
-### Phase 4.5: Check for unresolved references (v0.13+)
-
-After `put_page`, inspect `response.auto_links.unresolved` — an array of frontmatter
-references that did not resolve to existing pages. For idea ingestion, this usually
-means authors or sources you haven't created a person page for yet.
-
-If `unresolved.length > 0`:
-- Option 1 (create pages now): trigger an enrichment pass to build the missing entity pages.
-- Option 2 (defer): log the unresolved names to the enrichment queue for later.
-- Option 3 (accept the gap): the reference edge will not be created until a page exists.
-  Re-running `voltmind extract links --source db --include-frontmatter` after creating
-  the page fills in the missing edges.
-
 5. **Analyze for the user.** Reply with analysis that connects the content to what the brain knows. Think about:
    - Active projects — is this relevant?
    - Contradictions — does this challenge existing brain knowledge?

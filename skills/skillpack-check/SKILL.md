@@ -2,18 +2,18 @@
 name: skillpack-check
 version: 1.0.0
 description: |
-  Run `gbrain skillpack-check` to produce an agent-readable JSON health report
-  for the gbrain install. Wraps `gbrain doctor` + `gbrain apply-migrations
+  Run `voltmind skillpack-check` to produce an agent-readable JSON health report
+  for the voltmind install. Wraps `voltmind doctor` + `voltmind apply-migrations
   --list` so a host agent (your OpenClaw's morning-briefing, any OpenClaw cron)
   can see at a glance whether the skillpack needs attention.
 
-  Use when the user asks "is gbrain healthy?", when a cron fires a morning
+  Use when the user asks "is voltmind healthy?", when a cron fires a morning
   check, or proactively when something seems off (jobs not running, brain
   not updating, autopilot silent).
 triggers:
   - "skillpack check"
-  - "is gbrain healthy"
-  - "gbrain health"
+  - "is voltmind healthy"
+  - "voltmind health"
   - "check the brain"
   - "is the brain working"
 tools:
@@ -25,12 +25,12 @@ mutating: false
 
 ## Contract
 
-Running `gbrain skillpack-check` returns a JSON report with:
+Running `voltmind skillpack-check` returns a JSON report with:
 
 - **`healthy`** (bool): true if no action needed.
 - **`summary`** (string): one-line summary safe to quote in a briefing.
 - **`actions`** (string[]): every remediation command. If non-empty, run them.
-- **`doctor`**: full `gbrain doctor --fast --json` output (filesystem checks).
+- **`doctor`**: full `voltmind doctor --fast --json` output (filesystem checks).
 - **`migrations`**: applied/pending/partial counts from `apply-migrations --list`.
 
 Exit code:
@@ -40,10 +40,10 @@ Exit code:
 
 ## When to run
 
-- **Daily cron** (e.g. your OpenClaw's `morning-briefing`): `gbrain skillpack-check --quiet`.
+- **Daily cron** (e.g. your OpenClaw's `morning-briefing`): `voltmind skillpack-check --quiet`.
   Exit code alone tells you if anything is wrong; surface a one-liner in the
   briefing only when exit != 0. No JSON noise in happy-path briefings.
-- **On demand**: `gbrain skillpack-check` for the full JSON when debugging.
+- **On demand**: `voltmind skillpack-check` for the full JSON when debugging.
 - **In a CI pipeline**: same pattern — exit code gates, JSON is the evidence.
 
 ## What to do with the output
@@ -64,23 +64,23 @@ done
 
 Common `actions[]` entries and what they mean:
 
-- `gbrain apply-migrations --yes` — A migration is pending or half-finished.
+- `voltmind apply-migrations --yes` — A migration is pending or half-finished.
   Run this (it's idempotent). If it exits `status: "partial"`, the host has
   non-builtin cron handlers that need plugin registration — follow
   `skills/migrations/v0.11.0.md`.
-- `gbrain embed --stale` — Embeddings are stale.
-- `gbrain check-backlinks --fix` — Dead links or missing back-links.
+- `voltmind embed --stale` — Embeddings are stale.
+- `voltmind check-backlinks --fix` — Dead links or missing back-links.
 - Free-text action (no `Run:` prefix in the source message) — agent judgment
   needed. Quote it in the report for the user.
 
 ### Determine failure (`exit 2`)
 
-Treat as urgent. Probably means the gbrain binary is missing from `$PATH` or
+Treat as urgent. Probably means the voltmind binary is missing from `$PATH` or
 a required subcommand crashed. Check:
 
-1. `which gbrain` returns a path
-2. `gbrain --version` exits 0
-3. `~/.gbrain/` is accessible
+1. `which voltmind` returns a path
+2. `voltmind --version` exits 0
+3. `~/.voltmind/` is accessible
 
 ## Output format
 
@@ -89,12 +89,12 @@ a required subcommand crashed. Check:
   "version": "0.11.1",
   "ts": "2026-04-18T12:34:56.789Z",
   "healthy": false,
-  "summary": "gbrain skillpack needs attention: 1 action(s) — gbrain apply-migrations --yes",
-  "actions": ["gbrain apply-migrations --yes"],
+  "summary": "voltmind skillpack needs attention: 1 action(s) — voltmind apply-migrations --yes",
+  "actions": ["voltmind apply-migrations --yes"],
   "doctor": {
     "exit_code": 1,
     "checks": [
-      { "name": "minions_migration", "status": "fail", "message": "MINIONS HALF-INSTALLED (partial migration: 0.11.0). Run: gbrain apply-migrations --yes" }
+      { "name": "minions_migration", "status": "fail", "message": "MINIONS HALF-INSTALLED (partial migration: 0.11.0). Run: voltmind apply-migrations --yes" }
     ]
   },
   "migrations": {
@@ -124,9 +124,9 @@ then the action list, then (only if relevant) the full JSON for debugging.
 
 ## Related
 
-- `gbrain doctor` — the underlying filesystem + DB check. skillpack-check
+- `voltmind doctor` — the underlying filesystem + DB check. skillpack-check
   composes this.
-- `gbrain apply-migrations --list` — the migration status view.
+- `voltmind apply-migrations --list` — the migration status view.
 - `skills/migrations/v0.11.0.md` — the host-agent instruction manual for
   resolving `pending-host-work.jsonl` items.
 - `docs/guides/minions-fix.md` — troubleshooting a half-migrated install.
