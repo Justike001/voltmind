@@ -53,6 +53,7 @@ export const VOLTMIND_MVP_CLI_COMMANDS = new Set([
   'forget',
   'candidates',
   'actions',
+  'autopilot',
   'serve',
   'call',
   'jobs',

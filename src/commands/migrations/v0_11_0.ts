@@ -418,8 +418,34 @@ function phaseFInstall(opts: OrchestratorOpts): OrchestratorPhaseResult {
   if (opts.dryRun) return { name: 'install', status: 'skipped', detail: 'dry-run' };
   if (opts.noAutopilotInstall) return { name: 'install', status: 'skipped', detail: '--no-autopilot-install' };
   try {
-    execSync('voltmind autopilot --install --yes', { stdio: 'inherit', timeout: 60_000, env: process.env });
-    return { name: 'install', status: 'complete' };
+    // §14: migration must not auto-install autopilot for never-installed users.
+    // Reconcile only when a manifest already exists; otherwise skip and emit a
+    // hint so the user can run `voltmind autopilot --install` explicitly.
+    const { loadManifest } = require('../../core/autopilot/manifest.ts');
+    const existing = loadManifest();
+    if (!existing) {
+      return {
+        name: 'install',
+        status: 'skipped',
+        detail: 'no existing autopilot install; not auto-creating. Run `voltmind autopilot --install` to enable.',
+      };
+    }
+    // Use the shared CliInvocation resolver (no shell string concat, no bash,
+    // no internal migration flag). Spawn the public install command.
+    const { spawnSync } = require('child_process');
+    const { resolveCliInvocation, buildCliArgv } = require('../../core/autopilot/cli-invocation.ts');
+    // resolveCliInvocation is async; run it via a sync wrapper is not available,
+    // so fall back to a direct `voltmind` PATH invocation (the migration runs
+    // in an environment where voltmind is on PATH — same as before, but now
+    // gated on manifest existence and without VOLTMIND_INTERNAL_MIGRATION).
+    const result = spawnSync('voltmind', ['autopilot', '--install', '--yes'], {
+      stdio: 'inherit',
+      timeout: 60_000,
+      env: process.env,
+      shell: process.platform === 'win32',
+    });
+    if (result.status === 0) return { name: 'install', status: 'complete' };
+    return { name: 'install', status: 'failed', detail: `exit ${result.status}` };
   } catch (e) {
     // Install is best-effort — log but don't fail the whole migration. User
     // can re-run `voltmind autopilot --install` manually.

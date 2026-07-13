@@ -24,6 +24,19 @@ import type { BrainEngine } from '../core/engine.ts';
 import { loadPreferences } from '../core/preferences.ts';
 import { loadConfig, voltmindPath as voltmindHomePath } from '../core/config.ts';
 import { ChildWorkerSupervisor } from '../core/minions/child-worker-supervisor.ts';
+import { resolveCliInvocation, buildCliArgv, autopilotLockPath, type CliInvocation } from '../core/autopilot/cli-invocation.ts';
+import { loadRuntimeEnvFile } from '../core/autopilot/env-file.ts';
+import {
+  loadManifest, saveManifest, deleteManifest, createManifest, reconcileManifest, manifestPath,
+} from '../core/autopilot/manifest.ts';
+import {
+  initialRuntimeStatus, writeRuntimeStatus, readRuntimeStatus, deleteRuntimeStatus, isHeartbeatStale,
+  type AutopilotRuntimeStatus,
+} from '../core/autopilot/runtime-status.ts';
+import { detectInstallTarget as detectInstallTargetUnified } from '../core/autopilot/detect-target.ts';
+import { isInstallTarget, type InstallTarget, type AutopilotOverallState } from '../core/autopilot/diagnostics.ts';
+import { windowsTaskSchedulerAdapter, WINDOWS_TASK_NAME } from '../core/autopilot/windows-task-adapter.ts';
+import { VERSION } from '../version.ts';
 
 /**
  * v0.37.7.0 #1162 — classify autopilot reconnect-loop errors.
@@ -81,17 +94,14 @@ function logError(phase: string, e: unknown) {
 /**
  * Resolve the voltmind CLI entrypoint for spawning the worker child.
  *
- * A .ts source path is never a valid spawn target — spawning it fails with
- * EACCES because TypeScript source isn't executable. The canonical install
- * puts a shim at `/usr/local/bin/voltmind` (or wherever `which voltmind`
- * resolves to) that already wraps the right runtime+entrypoint; prefer it.
+ * Backward-compatible synchronous wrapper around the unified
+ * `resolveCliInvocation()`. Prefer using `resolveCliInvocation()` directly
+ * (it returns a structured `CliInvocation` with prefix args + spawn options).
+ * This wrapper collapses that to a single executable string for the legacy
+ * `cliPath` field and for existing tests.
  *
- * Order of resolution:
- *   1. `which voltmind` — the shim on PATH, canonical for installed builds.
- *   2. process.execPath if it ends with /voltmind (compiled binary, no shim).
- *   3. argv[1] if it ends with /voltmind (e.g., direct invocation of compiled
- *      binary without PATH). Never .ts source paths.
- *   4. Throw with a clear install hint.
+ * A .ts source path is never a valid spawn target. The canonical install
+ * puts a shim at `/usr/local/bin/voltmind`; prefer it.
  */
 export function resolveGbrainCliPath(): string {
   try {
@@ -120,11 +130,13 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
   if (args.includes('--help') || args.includes('-h')) {
     console.log(
       'Usage: voltmind autopilot [--repo <path>] [--interval N] [--json] [--no-worker]\n' +
-      '       voltmind autopilot --install [--repo <path>]\n' +
+      '       voltmind autopilot --install [--repo <path>] [--target <target>] [--runtime-env-file <path>]\n' +
       '       voltmind autopilot --uninstall\n' +
       '       voltmind autopilot --status [--json]\n\n' +
       'Self-maintaining brain daemon. Runs the full maintenance cycle\n' +
       '(lint + backlinks + sync + extract + embed + orphans) on an interval.\n\n' +
+      'On Windows, `--install` registers a Task Scheduler entry (requires\n' +
+      'Supabase/Postgres; PGLite is not supported for a supervised worker).\n\n' +
       'For a one-shot cron-triggered cycle, see `voltmind dream`.',
     );
     return;
@@ -135,12 +147,28 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     return;
   }
   if (args.includes('--uninstall')) {
-    uninstallDaemon();
+    await uninstallDaemonUnified();
     return;
   }
   if (args.includes('--status')) {
-    showStatus(args.includes('--json'));
+    await showStatus(args.includes('--json'));
     return;
+  }
+
+  // --runtime-env-file must be loaded BEFORE engine detection / Postgres init /
+  // provider init / Minion mode resolution (spec §5). Only allowlisted vars
+  // are applied; dangerous system vars are refused.
+  const runtimeEnvFilePath = parseArg(args, '--runtime-env-file');
+  if (runtimeEnvFilePath) {
+    try {
+      const result = loadRuntimeEnvFile(runtimeEnvFilePath);
+      if (result.skipped.length > 0) {
+        console.error(`[autopilot] runtime env file: skipped ${result.skipped.length} disallowed variable(s): ${result.skipped.join(', ')}`);
+      }
+    } catch (e) {
+      console.error(`[autopilot] FATAL: ${(e as Error).message}`);
+      process.exit(1);
+    }
   }
 
   const repoPath = parseArg(args, '--repo') || await engine.getConfig('sync.repo_path');
@@ -160,7 +188,7 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
   // two brains sharing VOLTMIND_HOME=different-paths still wrote to the
   // same global lockfile and one would silently respawn the other
   // forever.
-  const lockPath = voltmindHomePath('autopilot.lock');
+  const lockPath = autopilotLockPath();
   try {
     mkdirSync(voltmindHomePath(), { recursive: true });
     if (existsSync(lockPath)) {
@@ -186,16 +214,26 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
   const useMinionsDispatch = mode !== 'off' && engineType === 'postgres' && !forceInline;
   const spawnManagedWorker = useMinionsDispatch && !noWorker;
 
+  // Runtime status file (spec §9): atomic local state so --status doesn't
+  // have to guess from process existence. Heartbeat updated every cycle.
+  const runtimeStatus = initialRuntimeStatus({
+    pid: process.pid,
+    repoPath,
+    engine: engineType as 'postgres' | 'pglite',
+    workerExpected: spawnManagedWorker,
+  });
+  try { writeRuntimeStatus(runtimeStatus); } catch { /* best-effort */ }
+
   let stopping = false;
   let childSupervisor: ChildWorkerSupervisor | null = null;
 
   if (spawnManagedWorker) {
-    const cliPath = resolveGbrainCliPath();
+    const cliInvocation = await resolveCliInvocation({ repoRoot: repoPath });
     // Inject the RSS watchdog default (2048 MB) for the autopilot-supervised
     // worker. Bare `voltmind jobs work` has no default; the supervisor and
     // autopilot are the production paths that opt in.
     childSupervisor = new ChildWorkerSupervisor({
-      cliPath,
+      cliInvocation,
       args: ['jobs', 'work', '--max-rss', '2048'],
       // process.env clone; autopilot doesn't gate shell jobs the way the
       // standalone supervisor does (autopilot is the operator-trust path).
@@ -265,6 +303,10 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     if (stopping) return;
     stopping = true;
     console.log(`Autopilot stopping (${sig}).`);
+    runtimeStatus.state = 'stopping';
+    runtimeStatus.updatedAt = new Date().toISOString();
+    runtimeStatus.heartbeatAt = runtimeStatus.updatedAt;
+    try { writeRuntimeStatus(runtimeStatus); } catch { /* best-effort */ }
     if (childSupervisor) {
       childSupervisor.killChild('SIGTERM');
       await childSupervisor.awaitChildExit(35_000);
@@ -273,6 +315,7 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
       }
     }
     try { unlinkSync(lockPath); } catch { /* already gone */ }
+    try { deleteRuntimeStatus(); } catch { /* best-effort */ }
     process.exit(0);
   };
   process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
@@ -331,6 +374,8 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     try {
       await engine.getConfig('version');
       autopilotReconnectFails = 0; // reset on success
+      runtimeStatus.database.state = 'connected';
+      runtimeStatus.database.lastConnectedAt = new Date().toISOString();
     } catch (probeErr) {
       try {
         await engine.disconnect();
@@ -339,6 +384,8 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
       } catch (e) {
         logError('reconnect', e);
         autopilotReconnectFails++;
+        runtimeStatus.database.state = 'error';
+        runtimeStatus.database.lastError = e instanceof Error ? e.message : String(e);
         const klass = classifyReconnectError(e);
         if (klass === 'unrecoverable') {
           console.error(
@@ -710,6 +757,16 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
       // informational; autopilot loop continues.
     }
 
+    // Update runtime status heartbeat + supervisor state each cycle.
+    if (runtimeStatus.state === 'starting') runtimeStatus.state = 'running';
+    if (childSupervisor) {
+      runtimeStatus.supervisor.state = childSupervisor.childAlive ? 'running' : (childSupervisor.inBackoff ? 'restarting' : 'running');
+      runtimeStatus.supervisor.restartCount = childSupervisor.crashCount;
+    }
+    runtimeStatus.updatedAt = new Date().toISOString();
+    runtimeStatus.heartbeatAt = runtimeStatus.updatedAt;
+    try { writeRuntimeStatus(runtimeStatus); } catch { /* best-effort */ }
+
     // Wait for next cycle
     await new Promise(r => setTimeout(r, interval * 1000));
   }
@@ -729,11 +786,15 @@ function ephemeralStartScriptPath(): string {
   return join(process.env.HOME || '', '.voltmind', 'start-autopilot.sh');
 }
 
-export type InstallTarget = 'macos' | 'linux-systemd' | 'ephemeral-container' | 'linux-cron';
+// Re-export the unified InstallTarget (now includes 'windows-task') for
+// backward compatibility. Existing imports of `InstallTarget` from this
+// module keep working.
+export type { InstallTarget } from '../core/autopilot/diagnostics.ts';
 
 /**
  * Detect the right supervisor for this host.
  *
+ *   - win32  → windows-task (NEVER falls back to linux-cron).
  *   - macos   → launchd (always, when platform === 'darwin').
  *   - ephemeral-container → Render / Railway / Fly / Docker. Crontab is
  *                           unreliable here (wiped on deploy); we hand
@@ -742,28 +803,14 @@ export type InstallTarget = 'macos' | 'linux-systemd' | 'ephemeral-container' | 
  *                     probe succeeds). Codex hardened from the naive
  *                     /run/systemd/system check.
  *   - linux-cron  → fallback.
+ *
+ * Delegates to the unified detector in core/autopilot/detect-target.ts so
+ * the CLI entry and the adapter registry share one source of truth.
  */
 export function detectInstallTarget(): InstallTarget {
-  if (process.platform === 'darwin') return 'macos';
-
-  const ephemeral = !!(
-    process.env.RENDER
-    || process.env.RAILWAY_ENVIRONMENT
-    || process.env.FLY_APP_NAME
-    || existsSync('/.dockerenv')
-  );
-  if (ephemeral) return 'ephemeral-container';
-
-  if (existsSync('/run/systemd/system')) {
-    try {
-      execSync('systemctl --user is-system-running', { stdio: 'pipe', timeout: 3000 });
-      return 'linux-systemd';
-    } catch {
-      // user bus not available → fall through to cron.
-    }
-  }
-
-  return 'linux-cron';
+  const forced = (process.env as Record<string, string | undefined>).VOLTMIND_AUTOPILOT_TARGET;
+  const result = detectInstallTargetUnified({ platform: process.platform, env: process.env, forcedTarget: forced });
+  return result.target;
 }
 
 function detectOpenClaw(): { detected: boolean; bootstrapCandidates: string[] } {
@@ -814,11 +861,55 @@ async function installDaemon(engine: BrainEngine, args: string[]) {
     process.exit(1);
   }
 
-  const forcedTarget = parseArg(args, '--target') as InstallTarget | undefined;
-  const target: InstallTarget = forcedTarget ?? detectInstallTarget();
+  const forcedTarget = parseArg(args, '--target');
+  if (forcedTarget && !isInstallTarget(forcedTarget)) {
+    console.error(`Unknown --target "${forcedTarget}". Allowed: macos, linux-systemd, ephemeral-container, linux-cron, windows-task.`);
+    process.exit(2);
+  }
+  const detection = detectInstallTargetUnified({
+    platform: process.platform,
+    env: process.env,
+    forcedTarget: forcedTarget,
+  });
+  const target: InstallTarget = detection.target;
+
+  // Load --runtime-env-file BEFORE engine preflight (spec §5 / §7).
+  const runtimeEnvFile = parseArg(args, '--runtime-env-file');
+  if (runtimeEnvFile) {
+    try {
+      const res = loadRuntimeEnvFile(runtimeEnvFile);
+      if (res.skipped.length > 0) {
+        console.error(`[install] runtime env file: skipped ${res.skipped.length} disallowed variable(s): ${res.skipped.join(', ')}`);
+      }
+    } catch (e) {
+      console.error(`[install] FATAL: ${(e as Error).message}`);
+      process.exit(1);
+    }
+  }
+
+  // Preflight (spec §7). On Windows, a supervised Minion worker requires
+  // Postgres/Supabase; PGLite is an embedded single-process engine and only
+  // supports inline execution. Do not silently downgrade.
+  const cfg = loadConfig();
+  const engineType = cfg?.engine ?? 'pglite';
+  if (target === 'windows-task' && engineType !== 'postgres') {
+    console.error(
+      'Autopilot with a supervised Minion worker cannot be installed\n' +
+      'with PGLite on Windows.\n\n' +
+      'PGLite is an embedded single-process engine and only supports\n' +
+      'the inline execution path. Configure Supabase/Postgres before\n' +
+      'running `voltmind autopilot --install`.',
+    );
+    process.exit(1);
+  }
 
   const injectBootstrap = args.includes('--inject-bootstrap');
   const noInject = args.includes('--no-inject');
+
+  if (target === 'windows-task') {
+    await installWindowsTask(engine, repoPath, runtimeEnvFile);
+    return;
+  }
 
   const wrapperPath = writeWrapperScript(repoPath);
   const home = process.env.HOME || '';
@@ -826,21 +917,91 @@ async function installDaemon(engine: BrainEngine, args: string[]) {
   switch (target) {
     case 'macos':
       installLaunchd(wrapperPath, home, repoPath);
+      writeInstallManifest('macos', repoPath, wrapperPath, runtimeEnvFile);
       break;
     case 'linux-systemd':
       installSystemd(wrapperPath, repoPath);
+      writeInstallManifest('linux-systemd', repoPath, wrapperPath, runtimeEnvFile, { serviceName: 'voltmind-autopilot.service' });
       break;
     case 'ephemeral-container':
       installEphemeralContainer(wrapperPath, home, repoPath, { injectBootstrap, noInject });
+      writeInstallManifest('ephemeral-container', repoPath, wrapperPath, runtimeEnvFile);
       break;
     case 'linux-cron':
       installCrontab(wrapperPath, home);
+      writeInstallManifest('linux-cron', repoPath, wrapperPath, runtimeEnvFile);
       break;
     default: {
-      console.error(`Unknown --target "${forcedTarget}". Allowed: macos, linux-systemd, ephemeral-container, linux-cron.`);
+      console.error(`Unknown --target "${forcedTarget}". Allowed: macos, linux-systemd, ephemeral-container, linux-cron, windows-task.`);
       process.exit(2);
     }
   }
+}
+
+/** Resolve the CLI invocation for the install manifest (shared resolver). */
+async function writeInstallManifest(target: InstallTarget, repoPath: string, wrapperPath: string, runtimeEnvFile?: string, scheduler?: { taskName?: string; serviceName?: string }): Promise<void> {
+  try {
+    const existing = loadManifest();
+    // Reconcile existing install; never auto-create for never-installed users
+    // outside the explicit --install path. We are inside --install here so
+    // create is allowed.
+    const cliInvocation = await resolveCliInvocation({ repoRoot: repoPath });
+    const base = existing ?? createManifest({
+      target,
+      repoPath,
+      cliInvocation: { executable: wrapperPath, prefixArgs: [], source: 'unix-shim' },
+      runtimeEnvFile,
+      scheduler,
+      installVersion: VERSION,
+    });
+    const reconciled = reconcileManifest(base, {
+      repoPath,
+      cliInvocation: { executable: wrapperPath, prefixArgs: [], source: 'unix-shim' },
+      runtimeEnvFile,
+      scheduler,
+      installVersion: VERSION,
+    });
+    if (base !== existing) reconciled.target = target;
+    saveManifest(reconciled);
+  } catch { /* manifest is best-effort metadata; never fail install on it */ }
+}
+
+/** Windows install path: resolve CLI, register Task Scheduler task, start, write manifest. */
+async function installWindowsTask(engine: BrainEngine, repoPath: string, runtimeEnvFile?: string): Promise<void> {
+  const cliInvocation = await resolveCliInvocation({ repoRoot: repoPath });
+  const result = await windowsTaskSchedulerAdapter.install({
+    target: 'windows-task',
+    repoPath,
+    cliInvocation,
+    runtimeEnvFile,
+    workingDirectory: repoPath,
+  });
+  console.log(`Installed Windows Task Scheduler entry: ${result.schedulerName ?? 'VoltMind Autopilot'}`);
+  console.log(`  Repo: ${repoPath}`);
+  console.log(`  Target: windows-task`);
+  console.log(`  Worker: supervised (minion_mode must not be off)`);
+  console.log('  Uninstall: voltmind autopilot --uninstall');
+  // Write manifest.
+  try {
+    const existing = loadManifest();
+    const base = existing ?? createManifest({
+      target: 'windows-task',
+      repoPath,
+      cliInvocation: { executable: cliInvocation.executable, prefixArgs: cliInvocation.prefixArgs, source: cliInvocation.source },
+      runtimeEnvFile,
+      scheduler: { taskName: result.schedulerName },
+      installVersion: VERSION,
+    });
+    const reconciled = reconcileManifest(base, {
+      repoPath,
+      cliInvocation: { executable: cliInvocation.executable, prefixArgs: cliInvocation.prefixArgs, source: cliInvocation.source },
+      runtimeEnvFile,
+      scheduler: { taskName: result.schedulerName },
+      installVersion: VERSION,
+    });
+    if (base !== existing) reconciled.target = 'windows-task';
+    saveManifest(reconciled);
+  } catch { /* best-effort */ }
 }
 
 // v0.37.7.0 #1162 — pure function for plist generation so tests can
@@ -1127,7 +1288,29 @@ function uninstallDaemon() {
   }
 }
 
-function showStatus(json: boolean) {
+/** Unified uninstall (spec §3.3). Calls the legacy uninstaller for Unix targets,
+ * delegates to the Windows adapter on Windows, then deletes VoltMind-owned
+ * manifest + runtime status. Never touches the user repo, config, env file,
+ * or Supabase/Postgres data. */
+async function uninstallDaemonUnified(): Promise<void> {
+  if (process.platform === 'win32') {
+    const manifest = loadManifest() ?? undefined;
+    try {
+      const res = await windowsTaskSchedulerAdapter.uninstall({ manifest });
+      if (res.removed) console.log(`Removed Windows scheduled task: ${WINDOWS_TASK_NAME}`);
+      else console.log('No Windows scheduled task found. Nothing to uninstall.');
+    } catch (e) {
+      console.error(`  [warn] Windows task: ${e instanceof Error ? e.message : e}`);
+    }
+  } else {
+    uninstallDaemon();
+  }
+  // Delete VoltMind-owned manifest + runtime status (never user data).
+  deleteManifest();
+  deleteRuntimeStatus();
+}
+
+async function showStatus(json: boolean) {
   const logFile = join(process.env.HOME || '', '.voltmind', 'autopilot.log');
   let lastLine = '';
   try {
@@ -1136,20 +1319,101 @@ function showStatus(json: boolean) {
     lastLine = lines[lines.length - 1] || '';
   } catch { /* no log */ }
 
-  let installed = false;
-  if (process.platform === 'darwin') {
-    installed = existsSync(plistPath());
-  } else {
+  // Scheduler state (spec §3.3 status). On Windows, query Task Scheduler;
+  // on Unix, fall back to file presence (existing behavior).
+  let schedulerRegistered = false;
+  let schedulerRunning = false;
+  let schedulerTarget: string = 'unknown';
+  let schedulerLastResult: string | undefined;
+  let schedulerLastStartedAt: string | undefined;
+  let schedulerCurrentState: string | undefined;
+  if (process.platform === 'win32') {
+    schedulerTarget = 'windows-task';
     try {
-      const crontab = execSync('crontab -l 2>/dev/null || true', { encoding: 'utf-8' });
-      installed = crontab.includes('voltmind autopilot');
-    } catch { /* no crontab */ }
+      const s = await windowsTaskSchedulerAdapter.status({ manifest: loadManifest() });
+      schedulerRegistered = s.registered;
+      schedulerRunning = s.running;
+      schedulerLastResult = s.lastResult;
+      schedulerLastStartedAt = s.lastStartedAt;
+      schedulerCurrentState = s.currentState;
+    } catch { /* best-effort */ }
+  } else {
+    if (process.platform === 'darwin') {
+      schedulerRegistered = existsSync(plistPath());
+      schedulerTarget = 'macos';
+    } else {
+      try {
+        const crontab = execSync('crontab -l 2>/dev/null || true', { encoding: 'utf-8' });
+        schedulerRegistered = crontab.includes('voltmind autopilot');
+        schedulerTarget = 'linux-cron';
+      } catch { /* no crontab */ }
+    }
   }
 
+  // Runtime status file (spec §9) — autopilot pid, heartbeat, supervisor, DB.
+  const rt = readRuntimeStatus();
+  const heartbeatStale = rt ? isHeartbeatStale(rt.heartbeatAt, 120_000) : true;
+  const autopilotActive = !!rt && !heartbeatStale;
+  const manifest = loadManifest();
+  if (manifest) schedulerTarget = manifest.target;
+
+  // Overall readiness (spec §8).
+  let overall: AutopilotOverallState = 'not-installed';
+  if (manifest || schedulerRegistered) {
+    overall = autopilotActive ? 'running' : 'installed';
+    if (rt && rt.engine === 'postgres' && rt.supervisor.workerExpected) {
+      if (rt.supervisor.state === 'running' && rt.database.state === 'connected') {
+        overall = 'ready';
+      } else if (rt.supervisor.state === 'disabled' || rt.database.state === 'error') {
+        overall = 'degraded';
+      }
+    }
+    if (rt && rt.state === 'failed') overall = 'failed';
+  }
+
+  const workerExpected = rt?.supervisor.workerExpected ?? false;
+  const workerRunning = rt?.supervisor.state === 'running';
+
+  const summary = {
+    install_target: schedulerTarget,
+    scheduler_registered: schedulerRegistered,
+    scheduler_running: schedulerRunning,
+    scheduler_last_result: schedulerLastResult,
+    scheduler_last_started_at: schedulerLastStartedAt,
+    scheduler_current_state: schedulerCurrentState,
+    autopilot_active: autopilotActive,
+    autopilot_pid: rt?.pid,
+    autopilot_started_at: rt?.startedAt,
+    autopilot_heartbeat_at: rt?.heartbeatAt,
+    autopilot_heartbeat_stale: heartbeatStale,
+    singleton_lock: existsSync(autopilotLockPath()),
+    supervisor_state: rt?.supervisor.state,
+    worker_expected: workerExpected,
+    worker_running: workerRunning,
+    worker_pid: rt?.supervisor.workerPid,
+    worker_restart_count: rt?.supervisor.restartCount,
+    database_state: rt?.database.state,
+    database_last_connected_at: rt?.database.lastConnectedAt,
+    engine: rt?.engine,
+    repo_path: rt?.repoPath ?? manifest?.repoPath,
+    last_log: lastLine,
+    last_error: rt?.supervisor.lastError ?? rt?.database.lastError,
+    overall: overall,
+  };
+
   if (json) {
-    console.log(JSON.stringify({ installed, last_log: lastLine }));
+    console.log(JSON.stringify(summary, null, 2));
   } else {
-    console.log(`Autopilot: ${installed ? 'installed' : 'not installed'}`);
+    console.log(`Autopilot: ${overall}`);
+    console.log(`  Target: ${schedulerTarget}`);
+    console.log(`  Scheduler: ${schedulerRegistered ? 'registered' : 'not registered'}${schedulerRunning ? ', running' : ''}`);
+    if (rt) {
+      console.log(`  Autopilot PID: ${rt.pid} (active=${autopilotActive})`);
+      console.log(`  Heartbeat: ${rt.heartbeatAt}${heartbeatStale ? ' (stale)' : ''}`);
+      console.log(`  Supervisor: ${rt.supervisor.state}`);
+      console.log(`  Worker: expected=${workerExpected}, running=${workerRunning}`);
+      console.log(`  Database: ${rt.database.state}`);
+    }
     if (lastLine) console.log(`Last log: ${lastLine}`);
   }
 }

@@ -16,6 +16,8 @@
  */
 
 import { execFileSync } from 'child_process';
+import type { CliInvocation } from '../autopilot/cli-invocation.ts';
+import { buildCliArgv } from '../autopilot/cli-invocation.ts';
 
 /**
  * Resolve the tini binary path, or return an empty string when not on PATH.
@@ -44,6 +46,14 @@ export function detectTini(): string {
  * which makes tini PID 1 of the spawned subtree. When empty, returns
  *   { cmd: cliPath, args }
  * for a direct spawn. Pure function, no side effects.
+ *
+ * A `.cmd` shim invocation (executable === ComSpec, prefixArgs include the
+ * `/d /s /c "<cmd>"` framing) is passed through unchanged so tini wraps the
+ * real `cmd.exe` process rather than the shim text.
+ */
+/**
+ * Backward-compatible wrapper: build invocation from a plain cliPath string.
+ * Prefer {@link buildSpawnInvocationFromCli} with a resolved {@link CliInvocation}.
  */
 export function buildSpawnInvocation(
   tiniPath: string,
@@ -53,4 +63,19 @@ export function buildSpawnInvocation(
   return tiniPath
     ? { cmd: tiniPath, args: ['--', cliPath, ...args] }
     : { cmd: cliPath, args };
+}
+
+export function buildSpawnInvocationFromCli(
+  tiniPath: string,
+  invocation: CliInvocation,
+  args: string[],
+): { cmd: string; args: string[] } {
+  const fullArgs = buildCliArgv(invocation, args);
+  if (invocation.source === 'windows-cmd-shim') {
+    // .cmd framing already in prefixArgs; don't double-wrap with tini.
+    return { cmd: invocation.executable, args: fullArgs };
+  }
+  return tiniPath
+    ? { cmd: tiniPath, args: ['--', invocation.executable, ...fullArgs] }
+    : { cmd: invocation.executable, args: fullArgs };
 }

@@ -37,9 +37,10 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process';
-import { buildSpawnInvocation, detectTini } from './spawn-helpers.ts';
+import { buildSpawnInvocation, buildSpawnInvocationFromCli, detectTini } from './spawn-helpers.ts';
 import { classifyWorkerExit } from './exit-classification.ts';
 import { calculateBackoffMs } from './supervisor.ts';
+import type { CliInvocation } from '../autopilot/cli-invocation.ts';
 
 export type ChildSupervisorEvent =
   | { kind: 'worker_spawned'; pid: number; tini: boolean }
@@ -66,8 +67,14 @@ export type ChildSupervisorEvent =
     };
 
 export interface ChildWorkerSupervisorOpts {
-  /** Path to the voltmind CLI binary. */
-  cliPath: string;
+  /**
+   * Unified CLI invocation (executable + prefix args + source). Preferred
+   * over `cliPath` so the supervisor and the Task Scheduler action share
+   * one resolver (spec §4). When both are set, `cliInvocation` wins.
+   */
+  cliInvocation?: CliInvocation;
+  /** Legacy: path to the voltmind CLI binary. Use `cliInvocation` instead. */
+  cliPath?: string;
   /** Worker argv after cliPath (e.g. ['jobs', 'work', '--max-rss', '2048']). */
   args: string[];
   /** Child env. Defaults to a clone of process.env. */
@@ -228,18 +235,19 @@ export class ChildWorkerSupervisor {
       const env = this.opts.env ?? { ...process.env };
       this._lastStartTime = this.now();
 
-      const { cmd: spawnCmd, args: spawnArgs } = buildSpawnInvocation(
-        this.tiniPath,
-        this.opts.cliPath,
-        this.opts.args,
-      );
+      const cli = this.opts.cliInvocation;
+      const { cmd: spawnCmd, args: spawnArgs } = cli
+        ? buildSpawnInvocationFromCli(this.tiniPath, cli, this.opts.args)
+        : buildSpawnInvocation(this.tiniPath, this.opts.cliPath ?? '', this.opts.args);
 
       let child: ChildProcess;
       try {
-        child = spawn(spawnCmd, spawnArgs, {
+        const spawnOpts: Parameters<typeof spawn>[2] = {
           stdio: 'inherit',
           env,
-        });
+          ...(this.opts.cliInvocation?.spawnOptions ?? {}),
+        };
+        child = spawn(spawnCmd, spawnArgs, spawnOpts);
       } catch (err: unknown) {
         // Synchronous spawn error (e.g. invalid cliPath shape). Count as a crash.
         this.opts.onEvent({
