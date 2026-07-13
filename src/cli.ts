@@ -32,6 +32,7 @@ import { parseGlobalFlags, setCliOptions, getCliOptions } from './core/cli-optio
 import type { CliOptions } from './core/cli-options.ts';
 import { callRemoteTool, RemoteMcpError, unpackToolResult } from './core/mcp-client.ts';
 import { maybePromptForUpgrade } from './core/thin-client-upgrade-prompt.ts';
+import { loadRuntimeEnvFile } from './core/autopilot/env-file.ts';
 import { VERSION } from './version.ts';
 import {
   isVoltMindMvpCliCommand,
@@ -232,6 +233,28 @@ async function main() {
       if (op) {
         printOpHelp(op);
         return;
+      }
+    }
+  }
+
+  // `--runtime-env-file` is an autopilot process-wide bootstrap input. Load
+  // it exactly once before any config resolution, engine detection, provider
+  // setup, database initialization, or Minion mode/preflight work. The
+  // command handler intentionally does not reload it on each cycle.
+  if (command === 'autopilot') {
+    const runtimeEnvFileIndex = subArgs.indexOf('--runtime-env-file');
+    const runtimeEnvFile = runtimeEnvFileIndex >= 0
+      ? subArgs[runtimeEnvFileIndex + 1]
+      : undefined;
+    if (runtimeEnvFile) {
+      try {
+        const result = loadRuntimeEnvFile(runtimeEnvFile);
+        if (result.skipped.length > 0) {
+          console.error(`[autopilot] runtime env file: skipped ${result.skipped.length} disallowed variable(s): ${result.skipped.join(', ')}`);
+        }
+      } catch (e) {
+        console.error(`[autopilot] FATAL: ${(e as Error).message}`);
+        process.exit(1);
       }
     }
   }
@@ -2287,6 +2310,5 @@ main().catch(e => {
   console.error(e.message || e);
   process.exit(1);
 });
-
 
 

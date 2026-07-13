@@ -42,6 +42,7 @@ import {
 } from 'fs';
 import { dirname } from 'path';
 import type { BrainEngine } from '../engine.ts';
+import type { CliInvocation } from '../autopilot/cli-invocation.ts';
 
 export type SupervisorEvent =
   | 'started'
@@ -74,6 +75,8 @@ export interface SupervisorOpts {
   healthInterval: number;
   /** Path to the voltmind CLI executable (MUST be a compiled binary; .ts sources cannot be spawned). */
   cliPath: string;
+  /** Optional structured invocation used by Windows-native test fixtures and shared launchers. */
+  cliInvocation?: CliInvocation;
   /** Allow shell jobs on child worker. Default: false. When true, sets VOLTMIND_ALLOW_SHELL_JOBS=1 on child env. */
   allowShellJobs: boolean;
   /** JSON mode: emit JSONL events on stderr, reserve stdout for data payloads. Default: false. */
@@ -428,6 +431,7 @@ export class MinionSupervisor {
 
     this.childSupervisor = new ChildWorkerSupervisor({
       cliPath: this.opts.cliPath,
+      cliInvocation: this.opts.cliInvocation,
       args: workerArgs,
       env,
       maxCrashes: this.opts.maxCrashes,

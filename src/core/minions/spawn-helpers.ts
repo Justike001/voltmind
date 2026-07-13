@@ -16,6 +16,7 @@
  */
 
 import { execFileSync } from 'child_process';
+import { join } from 'path';
 import type { CliInvocation } from '../autopilot/cli-invocation.ts';
 import { buildCliArgv } from '../autopilot/cli-invocation.ts';
 
@@ -25,11 +26,16 @@ import { buildCliArgv } from '../autopilot/cli-invocation.ts';
  */
 export function detectTini(): string {
   try {
+    // Windows has no POSIX `which`; use the native system resolver. Keep the
+    // absolute path so tests that intentionally replace PATH still work.
+    const resolver = process.platform === 'win32'
+      ? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'where.exe')
+      : 'which';
     // Pass `env: process.env` explicitly: Bun's execFileSync does NOT
     // inherit the current process env by default (Bun snapshots env at
     // startup). Without this, runtime mutations to PATH (including in
     // tests) are invisible to `which`.
-    return execFileSync('which', ['tini'], {
+    return execFileSync(resolver, ['tini'], {
       encoding: 'utf8',
       timeout: 2000,
       env: process.env,

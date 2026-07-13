@@ -25,7 +25,6 @@ Set up VoltMind from scratch. Target: working brain in under 5 minutes.
 - Schema state is tracked in `~/.voltmind/update-state.json` so future upgrades know what the user adopted or declined.
 - No Supabase anon key is requested; VoltMind uses only the database connection string.
 
-
 ## How VoltMind connects
 
 VoltMind connects directly to Postgres over the wire protocol. NOT through the
@@ -62,7 +61,6 @@ Supabase gives you managed Postgres + pgvector (vector search built in) for $25/
 
 There is no `--local`, `--sqlite`, or offline mode. VoltMind requires Postgres + pgvector
 (local PGLite or remote Supabase / self-hosted).
-
 
 ## Phase A: Supabase Setup (recommended)
 
@@ -268,12 +266,51 @@ node -e "console.log(process.platform)"   # darwin -> macOS, linux -> Linux, win
 - Registers a user-level task (`VoltMind Autopilot`) that runs on logon
   with `LeastPrivilege`, `IgnoreNew` concurrency, restart-on-failure
   (1 min, up to 5 retries), and indefinite execution time.
+- **Administrator PowerShell is not required by default.** The task uses the
+  current user's `InteractiveToken` and `LeastPrivilege`; run the install from
+  a normal PowerShell window first. If Task Scheduler returns `Access is
+  denied`, a local policy blocks task registration, or the task service
+  requires elevation, stop and ask the user to open **PowerShell as
+  Administrator** and rerun the same install command themselves. Do not
+  silently self-elevate or ask the model to bypass the user's UAC decision.
 - The task action is plain `voltmind autopilot --repo <path>` — never
   `--no-worker` and never `jobs work` (only the allowed topology
   Task Scheduler → autopilot → supervised `jobs work`).
 - Optional `--runtime-env-file <path>` loads allowlisted runtime secrets
   (Postgres/Supabase/provider keys) before engine init. Windows does NOT
   read `.zshrc`/`.bashrc` and does NOT generate a bash wrapper.
+- Recommended PowerShell install path:
+
+  ```powershell
+  voltmind apply-migrations --yes
+  voltmind autopilot --install --repo <path>
+  # Add --runtime-env-file <path> only when required secrets are not already
+  # available through the VoltMind config file.
+  ```
+
+  If `sync.repo_path` is already configured, omit `--repo <path>`. This is
+  the complete Windows install path: do not run `voltmind jobs work` as a
+  second scheduled task, do not add `--no-worker`, and do not use WSL or
+  PowerShell `Start-Job` as a substitute. The Task Scheduler task starts
+  autopilot, and autopilot starts and supervises the Postgres Minions worker.
+- Installation performs a readiness check after starting the task. Verify the
+  result with:
+
+  ```powershell
+  voltmind autopilot --status --json
+  voltmind jobs stats
+  ```
+
+  The expected state is `target: "windows-task"`, a registered/running
+  scheduler entry, `autopilot: running`, and a ready Postgres worker. A task
+  that is merely registered but has no ready worker is not a successful
+  installation.
+- Common Windows failures are actionable: a PGLite engine must be migrated to
+  Supabase/Postgres first; a missing runtime env file must be corrected with
+  `--runtime-env-file`; and a worker readiness failure should be diagnosed
+  through the autopilot log and Supabase connectivity. Never work around these
+  failures by switching to `--no-worker`, because that leaves dispatched jobs
+  unconsumed.
 - Runs after the user logs in. 24x7 across logoff/reboot is not currently
   guaranteed; rely on the Task Scheduler logon trigger.
 - `voltmind autopilot --status --json` reports scheduler, autopilot,

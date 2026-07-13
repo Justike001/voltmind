@@ -130,6 +130,11 @@ function looksLikeCompiledBinary(p: string): boolean {
   return false;
 }
 
+function looksLikeBunRuntime(p: string): boolean {
+  const base = p.replace(/\\/g, '/').split('/').pop()?.toLowerCase() ?? '';
+  return base === 'bun' || base === 'bun.exe';
+}
+
 function looksLikeCmdShim(p: string): boolean {
   return p.toLowerCase().endsWith('.cmd');
 }
@@ -183,7 +188,8 @@ function resolveCmdShim(cmdPath: string): CliInvocation {
 
 /**
  * The canonical resolver. Resolution order (spec §4.1):
- *   native .exe → stable installed CLI → .cmd shim → bun source entry
+ *   native .exe (current process) → PATH native .exe → stable installed CLI
+ *   → .cmd shim → bun source entry
  *
  * On Windows the installed CLI is typically a `.cmd` shim (npm/bun global
  * install). A compiled `.exe` wins if present.
@@ -198,7 +204,19 @@ export async function resolveCliInvocation(
     return classifyExplicitPath(context.explicitPath, repoRoot);
   }
 
-  // 2. PATH lookup (where.exe / which) — the canonical install shape.
+  // 2. A compiled process must spawn the same native executable that is
+  // already running. Checking PATH first can select a stale global install
+  // when a repo-local `bin/voltmind.exe` launched Autopilot.
+  const exec = process.execPath ?? '';
+  if (exec && looksLikeCompiledBinary(exec) && !looksLikeBunRuntime(exec)) {
+    return {
+      executable: exec,
+      prefixArgs: [],
+      source: isWindows ? 'native-exe' : 'unix-binary',
+    };
+  }
+
+  // 3. PATH lookup (where.exe / which) — the canonical installed shape.
   const onPath = whichCli();
   if (onPath && existsSync(onPath)) {
     if (looksLikeCompiledBinary(onPath)) {
@@ -216,16 +234,6 @@ export async function resolveCliInvocation(
     if (!isWindows) {
       return { executable: onPath, prefixArgs: [], source: 'unix-shim' };
     }
-  }
-
-  // 3. process.execPath — compiled binary running as the current process.
-  const exec = process.execPath ?? '';
-  if (exec && looksLikeCompiledBinary(exec)) {
-    return {
-      executable: exec,
-      prefixArgs: [],
-      source: isWindows ? 'native-exe' : 'unix-binary',
-    };
   }
 
   // 4. argv[1] — direct invocation of compiled binary (no PATH).

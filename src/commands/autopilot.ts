@@ -25,7 +25,6 @@ import { loadPreferences } from '../core/preferences.ts';
 import { loadConfig, voltmindPath as voltmindHomePath } from '../core/config.ts';
 import { ChildWorkerSupervisor } from '../core/minions/child-worker-supervisor.ts';
 import { resolveCliInvocation, buildCliArgv, autopilotLockPath, type CliInvocation } from '../core/autopilot/cli-invocation.ts';
-import { loadRuntimeEnvFile } from '../core/autopilot/env-file.ts';
 import {
   loadManifest, saveManifest, deleteManifest, createManifest, reconcileManifest, manifestPath,
 } from '../core/autopilot/manifest.ts';
@@ -126,6 +125,45 @@ export function shouldSpawnAutopilotWorker(args: string[]): boolean {
   return !args.includes('--no-worker');
 }
 
+/**
+ * A force-killed Autopilot leaves its lock file behind. Its mtime cannot tell
+ * us whether the owning process is still alive: after a hard kill it remains
+ * fresh, which used to make every scheduler retry exit for ten minutes.
+ */
+export function isProcessAlive(pid: number): boolean {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    // EPERM still proves that a process with this PID exists; it only denies
+    // signaling it (for example, when it belongs to another security context).
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Remove the autopilot lock left by a force-killed or scheduler-stopped
+ * process. Never remove a lock whose owner PID is still alive.
+ */
+export function removeStaleAutopilotLock(): boolean {
+  const lockPath = autopilotLockPath();
+  if (!existsSync(lockPath)) return false;
+
+  let ownerPid = Number.NaN;
+  try {
+    ownerPid = Number.parseInt(readFileSync(lockPath, 'utf8').trim(), 10);
+  } catch { /* malformed/unreadable locks are safe to treat as stale */ }
+
+  if (isProcessAlive(ownerPid)) return false;
+  try {
+    unlinkSync(lockPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function runAutopilot(engine: BrainEngine, args: string[]) {
   if (args.includes('--help') || args.includes('-h')) {
     console.log(
@@ -155,22 +193,6 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     return;
   }
 
-  // --runtime-env-file must be loaded BEFORE engine detection / Postgres init /
-  // provider init / Minion mode resolution (spec §5). Only allowlisted vars
-  // are applied; dangerous system vars are refused.
-  const runtimeEnvFilePath = parseArg(args, '--runtime-env-file');
-  if (runtimeEnvFilePath) {
-    try {
-      const result = loadRuntimeEnvFile(runtimeEnvFilePath);
-      if (result.skipped.length > 0) {
-        console.error(`[autopilot] runtime env file: skipped ${result.skipped.length} disallowed variable(s): ${result.skipped.join(', ')}`);
-      }
-    } catch (e) {
-      console.error(`[autopilot] FATAL: ${(e as Error).message}`);
-      process.exit(1);
-    }
-  }
-
   const repoPath = parseArg(args, '--repo') || await engine.getConfig('sync.repo_path');
   const baseInterval = parseInt(parseArg(args, '--interval') || '300', 10);
   const jsonMode = args.includes('--json');
@@ -194,11 +216,12 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     if (existsSync(lockPath)) {
       const stat = require('fs').statSync(lockPath);
       const ageMinutes = (Date.now() - stat.mtimeMs) / 60000;
-      if (ageMinutes < 10) {
-        console.error('Another autopilot instance is running (lock file is fresh). Exiting.');
+      const existingPid = Number.parseInt(readFileSync(lockPath, 'utf8').trim(), 10);
+      if (isProcessAlive(existingPid)) {
+        console.error('Another autopilot instance is running (lock owner PID is alive). Exiting.');
         process.exit(0);
       }
-      console.log('Stale lock file found (>10 min). Taking over.');
+      console.log(`Stale lock file found (pid ${Number.isSafeInteger(existingPid) ? existingPid : 'unknown'} is not running; age ${ageMinutes.toFixed(1)} min). Taking over.`);
     }
     writeFileSync(lockPath, String(process.pid));
   } catch { /* best-effort */ }
@@ -235,8 +258,8 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     childSupervisor = new ChildWorkerSupervisor({
       cliInvocation,
       args: ['jobs', 'work', '--max-rss', '2048'],
-      // process.env clone; autopilot doesn't gate shell jobs the way the
-      // standalone supervisor does (autopilot is the operator-trust path).
+      // process.env clone; the worker daemon is a public host-local command
+      // and receives the same runtime environment as Autopilot.
       env: { ...process.env },
       maxCrashes: 5,
       isStopping: () => stopping,
@@ -873,19 +896,10 @@ async function installDaemon(engine: BrainEngine, args: string[]) {
   });
   const target: InstallTarget = detection.target;
 
-  // Load --runtime-env-file BEFORE engine preflight (spec §5 / §7).
+  // The CLI dispatcher loads --runtime-env-file once before connectEngine.
+  // Keep this function focused on target detection and preflight; reloading
+  // here would mutate process.env a second time after engine initialization.
   const runtimeEnvFile = parseArg(args, '--runtime-env-file');
-  if (runtimeEnvFile) {
-    try {
-      const res = loadRuntimeEnvFile(runtimeEnvFile);
-      if (res.skipped.length > 0) {
-        console.error(`[install] runtime env file: skipped ${res.skipped.length} disallowed variable(s): ${res.skipped.join(', ')}`);
-      }
-    } catch (e) {
-      console.error(`[install] FATAL: ${(e as Error).message}`);
-      process.exit(1);
-    }
-  }
 
   // Preflight (spec §7). On Windows, a supervised Minion worker requires
   // Postgres/Supabase; PGLite is an embedded single-process engine and only
@@ -1305,6 +1319,10 @@ async function uninstallDaemonUnified(): Promise<void> {
   } else {
     uninstallDaemon();
   }
+  // Task Scheduler termination is not guaranteed to run Autopilot's signal
+  // handler. Clean up only a lock whose recorded owner is no longer alive;
+  // this preserves the singleton guard if a stop request is still draining.
+  removeStaleAutopilotLock();
   // Delete VoltMind-owned manifest + runtime status (never user data).
   deleteManifest();
   deleteRuntimeStatus();

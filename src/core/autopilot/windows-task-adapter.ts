@@ -114,6 +114,10 @@ export class WindowsTaskSchedulerAdapter implements AutopilotProcessManagerAdapt
       arguments: argumentsAfterExe,
       workingDirectory: context.workingDirectory ?? context.repoPath,
       userId: context.userId,
+      // CalendarTrigger repeats every minute for every day, starting now.
+      // It is a recovery backstop for task termination paths that Task
+      // Scheduler does not classify as a restart-on-failure event.
+      recoveryStartBoundary: new Date().toISOString(),
       restartIntervalMinutes: DEFAULT_RESTART_INTERVAL_MINUTES,
       restartCount: DEFAULT_RESTART_COUNT,
     });
@@ -189,7 +193,10 @@ export class WindowsTaskSchedulerAdapter implements AutopilotProcessManagerAdapt
 
   async status(_context: AutopilotStatusContext): Promise<AutopilotProcessManagerStatus> {
     const info = queryTask();
-    const running = info.exists && (info.state === 'Running' || info.state === 'Ready');
+    // Ready means the task is registered and eligible for a future trigger;
+    // it does not mean an Autopilot process is currently alive. Treating it as
+    // running masked the exact failed-recovery state this adapter must report.
+    const running = info.exists && info.state === 'Running';
     return {
       target: 'windows-task',
       registered: info.exists,

@@ -8,6 +8,10 @@
  *
  * The generated task:
  *   - Logs on at user logon (LogonTrigger), current user, LeastPrivilege
+ *   - Adds a one-minute CalendarTrigger recovery pulse. This is deliberately
+ *     separate from RestartOnFailure: some Task Scheduler termination paths
+ *     (notably a manually/forcibly ended task instance) leave the task Ready
+ *     without consuming its restart-on-failure policy.
  *   - Runs indefinitely (no ExecutionTimeLimit)
  *   - IgnoreNew multiple-instance policy (no concurrent autopilot)
  *   - Restart on failure 1 minute, up to `restartCount` times
@@ -21,6 +25,12 @@ export interface WindowsTaskXmlInput {
   workingDirectory?: string;
   /** Windows user id (DOMAIN\user or user). Defaults to the interactive user. */
   userId?: string;
+  /**
+   * Start of the daily recovery pulse (an ISO-8601 Task Scheduler boundary).
+   * The adapter supplies the installation time so the pulse starts immediately
+   * and then covers every minute of each following day.
+   */
+  recoveryStartBoundary: string;
   restartIntervalMinutes: number;
   restartCount: number;
 }
@@ -47,6 +57,7 @@ function escapeXml(s: string): string {
 export function createWindowsTaskXml(input: WindowsTaskXmlInput): string {
   if (!input.taskName) throw new Error('createWindowsTaskXml: taskName is required');
   if (!input.executable) throw new Error('createWindowsTaskXml: executable is required');
+  if (!input.recoveryStartBoundary) throw new Error('createWindowsTaskXml: recoveryStartBoundary is required');
   if (input.restartCount < 0) throw new Error('createWindowsTaskXml: restartCount must be >= 0');
   if (input.restartIntervalMinutes <= 0) throw new Error('createWindowsTaskXml: restartIntervalMinutes must be > 0');
 
@@ -66,6 +77,18 @@ export function createWindowsTaskXml(input: WindowsTaskXmlInput): string {
       <Enabled>true</Enabled>
       ${userIdEl}
     </LogonTrigger>
+    <CalendarTrigger>
+      <StartBoundary>${escapeXml(input.recoveryStartBoundary)}</StartBoundary>
+      <Enabled>true</Enabled>
+      <Repetition>
+        <Interval>PT${input.restartIntervalMinutes}M</Interval>
+        <Duration>P1D</Duration>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
   </Triggers>
   <Principals>
     <Principal id="Author">
@@ -79,7 +102,7 @@ export function createWindowsTaskXml(input: WindowsTaskXmlInput): string {
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <AllowHardTerminate>true</AllowHardTerminate>
-    <StartWhenAvailable>false</StartWhenAvailable>
+    <StartWhenAvailable>true</StartWhenAvailable>
     <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
     <IdleSettings>
       <StopOnIdleEnd>false</StopOnIdleEnd>

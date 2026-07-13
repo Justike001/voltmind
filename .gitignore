@@ -53,3 +53,9 @@ tmptxt/
 .voltmind-codex-interactive-*
 .voltmind-action-runs/
 Codex
+
+# Auto-managed by voltmind (db_only directories)
+media/x/
+media/articles/
+meetings/transcripts/
+/nul

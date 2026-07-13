@@ -10,7 +10,7 @@ import type { MinionJob, MinionJobStatus } from '../core/minions/types.ts';
 import { loadConfig, isThinClient } from '../core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../core/mcp-client.ts';
 
-const MVP_JOB_SUBCOMMANDS = new Set(['list', 'get', 'cancel', 'stats', 'smoke', 'progress', 'failures', 'checkpoints', 'undo-report', 'plan']);
+const MVP_JOB_SUBCOMMANDS = new Set(['list', 'get', 'cancel', 'stats', 'smoke', 'progress', 'failures', 'checkpoints', 'undo-report', 'plan', 'work']);
 
 function parseFlag(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);
@@ -143,6 +143,7 @@ USAGE
   voltmind jobs undo-report <id>
   voltmind jobs plan <name> --dry-run [--source-id id]
   voltmind jobs stats
+  voltmind jobs work [--concurrency N] [--max-rss MB]
 
 `);
     return;
