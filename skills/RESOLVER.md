@@ -51,6 +51,7 @@ background page creation.
 | "brain health", "doctor", "status", "embedding freshness", "job status", "cancel job" | `skills/maintain/SKILL.md` |
 | "minions", "job queue", "background jobs", "what jobs are running", "jobs stats" | `skills/minion-orchestrator/SKILL.md` |
 | "schedule a job", "cron", "recurring job", "autopilot schedule", "daily maintenance" | `skills/cron-scheduler/SKILL.md` |
+| "install autopilot", "set up autopilot", "autopilot install", "one-step autopilot + Minions", "Windows Task Scheduler", "launchd autopilot" | `skills/setup/SKILL.md` |
 | "where should this page go", filing rules, source selection | `skills/brain-ops/SKILL.md` plus `skills/_brain-filing-rules.md` |
 | "present options", "ask before proceeding", "choice gate", "user decision" | `skills/ask-user/SKILL.md` |
 
@@ -110,6 +111,10 @@ explicitly working on VoltMind internals:
   `voltmind jobs cancel`, `voltmind jobs progress`, `voltmind jobs failures`,
   `voltmind jobs checkpoints`, `voltmind jobs undo-report`,
   `voltmind jobs plan --dry-run`, `voltmind jobs stats`.
+- Autopilot (host-local): `voltmind autopilot --install`,
+  `voltmind autopilot --status`, `voltmind autopilot --uninstall`,
+  `voltmind autopilot --help`. Runs on the host with a supervised Minions
+  worker; requires Postgres/Supabase. Not routed through remote MCP.
 
 Use `VOLTMIND_HOME`, `VOLTMIND_SOURCE`, `.voltmind-source`, and
 `voltmind.yml`. Old `GBRAIN_*`, `.gbrain`, and `gbrain.yml` names are not part
@@ -119,8 +124,11 @@ of the MVP route.
 
 Keep these files/modules recoverable, but do not dispatch to them in MVP:
 
-- Autonomous or agentic systems: `agent`, `autopilot`, `dream`, `think`,
+- Autonomous or agentic systems: `agent`, `dream`, `think`,
   recall watch/auto-briefing loops, direct legacy forget, `onboard`, `founder`.
+  Note: `voltmind autopilot` is public for host-local Postgres/Supabase
+  installs (Windows Task Scheduler / macOS launchd / Linux systemd/cron).
+  It is NOT routed through remote MCP or thin-client execution.
 - Advanced runtime analysis: `eval`, search-mode tuning, code intelligence,
   trajectory mutation/scorecard flows, and takes mutation/scorecard flows. The
   narrow retrieval-enrichment, judgment-readout, and knowledge-insight commands
@@ -131,8 +139,11 @@ Keep these files/modules recoverable, but do not dispatch to them in MVP:
   social/web research enrichers, archive crawler, academic verification,
   publish/export flows.
 - Background orchestration beyond MVP visibility: Minion submit/shell/worker,
-  subagent routing, host scheduler installation, autopilot, and dream
-  maintenance. Source-backed signal enrichment on explicit MVP write paths is
+  subagent routing, host scheduler installation, and dream
+  maintenance. Host-local `voltmind autopilot --install` (which supervises a
+  single Minions worker consuming the Postgres queue) is allowed on the host;
+  remote `submit_job`, remote shell, and remote subagent remain frozen.
+  Source-backed signal enrichment on explicit MVP write paths is
   allowed; ambient webhook/social crawlers remain frozen. Jobs readouts and
   dry-run plans remain allowed.
 - Multi-brain/topology flows: mounts, cross-brain federation, thin-client setup,

@@ -103,6 +103,8 @@ Transaction pooler string instead (see Phase A step 4).
 
 1. **Discover markdown repos.** Scan the environment for git repos with markdown content.
 
+On macOS/Linux:
+
 ```bash
 echo "=== VoltMind Environment Discovery ==="
 for dir in /data/* ~/git/* ~/Documents/* 2>/dev/null; do
@@ -117,15 +119,65 @@ done
 echo "=== Discovery Complete ==="
 ```
 
-2. **Import the best candidate.** For large imports (>1000 files), use nohup to
-   survive session timeouts:
+On Windows PowerShell, use the equivalent scan below. Adjust `$roots` when your
+repositories live elsewhere:
+
+```powershell
+Write-Host "=== VoltMind Environment Discovery ==="
+$roots = @(
+  (Join-Path $env:USERPROFILE "git"),
+  (Join-Path $env:USERPROFILE "Documents"),
+  (Join-Path $env:USERPROFILE "source")
+) | Where-Object { Test-Path -LiteralPath $_ }
+
+$repos = foreach ($root in $roots) {
+  Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+    Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName ".git") }
+}
+
+foreach ($repo in $repos) {
+  $mdFiles = @(Get-ChildItem -LiteralPath $repo.FullName -Recurse -File -Filter "*.md" -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch "[\\/](node_modules|\.git)[\\/]" })
+  if ($mdFiles.Count -gt 10) {
+    $allFiles = @(Get-ChildItem -LiteralPath $repo.FullName -Recurse -File -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -notmatch "[\\/]\.git[\\/]" })
+    $totalBytes = ($allFiles | Measure-Object -Property Length -Sum).Sum
+    $totalSize = "{0:N1} MB" -f ($totalBytes / 1MB)
+    Write-Host ("  {0} ({1}, {2} .md files)" -f $repo.FullName, $totalSize, $mdFiles.Count)
+  }
+}
+Write-Host "=== Discovery Complete ==="
+```
+
+2. **Import the best candidate.** For large imports (>1000 files), run the
+   import in a detached process so it survives the current terminal session.
+   On macOS/Linux, use `nohup`:
    ```bash
    nohup voltmind import <dir> --no-embed --workers 4 > /tmp/voltmind-import.log 2>&1 &
    ```
-   Then check progress: `tail -1 /tmp/voltmind-import.log`
+   Check progress with: `tail -1 /tmp/voltmind-import.log`
+
+   On Windows PowerShell, use `Start-Process` with separate stdout/stderr logs:
+   ```powershell
+   $log = Join-Path $env:TEMP "voltmind-import.log"
+   $err = Join-Path $env:TEMP "voltmind-import.err.log"
+   $proc = Start-Process -FilePath "voltmind" `
+     -ArgumentList @("import", "<dir>", "--no-embed", "--workers", "4") `
+     -RedirectStandardOutput $log -RedirectStandardError $err -PassThru
+   $proc.Id
+   Get-Content -Path $log -Tail 1
+   Get-Content -Path $err -Tail 1
+   ```
+   Check progress again with `Get-Content -Path $log -Tail 1` and inspect
+   `$err` if the process exits unexpectedly. To stop it, use
+   `Stop-Process -Id <pid>`.
 
    For smaller imports, run directly:
    ```bash
+   voltmind import <dir> --no-embed
+   ```
+   The same direct command works in PowerShell:
+   ```powershell
    voltmind import <dir> --no-embed
    ```
 
@@ -183,19 +235,20 @@ If no markdown repos are found, create a starter brain with a few template pages
 
 ## Phase C.5: One-step autopilot + Minions install (v0.11.1+)
 
-**Platform gate — check this BEFORE running the install below.**
+Windows, macOS, and Linux all use the same entry:
 
-`voltmind autopilot --install` only supports macOS (launchd), Linux with
-systemd, Linux without systemd (cron), and ephemeral containers. It has **no
-Windows install target**: `detectInstallTarget()` (src/commands/autopilot.ts)
-only matches `darwin`, `/.dockerenv`, `/run/systemd/system`, and a final
-`linux-cron` fallback. On Windows it falls through to `linux-cron` and then
-calls `crontab` (which does not exist on Windows, so it errors), and the
-generated wrapper is a `#!/bin/bash` script that sources `~/.zshenv` /
-`~/.zshrc`. So the install step is **unavailable on Windows**. (The autopilot
-*runtime* itself still works on Windows + Supabase — Supabase is remote Postgres
-with no PGLite exclusive-lock problem, and `runAutopilot()`'s dispatch loop plus
-the Postgres worker path run fine — but the `--install` wiring does not.)
+```bash
+voltmind autopilot --install
+```
+
+`voltmind autopilot --install` is now a public MVP command (no
+`VOLTMIND_INTERNAL_MIGRATION` flag needed). It detects the platform and
+installs the right process manager, then runs the single platform-agnostic
+`runAutopilot()` which supervises one Minions worker consuming the
+Postgres/Supabase queue.
+
+**Process manager differs by platform. Autopilot, ChildWorkerSupervisor,
+Minion worker and Postgres queue are shared.**
 
 Detect the platform first, or ask the user if you cannot determine it:
 
@@ -206,16 +259,44 @@ node -e "console.log(process.platform)"   # darwin -> macOS, linux -> Linux, win
 > If detection is inconclusive, ask the user:
 > "What OS are you on — Windows, macOS, or Linux?"
 
-- **Windows:** skip Phase C.5 entirely. There is no `autopilot --install` path
-  here; use `voltmind daemon` for the Windows-native background runtime instead.
-- **macOS or Linux:** proceed with the install steps below.
+### Windows
 
-Run the migration runner once, then install autopilot. Two commands, done:
+- Uses the **Task Scheduler** adapter. `win32` routes to `windows-task`
+  (never falls back to `linux-cron`).
+- **Requires Supabase/Postgres.** PGLite does not support a supervised
+  Minion worker on Windows — install returns a clear, actionable error.
+- Registers a user-level task (`VoltMind Autopilot`) that runs on logon
+  with `LeastPrivilege`, `IgnoreNew` concurrency, restart-on-failure
+  (1 min, up to 5 retries), and indefinite execution time.
+- The task action is plain `voltmind autopilot --repo <path>` — never
+  `--no-worker` and never `jobs work` (only the allowed topology
+  Task Scheduler → autopilot → supervised `jobs work`).
+- Optional `--runtime-env-file <path>` loads allowlisted runtime secrets
+  (Postgres/Supabase/provider keys) before engine init. Windows does NOT
+  read `.zshrc`/`.bashrc` and does NOT generate a bash wrapper.
+- Runs after the user logs in. 24x7 across logoff/reboot is not currently
+  guaranteed; rely on the Task Scheduler logon trigger.
+- `voltmind autopilot --status --json` reports scheduler, autopilot,
+  worker, and database readiness. `voltmind autopilot --uninstall` stops
+  and deletes the task plus VoltMind-owned manifest/Task XML (never user
+  repo/config/env/Supabase data).
+
+### macOS
+
+- Keeps the **launchd** path (`~/Library/LaunchAgents/com.voltmind.autopilot.plist`).
+
+### Linux
+
+- Keeps the **systemd / ephemeral-container / cron** paths. A Linux brain
+  host uses the same `runAutopilot()` and `ChildWorkerSupervisor` and
+  consumes the same Supabase/Postgres queue — no Windows-specific manifest,
+  Task XML, or local paths enter the shared database.
+
+### Install
 
 ```bash
-voltmind apply-migrations --yes       # applies any pending migrations; idempotent on healthy installs
-# autopilot is gated out of the public MVP surface; set the migration flag for the install step only:
-VOLTMIND_INTERNAL_MIGRATION=1 voltmind autopilot --install   # supervises itself + forks the Minions worker; env-aware
+voltmind apply-migrations --yes       # idempotent on healthy installs
+voltmind autopilot --install          # supervises itself + forks the Minions worker; env-aware
 ```
 
 What `voltmind autopilot --install` does:
@@ -229,13 +310,20 @@ What `voltmind autopilot --install` does:
   Auto-injects into OpenClaw's `hooks/bootstrap/ensure-services.sh` if
   detected (use `--no-inject` to opt out).
 - On **Linux without systemd**: installs a crontab entry (every 5 min).
+- On **Windows**: registers a Task Scheduler entry (`windows-task`) and
+  starts it immediately.
 
 Autopilot then supervises the Minions worker as a child process. Users get
 sync + extract + embed + backlinks + durable Postgres-backed job processing
 from ONE install step. No separate `voltmind jobs work` daemon to manage.
 
 On PGLite, autopilot runs inline (PGLite's exclusive file lock blocks a
-separate worker process). Everything else still works.
+separate worker process). On Windows, PGLite install is refused — configure
+Supabase/Postgres first. Everything else still works.
+
+If `minion_mode=off`, the install still registers autopilot but reports a
+**degraded** state (`autopilot: running, minion_worker: disabled_by_config,
+queue_consumption: unavailable`) — it never silently overrides user config.
 
 If `apply-migrations` prints "N host-specific items need your agent's
 attention," read `~/.voltmind/migrations/pending-host-work.jsonl` + walk

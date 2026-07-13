@@ -281,9 +281,19 @@ after bulk imports or content edits that add new dated entries.
 
 ### Embedding freshness
 Chunks without embeddings, or chunks embedded with an old model.
-- For large embedding refreshes (>1000 chunks), use nohup:
-  `nohup voltmind embed refresh > /tmp/voltmind-embed.log 2>&1 &`
+- On macOS/Linux, for large embedding refreshes (>1000 chunks), use `nohup`:
+  `nohup voltmind embed --stale > /tmp/voltmind-embed.log 2>&1 &`
 - Then check progress: `tail -1 /tmp/voltmind-embed.log`
+- On Windows PowerShell, use `Start-Process` with separate logs:
+  ```powershell
+  $log = Join-Path $env:TEMP "voltmind-embed.log"
+  $err = Join-Path $env:TEMP "voltmind-embed.err.log"
+  $proc = Start-Process -FilePath "voltmind" `
+    -ArgumentList @("embed", "--stale") `
+    -RedirectStandardOutput $log -RedirectStandardError $err -PassThru
+  $proc.Id
+  Get-Content -Path $log -Tail 1
+  ```
 
 ### Security (RLS verification)
 Run `voltmind doctor --json` and check the RLS status.
@@ -339,10 +349,12 @@ staleness.
 ### Weekly maintenance
 
 Run `voltmind embed --stale` to refresh embeddings for pages that have changed since
-their last embedding. For large brains (>5000 pages), run this with nohup:
+their last embedding. For large brains (>5000 pages), on macOS/Linux run this with `nohup`:
 ```bash
 nohup voltmind embed --stale > /tmp/voltmind-embed.log 2>&1 &
 ```
+On Windows, use the PowerShell `Start-Process` pattern from **Embedding
+freshness** above.
 
 ### Daily verification
 
