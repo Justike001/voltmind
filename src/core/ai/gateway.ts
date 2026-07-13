@@ -1271,12 +1271,20 @@ export async function embed(texts: string[], opts?: EmbedOpts): Promise<Float32A
 
   const embedding = recipe.touchpoints?.embedding;
   const maxBatchTokens = embedding?.max_batch_tokens;
+  const maxBatchItems = embedding?.max_batch_items;
   const charsPerToken = embedding?.chars_per_token ?? DEFAULT_CHARS_PER_TOKEN;
 
-  // Pre-split is gated on max_batch_tokens. Recipes without it (e.g. OpenAI)
-  // ride the fast path: one embedMany call, no recursion safety net.
-  const batches = maxBatchTokens
-    ? splitByTokenBudget(truncated, Math.floor(maxBatchTokens * effectiveSafetyFactor(recipe)), charsPerToken)
+  // Pre-split when the recipe declares a token or item cap. Recipes without
+  // either cap ride the fast path: one embedMany call, no recursion safety net.
+  const batches = maxBatchTokens || maxBatchItems
+    ? splitByTokenBudget(
+      truncated,
+      maxBatchTokens
+        ? Math.floor(maxBatchTokens * effectiveSafetyFactor(recipe))
+        : Number.MAX_SAFE_INTEGER,
+      charsPerToken,
+      maxBatchItems,
+    )
     : [truncated];
 
   const allEmbeddings: Float32Array[] = [];
@@ -1333,15 +1341,19 @@ export function splitByTokenBudget(
   texts: string[],
   budgetTokens: number,
   charsPerToken: number = DEFAULT_CHARS_PER_TOKEN,
+  maxBatchItems?: number,
 ): string[][] {
   const ratio = charsPerToken > 0 ? charsPerToken : DEFAULT_CHARS_PER_TOKEN;
+  const itemLimit = Number.isFinite(maxBatchItems) && (maxBatchItems ?? 0) > 0
+    ? Math.max(1, Math.floor(maxBatchItems as number))
+    : Infinity;
   const batches: string[][] = [];
   let current: string[] = [];
   let currentTokens = 0;
 
   for (const text of texts) {
     const estTokens = Math.ceil(text.length / ratio);
-    if (current.length > 0 && currentTokens + estTokens > budgetTokens) {
+    if (current.length > 0 && (currentTokens + estTokens > budgetTokens || current.length >= itemLimit)) {
       batches.push(current);
       current = [];
       currentTokens = 0;

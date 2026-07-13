@@ -39,6 +39,8 @@ export interface EmbeddingTouchpoint {
    * path).
    */
   max_batch_tokens?: number;
+  /** Maximum number of input strings accepted by one provider request. */
+  max_batch_items?: number;
   /**
    * Expected character density for this provider's tokenizer (chars per
    * token). OpenAI tiktoken averages ~4 on English text; Voyage averages

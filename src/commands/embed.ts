@@ -9,6 +9,18 @@ import { loadConfig } from '../core/config.ts';
 import { slog, serr } from '../core/console-prefix.ts';
 import { filterOutEmbedSkipped } from '../core/embed-skip.ts';
 import { runSlidingPool } from '../core/worker-pool.ts';
+import { getEmbeddingModel } from '../core/ai/gateway.ts';
+
+/** Explicit operator configuration wins; DashScope gets a safer default. */
+function resolveEmbedConcurrency(): number {
+  const configured = process.env.VOLTMIND_EMBED_CONCURRENCY;
+  if (configured !== undefined) return parseInt(configured, 10);
+  try {
+    return getEmbeddingModel().toLowerCase().startsWith('dashscope:') ? 4 : 20;
+  } catch {
+    return 20;
+  }
+}
 
 export interface EmbedOpts {
   /** Embed ALL pages (every chunk). */
@@ -438,7 +450,7 @@ async function embedAll(
   // (3000+/min for tier 1 = 50+/sec, 20 parallel is safely below) and
   // avoids overwhelming postgres connection pools. Users can tune via
   // VOLTMIND_EMBED_CONCURRENCY env var based on their tier/infra.
-  const CONCURRENCY = parseInt(process.env.VOLTMIND_EMBED_CONCURRENCY || '20', 10);
+  const CONCURRENCY = resolveEmbedConcurrency();
 
   async function embedOnePage(page: typeof pages[number]) {
     // v0.31.12: thread source_id from the page row so getChunks/upsertChunks
@@ -573,7 +585,7 @@ async function embedAllStale(
   // (page_id, chunk_index). Each query finishes in <1s.
   // v0.41.18.0 (A13): --batch-size N CLI flag overrides hardcoded 2000 default.
   const PAGE_SIZE = staleOpts?.batchSize ?? 2000;
-  const CONCURRENCY = parseInt(process.env.VOLTMIND_EMBED_CONCURRENCY || '20', 10);
+  const CONCURRENCY = resolveEmbedConcurrency();
 
   // D3 + D3a + D8: wall-clock budget. 30 min default; env override.
   // v0.41.18.0 (A13): --catch-up removes the wall-clock cap entirely so the
