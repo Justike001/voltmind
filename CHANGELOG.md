@@ -1088,7 +1088,6 @@ review passes) on cascade-resilience and lock-stealing invariants.
   TypeScript exhaustiveness check fail until they add a `'partial'`
   arm.
 
-
 ## [0.41.14.0] - 2026-05-25
 
 **Your gbrain skills can declare their own routing triggers in their
@@ -3489,7 +3488,6 @@ The same plumbing lands in the LongMemEval benchmark, with a methodology change 
 
 Plan file at `~/.claude/plans/system-instruction-you-are-working-crystalline-owl.md` carries the full design rationale, the CEO/Eng/Codex review history (3 review passes, all CLEARED), the measurement plan (3 seeds per condition + paired-bootstrap CI), and the hand-verification gate list. Codex flagged 18 findings during outside-voice review; 6 load-bearing ones folded as design decisions (alias-map wording, `resolveEntitySlugWithSource` resolution_source signal, prompt-placement preserving both calibration AND default ordering, INJECTION_PATTERNS extension for `</trajectory>`, 5s findTrajectory timeout + 10s extractor timeout, doctor check deferred to v0.40.1+, real-LLM spot-check added, success metric broadened). The benchmark methodology contamination was the load-bearing decision — accepted with explicit CHANGELOG + JSON-envelope disclosure.
 
-
 ## [0.40.1.0] - 2026-05-22
 
 **Eval infrastructure that catches retrieval regressions before merge and proves answer-quality wins after ship.**
@@ -3880,7 +3878,6 @@ Content-Type: application/json
 - The plan-eng-review flow on the v0 plan produced 15 decisions, 9 of them via codex outside-voice. Plan + decision trace at `~/.claude/plans/system-instruction-you-are-working-async-popcorn.md`.
 - Filed v0.39+ TODOs: SQL-shape rewrite of `listPrefixSampledPages` for PgBouncer; magic-byte allowlist for binary content detection; `--source-kind` override flag; facts:absorb root-cause trace; ingest_capture Minion handler architecture migration.
 
-
 ## [0.39.2.0] - 2026-05-22
 
 **Your federated brain refreshes all its sources in parallel now, not one at a time.**
@@ -4248,7 +4245,6 @@ Community PR #1287 (by @garrytan-agents) diagnosed the hang correctly and propos
 - `scanBrainSources` now returns `partial` + `aborted_at_source` on `AuditReport` and `status` + `files_scanned` (+ optional `db_page_count`) per `PerSourceReport`. Any test that constructs `AuditReport` literals needs to include the new required fields. (One pre-existing test was updated as part of this PR.)
 - `runDoctor` still calls `process.exit` at the end — behavioral tests against it can't run via the unit-test runner. That refactor stays a TODO; the unit-test layer covers `scanBrainSources` + doctor's render shape via source-grep, and the heavy script covers end-to-end against a subprocess.
 
-
 ## [0.38.1.0] - 2026-05-21
 
 **Your `gbrain agent run` loop can now run on any provider with native tool calling — not just Anthropic.** OpenAI, Google Gemini, OpenRouter, openai-compatible servers (Ollama, LiteLLM, vLLM, llama-server) all work. Pick the cheapest model that does the job for your agent, or stay on Anthropic if you want the prompt-cache cost savings on long loops.
@@ -4462,7 +4458,6 @@ The full plan estimated 12-14 weeks across all four phases. v0.38.0.0 lands Phas
 - `test/scope.test.ts` + `test/oauth.test.ts` + `test/model-config.serial.test.ts` updated for v0.38 semantics.
 
 **Plan:** `~/.claude/plans/system-instruction-you-are-working-shimmying-breeze.md`. Wave went through `/plan-ceo-review` (Option B locked), `/plan-eng-review` (7 decisions D3-D9), and two codex outside-voice rounds (D11-D13 absorbed; round 2 caught blocker on missing Slice 1 stable-ID migration + 4 non-blockers).
-
 
 ## [0.38.0.0] - 2026-05-21
 
@@ -10485,7 +10480,6 @@ stops being a search engine and starts being an aide who notices.
   vs computing the boundary in JS), v0.29 always picks the parity-safe
   path. See engine-parity-salience.test.ts for the smoke.
 
-
 ## [0.28.12] - 2026-05-07
 
 **gbrain hits 97.60% retrieval recall on the public LongMemEval benchmark.
@@ -10591,9 +10585,6 @@ gbrain eval longmemeval ~/datasets/longmemeval/longmemeval_s.json \
 
 If anything looks off, file at https://github.com/garrytan/gbrain/issues
 with `gbrain doctor` output.
-
-
-
 
 ## [0.28.11] - 2026-05-07
 
@@ -11158,7 +11149,6 @@ issue with the doctor output and we will look.
    - output of `gbrain --version`
    - which step broke
 
-
 ## [0.28.4] - 2026-05-06
 
 ## **`gbrain eval cross-modal` — three frontier models score your skill output BEFORE tests cement it.**
@@ -11482,7 +11472,6 @@ core feature:
   contract documented in the file header.
 - `bun run check:admin-scope-drift` — new gate; fails the build if
   `admin/src/lib/scope-constants.ts` falls behind `src/core/scope.ts`.
-
 
 ## [0.28.1] - 2026-05-06
 
@@ -12561,10 +12550,6 @@ React admin dashboard baked into the binary. Seven screens designed through Stev
 **Tests:**
 - `test/oauth.test.ts` ... 34 test cases covering provider: register, getClient, client_credentials exchange, auth_code flow with PKCE, refresh rotation, verifyAccessToken (OAuth + legacy fallback), revokeToken, sweepExpiredTokens, scope annotations on all 30 operations. Plus the post-/cso security-fix regressions: 10-concurrent auth code exchange (only 1 wins), 10-concurrent refresh rotation (only 1 wins), redirect_uri HTTPS-or-loopback gate, and pgArray comma-element round-trip (1 element in → 1 element out).
 
-
-
-
-
 ## [0.25.1] - 2026-05-01
 
 ## **Your brain can now read books with you. Nine new skills land at once.**
@@ -13145,7 +13130,6 @@ Eight findings from the cross-model review caught real implementation traps befo
 - Auto git commit + push from the synthesize/patterns phases. v1 writes files locally; either commit yourself or let `gbrain autopilot` handle it.
 - Daily token budget cap. Cooldown is the v1 spend bound.
 - Cross-modal pattern review (currently reflections-only).
-
 
 ## [0.22.16] - 2026-04-29
 
@@ -13812,8 +13796,6 @@ Then point Claude Desktop, claude.ai/code, or any MCP client at `http://your-tun
 6. **If `gbrain serve --http` exits with "Postgres engine required":** PGLite is local-only by design. Either keep using stdio (`gbrain serve`) for local agents, or migrate to Postgres (`gbrain migrate --to supabase`).
 
 If anything breaks: `gbrain doctor`, `~/.gbrain/upgrade-errors.jsonl` (if present), and please file an issue at https://github.com/garrytan/gbrain/issues with both.
-
-
 
 ## [0.22.6.1] - 2026-04-26
 
