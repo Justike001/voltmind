@@ -35,6 +35,14 @@ export const EMBEDDING_PRICING: Record<string, EmbeddingPricing> = {
   'voyage:voyage-3-large':         { pricePerMTok: 0.18 },
   'voyage:voyage-3':               { pricePerMTok: 0.06 },
   'voyage:voyage-4-large':         { pricePerMTok: 0.18 },
+  // Alibaba DashScope text embeddings. Model Studio lists CNY 0.0005/1K
+  // input tokens for v4 and CNY 0.0006/1K for v3; the USD values below use
+  // a deliberately conservative 0.15 CNY/USD conversion so cost caps remain
+  // enforceable for the OpenAI-compatible synchronous endpoint.
+  // Source: https://help.aliyun.com/en/model-studio/text-embedding-synchronous-api
+  'dashscope:text-embedding-v4':   { pricePerMTok: 0.075 },
+  'dashscope:text-embedding-v3':   { pricePerMTok: 0.09 },
+  'dashscope:text-embedding-v2':   { pricePerMTok: 0.105 },
   // ZeroEntropy (https://zeroentropy.dev/pricing — zembed-1)
   'zeroentropyai:zembed-1':        { pricePerMTok: 0.05 },
 };

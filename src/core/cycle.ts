@@ -49,8 +49,9 @@ import { voltmindPath } from './config.ts';
 import type { BrainEngine } from './engine.ts';
 import { createProgress, type ProgressReporter } from './progress.ts';
 import { getCliOptions, cliOptsToProgressOptions } from './cli-options.ts';
-import { tryAcquireDbLock, type DbLockHandle } from './db-lock.ts';
+import { tryAcquireDbLock, recoverLocalDeadDbLock, type DbLockHandle } from './db-lock.ts';
 import { assertValidSourceId } from './source-id.ts';
+import { isRecoverableConnectionError, reconnectEngine } from './connection-errors.ts';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -249,7 +250,7 @@ const NEEDS_LOCK_PHASES: ReadonlySet<CyclePhase> = new Set([
   'purge',
 ]);
 
-export type PhaseStatus = 'ok' | 'warn' | 'fail' | 'skipped';
+export type PhaseStatus = 'ok' | 'warn' | 'fail' | 'skipped' | 'blocked';
 
 export interface PhaseError {
   /** Error class for machine branching — e.g., 'DatabaseConnection', 'Timeout', 'LLMError', 'FilesystemError', 'InternalError'. */
@@ -284,7 +285,9 @@ export interface CycleReport {
    * Overall status derived from phase results:
    *   - 'clean'   : ran successfully, zero fixes/writes across every phase
    *   - 'ok'      : ran successfully, some work was done
-   *   - 'partial' : at least one phase warned or failed, others ran
+   *   - 'partial' : a business-critical phase failed, was blocked, or sync
+   *                 completed with input failures; quality warnings remain
+   *                 visible in `phases` without falsifying completion
    *   - 'skipped' : cycle did not run (lock held by another holder)
    *   - 'failed'  : lock acquired but all attempted phases failed
    */
@@ -482,7 +485,14 @@ export function cycleLockIdFor(sourceId?: string): string {
  */
 async function acquireDbCycleLock(engine: BrainEngine, sourceId?: string): Promise<LockHandle | null> {
   const lockId = cycleLockIdFor(sourceId);
-  const handle: DbLockHandle | null = await tryAcquireDbLock(engine, lockId, LOCK_TTL_MINUTES);
+  let handle: DbLockHandle | null = await tryAcquireDbLock(engine, lockId, LOCK_TTL_MINUTES);
+  if (handle === null) {
+    const recovery = await recoverLocalDeadDbLock(engine, lockId);
+    if (recovery.reason === 'reclaimed') {
+      console.warn(`[cycle] reclaimed abandoned local lock ${lockId} from pid ${recovery.holder_pid}; retrying once`);
+      handle = await tryAcquireDbLock(engine, lockId, LOCK_TTL_MINUTES);
+    }
+  }
   if (handle === null) return null;
   return {
     refresh: handle.refresh,
@@ -616,10 +626,14 @@ function checkAborted(signal?: AbortSignal): void {
 // keyword is the minimal seam that lets behavioral tests drive the
 // wrapper's result-mapping (counter → status enum + summary) without
 // going through runCycle's full setup cost.
-export async function runPhaseLint(brainDir: string, dryRun: boolean): Promise<PhaseResult> {
+export async function runPhaseLint(
+  brainDir: string,
+  dryRun: boolean,
+  engine?: BrainEngine,
+): Promise<PhaseResult> {
   try {
     const { runLintCore } = await import('../commands/lint.ts');
-    const result = await runLintCore({ target: brainDir, fix: true, dryRun });
+    const result = await runLintCore({ target: brainDir, fix: true, dryRun, engine });
     const issues = result.total_issues ?? 0;
     const fixed = result.total_fixed ?? 0;
     const remaining = Math.max(0, issues - fixed);
@@ -776,7 +790,7 @@ async function runPhaseSync(
     const syncedCount = result.added + result.modified;
     return {
       phase: 'sync',
-      status: result.status === 'blocked_by_failures' ? 'warn' : 'ok',
+      status: result.status === 'blocked_by_failures' || result.status === 'partial' ? 'warn' : 'ok',
       duration_ms: 0,
       summary: dryRun
         ? `${syncedCount} page(s) would sync, ${result.deleted} would delete`
@@ -794,6 +808,9 @@ async function runPhaseSync(
       pagesAffected: result.pagesAffected,
     };
   } catch (e) {
+    // A DB connection loss is not a completed-but-degraded sync. Let the
+    // Minion handler requeue the whole idempotent cycle after reconnecting.
+    if (isRecoverableConnectionError(e)) throw e;
     return {
       phase: 'sync',
       status: 'fail',
@@ -850,6 +867,9 @@ async function runPhaseExtract(
       },
     };
   } catch (e) {
+    // `extract.links_fs` writes the graph. Treat a lost pool as retryable
+    // infrastructure failure rather than a partial business success.
+    if (isRecoverableConnectionError(e)) throw e;
     return {
       phase: 'extract',
       status: 'fail',
@@ -1236,10 +1256,24 @@ export async function runCycle(
 
   const progress = createProgress(cliOptsToProgressOptions(getCliOptions()));
 
+  // Merge the caller's cancellation signal with an internal one used by the
+  // cycle-lock heartbeat. Existing phase-boundary checks then stop safely
+  // after a heartbeat/reconnect failure without changing every phase API.
+  const cycleAbort = new AbortController();
+  const parentSignal = opts.signal;
+  const forwardAbort = () => {
+    if (!cycleAbort.signal.aborted) cycleAbort.abort(parentSignal?.reason ?? new Error('aborted'));
+  };
+  if (parentSignal?.aborted) forwardAbort();
+  else parentSignal?.addEventListener('abort', forwardAbort, { once: true });
+  opts = { ...opts, signal: cycleAbort.signal };
+
   // Decide if we need the cycle lock: any state-mutating phase in the selection.
   const needsLock = phases.some(p => NEEDS_LOCK_PHASES.has(p));
 
   let lock: LockHandle | null = null;
+  let lockHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let lockHeartbeatInFlight = false;
   if (needsLock) {
     if (engine) {
       // v0.38 (codex r2 P0-C + P0-D): on PGLite, acquire the GLOBAL file
@@ -1359,12 +1393,44 @@ export async function runCycle(
     }
   }
 
+  // A cycle may spend a long time inside extract/sync, while the old code only
+  // refreshed after phases (and the worker hook was merely setImmediate).
+  // Postgres pools support this independent, serialized heartbeat; PGLite
+  // deliberately keeps its single-connection path free of concurrent queries.
+  if (engine?.kind === 'postgres' && lock) {
+    const refreshEveryMs = Math.max(60_000, Math.floor((LOCK_TTL_MINUTES * 60_000) / 3));
+    const heartbeat = async () => {
+      if (lockHeartbeatInFlight || cycleAbort.signal.aborted) return;
+      lockHeartbeatInFlight = true;
+      try {
+        await lock!.refresh();
+      } catch (error) {
+        try {
+          if (!isRecoverableConnectionError(error) || !await reconnectEngine(engine as any)) throw error;
+          await lock!.refresh();
+          console.warn('[cycle] reconnected and refreshed cycle lock heartbeat');
+          return;
+        } catch (reconnectError) {
+          const message = reconnectError instanceof Error ? reconnectError.message : String(reconnectError);
+          console.error(`[cycle] cycle lock heartbeat failed: ${message}`);
+          if (!cycleAbort.signal.aborted) {
+            cycleAbort.abort(new Error(`cycle-lock-heartbeat-failed: ${message}`));
+          }
+        }
+      } finally {
+        lockHeartbeatInFlight = false;
+      }
+    };
+    lockHeartbeatTimer = setInterval(() => { void heartbeat(); }, refreshEveryMs);
+    lockHeartbeatTimer.unref?.();
+  }
+
   try {
     // ── Phase 1: lint ────────────────────────────────────────────
     if (phases.includes('lint')) {
       checkAborted(opts.signal);
       progress.start('cycle.lint');
-      const { result, duration_ms } = await timePhase(() => runPhaseLint(opts.brainDir, dryRun));
+      const { result, duration_ms } = await timePhase(() => runPhaseLint(opts.brainDir, dryRun, engine ?? undefined));
       result.duration_ms = duration_ms;
       phaseResults.push(result);
       progress.finish();
@@ -1387,6 +1453,7 @@ export async function runCycle(
     // and which slugs synthesize wrote so recompute_emotional_weight can
     // pick up the union of (sync ∪ synthesize) for v0.29 incremental mode.
     let syncPagesAffected: string[] | undefined;
+    let syncFailedUpstream = false;
     let synthesizeWrittenSlugs: string[] | undefined;
     if (phases.includes('sync')) {
       checkAborted(opts.signal);
@@ -1404,6 +1471,9 @@ export async function runCycle(
         result.duration_ms = duration_ms;
         // Capture changed slugs for incremental extract.
         syncPagesAffected = (result as SyncPhaseResult).pagesAffected;
+        syncFailedUpstream = result.status === 'fail' ||
+          result.details.syncStatus === 'blocked_by_failures' ||
+          result.details.syncStatus === 'partial';
         phaseResults.push(result);
         progress.finish();
       }
@@ -1747,13 +1817,32 @@ export async function runCycle(
         } as never;
 
         if (phases.includes('propose_takes')) {
-          checkAborted(opts.signal);
-          progress.start('cycle.propose_takes');
-          const { runPhaseProposeTakes } = await import('./cycle/propose-takes.ts');
-          const { result, duration_ms } = await timePhase(() => runPhaseProposeTakes(calibrationCtx, { repoPath: opts.brainDir }) as Promise<PhaseResult>);
-          result.duration_ms = duration_ms;
-          phaseResults.push(result);
-          progress.finish();
+          // The current proposal extractor is Anthropic-backed. Without a
+          // usable key, attempting every page only creates a large list of
+          // identical "requires ANTHROPIC_API_KEY" warnings and wastes a
+          // cycle slot. Treat an unconfigured optional provider as an
+          // explicit skip; it is not a sync, queue, or worker failure.
+          const hasAnthropicKey = !!(
+            process.env.ANTHROPIC_API_KEY ||
+            await engine.getConfig('anthropic_api_key')
+          );
+          if (!hasAnthropicKey) {
+            phaseResults.push({
+              phase: 'propose_takes',
+              status: 'skipped',
+              duration_ms: 0,
+              summary: 'propose_takes skipped: Anthropic chat is not configured',
+              details: { reason: 'provider_not_configured', provider: 'anthropic' },
+            });
+          } else {
+            checkAborted(opts.signal);
+            progress.start('cycle.propose_takes');
+            const { runPhaseProposeTakes } = await import('./cycle/propose-takes.ts');
+            const { result, duration_ms } = await timePhase(() => runPhaseProposeTakes(calibrationCtx, { repoPath: opts.brainDir }) as Promise<PhaseResult>);
+            result.duration_ms = duration_ms;
+            phaseResults.push(result);
+            progress.finish();
+          }
           await safeYield(opts.yieldBetweenPhases);
         }
 
@@ -1835,11 +1924,21 @@ export async function runCycle(
           details: { reason: 'no_database' },
         });
       } else {
-        progress.start('cycle.embed');
-        const { result, duration_ms } = await timePhase(() => runPhaseEmbed(engine, dryRun));
-        result.duration_ms = duration_ms;
-        phaseResults.push(result);
-        progress.finish();
+        if (syncFailedUpstream) {
+          phaseResults.push({
+            phase: 'embed',
+            status: 'blocked',
+            duration_ms: 0,
+            summary: 'embed blocked because this cycle\'s sync did not complete',
+            details: { reason: 'upstream_sync_failed' },
+          });
+        } else {
+          progress.start('cycle.embed');
+          const { result, duration_ms } = await timePhase(() => runPhaseEmbed(engine, dryRun));
+          result.duration_ms = duration_ms;
+          phaseResults.push(result);
+          progress.finish();
+        }
       }
       await safeYield(opts.yieldBetweenPhases);
     }
@@ -1934,7 +2033,10 @@ export async function runCycle(
       }
       await safeYield(opts.yieldBetweenPhases);
     }
+    checkAborted(opts.signal);
   } finally {
+    if (lockHeartbeatTimer) clearInterval(lockHeartbeatTimer);
+    parentSignal?.removeEventListener('abort', forwardAbort);
     if (lock) {
       try { await lock.release(); } catch { /* best-effort */ }
     }
@@ -2054,9 +2156,19 @@ function deriveStatus(phases: PhaseResult[], totals: CycleReport['totals']): Cyc
   if (phases.length === 0) return 'failed';
   const anyFailed = phases.some(p => p.status === 'fail');
   const allFailed = phases.every(p => p.status === 'fail');
-  const anyWarn = phases.some(p => p.status === 'warn');
+  const anyBlocked = phases.some(p => p.status === 'blocked');
   if (allFailed) return 'failed';
-  if (anyFailed || anyWarn) return 'partial';
+  // Warnings are deliberately preserved in the per-phase report but are not
+  // all equivalent to a failed consumption run. For example, lint findings,
+  // orphan ratios, optional fact-enrichment warnings, and an unavailable
+  // optional LLM are actionable quality signals; they must not make every
+  // healthy sync look incomplete forever. Sync is the exception: its `warn`
+  // status means `blocked_by_failures`/`partial`, so no trustworthy source
+  // checkpoint was written and embedding must remain blocked.
+  const syncInputCompromised = phases.some(
+    p => p.phase === 'sync' && p.status === 'warn',
+  );
+  if (anyFailed || anyBlocked || syncInputCompromised) return 'partial';
   // All phases 'ok' or 'skipped'. Distinguish clean (no activity) from ok (work done).
   const anyWork =
     totals.lint_fixes > 0 ||

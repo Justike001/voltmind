@@ -11,6 +11,7 @@
 import type { BrainEngine } from './engine.ts';
 import type { Page } from './types.ts';
 import { BudgetLedger } from './enrichment/budget.ts';
+import { isEmbedSkipped } from './embed-skip.ts';
 
 export type EnrichmentEntityType = 'person' | 'company';
 
@@ -133,6 +134,15 @@ export async function applySignalEnrichmentForPages(
   }
 
   for (const slug of selected) {
+    // Content-sanity soft-blocks are intentionally lightweight records. Do
+    // not feed an oversized/generated page into entity extraction: it can
+    // turn a successful sync into thousands of serial DB writes and starve
+    // the Autopilot queue after the file was already isolated from embedding.
+    const page = await engine.getPage(slug, { sourceId: opts.sourceId || 'default' });
+    if (page && isEmbedSkipped(page.frontmatter as Record<string, unknown>)) {
+      summary.warnings.push(`page_embed_skipped:${slug}`);
+      continue;
+    }
     const pageSummary = await applySignalEnrichment(engine, {
       sourceId: opts.sourceId || 'default',
       sourceSlug: slug,

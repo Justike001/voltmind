@@ -1010,6 +1010,33 @@ export class MinionQueue {
     return rowToMinionJob(rows[0]);
   }
 
+  /**
+   * Release an active job after a transient infrastructure failure without
+   * consuming its handler-attempt budget. Unlike failJob(), this represents
+   * "the worker lost its database transport before it could make a business
+   * decision", not a failed business attempt.
+   */
+  async releaseRecoverableConnectionJob(
+    id: number,
+    lockToken: string,
+    errorText: string,
+    backoffMs: number,
+  ): Promise<MinionJob | null> {
+    const rows = await this.engine.executeRaw<Record<string, unknown>>(
+      `UPDATE minion_jobs SET
+        status = 'delayed',
+        error_text = $1,
+        stacktrace = COALESCE(stacktrace, '[]'::jsonb) || to_jsonb($1::text),
+        delay_until = now() + ($2::double precision * interval '1 millisecond'),
+        lock_token = NULL, lock_until = NULL, updated_at = now()
+       WHERE id = $3 AND status = 'active' AND lock_token = $4
+       RETURNING *`,
+      [errorText, backoffMs, id, lockToken],
+    );
+    if (rows.length === 0) return null;
+    return rowToMinionJob(rows[0]);
+  }
+
   /** Update job progress (token-fenced). */
   async updateProgress(id: number, lockToken: string, progress: unknown): Promise<boolean> {
     const rows = await this.engine.executeRaw<Record<string, unknown>>(

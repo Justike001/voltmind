@@ -295,15 +295,30 @@ export function fixContent(content: string): string {
  * Also loads the operator literals file (`~/.voltmind/junk-substrings.txt`)
  * once per lint invocation so multi-file lint runs amortize the read.
  */
-async function resolveLintContentSanity(): Promise<LintContentOpts['contentSanity']> {
+async function resolveLintContentSanity(
+  sharedEngine?: { getConfig(key: string): Promise<string | null | undefined> },
+): Promise<LintContentOpts['contentSanity']> {
   const base = loadConfig();
   let cs = base?.content_sanity;
+
+  // Long-running callers (Autopilot / Minion cycle) already own a connected
+  // engine. Reuse it instead of creating a module-singleton Postgres engine:
+  // disconnecting that temporary engine previously tore down the worker's
+  // shared db.ts pool immediately after cycle.lint.
+  if (sharedEngine) {
+    try {
+      const lifted = await loadConfigWithEngine(sharedEngine, base);
+      cs = lifted?.content_sanity ?? cs;
+    } catch {
+      // Keep the file/env values when the caller's DB is transiently down.
+    }
+  }
 
   // DB-plane lift: only attempt when the file/env config suggests an
   // engine is configured. Avoids spinning up a fresh PGLite just to
   // read 4 config keys in a CI lint run that has no brain at all.
   const hasEngineConfig = !!(base?.database_url || base?.database_path);
-  if (hasEngineConfig) {
+  if (!sharedEngine && hasEngineConfig) {
     try {
       const { createEngine } = await import('../core/engine-factory.ts');
       const engine = await createEngine({
@@ -312,7 +327,11 @@ async function resolveLintContentSanity(): Promise<LintContentOpts['contentSanit
         database_path: base!.database_path,
       });
       try {
-        await engine.connect({});
+        await engine.connect({
+          engine: base!.engine,
+          database_url: base!.database_url,
+          database_path: base!.database_path,
+        });
         const lifted = await loadConfigWithEngine(engine, base);
         cs = lifted?.content_sanity ?? cs;
       } finally {
@@ -361,6 +380,8 @@ export interface LintOpts {
    *  `runLintCore` resolves via the file/env/DB chain. Tests inject
    *  this directly to bypass the FS + engine layers. */
   contentSanity?: LintContentOpts['contentSanity'];
+  /** Reuse a caller-owned engine; it is never disconnected by lint. */
+  engine?: { getConfig(key: string): Promise<string | null | undefined> };
 }
 
 export interface LintResult {
@@ -392,7 +413,7 @@ export async function runLintCore(opts: LintOpts): Promise<LintResult> {
   // Resolve content-sanity config once for this lint run (D1: lift DB
   // config when reachable). Caller can pre-pass via opts.contentSanity
   // (tests, Minion handler) to bypass the engine probe entirely.
-  const contentSanity = opts.contentSanity ?? await resolveLintContentSanity();
+  const contentSanity = opts.contentSanity ?? await resolveLintContentSanity(opts.engine);
   const lintOpts: LintContentOpts = { contentSanity };
 
   let totalIssues = 0;

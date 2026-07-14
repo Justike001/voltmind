@@ -669,7 +669,14 @@ export async function importFromContent(
     // this in v0.18.x), so we wrap each pair in try/catch — guides imported
     // before their code repo syncs are common, and the missing edges land
     // later via `voltmind reconcile-links` (Layer 8 D3, v0.21.0).
-    const codeRefs = extractCodeRefs(parsed.compiled_truth + '\n' + (parsed.timeline || ''));
+    // An oversize content-sanity soft-block is deliberately kept as a
+    // lightweight page record.  It must not then spend an unbounded amount
+    // of time deriving hundreds of code-reference edges from release notes
+    // or generated changelogs: that would turn the isolation path into the
+    // same queue-stalling failure mode it is intended to prevent.
+    const codeRefs = embedSkipped
+      ? []
+      : extractCodeRefs(parsed.compiled_truth + '\n' + (parsed.timeline || ''));
     // For doc↔impl edges, both endpoints are within the same source as the
     // markdown page being imported. Cross-source edges (markdown in one
     // source, code in another) currently fail with "page not found" — a

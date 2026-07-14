@@ -21,6 +21,7 @@ import { MinionQueue } from './queue.ts';
 import { calculateBackoff } from './backoff.ts';
 import { RateLeaseUnavailableError } from './handlers/subagent.ts';
 import { logLeasePressure } from './lease-pressure-audit.ts';
+import { isRecoverableConnectionError, reconnectEngine } from '../connection-errors.ts';
 import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { evaluateQuietHours, type QuietHoursConfig } from './quiet-hours.ts';
@@ -614,14 +615,68 @@ export class MinionWorker extends EventEmitter {
   private launchJob(job: MinionJob, lockToken: string): void {
     const abort = new AbortController();
 
-    // Start lock renewal (per-job timer, not shared)
-    const lockTimer = setInterval(async () => {
-      const renewed = await this.queue.renewLock(job.id, lockToken, this.opts.lockDuration);
-      if (!renewed) {
-        console.warn(`Lock lost for job ${job.id}, aborting execution`);
+    // Start lock renewal (per-job timer, not shared). The callback must never
+    // leak a rejected promise: an unhandled rejection here used to terminate
+    // the supervised worker after a transient Supabase/PgBouncer disconnect.
+    // Renewal is serialized so a slow reconnect cannot overlap the next tick.
+    let renewalInFlight = false;
+    const renewJobLock = async (): Promise<void> => {
+      if (renewalInFlight || abort.signal.aborted) return;
+      renewalInFlight = true;
+      try {
+        let renewed = await this.queue.renewLock(job.id, lockToken, this.opts.lockDuration);
+        if (!renewed) {
+          console.warn(`Lock lost for job ${job.id}, aborting execution`);
+          clearInterval(lockTimer);
+          abort.abort(new Error('lock-lost'));
+          return;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[minion worker] lock renewal failed for job ${job.id}: ${message}`);
+
+        // A connection failure is recoverable only by rebuilding the saved
+        // engine pool, then renewing the same token-fenced lease once. Never
+        // retry the job's arbitrary handler statement from this timer.
+        if (isRecoverableConnectionError(error)) {
+          try {
+            const reconnected = await reconnectEngine(this.engine as any);
+            if (reconnected) {
+              const renewed = await this.queue.renewLock(job.id, lockToken, this.opts.lockDuration);
+              if (renewed) {
+                console.warn(`[minion worker] reconnected and renewed lock for job ${job.id}`);
+                return;
+              }
+            }
+          } catch (reconnectError) {
+            const reconnectMessage = reconnectError instanceof Error ? reconnectError.message : String(reconnectError);
+            console.error(`[minion worker] reconnect after lock renewal failure for job ${job.id} failed: ${reconnectMessage}`);
+          }
+        }
+
         clearInterval(lockTimer);
-        abort.abort(new Error('lock-lost'));
+        if (!abort.signal.aborted) {
+          abort.abort(new Error(`lock-renewal-failed: ${message}`));
+        }
+      } finally {
+        renewalInFlight = false;
       }
+    };
+
+    // Do not pass an async function directly to setInterval. Timer APIs discard
+    // their return value, so an exception accidentally introduced in any future
+    // renewal/reconnect branch would become a process-level unhandled rejection.
+    // The outer catch is deliberately redundant with renewJobLock's local catch:
+    // it is the last-resort containment boundary for a supervised worker.
+    const lockTimer = setInterval(() => {
+      void renewJobLock().catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[minion worker] unexpected lock-renewal failure for job ${job.id}: ${message}`);
+        clearInterval(lockTimer);
+        if (!abort.signal.aborted) {
+          abort.abort(new Error(`lock-renewal-unhandled: ${message}`));
+        }
+      });
     }, this.opts.lockDuration / 2);
 
     // Per-job wall-clock timeout safety net. Cooperative: fires abort() so the
@@ -658,6 +713,15 @@ export class MinionWorker extends EventEmitter {
     }
 
     const promise = this.executeJob(job, lockToken, abort, lockTimer)
+      // executeJob is intended to contain handler and queue-settlement errors,
+      // but this is the worker's final process-safety boundary. A terminal
+      // queue write must never become an unhandled rejection that kills the
+      // supervised child.
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[minion worker] uncontained job error for ${job.id}: ${message}`);
+        if (!abort.signal.aborted) abort.abort(new Error(`job-settlement-failed: ${message}`));
+      })
       .finally(() => {
         clearInterval(lockTimer);
         if (timeoutTimer) clearTimeout(timeoutTimer);
@@ -670,6 +734,41 @@ export class MinionWorker extends EventEmitter {
     this.inFlight.set(job.id, { job, lockToken, lockTimer, abort, promise });
   }
 
+  /**
+   * Execute a token-fenced queue state transition with one controlled,
+   * configuration-preserving reconnect. These writes are safe to retry: a
+   * successful first attempt makes the second return false via its active-row
+   * token predicate, rather than applying the terminal transition twice.
+   *
+   * Returning undefined means the worker must leave the active lease for the
+   * stalled/timeout recovery path; it must not crash the process trying to
+   * report the original handler error.
+   */
+  private async queueWriteWithReconnect<T>(
+    jobId: number,
+    label: string,
+    write: () => Promise<T>,
+  ): Promise<T | undefined> {
+    try {
+      return await write();
+    } catch (error) {
+      if (!isRecoverableConnectionError(error)) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[minion worker] ${label} for job ${jobId} hit a connection error; reconnecting once: ${message}`);
+      try {
+        if (!await reconnectEngine(this.engine as any)) {
+          console.error(`[minion worker] ${label} for job ${jobId} cannot reconnect this engine; leaving lease for recovery`);
+          return undefined;
+        }
+        return await write();
+      } catch (reconnectError) {
+        const reconnectMessage = reconnectError instanceof Error ? reconnectError.message : String(reconnectError);
+        console.error(`[minion worker] ${label} for job ${jobId} failed after reconnect; leaving lease for recovery: ${reconnectMessage}`);
+        return undefined;
+      }
+    }
+  }
+
   private async executeJob(
     job: MinionJob,
     lockToken: string,
@@ -678,7 +777,11 @@ export class MinionWorker extends EventEmitter {
   ): Promise<void> {
     const handler = this.handlers.get(job.name);
     if (!handler) {
-      await this.queue.failJob(job.id, lockToken, `No handler for job type '${job.name}'`, 'dead');
+      await this.queueWriteWithReconnect(
+        job.id,
+        'dead-letter missing handler',
+        () => this.queue.failJob(job.id, lockToken, `No handler for job type '${job.name}'`, 'dead'),
+      );
       return;
     }
 
@@ -724,13 +827,26 @@ export class MinionWorker extends EventEmitter {
     try {
       const result = await handler(context);
 
+      // A cooperative handler normally throws as soon as it sees the signal.
+      // Keep this guard for handlers that return just after a lock-loss or
+      // connection-loss abort, so they cannot incorrectly complete the job.
+      if (abort.signal.aborted) {
+        throw abort.signal.reason instanceof Error
+          ? abort.signal.reason
+          : new Error(String(abort.signal.reason ?? 'aborted'));
+      }
+
       clearInterval(lockTimer);
 
       // Complete the job (token-fenced)
-      const completed = await this.queue.completeJob(
+      const completed = await this.queueWriteWithReconnect(
         job.id,
-        lockToken,
-        result != null ? (typeof result === 'object' ? result as Record<string, unknown> : { value: result }) : undefined,
+        'complete job',
+        () => this.queue.completeJob(
+          job.id,
+          lockToken,
+          result != null ? (typeof result === 'object' ? result as Record<string, unknown> : { value: result }) : undefined,
+        ),
       );
 
       if (!completed) {
@@ -780,8 +896,12 @@ export class MinionWorker extends EventEmitter {
         // 1-3s jittered backoff. Not the exponential curve — this is "yield
         // the slot, try again soon", not "give up after a few tries."
         const leaseBackoffMs = 1000 + Math.floor(Math.random() * 2000);
-        const released = await this.queue.releaseLeaseFullJob(
-          job.id, lockToken, errorText, leaseBackoffMs,
+        const released = await this.queueWriteWithReconnect(
+          job.id,
+          'release lease-full job',
+          () => this.queue.releaseLeaseFullJob(
+            job.id, lockToken, errorText, leaseBackoffMs,
+          ),
         );
         if (!released) {
           console.warn(`Job ${job.id} lease-full release dropped (lock token mismatch)`);
@@ -790,7 +910,7 @@ export class MinionWorker extends EventEmitter {
         // Audit row write is best-effort — never blocks the bypass path.
         // Denormalized columns persist past `voltmind jobs prune` so post-NULL
         // forensic queries still see context (Eng D8 / codex pass-3 #7).
-        await logLeasePressure(this.engine, {
+        try { await logLeasePressure(this.engine, {
           job_id: job.id,
           lease_key: leaseErr.key,
           active_at_bounce: leaseErr.active,
@@ -804,10 +924,43 @@ export class MinionWorker extends EventEmitter {
           model: null,
           provider: null,
           root_owner_id: job.parent_job_id ?? null,
-        });
+        }); } catch (auditError) {
+          console.warn(`[minion worker] lease-pressure audit for job ${job.id} failed: ${auditError instanceof Error ? auditError.message : String(auditError)}`);
+        }
         console.log(
           `Job ${job.id} (${job.name}) lease-full, re-queuing in ${Math.round(leaseBackoffMs)}ms (no attempt burned)`,
         );
+        return;
+      }
+
+      // Database transport loss is infrastructure noise, not a failed
+      // business execution. Rebuild the saved pool once, then release the
+      // token-fenced lease for a short retry without spending max_attempts.
+      // If reconnect/release cannot run, leave the active lease for the
+      // existing stalled/timeout detector; never dead-letter it here.
+      if (isRecoverableConnectionError(err)) {
+        const retryDelayMs = 5_000 + Math.floor(Math.random() * 2_000);
+        try {
+          const reconnected = await reconnectEngine(this.engine as any);
+          if (!reconnected) {
+            console.error(`[minion worker] connection failure for job ${job.id}; engine has no reconnect hook, leaving lease for recovery`);
+            return;
+          }
+        } catch (reconnectError) {
+          const reconnectMessage = reconnectError instanceof Error ? reconnectError.message : String(reconnectError);
+          console.error(`[minion worker] connection failure for job ${job.id}; reconnect failed, leaving lease for recovery: ${reconnectMessage}`);
+          return;
+        }
+        const released = await this.queueWriteWithReconnect(
+          job.id,
+          'release recoverable connection job',
+          () => this.queue.releaseRecoverableConnectionJob(job.id, lockToken, errorText, retryDelayMs),
+        );
+        if (!released) {
+          console.warn(`[minion worker] recoverable connection release for job ${job.id} did not apply; lease recovery will decide`);
+          return;
+        }
+        console.warn(`Job ${job.id} (${job.name}) delayed after recoverable connection failure; retrying in ${Math.round(retryDelayMs)}ms (attempt budget unchanged)`);
         return;
       }
 
@@ -828,7 +981,11 @@ export class MinionWorker extends EventEmitter {
         attempts_made: job.attempts_made + 1,
       }) : 0;
 
-      const failed = await this.queue.failJob(job.id, lockToken, errorText, newStatus, backoffMs);
+      const failed = await this.queueWriteWithReconnect(
+        job.id,
+        'fail job',
+        () => this.queue.failJob(job.id, lockToken, errorText, newStatus, backoffMs),
+      );
       if (!failed) {
         console.warn(`Job ${job.id} failure dropped (lock token mismatch)`);
         return;

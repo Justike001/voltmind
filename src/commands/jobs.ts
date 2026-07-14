@@ -1157,6 +1157,13 @@ export async function registerBuiltinHandlers(worker: MinionWorker, engine: Brai
       concurrency: concurrencyOverride,
     });
 
+    // A returned sync result is not necessarily a successful business
+    // completion.  In particular, blocked_by_failures used to be persisted
+    // as COMPLETED and could even trigger an embed backfill.  Convert it to a
+    // queue failure before any downstream work is submitted.
+    const { requireCompletedSync } = await import('../core/minions/sync-result.ts');
+    requireCompletedSync(result);
+
     // v0.40 D22: auto_embed_backfill defaults TRUE when sourceId is set AND
     // the feature flag is enabled. Submits a child embed-backfill job
     // (fire-and-forget — D15.1) so stale chunks get embedded async without
@@ -1418,6 +1425,13 @@ export async function registerBuiltinHandlers(worker: MinionWorker, engine: Brai
         await new Promise<void>(r => setImmediate(r));
       },
     });
+
+    // A lock-conflicted cycle did no maintenance. Returning it normally
+    // marks the queue row completed and hides persistent starvation; throw
+    // so Minions applies its normal delayed retry/backoff semantics instead.
+    if (report.status === 'skipped' && report.reason === 'cycle_already_running') {
+      throw new Error('cycle_already_running: maintenance cycle lock is busy; retrying later');
+    }
 
     return {
       partial: report.status === 'partial' || report.status === 'failed',

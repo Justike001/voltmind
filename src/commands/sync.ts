@@ -33,6 +33,7 @@ import {
   tryAcquireDbLock,
   withRefreshingLock,
   LockUnavailableError,
+  recoverLocalDeadDbLock,
   syncLockId,
   SYNC_LOCK_ID,
 } from '../core/db-lock.ts';
@@ -75,6 +76,8 @@ export interface SyncResult {
    */
   filesImported?: number;
   reason?: 'timeout' | 'pull_timeout';
+  /** Present when this run safely reclaimed a dead local sync-lock holder. */
+  lockRecovery?: { reason: 'reclaimed'; holder_pid?: number; age_ms?: number };
 }
 
 /**
@@ -552,27 +555,73 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
   // bit-for-bit back-compat with single-default-source brains.
   const usePerSourcePath = opts.lockId !== undefined || opts.sourceId !== undefined;
 
-  if (usePerSourcePath) {
-    try {
+  const runWithLock = async (): Promise<SyncResult> => {
+    if (usePerSourcePath) {
       return await withRefreshingLock(engine, lockKey, () => performSyncInner(engine, opts));
-    } catch (err) {
-      if (err instanceof LockUnavailableError) {
+    }
+    const lockHandle = await tryAcquireDbLock(engine, lockKey);
+    if (!lockHandle) throw new LockUnavailableError(lockKey);
+    try {
+      return await performSyncInner(engine, opts);
+    } finally {
+      try { await lockHandle.release(); } catch { /* best-effort release */ }
+    }
+  };
+
+  try {
+    return await runWithLock();
+  } catch (err) {
+    if (!(err instanceof LockUnavailableError)) throw err;
+
+    // A Task Scheduler worker can be hard-killed before process cleanup runs.
+    // Reclaim only a confirmed-dead, local, age-protected holder, then retry
+    // once. All other lock conflicts remain visible and retryable to Minions.
+    const recovery = await recoverLocalDeadDbLock(engine, lockKey);
+    if (recovery.reason !== 'reclaimed') {
+      throw new Error(await formatLockBusyMessage(engine, lockKey));
+    }
+    console.warn(
+      `[sync] reclaimed abandoned local lock ${lockKey} from pid ${recovery.holder_pid} ` +
+      `(age ${formatAgeHuman(recovery.age_ms ?? 0)}); retrying once`,
+    );
+    try {
+      const result = await runWithLock();
+      return {
+        ...result,
+        lockRecovery: {
+          reason: 'reclaimed',
+          holder_pid: recovery.holder_pid,
+          age_ms: recovery.age_ms,
+        },
+      };
+    } catch (retryError) {
+      if (retryError instanceof LockUnavailableError) {
         throw new Error(await formatLockBusyMessage(engine, lockKey));
       }
-      throw err;
+      throw retryError;
     }
   }
+}
 
-  // Legacy global-lock path (single-default-source brains).
-  const lockHandle = await tryAcquireDbLock(engine, lockKey);
-  if (!lockHandle) {
-    throw new Error(await formatLockBusyMessage(engine, lockKey));
+/** A transient Git process timeout must not poison an otherwise valid sync. */
+async function gitWithTransientRetry(
+  repoPath: string,
+  args: string[],
+  configs: string[] = [],
+  attempts = 3,
+): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return git(repoPath, args, configs);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/ETIMEDOUT|spawnSync.*timed out|EAGAIN/i.test(message) || attempt === attempts) break;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+    }
   }
-  try {
-    return await performSyncInner(engine, opts);
-  } finally {
-    try { await lockHandle.release(); } catch { /* best-effort release */ }
-  }
+  throw lastError;
 }
 
 /**
@@ -1472,7 +1521,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
   // prevents *this* voltmind process from stepping on itself; this gate
   // catches drift caused by external `git` commands the lock cannot see.
   try {
-    const currentHead = git(repoPath, ['rev-parse', 'HEAD']);
+    const currentHead = await gitWithTransientRetry(repoPath, ['rev-parse', 'HEAD']);
     if (currentHead !== headCommit) {
       failedFiles.push({
         path: '<head>',

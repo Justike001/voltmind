@@ -32,6 +32,12 @@ export interface DbLockHandle {
 
 /** Default TTL: 30 minutes, same as cycle lock. */
 const DEFAULT_TTL_MINUTES = 30;
+/**
+ * Do not reclaim a just-created lock even when its PID appears dead. This
+ * narrows the PID-reuse window on local Windows hosts after a forced worker
+ * termination.
+ */
+export const LOCAL_DEAD_LOCK_MIN_AGE_MS = 60_000;
 
 /**
  * Try to acquire a named DB lock.
@@ -368,6 +374,108 @@ export async function deleteLockRow(
     return { deleted: rows.length > 0 };
   }
   throw new Error(`Unknown engine kind for deleteLockRow: ${engine.kind}`);
+}
+
+/**
+ * Atomically delete only a lock that still belongs to the inspected PID and
+ * is older than the local dead-holder safety window. The caller performs the
+ * host + PID liveness checks; this SQL predicate closes the race where that
+ * PID releases and immediately acquires a new lock before the delete runs.
+ */
+export async function deleteLockRowIfOld(
+  engine: BrainEngine,
+  lockId: string,
+  holderPid: number,
+  minAgeMs: number = LOCAL_DEAD_LOCK_MIN_AGE_MS,
+): Promise<{ deleted: boolean }> {
+  const maybePG = engine as unknown as { sql?: (...args: unknown[]) => Promise<unknown> };
+  const maybePGLite = engine as unknown as {
+    db?: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
+  };
+  const minAgeSeconds = Math.ceil(minAgeMs / 1000);
+
+  if (engine.kind === 'postgres' && maybePG.sql) {
+    const sql = maybePG.sql as any;
+    const rows: Array<{ id: string }> = await sql`
+      DELETE FROM gbrain_cycle_locks
+       WHERE id = ${lockId}
+         AND holder_pid = ${holderPid}
+         AND acquired_at <= NOW() - ${minAgeSeconds} * INTERVAL '1 second'
+      RETURNING id
+    `;
+    return { deleted: rows.length > 0 };
+  }
+  if (engine.kind === 'pglite' && maybePGLite.db) {
+    const { rows } = await maybePGLite.db.query(
+      `DELETE FROM gbrain_cycle_locks
+        WHERE id = $1
+          AND holder_pid = $2
+          AND acquired_at <= NOW() - $3 * INTERVAL '1 second'
+       RETURNING id`,
+      [lockId, holderPid, minAgeSeconds],
+    );
+    return { deleted: rows.length > 0 };
+  }
+  throw new Error(`Unknown engine kind for deleteLockRowIfOld: ${engine.kind}`);
+}
+
+export type LocalDeadLockRecoveryReason =
+  | 'reclaimed'
+  | 'not_held'
+  | 'cross_host'
+  | 'holder_alive'
+  | 'too_young'
+  | 'race_lost';
+
+export interface LocalDeadLockRecovery {
+  reason: LocalDeadLockRecoveryReason;
+  holder_pid?: number;
+  age_ms?: number;
+}
+
+/**
+ * Safely reclaim one abandoned DB lock for unattended local operation.
+ *
+ * This deliberately does not use TTL as a shortcut: a force-killed worker
+ * can leave a fresh 30-minute lease. We only reclaim a lock when it belongs
+ * to this host, its PID is confirmed absent, and it has survived the minimum
+ * age guard. The final delete is atomic and age-gated.
+ */
+export async function recoverLocalDeadDbLock(
+  engine: BrainEngine,
+  lockId: string,
+  minAgeMs: number = LOCAL_DEAD_LOCK_MIN_AGE_MS,
+): Promise<LocalDeadLockRecovery> {
+  const [{ hostname }, snap] = await Promise.all([
+    import('os'),
+    inspectLock(engine, lockId),
+  ]);
+  if (!snap) return { reason: 'not_held' };
+  if (snap.holder_host !== hostname()) {
+    return { reason: 'cross_host', holder_pid: snap.holder_pid, age_ms: snap.age_ms };
+  }
+  if (snap.age_ms < minAgeMs) {
+    return { reason: 'too_young', holder_pid: snap.holder_pid, age_ms: snap.age_ms };
+  }
+
+  let holderAlive = true;
+  try {
+    process.kill(snap.holder_pid, 0);
+  } catch (error) {
+    // EPERM proves a process exists but cannot be signalled. Only ESRCH is
+    // evidence of a dead PID; all other errors remain fail-safe busy.
+    holderAlive = (error as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+  if (holderAlive) {
+    return { reason: 'holder_alive', holder_pid: snap.holder_pid, age_ms: snap.age_ms };
+  }
+
+  const { deleted } = await deleteLockRowIfOld(engine, lockId, snap.holder_pid, minAgeMs);
+  return {
+    reason: deleted ? 'reclaimed' : 'race_lost',
+    holder_pid: snap.holder_pid,
+    age_ms: snap.age_ms,
+  };
 }
 
 /**
