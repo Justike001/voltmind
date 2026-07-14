@@ -33,12 +33,27 @@ import type { CliOptions } from './core/cli-options.ts';
 import { callRemoteTool, RemoteMcpError, unpackToolResult } from './core/mcp-client.ts';
 import { maybePromptForUpgrade } from './core/thin-client-upgrade-prompt.ts';
 import { loadRuntimeEnvFile } from './core/autopilot/env-file.ts';
+import { installProcessLog } from './core/process-log.ts';
 import { VERSION } from './version.ts';
 import {
   isVoltMindMvpCliCommand,
   isVoltMindMvpOperationName,
   voltMindMvpUnavailableMessage,
 } from './core/mvp-surface.ts';
+
+// Windows Task Scheduler launches the native executable directly, so there
+// is no shell available to redirect `stdout 2>&1`. The installer passes this
+// path on the Autopilot command and the worker inherits it through env.
+// Install the tee before config/engine startup so connection diagnostics and
+// all later worker output are captured in the same live log.
+const cliBootstrapArgs = process.argv.slice(2);
+const logFileFlag = cliBootstrapArgs.indexOf('--log-file');
+const logFileFromArgs = logFileFlag >= 0 ? cliBootstrapArgs[logFileFlag + 1] : undefined;
+const processLogPath = process.env.VOLTMIND_AUTOPILOT_LOG_FILE || logFileFromArgs;
+if (processLogPath) {
+  process.env.VOLTMIND_AUTOPILOT_LOG_FILE = processLogPath;
+  installProcessLog(processLogPath);
+}
 
 // Build CLI name -> operation lookup
 const cliOps = new Map<string, Operation>();

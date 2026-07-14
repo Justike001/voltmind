@@ -279,6 +279,10 @@ node -e "console.log(process.platform)"   # darwin -> macOS, linux -> Linux, win
 - Optional `--runtime-env-file <path>` loads allowlisted runtime secrets
   (Postgres/Supabase/provider keys) before engine init. Windows does NOT
   read `.zshrc`/`.bashrc` and does NOT generate a bash wrapper.
+- Windows writes the Autopilot and supervised Minion stdout/stderr to the
+  combined live log `%USERPROFILE%\.voltmind\runtime\autopilot.log` while
+  preserving the native Task Scheduler → Autopilot → worker process tree. Tail
+  it with `Get-Content "$env:USERPROFILE\.voltmind\runtime\autopilot.log" -Wait`.
 - Recommended PowerShell install path:
 
   ```powershell

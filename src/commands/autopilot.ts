@@ -167,7 +167,7 @@ export function removeStaleAutopilotLock(): boolean {
 export async function runAutopilot(engine: BrainEngine, args: string[]) {
   if (args.includes('--help') || args.includes('-h')) {
     console.log(
-      'Usage: voltmind autopilot [--repo <path>] [--interval N] [--json] [--no-worker]\n' +
+      'Usage: voltmind autopilot [--repo <path>] [--interval N] [--json] [--no-worker] [--log-file <path>]\n' +
       '       voltmind autopilot --install [--repo <path>] [--target <target>] [--runtime-env-file <path>]\n' +
       '       voltmind autopilot --uninstall\n' +
       '       voltmind autopilot --status [--json]\n\n' +

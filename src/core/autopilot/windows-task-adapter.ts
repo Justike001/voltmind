@@ -10,8 +10,9 @@
  *
  * The adapter ONLY keeps the autopilot process running. It does not submit
  * jobs, run `jobs work`, manage leases, or persist business state. The task
- * action is always plain `voltmind autopilot --repo <path>` — never
- * `--no-worker`, never `jobs work`.
+ * action is always native `voltmind autopilot --repo <path> --log-file <path>`
+ * — never `--no-worker`, never `jobs work`. The log flag is handled inside
+ * the native process, so it does not add a PowerShell or shell parent.
  */
 
 import { existsSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'fs';
@@ -96,9 +97,14 @@ export class WindowsTaskSchedulerAdapter implements AutopilotProcessManagerAdapt
   }
 
   async install(context: AutopilotInstallContext): Promise<AutopilotInstallResult> {
-    // Build the task action: `voltmind autopilot --repo <path> [--runtime-env-file <path>]`
+    // Build the task action: `voltmind autopilot --repo <path> --log-file <path>`
+    // `[--runtime-env-file <path>]`.
     // NEVER `--no-worker` (spec §3.1 / §20).
-    const subcommand = ['autopilot', '--repo', context.repoPath];
+    const subcommand = [
+      'autopilot',
+      '--repo', context.repoPath,
+      '--log-file', voltmindPath('runtime', 'autopilot.log'),
+    ];
     if (context.runtimeEnvFile) {
       subcommand.push('--runtime-env-file', context.runtimeEnvFile);
     }
