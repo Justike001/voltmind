@@ -34,6 +34,7 @@ import {
   type ReceiptStatus,
 } from '../core/cross-modal-eval/receipt-name.ts';
 import { parseSkillFrontmatter } from '../core/skill-frontmatter.ts';
+import { checkResolvable } from '../core/check-resolvable.ts';
 import {
   analyzeSkillBrainFirst,
   buildBrainFirstSummaryLine,
@@ -82,7 +83,7 @@ function checkOptional(name: string, passed: boolean, detail?: string): CheckIte
   return { name, passed, required: false, detail };
 }
 
-interface ResolverResult {
+export interface ResolverResult {
   ok: boolean;
   detail: string;
 }
@@ -190,7 +191,7 @@ function isInResolver(skillName: string, scriptPath: string, skillsDir: string):
   );
 }
 
-function runSkillifyCheckTarget(target: string, root: string): CheckResult {
+function runSkillifyCheckTarget(target: string, root: string, resolverResultOverride?: ResolverResult): CheckResult {
   const skillsDir = join(root, 'skills');
   const testDir = detectTestDir(root);
   const abs = resolve(target);
@@ -247,7 +248,7 @@ function runSkillifyCheckTarget(target: string, root: string): CheckResult {
   }
   items.push(checkOptional('Resolver trigger eval', hasTriggerEval));
 
-  const resolverResult = runCheckResolvableCached();
+  const resolverResult = resolverResultOverride ?? runCheckResolvableCached();
   items.push(
     checkOptional('check-resolvable gate', resolverResult.ok, resolverResult.detail),
   );
@@ -399,7 +400,7 @@ function checkBrainFirstCompliance(
   };
 }
 
-function recentlyModified(root: string, days: number = 7): string[] {
+export function recentlyModified(root: string, days: number = 7): string[] {
   const candidates: string[] = [];
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const roots = ['src/commands', 'src/core', 'scripts']

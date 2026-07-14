@@ -65,7 +65,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'extract',
@@ -120,6 +120,11 @@ const CLI_ONLY_SELF_HELP = new Set([
   // schema.ts printHelp() with the full 22+ verb taxonomy, not the
   // generic short-circuit's one-line stub.
   'schema',
+  // think + eval ship their own detailed --help (think.ts prints the
+  // synthesis flags; eval.ts prints the eval subcommand taxonomy). Route
+  // --help around the generic CLI-only short-circuit so it reaches them.
+  'think',
+  'eval',
   // v0.41.11.0 — extract-conversation-facts ships its own detailed HELP
   // describing segment splitting + checkpointing + budget caps + the
   // unified types config story. Route around the generic short-circuit.
@@ -1720,8 +1725,9 @@ async function handleCliOnly(command: string, args: string[]) {
       // v0.32.7 CJK wave — post-upgrade markdown re-chunk sweep.
       // v0.36 Phase 3 wave — `voltmind reindex --multimodal` re-embeds content_chunks
       // into the unified Voyage multimodal-3 column.
-      case 'reindex': {
-        if (args.includes('--multimodal')) {
+      case 'reindex':
+      case 'reindex-multimodal': {
+        if (command === 'reindex-multimodal' || args.includes('--multimodal')) {
           const { runReindexMultimodal } = await import('./commands/reindex-multimodal.ts');
           const { parseWorkers } = await import('./core/sync-concurrency.ts');
           const limitIdx = args.indexOf('--limit');
@@ -1747,7 +1753,8 @@ async function handleCliOnly(command: string, args: string[]) {
           if (args.includes('--json')) {
             console.log(JSON.stringify(result, null, 2));
           } else {
-            console.log(`reindex --multimodal: ${result.reembedded} re-embedded, ${result.failed} failed, ${result.pending_after} pending. est. cost: $${result.cost_usd_estimate.toFixed(2)}`);
+            const label = command === 'reindex-multimodal' ? 'reindex-multimodal' : 'reindex --multimodal';
+            console.log(`${label}: ${result.reembedded} re-embedded, ${result.failed} failed, ${result.pending_after} pending. est. cost: $${result.cost_usd_estimate.toFixed(2)}`);
           }
           break;
         }
@@ -2284,6 +2291,72 @@ JUDGMENT READOUTS
   candidates list|preview|apply      Review/apply enrichment candidates
   conversation-parser scan <slug>    Dry-run conversation parsing
   conversation-parser list-builtins  Inspect built-in parser patterns
+
+SYNTHESIS
+  think <question> [--anchor s]      Multi-hop synthesis with cited answer
+        [--save] [--take] [--model M]
+
+SCHEMA
+  schema active|list|stats          Inspect the active schema pack
+  schema lint|graph|explain <type>   Lint / graph / explain a page type
+  schema review-orphans              List untyped pages
+  schema fork|use|sync|reload        Author and switch schema packs
+  schema add-type|remove-type|...   Mutate a forked pack atomically
+
+QUALITY / EVAL
+  eval --qrels <path> [flags]        Retrieval quality benchmark
+  eval gate [--baseline|--qrels]     Regression / correctness gate
+  eval export|prune|replay           Export, prune, or replay eval receipts
+  eval run-all                       Run the full eval suite
+
+P2.1 — LOCAL BRAIN OPERATIONS
+  report <...>                       Save or read local audit reports
+  export <dir>                       Export the brain as markdown
+  features [--auto-fix]              Inspect or apply supported feature fixes
+  models [doctor]                    Inspect model routing or probe models
+  pages purge-deleted [--dry-run]    Purge expired soft-deleted pages
+  cache stats|clear|prune            Manage the semantic query cache
+  lint [flags]                       Deterministic page-quality checks
+  integrity [flags]                  Audit and repair URLs and references
+  orphans [--json|--count]           List pages without inbound links
+  friction log|render|list|summary   Record or review experience friction
+  brainstorm <prompt>                Brain-grounded associative ideation
+  book-mirror [flags]                Queue personalized book analysis locally
+  onboard [--check|--auto]           Inspect or run onboarding remediation
+
+P2.2 — LOCAL MAINTENANCE / CODE
+  code-def <symbol>                  Find a symbol definition
+  code-refs <symbol>                 Find symbol reference locations
+  code-callers <symbol>              Find callers of a symbol
+  code-callees <symbol>              Find symbols called by a symbol
+  reindex [--markdown]               Re-ingest stale markdown pages
+  reindex-code [flags]               Re-ingest code pages
+  reindex-frontmatter [flags]        Rebuild effective-date indexes
+  reindex-multimodal [flags]         Backfill multimodal embeddings
+
+P3 — SUPERVISED / FEDERATED RUNTIME (HOST-LOCAL ONLY)
+  autopilot --install|--status       Supervised maintenance runtime
+  agent run <prompt> [--detach]      Queue a durable subagent run (Postgres)
+  agent logs <job_id> [--follow]     Read a durable subagent run
+  dream [--phase name] [--json]      Run one scheduled-maintenance cycle
+  mounts add|list|remove             Manage explicitly configured brain mounts
+  remote ping|doctor                 Thin-client host control/readiness checks
+  auth <subcommand>                  Manage HTTP MCP/OAuth clients on the host
+  publish <subcommand>               Publish through configured external targets
+  integrations <subcommand>          Configure or inspect external integrations
+
+  Windows: keep one worker topology only — Task Scheduler -> autopilot ->
+  supervised jobs work -> Postgres queue. Do not schedule jobs work directly.
+  Before agent or dream work, verify: voltmind autopilot --status --json.
+
+SKILL PLATFORM
+  skillify scaffold|check             Create or audit a local skill
+  skillpack <subcommand>              Manage, validate, and inspect local skillpacks
+  skillpack-check [--quiet]           Agent-readable skillpack health report
+  check-resolvable [--strict]         Validate skill-tree reachability and routing
+  resolvers list|describe             Inspect registered resolvers
+  routing-eval [--json]               Run structural skill-routing evaluation
+  frontmatter validate|audit|generate Validate, audit, or generate frontmatter
 
 ACTION SYSTEM
   actions scan                       Index state/actions/*.md

@@ -24,6 +24,7 @@ import {
   type AutoFixReport,
 } from '../core/check-resolvable.ts';
 import { autoDetectSkillsDirReadOnly, AUTO_DETECT_HINT_READ_ONLY, type SkillsDirSource } from '../core/repo-root.ts';
+import { isVoltMindMvpSkillName } from '../core/mvp-surface.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,6 +55,8 @@ export interface Flags {
   dryRun: boolean;
   verbose: boolean;
   strict: boolean;
+  /** Limit the gate to currently public VoltMind MVP skills. */
+  mvpOnly?: boolean;
   skillsDir: string | null;
 }
 
@@ -76,6 +79,7 @@ Options:
   --dry-run          With --fix, preview only; no writes
   --verbose          Show passing checks and the deferred-check note
   --strict           Treat warnings as errors (promotes warnings to exit 1)
+  --mvp-only         Check public VoltMind MVP skills; exclude archived routes
   --skills-dir PATH  Override the auto-detected skills/ directory
   --help             Show this message
 
@@ -104,6 +108,7 @@ export function parseFlags(argv: string[]): Flags {
     dryRun: false,
     verbose: false,
     strict: false,
+    mvpOnly: false,
     skillsDir: null,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -114,6 +119,7 @@ export function parseFlags(argv: string[]): Flags {
     else if (a === '--dry-run') flags.dryRun = true;
     else if (a === '--verbose') flags.verbose = true;
     else if (a === '--strict') flags.strict = true;
+    else if (a === '--mvp-only') flags.mvpOnly = true;
     else if (a === '--skills-dir') {
       flags.skillsDir = argv[i + 1] ?? null;
       i++;
@@ -180,7 +186,7 @@ export function resolveSkillsDir(flags: Flags): {
 // Human output (mirrors doctor's resolver_health formatting)
 // ---------------------------------------------------------------------------
 
-function renderHuman(env: Envelope, flags: Flags): void {
+function renderHuman(env: Envelope, flags: Flags, ignoredFrozenIssues = 0): void {
   if (env.error === 'no_skills_dir') {
     console.error(env.message);
     return;
@@ -192,7 +198,10 @@ function renderHuman(env: Envelope, flags: Flags): void {
   }
 
   if (report.errors.length === 0 && report.warnings.length === 0) {
-    console.log(`resolver_health: OK — ${report.summary.total_skills} skills, all reachable`);
+    const scope = flags.mvpOnly
+      ? `MVP routes healthy (${ignoredFrozenIssues} frozen/archive issue(s) excluded)`
+      : `${report.summary.total_skills} skills, all reachable`;
+    console.log(`resolver_health: OK — ${scope}`);
   } else {
     const status =
       report.errors.length > 0
@@ -216,6 +225,20 @@ function renderHuman(env: Envelope, flags: Flags): void {
     const urls = DEFERRED.map(d => `${d.name} (${d.issue})`).join(', ');
     console.log(`Deferred: ${urls}`);
   }
+}
+
+function isMvpResolverIssue(issue: ResolvableIssue): boolean {
+  return issue.skill
+    .split(',')
+    .map(part => part.trim().replace(/^skills\//, '').replace(/\/SKILL\.md$/, ''))
+    .some(isVoltMindMvpSkillName);
+}
+
+export function restrictReportToMvpSkills(report: ResolvableReport): ResolvableReport {
+  const issues = report.issues.filter(isMvpResolverIssue);
+  const errors = issues.filter(issue => issue.severity === 'error');
+  const warnings = issues.filter(issue => issue.severity === 'warning');
+  return { ...report, ok: errors.length === 0, errors, warnings, issues };
 }
 
 function formatIssueLine(iss: ResolvableIssue): string {
@@ -301,7 +324,9 @@ export async function runCheckResolvable(args: string[]): Promise<void> {
     autoFix = autoFixDryViolations(skillsDir, { dryRun: flags.dryRun });
   }
 
-  const report = checkResolvable(skillsDir);
+  const fullReport = checkResolvable(skillsDir);
+  const report = flags.mvpOnly ? restrictReportToMvpSkills(fullReport) : fullReport;
+  const ignoredFrozenIssues = fullReport.issues.length - report.issues.length;
 
   // Exit semantics (D-CX-3):
   //   default mode: fail iff any errors
@@ -326,7 +351,7 @@ export async function runCheckResolvable(args: string[]): Promise<void> {
   if (flags.json) {
     console.log(JSON.stringify(env, null, 2));
   } else {
-    renderHuman(env, flags);
+    renderHuman(env, flags, ignoredFrozenIssues);
   }
 
   process.exit(env.ok ? 0 : 1);

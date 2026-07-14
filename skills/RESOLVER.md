@@ -3,15 +3,15 @@
 This is the agent-side dispatcher for the VoltMind MVP. Skills are the implementation.
 Read the matched skill file before acting.
 
-## MVP Freeze Rule
+## Runtime Boundary
 
 VoltMind is currently a local-first knowledge-base MVP. Route only to skills and
 commands that sit inside the runtime MVP boundary. Inherited GBrain skills remain
 in the tree for later phases, but are frozen from public agent routing.
 
-If the user asks for a frozen capability, say it is not included in VoltMind MVP
-yet and offer the closest MVP-safe path. Do not call hidden runtime commands, do
-not suggest inherited `gbrain` commands, and do not route through advanced skills
+If the user asks for a frozen capability, say it is not included in VoltMind yet
+and offer the closest safe path. Do not call hidden runtime commands, do not
+suggest inherited `gbrain` commands, and do not route through advanced skills
 just because the file still exists.
 
 ## Always-on
@@ -38,8 +38,14 @@ background page creation.
 | "project update", "update project page", "project context", "open threads", "项目更新", "项目上下文" | `skills/project/SKILL.md` |
 | "review draft", "approve changes", "reject changes", "edit before writing", "确认写入", "审核草稿" | `skills/review/SKILL.md` |
 | "enrich", "create person page", "update company page", "who is this person", "look up this company" | `skills/enrich/SKILL.md` |
+| "think", "synthesize", "reason this out", "what should I conclude", "multi-hop", "合成", "综合判断" | `skills/concept-synthesis/SKILL.md` + `think` CLI |
+| "author schema", "schema pack", "add page type", "fork schema", "schema lint", "schema orphans", "建类型", "schema" | `skills/schema-author/SKILL.md` + `skills/schema-unify/SKILL.md` |
+| "run eval", "eval gate", "eval benchmark", "retrieval quality", "skill optimizer", "tune the skill", "质量闭环", "eval" | `skills/testing/SKILL.md` + `skills/skill-optimizer/SKILL.md` |
 | "fix citations", "fix broken citations", "citation audit", "check citations", "citation fixer" | `skills/citation-fixer/SKILL.md` |
 | "validate skills", "test skills", "skill health check", "run conformance tests", "run the tests", "how are the tests", "what's broken", "daily test run" | `skills/testing/SKILL.md` |
+| "skillify", "create a skill", "skill scaffold", "skill audit" | `skills/skillify/SKILL.md` |
+| "skillpack health", "skillpack check", "skillpack status" | `skills/skillpack-check/SKILL.md` |
+| "frontmatter validate", "frontmatter audit", "frontmatter repair" | `skills/frontmatter-guard/SKILL.md` |
 | "what do we know about", "tell me about", "search for", "who is", "background on", "notes on" | `skills/query/SKILL.md` |
 | "who knows who", "relationship between", "connections", "backlinks", "links", "timeline", "tags" | `skills/query/SKILL.md` |
 | "build the graph", "link these entities", "create relationship", "connect pages", "整理实体关系", "建链" | `skills/brain-ops/SKILL.md` |
@@ -49,19 +55,29 @@ background page creation.
 | "cold start", "fill my brain", "bootstrap brain", "import my data", "what should I import first", "populate brain", "now what?", "离线导入", "初始化数据", "冷启动" | `skills/cold-start/SKILL.md` |
 | "Set up VoltMind", first boot, Bun install, local init | `skills/setup/SKILL.md` |
 | "brain health", "doctor", "status", "embedding freshness", "job status", "cancel job" | `skills/maintain/SKILL.md` |
+| "brain report", "audit report", "save report" | `skills/reports/SKILL.md` + `voltmind report` |
+| "export my brain", "markdown export" | `skills/publish/SKILL.md` + `voltmind export` |
+| "orphan pages", "page lint", "integrity audit", "reindex", "multimodal backfill" | `skills/maintain/SKILL.md` + the matching host-local P2 command |
+| "model routing", "models doctor", "feature recommendations" | `skills/enrich/SKILL.md` + `voltmind models|features` |
+| "mirror this book", "personalized version of this book" | `skills/book-mirror/SKILL.md` + `voltmind book-mirror` |
+| "who calls this symbol", "what does this symbol call", "find symbol definition", "find symbol references" | `skills/repo-architecture/SKILL.md` + the matching host-local code command |
+| "first-run remediation", "onboard checks" | `skills/schema-unify/SKILL.md` + `voltmind onboard` |
 | "minions", "job queue", "background jobs", "what jobs are running", "jobs stats" | `skills/minion-orchestrator/SKILL.md` |
-| "schedule a job", "cron", "recurring job", "autopilot schedule", "daily maintenance" | `skills/cron-scheduler/SKILL.md` |
+| "schedule a job", "cron", "recurring job", "autopilot schedule", "daily maintenance", "dream" | `skills/cron-scheduler/SKILL.md` |
 | "install autopilot", "set up autopilot", "autopilot install", "one-step autopilot + Minions", "Windows Task Scheduler", "launchd autopilot" | `skills/setup/SKILL.md` |
+| "run an agent", "subagent", "agent run", "agent logs" | `skills/minion-orchestrator/SKILL.md` + `voltmind agent` |
+| "mount a brain", "brain mount", "remote brain", "thin client", "remote ping" | `skills/brain-ops/SKILL.md` + `voltmind mounts|remote` |
+| "OAuth client", "publish", "integration setup", "external integration" | matching host-local `voltmind auth|publish|integrations` command |
 | "where should this page go", filing rules, source selection | `skills/brain-ops/SKILL.md` plus `skills/_brain-filing-rules.md` |
 | "present options", "ask before proceeding", "choice gate", "user decision" | `skills/ask-user/SKILL.md` |
 
 ## Content & media ingestion
 
-Phase 1 routes meeting notes and transcripts through `skills/meeting-ingestion/SKILL.md`; inherited media/book/PDF pipelines are frozen unless explicitly working on future phases.
+Phase 1 routes meeting notes and transcripts through `skills/meeting-ingestion/SKILL.md`. `book-mirror` is an explicit host-local P2 command: it requires a configured Minion-capable runtime and preserves its cost confirmation. Other inherited media/PDF pipelines remain frozen.
 
 ## Operational
 
-Use setup, maintain, review, and jobs visibility skills only inside the MVP command surface below.
+Use setup, maintain, review, and jobs skills only inside the public command surface below.
 
 ## MVP Command Surface
 
@@ -97,6 +113,15 @@ explicitly working on VoltMind internals:
   `voltmind whoknows`, `voltmind calibration`. MCP may use
   `get_recent_salience`, `find_anomalies`, `find_experts`, and
   `get_calibration_profile`.
+- Synthesis: `voltmind think <question>` (local-CLI `--save`/`--take` persist;
+  MCP `think` returns the cited synthesis without persisting). MCP may use
+  `think`.
+- Schema authoring: `voltmind schema active|list|stats|lint|graph|explain|review-orphans`,
+  `voltmind schema fork|use|sync|reload`, and the atomic mutation verbs
+  (`add-type`/`remove-type`/`update-type`/`add-alias`/`add-prefix`/`add-link-type`/`set-extractable`/`set-expert-routing`).
+  MCP may use `get_active_schema_pack`, `list_schema_packs`, `schema_stats`,
+  `schema_lint`, `schema_graph`, `schema_explain_type`, `schema_review_orphans`,
+  `schema_apply_mutations`, and `reload_schema_pack`.
 - Provenance/review: `voltmind candidates list|get|preview|apply|reject`.
   Apply requires explicit source, citation, and confirmation. MCP may use
   candidate propose/preview/apply/reject ops with the same explicit-source
@@ -106,6 +131,25 @@ explicitly working on VoltMind internals:
   Apply requires explicit source-backed signal and confirmation.
 - Controlled memory: `voltmind recall` is one-shot/read-only. `voltmind forget`
   is limited to `preview` and explicit `apply`; no direct legacy forget path.
+- Quality / eval: `voltmind eval` (single-config, A/B, `gate`, `export`,
+  `prune`, `replay`, `run-all`, and the `eval-*` sub-suites) plus
+  `voltmind skillopt` for SkillOpt-grounded skill optimization. These are
+  host-local CLI flows; they have no MCP operation equivalent.
+- Skill platform (trusted local CLI): `voltmind skillify`, `voltmind skillpack`,
+  `voltmind skillpack-check`, `voltmind check-resolvable`, `voltmind resolvers`,
+  `voltmind routing-eval`, and `voltmind frontmatter`. Remote MCP exposes only
+  admin-scoped, read-only diagnostics; filesystem writes, packing, harvesting,
+  registry/network actions, and frontmatter fixes remain host-local CLI flows.
+- P2.1 local brain operations (host-local CLI only; no MCP equivalents):
+  `voltmind report`, `export`, `features`, `models`, `pages`, `cache`, `lint`,
+  `integrity`, `orphans`, `friction`, `brainstorm`, `book-mirror`, and `onboard`.
+  Preserve command confirmation and cost gates: `features --auto-fix`,
+  `pages purge-deleted`, `book-mirror`, and `onboard --auto` can mutate state
+  or incur model spend.
+- P2.2 local maintenance/code operations (host-local CLI only; no MCP equivalents):
+  `voltmind code-callees`, `code-callers`, `code-def`, `code-refs`, `reindex`,
+  `reindex-code`, `reindex-frontmatter`, and `reindex-multimodal`.
+  `reindex --multimodal` remains supported as an alias for the last command.
 - MCP: `voltmind serve`, `voltmind call`.
 - Jobs: `voltmind jobs list`, `voltmind jobs get`,
   `voltmind jobs cancel`, `voltmind jobs progress`, `voltmind jobs failures`,
@@ -115,6 +159,17 @@ explicitly working on VoltMind internals:
   `voltmind autopilot --status`, `voltmind autopilot --uninstall`,
   `voltmind autopilot --help`. Runs on the host with a supervised Minions
   worker; requires Postgres/Supabase. Not routed through remote MCP.
+- Production worker runtime (host-local): `voltmind agent run|logs` and
+  `voltmind dream`. These require the Postgres/Supabase queue plus the managed
+  Autopilot worker. On Windows, use exactly the Task Scheduler → Autopilot →
+  supervised `jobs work` topology in
+  `docs/operations/windows-autopilot-reliability.md`; never schedule `jobs work`
+  separately. Verify `voltmind autopilot --status --json` before submission.
+- Federation and external surfaces (host-local): `voltmind mounts`,
+  `voltmind remote`, `voltmind auth`, `voltmind publish`, and
+  `voltmind integrations`. They may use Postgres, HTTP, registries, network,
+  or external credentials. Keep credentials on the host and do not expose their
+  mutation or queue-control paths through MCP.
 
 Use `VOLTMIND_HOME`, `VOLTMIND_SOURCE`, `.voltmind-source`, and
 `voltmind.yml`. Old `GBRAIN_*`, `.gbrain`, and `gbrain.yml` names are not part
@@ -124,31 +179,36 @@ of the MVP route.
 
 Keep these files/modules recoverable, but do not dispatch to them in MVP:
 
-- Autonomous or agentic systems: `agent`, `dream`, `think`,
-  recall watch/auto-briefing loops, direct legacy forget, `onboard`, `founder`.
-  Note: `voltmind autopilot` is public for host-local Postgres/Supabase
+- Autonomous or agentic systems: recall watch/auto-briefing loops, direct
+  legacy forget, and `founder`.
+  Note: `think` (multi-hop synthesis) is now public in the MVP runtime —
+  local-CLI callers may `--save`/`--take`; MCP `think` is read-only (no
+  persistence). `voltmind autopilot` is public for host-local Postgres/Supabase
   installs (Windows Task Scheduler / macOS launchd / Linux systemd/cron).
   It is NOT routed through remote MCP or thin-client execution.
-- Advanced runtime analysis: `eval`, search-mode tuning, code intelligence,
-  trajectory mutation/scorecard flows, and takes mutation/scorecard flows. The
-  narrow retrieval-enrichment, judgment-readout, and knowledge-insight commands
-  above are public in the MVP runtime.
-- Skill platform features: `skillpack`, `skillify`, skill harvesting,
-  schema authoring/evolution, functional-area resolver compression.
-- Advanced ingestion: media/book/podcast/PDF pipelines,
-  social/web research enrichers, archive crawler, academic verification,
-  publish/export flows.
-- Background orchestration beyond MVP visibility: Minion submit/shell/worker,
-  subagent routing, host scheduler installation, and dream
-  maintenance. Host-local `voltmind autopilot --install` (which supervises a
-  single Minions worker consuming the Postgres queue) is allowed on the host;
-  remote `submit_job`, remote shell, and remote subagent remain frozen.
+- Advanced runtime analysis: search-mode tuning, trajectory mutation/scorecard
+  flows, and takes mutation/scorecard flows. The
+  narrow retrieval-enrichment, judgment-readout, knowledge-insight, synthesis
+  (`think`), schema-authoring, and `eval`/`eval-*` quality commands above are
+  public in the MVP runtime. Fresh `eval` probes that mutate brain state remain
+  CLI-only; read-only contradiction/trajectory readouts stay available over MCP.
+- Functional-area resolver compression remains frozen. Schema pack authoring via
+  `voltmind schema` and the `schema_*` MCP ops IS public; schema-evolution
+  automation beyond the atomic mutation verbs remains frozen.
+- Advanced ingestion: media/podcast/PDF pipelines other than explicit
+  host-local `book-mirror`, social/web research enrichers, archive crawler,
+  and academic verification.
+- Background orchestration beyond the supervised host runtime: direct Minion
+  submit/shell/worker control and remote queue submission remain frozen.
+  `agent`, `dream`, and host scheduler installation are public only through the
+  controlled local CLI paths above; remote shell and remote subagent remain
+  frozen.
   Source-backed signal enrichment on explicit MVP write paths is
   allowed; ambient webhook/social crawlers remain frozen. Jobs readouts and
   dry-run plans remain allowed.
-- Multi-brain/topology flows: mounts, cross-brain federation, thin-client setup,
-  remote artifact brains, and remote/cloud topology setup beyond host-local
-  `voltmind files` migration.
+- Multi-brain/topology flows beyond the explicit host-local `mounts` and
+  `remote` commands, including automatic cross-brain fan-out and remote
+  artifact-brain setup.
 
 When a frozen route is requested, prefer one of:
 
@@ -176,11 +236,12 @@ When a frozen route is requested, prefer one of:
 ## Disambiguation rules
 
 1. Prefer the narrowest MVP skill that can complete the user request.
-2. If a request mixes MVP and frozen capability, do the MVP-safe part and state
+2. If a request mixes public and frozen capability, do the safe public part and state
    what is frozen.
 3. If the user mentions a URL, PDF, video, podcast, or transcript, capture or
    import the text only unless they explicitly ask for a future design plan.
-4. If the user asks for background jobs, expose only list/get/cancel/readout/dry-run plan commands.
+4. For background work, use the controlled local `agent`, `dream`, and
+   Autopilot paths only; do not expose direct worker or remote queue control.
 5. When in doubt, ask the user for the target source or whether to save content.
 
 ## Conventions

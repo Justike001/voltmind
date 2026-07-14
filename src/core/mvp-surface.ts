@@ -52,8 +52,21 @@ export const VOLTMIND_MVP_CLI_COMMANDS = new Set([
   'recall',
   'forget',
   'candidates',
+  'think',
+  'schema',
+  'eval',
   'actions',
   'autopilot',
+  // P3 — supervised, federated, and externally integrated production runtime.
+  // These are deliberately host-local CLI commands; their queue, credentials,
+  // and topology controls are never exposed as broad MCP operations.
+  'agent',
+  'dream',
+  'mounts',
+  'remote',
+  'auth',
+  'publish',
+  'integrations',
   'serve',
   'call',
   'jobs',
@@ -61,7 +74,78 @@ export const VOLTMIND_MVP_CLI_COMMANDS = new Set([
   'health',
   'history',
   'version',
+  // P1 skill platform (trusted local CLI; MCP has read-only diagnostic ops).
+  'skillify',
+  'skillpack',
+  'skillpack-check',
+  'check-resolvable',
+  'resolvers',
+  'routing-eval',
+  'frontmatter',
+  // P2.1 — host-local, directly useful brain operations.
+  'report',
+  'export',
+  'features',
+  'models',
+  'pages',
+  'cache',
+  'lint',
+  'integrity',
+  'orphans',
+  'friction',
+  'brainstorm',
+  'book-mirror',
+  'onboard',
+  // P2.2 — host-local maintenance and code-intelligence utilities.
+  'code-callees',
+  'code-callers',
+  'code-def',
+  'code-refs',
+  'reindex',
+  'reindex-code',
+  'reindex-frontmatter',
+  'reindex-multimodal',
 ]);
+
+/**
+ * Skill names that are presently routed by the VoltMind MVP dispatcher.
+ * Keep this alongside the command/operation allowlists: resolver gates must
+ * not require archived GBrain skills to be healthy before the public runtime
+ * can ship.
+ */
+export const VOLTMIND_MVP_SKILL_NAMES = new Set([
+  'ask-user',
+  'book-mirror',
+  'brain-ops',
+  'capture',
+  'citation-fixer',
+  'cold-start',
+  'concept-synthesis',
+  'cron-scheduler',
+  'daily',
+  'enrich',
+  'frontmatter-guard',
+  'ingest',
+  'maintain',
+  'meeting',
+  'meeting-ingestion',
+  'minion-orchestrator',
+  'project',
+  'publish',
+  'query',
+  'repo-architecture',
+  'reports',
+  'review',
+  'schema-author',
+  'setup',
+  'skillify',
+  'skillpack-check',
+  'testing',
+]);
+
+export function isVoltMindMvpSkillName(name: string): boolean {
+  return VOLTMIND_MVP_SKILL_NAMES.has(name);
+}
 
 export const VOLTMIND_MVP_OPERATION_NAMES = new Set([
   'get_page',
@@ -118,6 +202,16 @@ export const VOLTMIND_MVP_OPERATION_NAMES = new Set([
   'find_trajectory',
   'takes_list',
   'takes_search',
+  'think',
+  'get_active_schema_pack',
+  'list_schema_packs',
+  'schema_stats',
+  'schema_lint',
+  'schema_graph',
+  'schema_explain_type',
+  'schema_review_orphans',
+  'schema_apply_mutations',
+  'reload_schema_pack',
   'recall',
   'preview_forget_fact',
   'apply_forget_fact',
@@ -125,6 +219,15 @@ export const VOLTMIND_MVP_OPERATION_NAMES = new Set([
   'preview_candidate_apply',
   'apply_candidate',
   'reject_candidate',
+  'skillify_check',
+  'list_skillpack_skills',
+  'get_skillpack_health',
+  'diff_skillpack_skill',
+  'check_skill_tree',
+  'evaluate_skill_routing',
+  'list_resolvers',
+  'describe_resolver',
+  'audit_frontmatter',
 ]);
 
 const VOLTMIND_MVP_OPERATION_DESCRIPTIONS: Record<string, string> = {
@@ -177,6 +280,16 @@ const VOLTMIND_MVP_OPERATION_DESCRIPTIONS: Record<string, string> = {
   find_trajectory: 'Read a source-scoped VoltMind trajectory for an entity without writing conclusions back.',
   takes_list: 'Read active VoltMind takes for a page, filtered by holder, kind, and status.',
   takes_search: 'Search active VoltMind takes by keyword without mutating take state.',
+  think: 'Multi-hop synthesis across VoltMind pages, takes, and the link graph. Pulls relevant evidence and produces a cited answer with conflict + gap analysis. Remote MCP callers receive the synthesis but cannot persist pages or append takes.',
+  get_active_schema_pack: 'Return a cheap identity packet for the active VoltMind schema pack (name, version, type/link counts, primitive summary).',
+  list_schema_packs: 'List installed VoltMind schema packs (bundled plus user-installed).',
+  schema_stats: 'Return per-type page counts and typed-coverage from the active VoltMind schema pack, multi-source aware.',
+  schema_lint: 'Lint the active (or named) VoltMind schema pack with file-plane rules. Returns a structured ok/errors/warnings report.',
+  schema_graph: 'Return the active VoltMind schema pack as JSON graph edges derived from link_types inference and frontmatter_links.',
+  schema_explain_type: 'Return the resolved settings for a single page_type in the active VoltMind schema pack.',
+  schema_review_orphans: 'List VoltMind pages with no active-pack type match, grouped by source.',
+  schema_apply_mutations: 'Batch-apply VoltMind schema pack mutations atomically (add/update/remove types, aliases, prefixes, link types, flags). Admin scope; all mutations succeed or all roll back.',
+  reload_schema_pack: 'Flush the in-process VoltMind schema pack cache so the next load re-reads from disk.',
   recall: 'Read one-shot VoltMind memory recall results with provenance; no watch loop or cursor advancement.',
   preview_forget_fact: 'Preview a controlled fact forget without mutating DB or markdown.',
   apply_forget_fact: 'Apply a controlled fact forget with explicit confirm, source, and citation.',
@@ -184,6 +297,15 @@ const VOLTMIND_MVP_OPERATION_DESCRIPTIONS: Record<string, string> = {
   preview_candidate_apply: 'Preview the diff and risk of applying a pending candidate.',
   apply_candidate: 'Apply a pending candidate only with explicit confirm, source, and citation.',
   reject_candidate: 'Reject a pending candidate without changing brain content.',
+  skillify_check: 'Run a read-only skillify audit for a repository-confined target or recent skill code.',
+  list_skillpack_skills: 'List skills bundled with VoltMind on this host.',
+  get_skillpack_health: 'Return a read-only skillpack health summary.',
+  diff_skillpack_skill: 'Compare one bundled skill with the server-controlled skills workspace without changing files.',
+  check_skill_tree: 'Validate the server skill tree for reachability, routing, and DRY issues.',
+  evaluate_skill_routing: 'Run the structural routing evaluation for the server skill tree without LLM execution.',
+  list_resolvers: 'List registered resolver metadata.',
+  describe_resolver: 'Describe one registered resolver and its availability.',
+  audit_frontmatter: 'Audit frontmatter integrity for one source within the caller scope.',
 };
 
 const VOLTMIND_MVP_OPERATION_PARAMS: Record<string, string[]> = {
@@ -207,6 +329,12 @@ const VOLTMIND_MVP_OPERATION_PARAMS: Record<string, string[]> = {
   find_trajectory: ['entity_slug', 'metric', 'kind', 'since', 'until', 'limit'],
   takes_list: ['page_slug', 'holder', 'kind', 'active', 'resolved', 'sort_by', 'limit', 'offset'],
   takes_search: ['query', 'limit'],
+  think: ['question', 'anchor', 'rounds', 'save', 'take', 'model', 'since', 'until'],
+  schema_lint: ['pack'],
+  schema_explain_type: ['type'],
+  schema_review_orphans: ['limit'],
+  schema_apply_mutations: ['pack', 'mutations', 'force'],
+  reload_schema_pack: ['pack'],
   recall: ['entity', 'since', 'session_id', 'grep', 'limit', 'include_pending', 'include_expired', 'supersessions'],
   preview_forget_fact: ['id'],
   apply_forget_fact: ['id', 'reason', 'source_id', 'citation', 'confirm'],
@@ -214,6 +342,11 @@ const VOLTMIND_MVP_OPERATION_PARAMS: Record<string, string[]> = {
   preview_candidate_apply: ['candidate_id'],
   apply_candidate: ['candidate_id', 'source_id', 'citation', 'confirm'],
   reject_candidate: ['candidate_id'],
+  skillify_check: ['target', 'recent'],
+  diff_skillpack_skill: ['skill'],
+  list_resolvers: ['cost', 'backend'],
+  describe_resolver: ['id'],
+  audit_frontmatter: ['source_id'],
 };
 
 export function isVoltMindMvpCliCommand(name: string): boolean {

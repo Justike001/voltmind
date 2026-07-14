@@ -26,6 +26,17 @@ import { bumpLastRetrievedAt } from './last-retrieved.ts';
 import { CJK_SLUG_CHARS } from './cjk.ts';
 import { readoutProvenance, withReadoutProvenance } from './readout-provenance.ts';
 import { isWriteTargetContained } from './path-confine.ts';
+import {
+  auditFrontmatter,
+  checkSkillify,
+  checkSkillTree,
+  describeResolver,
+  diffSkillpackSkill,
+  evaluateSkillRouting,
+  getSkillpackHealth,
+  listResolvers,
+  listSkillpackSkills,
+} from './skill-platform-diagnostics.ts';
 import * as db from './db.ts';
 import { VERSION } from '../version.ts';
 import {
@@ -4864,6 +4875,103 @@ const run_onboard: Operation = {
   },
 };
 
+// P1 skill-platform diagnostics. These are intentionally admin-scoped and
+// read-only: remote callers may inspect the server workspace but never modify
+// skills, frontmatter, registries, or local files through MCP.
+const skillify_check: Operation = {
+  name: 'skillify_check',
+  description: 'Run the read-only skillify audit for a repository-confined target, or recently modified skill code.',
+  params: {
+    target: { type: 'string', description: 'Relative file path below the server repository root.' },
+    recent: { type: 'boolean', description: 'Audit recently modified server-repository skill code.' },
+  },
+  scope: 'admin',
+  localOnly: false,
+  handler: async (_ctx, p) => checkSkillify(p.target as string | undefined, p.recent === true),
+};
+
+const list_skillpack_skills: Operation = {
+  name: 'list_skillpack_skills',
+  description: 'List skills bundled with the VoltMind skillpack on this host.',
+  params: {},
+  scope: 'admin',
+  localOnly: false,
+  handler: async () => listSkillpackSkills(),
+};
+
+const get_skillpack_health: Operation = {
+  name: 'get_skillpack_health',
+  description: 'Return a read-only skillpack health summary using the remote-safe doctor report.',
+  params: {},
+  scope: 'admin',
+  localOnly: false,
+  handler: async (ctx) => getSkillpackHealth(ctx.engine),
+};
+
+const diff_skillpack_skill: Operation = {
+  name: 'diff_skillpack_skill',
+  description: 'Compare one bundled skill with the server-controlled skills workspace without modifying either tree.',
+  params: { skill: { type: 'string', required: true, description: 'Bundled skill slug.' } },
+  scope: 'admin',
+  localOnly: false,
+  handler: async (_ctx, p) => diffSkillpackSkill(p.skill as string),
+};
+
+const check_skill_tree: Operation = {
+  name: 'check_skill_tree',
+  description: 'Validate reachability, MECE overlap, routing fixtures, and DRY issues in the server skill tree.',
+  params: {},
+  scope: 'admin',
+  localOnly: false,
+  handler: async () => checkSkillTree(),
+};
+
+const evaluate_skill_routing: Operation = {
+  name: 'evaluate_skill_routing',
+  description: 'Run the structural routing evaluation against the server skill tree without LLM execution.',
+  params: {},
+  scope: 'admin',
+  localOnly: false,
+  handler: async () => evaluateSkillRouting(),
+};
+
+const list_resolvers: Operation = {
+  name: 'list_resolvers',
+  description: 'List registered embedded resolvers and optionally filter by cost or backend.',
+  params: {
+    cost: { type: 'string', enum: ['free', 'rate-limited', 'paid'], description: 'Optional resolver cost tier.' },
+    backend: { type: 'string', description: 'Optional resolver backend label.' },
+  },
+  scope: 'admin',
+  localOnly: false,
+  handler: async (_ctx, p) => listResolvers(p.cost as 'free' | 'rate-limited' | 'paid' | undefined, p.backend as string | undefined),
+};
+
+const describe_resolver: Operation = {
+  name: 'describe_resolver',
+  description: 'Describe one registered resolver, including its schemas and server-side availability.',
+  params: { id: { type: 'string', required: true, description: 'Resolver identifier.' } },
+  scope: 'admin',
+  localOnly: false,
+  handler: async (_ctx, p) => describeResolver(p.id as string),
+};
+
+const audit_frontmatter: Operation = {
+  name: 'audit_frontmatter',
+  description: 'Audit frontmatter integrity for one source within the caller\'s authorized source scope.',
+  params: { source_id: { type: 'string', description: 'Source to audit; defaults to the caller\'s scoped source.' } },
+  scope: 'admin',
+  localOnly: false,
+  handler: async (ctx, p) => {
+    const sourceId = (p.source_id as string | undefined) ?? ctx.sourceId;
+    const allowed = ctx.auth?.allowedSources;
+    if (ctx.remote !== false && allowed && allowed.length > 0 && !allowed.includes(sourceId)) {
+      throw new OperationError('permission_denied', `source '${sourceId}' is outside your granted sources.`);
+    }
+    return auditFrontmatter(ctx.engine, sourceId);
+  },
+};
+
 export const operations: Operation[] = [
   // Page CRUD
   get_page, put_page, delete_page, list_pages,
@@ -4942,6 +5050,9 @@ export const operations: Operation[] = [
   schema_apply_mutations, reload_schema_pack,
   // v0.41.18.0 (T16, A7, codex #5)
   run_onboard,
+  // P1 skill platform diagnostics (remote-safe, admin scoped)
+  skillify_check, list_skillpack_skills, get_skillpack_health, diff_skillpack_skill,
+  check_skill_tree, evaluate_skill_routing, list_resolvers, describe_resolver, audit_frontmatter,
 ];
 
 export const operationsByName = Object.fromEntries(

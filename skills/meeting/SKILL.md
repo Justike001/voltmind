@@ -3,9 +3,6 @@ name: meeting
 version: 1.0.0
 description: Human-reviewed VoltMind Meeting Loop for Personal Brain Phase 1.
 triggers:
-  - "meeting notes"
-  - "meeting transcript"
-  - "process this meeting"
   - "prepare meeting page"
   - "会议整理"
   - "会议纪要"

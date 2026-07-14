@@ -219,7 +219,10 @@ export function parseResolverEntries(resolverContent: string): ResolverEntry[] {
 
 /** Simple YAML frontmatter parser — extracts triggers array if present. */
 function extractTriggers(skillContent: string): string[] {
-  const fmMatch = skillContent.match(/^---\n([\s\S]*?)\n---/);
+  // SKILL.md files are frequently edited on Windows. Normalize line endings
+  // before the lightweight scan so it agrees with the canonical parser.
+  const normalized = skillContent.replace(/\r\n/g, '\n');
+  const fmMatch = normalized.match(/^---\n([\s\S]*?)\n---/);
   if (!fmMatch) return [];
   const fm = fmMatch[1];
   const triggersMatch = fm.match(/^triggers:\s*\n((?:\s+-\s+.+\n?)*)/m);

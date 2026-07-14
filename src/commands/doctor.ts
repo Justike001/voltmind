@@ -3,6 +3,7 @@ import * as db from '../core/db.ts';
 import { LATEST_VERSION, getIdleBlockers } from '../core/migrate.ts';
 import { checkResolvable } from '../core/check-resolvable.ts';
 import type { ResolvableIssue } from '../core/check-resolvable.ts';
+import { VOLTMIND_MVP_SKILL_NAMES } from '../core/mvp-surface.ts';
 import { autoFixDryViolations, type AutoFixReport, type FixOutcome } from '../core/dry-fix.ts';
 import { autoDetectSkillsDirReadOnly } from '../core/repo-root.ts';
 import { loadOrDeriveManifest } from '../core/skill-manifest.ts';
@@ -63,25 +64,6 @@ export interface Check {
    */
   category?: CheckCategory;
 }
-
-const VOLTMIND_MVP_SKILL_NAMES = new Set([
-  'ask-user',
-  'brain-ops',
-  'capture',
-  'citation-fixer',
-  'cron-scheduler',
-  'daily',
-  'enrich',
-  'ingest',
-  'maintain',
-  'meeting',
-  'minion-orchestrator',
-  'project',
-  'query',
-  'review',
-  'setup',
-  'testing',
-]);
 
 const DYNAMIC_ENGINE_HEALTH_CHECK_NAMES: Array<Pick<Check, 'name'>> = [
   { name: 'embed_staleness' },
