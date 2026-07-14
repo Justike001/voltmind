@@ -8,10 +8,9 @@
  *
  * The generated task:
  *   - Logs on at user logon (LogonTrigger), current user, LeastPrivilege
- *   - Adds a one-minute CalendarTrigger recovery pulse. This is deliberately
- *     separate from RestartOnFailure: some Task Scheduler termination paths
- *     (notably a manually/forcibly ended task instance) leave the task Ready
- *     without consuming its restart-on-failure policy.
+ *   - Uses LogonTrigger plus RestartOnFailure. A repeating CalendarTrigger
+ *     would attempt to launch the already-running singleton every minute and
+ *     leave a misleading 0x800710E0 "request refused" LastTaskResult.
  *   - Runs indefinitely (no ExecutionTimeLimit)
  *   - IgnoreNew multiple-instance policy (no concurrent autopilot)
  *   - Restart on failure 1 minute, up to `restartCount` times
@@ -25,14 +24,14 @@ export interface WindowsTaskXmlInput {
   workingDirectory?: string;
   /** Windows user id (DOMAIN\user or user). Defaults to the interactive user. */
   userId?: string;
-  /**
-   * Start of the daily recovery pulse (an ISO-8601 Task Scheduler boundary).
-   * The adapter supplies the installation time so the pulse starts immediately
-   * and then covers every minute of each following day.
-   */
+  /** Retained for XML-call compatibility; no repeated recovery trigger is emitted. */
   recoveryStartBoundary: string;
   restartIntervalMinutes: number;
   restartCount: number;
+  /** Register disabled for a safe post-deployment validation window. */
+  enabled?: boolean;
+  /** Optional Task Scheduler SDDL, used to keep control with the interactive user. */
+  securityDescriptor?: string;
 }
 
 function escapeXml(s: string): string {
@@ -57,7 +56,6 @@ function escapeXml(s: string): string {
 export function createWindowsTaskXml(input: WindowsTaskXmlInput): string {
   if (!input.taskName) throw new Error('createWindowsTaskXml: taskName is required');
   if (!input.executable) throw new Error('createWindowsTaskXml: executable is required');
-  if (!input.recoveryStartBoundary) throw new Error('createWindowsTaskXml: recoveryStartBoundary is required');
   if (input.restartCount < 0) throw new Error('createWindowsTaskXml: restartCount must be >= 0');
   if (input.restartIntervalMinutes <= 0) throw new Error('createWindowsTaskXml: restartIntervalMinutes must be > 0');
 
@@ -66,29 +64,22 @@ export function createWindowsTaskXml(input: WindowsTaskXmlInput): string {
     ? `      <WorkingDirectory>${escapeXml(input.workingDirectory)}</WorkingDirectory>`
     : '';
   const argsStr = input.arguments.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ');
+  const enabled = input.enabled !== false;
+  const securityDescriptorEl = input.securityDescriptor
+    ? `    <SecurityDescriptor>${escapeXml(input.securityDescriptor)}</SecurityDescriptor>`
+    : '';
 
   return `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Description>${escapeXml(input.taskName)}</Description>
+${securityDescriptorEl}
   </RegistrationInfo>
   <Triggers>
     <LogonTrigger>
       <Enabled>true</Enabled>
       ${userIdEl}
     </LogonTrigger>
-    <CalendarTrigger>
-      <StartBoundary>${escapeXml(input.recoveryStartBoundary)}</StartBoundary>
-      <Enabled>true</Enabled>
-      <Repetition>
-        <Interval>PT${input.restartIntervalMinutes}M</Interval>
-        <Duration>P1D</Duration>
-        <StopAtDurationEnd>false</StopAtDurationEnd>
-      </Repetition>
-      <ScheduleByDay>
-        <DaysInterval>1</DaysInterval>
-      </ScheduleByDay>
-    </CalendarTrigger>
   </Triggers>
   <Principals>
     <Principal id="Author">
@@ -109,7 +100,7 @@ export function createWindowsTaskXml(input: WindowsTaskXmlInput): string {
       <RestartOnIdle>false</RestartOnIdle>
     </IdleSettings>
     <AllowStartOnDemand>true</AllowStartOnDemand>
-    <Enabled>true</Enabled>
+    <Enabled>${enabled}</Enabled>
     <Hidden>false</Hidden>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
     <WakeToRun>false</WakeToRun>

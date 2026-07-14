@@ -36,6 +36,8 @@ export interface AutopilotInstallContext {
   /** Whether to auto-inject bootstrap for ephemeral containers. */
   injectBootstrap?: boolean;
   noInject?: boolean;
+  /** Register the scheduler entry disabled and do not start it. */
+  startImmediately?: boolean;
 }
 
 export interface AutopilotInstallResult {
@@ -64,6 +66,8 @@ export interface AutopilotStatusContext {
 export interface AutopilotProcessManagerStatus {
   target: InstallTarget | 'unknown';
   registered: boolean;
+  /** Whether future scheduler triggers are enabled. */
+  enabled?: boolean;
   running: boolean;
   lastResult?: string;
   lastStartedAt?: string;

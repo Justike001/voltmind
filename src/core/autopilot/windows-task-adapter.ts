@@ -46,6 +46,29 @@ function taskXmlPath(): string {
   return voltmindPath('runtime', 'autopilot-task.xml');
 }
 
+/** Resolve the interactive user's SID without depending on localized names. */
+function resolveCurrentUserSid(): string | undefined {
+  try {
+    const out = execFileSync('whoami.exe', ['/user', '/fo', 'csv', '/nh'], {
+      encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'], env: process.env,
+    }).trim();
+    const match = out.match(/"[^"]+","(S-1-[^"]+)"/i);
+    return match?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Preserve OS maintenance access while granting the interactive owner full
+ * Task Scheduler control. This is important when an administrator performs
+ * the one-time registration: the owner must not become Administrators, or a
+ * normal VoltMind process cannot later pause/start its own task.
+ */
+function userControlledTaskSddl(userSid: string): string {
+  return `O:${userSid}G:SYD:P(A;;GA;;;${userSid})(A;;GA;;;SY)(A;;GA;;;BA)`;
+}
+
 function runPowerShell(script: string, opts: { timeoutMs?: number } = {}): string {
   try {
     return execFileSync(
@@ -67,7 +90,7 @@ function runPowerShell(script: string, opts: { timeoutMs?: number } = {}): strin
  * Query the task state via the ScheduledTasks module, returning stable JSON.
  * Never parses localized `schtasks` text.
  */
-function queryTask(): { exists: boolean; state: string; lastResult?: string; lastRunTime?: string } {
+function queryTask(): { exists: boolean; enabled?: boolean; state: string; lastResult?: string; lastRunTime?: string } {
   const script = `
 $ErrorActionPreference = 'SilentlyContinue'
 $t = Get-ScheduledTask -TaskName '${WINDOWS_TASK_NAME.replace(/'/g, "''")}'
@@ -75,6 +98,7 @@ if ($null -eq $t) { '{"exists":false}'; exit }
 $info = $t | Get-ScheduledTaskInfo
 $obj = @{
   exists = $true
+  enabled = $t.State -ne 'Disabled'
   state = [string]$t.State
   lastResult = [string]$info.LastTaskResult
   lastRunTime = if ($info.LastRunTime) { $info.LastRunTime.ToString('o') } else { $null }
@@ -114,18 +138,21 @@ export class WindowsTaskSchedulerAdapter implements AutopilotProcessManagerAdapt
     // in the prefix args; for a native .exe the prefix args are empty.
     const executable = context.cliInvocation.executable;
     const argumentsAfterExe = argv;
+    const ownerSid = context.userId ?? resolveCurrentUserSid();
     const xml = createWindowsTaskXml({
       taskName: WINDOWS_TASK_NAME,
       executable,
       arguments: argumentsAfterExe,
       workingDirectory: context.workingDirectory ?? context.repoPath,
-      userId: context.userId,
-      // CalendarTrigger repeats every minute for every day, starting now.
-      // It is a recovery backstop for task termination paths that Task
-      // Scheduler does not classify as a restart-on-failure event.
+      userId: ownerSid,
+      // Kept for XML-call compatibility. Recovery is handled by
+      // RestartOnFailure; a repeating calendar trigger would constantly
+      // collide with the live singleton and pollute LastTaskResult.
       recoveryStartBoundary: new Date().toISOString(),
       restartIntervalMinutes: DEFAULT_RESTART_INTERVAL_MINUTES,
       restartCount: DEFAULT_RESTART_COUNT,
+      enabled: context.startImmediately !== false,
+      ...(ownerSid ? { securityDescriptor: userControlledTaskSddl(ownerSid) } : {}),
     });
 
     const xmlPath = taskXmlPath();
@@ -148,6 +175,16 @@ export class WindowsTaskSchedulerAdapter implements AutopilotProcessManagerAdapt
         message: `Failed to register Windows scheduled task "${WINDOWS_TASK_NAME}": ${msg}`,
         actionableHint: 'Ensure you are logged in and Task Scheduler service is running.',
       });
+    }
+
+    if (context.startImmediately === false) {
+      return {
+        target: 'windows-task',
+        registered: true,
+        started: false,
+        schedulerName: WINDOWS_TASK_NAME,
+        detail: 'Task registered disabled',
+      };
     }
 
     // Start the task immediately.
@@ -197,6 +234,54 @@ export class WindowsTaskSchedulerAdapter implements AutopilotProcessManagerAdapt
     return { stopped, removed, detail: removed ? 'Task deleted' : 'Task not found' };
   }
 
+  /** Disable future calendar/restart triggers. Does not terminate a live process. */
+  async pause(): Promise<{ registered: boolean; disabled: boolean }> {
+    const info = queryTask();
+    if (!info.exists) return { registered: false, disabled: false };
+    try {
+      runPowerShell(`Disable-ScheduledTask -TaskName '${WINDOWS_TASK_NAME.replace(/'/g, "''")}' -ErrorAction Stop | Out-Null`);
+      return { registered: true, disabled: true };
+    } catch (error) {
+      throw new AutopilotError({
+        code: AUTOPILOT_ERRORS.WINDOWS_TASK_PAUSE_FAILED,
+        stage: 'task-registration',
+        message: `Failed to disable Windows scheduled task "${WINDOWS_TASK_NAME}": ${error instanceof Error ? error.message : String(error)}`,
+        actionableHint: 'Disable the task manually in Task Scheduler, then retry `voltmind autopilot --pause`.',
+      });
+    }
+  }
+
+  /** Re-enable a paused task before explicitly starting it. */
+  async start(): Promise<{ registered: boolean; enabled: boolean; started: boolean }> {
+    const info = queryTask();
+    if (!info.exists) return { registered: false, enabled: false, started: false };
+    try {
+      runPowerShell(`Enable-ScheduledTask -TaskName '${WINDOWS_TASK_NAME.replace(/'/g, "''")}' -ErrorAction Stop | Out-Null`);
+      // Starting an already-running task through the ScheduledTasks cmdlet can
+      // block until the task action has finished initializing.  That made the
+      // operator control plane time out even though the daemon was healthy.
+      // IgnoreNew means there is nothing further to launch in this state.
+      if (info.state === 'Running') {
+        return { registered: true, enabled: true, started: true };
+      }
+      // schtasks /Run asks the scheduler to launch asynchronously.  Unlike
+      // Start-ScheduledTask it does not wait on the long-lived daemon action.
+      execFileSync(
+        'schtasks.exe',
+        ['/Run', '/TN', WINDOWS_TASK_NAME],
+        { encoding: 'utf8', timeout: 15_000, stdio: ['ignore', 'pipe', 'pipe'], env: process.env },
+      );
+      return { registered: true, enabled: true, started: true };
+    } catch (error) {
+      throw new AutopilotError({
+        code: AUTOPILOT_ERRORS.WINDOWS_TASK_START_FAILED,
+        stage: 'task-start',
+        message: `Failed to enable and start Windows scheduled task "${WINDOWS_TASK_NAME}": ${error instanceof Error ? error.message : String(error)}`,
+        actionableHint: 'Check Task Scheduler for the VoltMind Autopilot task and its Last Run Result.',
+      });
+    }
+  }
+
   async status(_context: AutopilotStatusContext): Promise<AutopilotProcessManagerStatus> {
     const info = queryTask();
     // Ready means the task is registered and eligible for a future trigger;
@@ -206,6 +291,7 @@ export class WindowsTaskSchedulerAdapter implements AutopilotProcessManagerAdapt
     return {
       target: 'windows-task',
       registered: info.exists,
+      enabled: info.enabled,
       running,
       lastResult: info.lastResult,
       lastStartedAt: info.lastRunTime,

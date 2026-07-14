@@ -35,7 +35,13 @@ import {
 import { detectInstallTarget as detectInstallTargetUnified } from '../core/autopilot/detect-target.ts';
 import { isInstallTarget, type InstallTarget, type AutopilotOverallState } from '../core/autopilot/diagnostics.ts';
 import { windowsTaskSchedulerAdapter, WINDOWS_TASK_NAME } from '../core/autopilot/windows-task-adapter.ts';
+import {
+  clearAutopilotPauseRequest,
+  readAutopilotPauseRequest,
+  requestAutopilotPause,
+} from '../core/autopilot/pause-control.ts';
 import { VERSION } from '../version.ts';
+import { reconnectEngine } from '../core/connection-errors.ts';
 
 /**
  * v0.37.7.0 #1162 — classify autopilot reconnect-loop errors.
@@ -164,13 +170,54 @@ export function removeStaleAutopilotLock(): boolean {
   }
 }
 
+/**
+ * Submit one ordinary full maintenance cycle through the durable Minion queue.
+ *
+ * This is intentionally not an inline "verification" implementation: it is
+ * an operator-controlled way to exercise the same Task Scheduler → Autopilot
+ * → ChildWorkerSupervisor → worker path used in production when a source is
+ * otherwise fresh and the regular dispatcher has nothing to submit.
+ */
+export async function submitVerificationCycle(engine: BrainEngine, args: string[]): Promise<void> {
+  const repoPath = parseArg(args, '--repo') || await engine.getConfig('sync.repo_path');
+  const jsonMode = args.includes('--json');
+  if (!repoPath) {
+    throw new Error('No repo path. Use --repo or run voltmind sync --repo first.');
+  }
+
+  const { MinionQueue } = await import('../core/minions/queue.ts');
+  const queue = new MinionQueue(engine);
+  const job = await queue.add(
+    'autopilot-cycle',
+    // Explicitly disable pull for a local verification run. The normal
+    // per-source dispatcher enables it only when the source has a remote.
+    { repoPath, pull: false },
+    {
+      queue: 'default',
+      idempotency_key: `autopilot-verify:${Date.now()}:${process.pid}`,
+      max_attempts: 2,
+      timeout_ms: 600_000,
+      // A verification request must not create an unbounded backlog while a
+      // prior full cycle is waiting; the cycle lock still protects active work.
+      maxWaiting: 1,
+    },
+  );
+
+  const result = { status: 'submitted', job_id: job.id, name: 'autopilot-cycle', queue: 'default' };
+  if (jsonMode) console.log(JSON.stringify(result));
+  else console.log(`Submitted verification cycle as job #${job.id}.`);
+}
+
 export async function runAutopilot(engine: BrainEngine, args: string[]) {
   if (args.includes('--help') || args.includes('-h')) {
     console.log(
       'Usage: voltmind autopilot [--repo <path>] [--interval N] [--json] [--no-worker] [--log-file <path>]\n' +
-      '       voltmind autopilot --install [--repo <path>] [--target <target>] [--runtime-env-file <path>]\n' +
+      '       voltmind autopilot --install [--paused] [--repo <path>] [--target <target>] [--runtime-env-file <path>]\n' +
       '       voltmind autopilot --uninstall\n' +
-      '       voltmind autopilot --status [--json]\n\n' +
+      '       voltmind autopilot --status [--json]\n' +
+      '       voltmind autopilot --pause|--stop [--force]\n' +
+      '       voltmind autopilot --start\n\n' +
+      '       voltmind autopilot --verify-once [--repo <path>] [--json]\n\n' +
       'Self-maintaining brain daemon. Runs the full maintenance cycle\n' +
       '(lint + backlinks + sync + extract + embed + orphans) on an interval.\n\n' +
       'On Windows, `--install` registers a Task Scheduler entry (requires\n' +
@@ -188,8 +235,20 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     await uninstallDaemonUnified();
     return;
   }
+  if (args.includes('--pause') || args.includes('--stop')) {
+    await pauseWindowsAutopilot(args.includes('--json'), args.includes('--force'));
+    return;
+  }
+  if (args.includes('--start')) {
+    await startWindowsAutopilot(args.includes('--json'));
+    return;
+  }
   if (args.includes('--status')) {
-    await showStatus(args.includes('--json'));
+    await showStatus(engine, args.includes('--json'));
+    return;
+  }
+  if (args.includes('--verify-once')) {
+    await submitVerificationCycle(engine, args);
     return;
   }
 
@@ -249,6 +308,37 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
 
   let stopping = false;
   let childSupervisor: ChildWorkerSupervisor | null = null;
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+
+  // The dispatch loop intentionally sleeps for as long as `interval` (150s
+  // on a healthy deployment). Runtime liveness must not inherit that cadence:
+  // the status stale threshold is 120s, so a loop-end-only heartbeat produced
+  // a recurring false "autopilot inactive" window. Keep the lightweight
+  // heartbeat independent from dispatch and worker activity.
+  const refreshRuntimeHeartbeat = () => {
+    if (runtimeStatus.state === 'starting') runtimeStatus.state = 'running';
+    if (childSupervisor) {
+      // A persisted supervisor state must never invent a live worker.  In
+      // particular, retain the transition recorded by the lifecycle callback
+      // while a replacement is being spawned instead of turning a dead child
+      // back into "running" on the next heartbeat.
+      if (childSupervisor.childAlive) {
+        runtimeStatus.supervisor.state = 'running';
+      } else if (childSupervisor.inBackoff) {
+        runtimeStatus.supervisor.state = 'restarting';
+      }
+      runtimeStatus.supervisor.restartCount = childSupervisor.crashCount;
+    }
+    runtimeStatus.updatedAt = new Date().toISOString();
+    runtimeStatus.heartbeatAt = runtimeStatus.updatedAt;
+    try { writeRuntimeStatus(runtimeStatus); } catch { /* best-effort */ }
+  };
+
+  // The supervisor is started after the shutdown routine is installed.  This
+  // avoids an early child failure racing a callback that needs to drain and
+  // clean up the parent, and gives its rejected promise a durable error path
+  // instead of an unhandled rejection that can terminate Bun silently.
+  let startChildSupervisor: (() => void) | undefined;
 
   if (spawnManagedWorker) {
     const cliInvocation = await resolveCliInvocation({ repoRoot: repoPath });
@@ -272,18 +362,38 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
         // Matches the prior console output shape so operators reading
         // existing logs see the same lines.
         if (event.kind === 'worker_spawned') {
+          runtimeStatus.supervisor.state = 'running';
+          runtimeStatus.supervisor.workerPid = event.pid;
+          runtimeStatus.supervisor.lastRestartAt = new Date().toISOString();
+          runtimeStatus.supervisor.lastError = undefined;
+          refreshRuntimeHeartbeat();
           console.log(
             `[autopilot] Minions worker spawned (pid: ${event.pid}, watchdog: 2048MB${event.tini ? ', tini: active' : ''})`,
           );
         } else if (event.kind === 'worker_spawn_failed') {
+          runtimeStatus.state = 'degraded';
+          runtimeStatus.supervisor.state = 'restarting';
+          runtimeStatus.supervisor.workerPid = undefined;
+          runtimeStatus.supervisor.lastError = `spawn_${event.phase}: ${event.error}`;
+          refreshRuntimeHeartbeat();
           console.error(
             `[autopilot] worker spawn failed (${event.phase}): ${event.error}${event.errnoCode ? ` (code=${event.errnoCode})` : ''}`,
           );
         } else if (event.kind === 'worker_exited') {
+          runtimeStatus.state = 'degraded';
+          runtimeStatus.supervisor.state = 'restarting';
+          runtimeStatus.supervisor.workerPid = undefined;
+          runtimeStatus.supervisor.restartCount = event.crashCount;
+          runtimeStatus.supervisor.lastError =
+            `worker_exit: code=${event.code ?? 'null'} signal=${event.signal ?? 'null'} cause=${event.likelyCause}`;
+          refreshRuntimeHeartbeat();
           console.error(
             `[autopilot] worker exited code=${event.code} signal=${event.signal} after ${event.runDurationMs}ms, crashCount=${event.crashCount}, cause=${event.likelyCause}`,
           );
         } else if (event.kind === 'backoff') {
+          runtimeStatus.supervisor.state = 'restarting';
+          runtimeStatus.supervisor.restartCount = event.crashCount;
+          refreshRuntimeHeartbeat();
           if (event.reason === 'budget_exceeded') {
             console.error(
               `[autopilot] clean-restart budget exceeded; backing off ${event.ms}ms before next spawn`,
@@ -303,9 +413,20 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
         }
       },
     });
-    // Fire-and-forget; runs alongside the dispatch loop. shutdown() drives
-    // the child-supervisor's isStopping accessor + drain.
-    void childSupervisor.run();
+    startChildSupervisor = () => {
+      const supervisor = childSupervisor;
+      if (!supervisor) return;
+      void supervisor.run().catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        runtimeStatus.state = 'failed';
+        runtimeStatus.supervisor.state = 'failed';
+        runtimeStatus.supervisor.workerPid = undefined;
+        runtimeStatus.supervisor.lastError = `supervisor_runtime_error: ${message}`;
+        refreshRuntimeHeartbeat();
+        console.error(`[autopilot] FATAL: child worker supervisor crashed: ${message}`);
+        void shutdown('supervisor_runtime_error');
+      });
+    };
   } else if (!useMinionsDispatch) {
     const why = mode === 'off'
       ? 'minion_mode=off'
@@ -315,16 +436,20 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     console.log('[autopilot] --no-worker set: dispatch loop only (worker managed externally)');
   }
 
-  // Async shutdown with 35s drain window for the worker child. The worker
+  // Async shutdown with a 35s initial drain window for the worker child. The worker
   // has its own SIGTERM handler (minions/worker.ts:79-85) that drains
   // in-flight jobs for up to 30s before exit. We give it 35s here to
-  // account for signal-delivery latency, then SIGKILL as a last resort.
+  // account for signal-delivery latency. Operator pauses stay in drain mode
+  // unless their marker explicitly authorizes --force; OS stop signals retain
+  // the historical SIGKILL escalation as a last resort.
   //
   // No `process.on('exit')` handler — its callback runs synchronously and
   // cannot await the worker's drain.
-  const shutdown = async (sig: string) => {
+  let pausePoll: ReturnType<typeof setInterval> | undefined;
+  const shutdown = async (sig: string, forceAfterDrain = sig !== 'operator_pause') => {
     if (stopping) return;
     stopping = true;
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
     console.log(`Autopilot stopping (${sig}).`);
     runtimeStatus.state = 'stopping';
     runtimeStatus.updatedAt = new Date().toISOString();
@@ -333,16 +458,32 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     if (childSupervisor) {
       childSupervisor.killChild('SIGTERM');
       await childSupervisor.awaitChildExit(35_000);
-      if (childSupervisor.childAlive) {
+      if (childSupervisor.childAlive && forceAfterDrain) {
         childSupervisor.killChild('SIGKILL');
+      } else {
+        while (childSupervisor.childAlive) {
+          console.warn('Autopilot drain is still running; task remains disabled. Use `autopilot --pause --force` only when termination is intended.');
+          await childSupervisor.awaitChildExit(30_000);
+        }
       }
     }
+    if (pausePoll) clearInterval(pausePoll);
     try { unlinkSync(lockPath); } catch { /* already gone */ }
     try { deleteRuntimeStatus(); } catch { /* best-effort */ }
     process.exit(0);
   };
   process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
   process.on('SIGINT',  () => { void shutdown('SIGINT'); });
+  startChildSupervisor?.();
+  // `autopilot --pause` first disables the Windows task, then writes this
+  // marker. The running daemon observes it and uses the graceful drain above;
+  // only a marker written by `autopilot --pause --force` permits escalation.
+  pausePoll = setInterval(() => {
+    const pauseRequest = readAutopilotPauseRequest();
+    if (pauseRequest) void shutdown('operator_pause', pauseRequest.force === true);
+  }, 2000);
+  heartbeatTimer = setInterval(refreshRuntimeHeartbeat, 30_000);
+  heartbeatTimer.unref?.();
 
   let consecutiveErrors = 0;
   // v0.37.7.0 #1162 — counter for consecutive reconnect failures.
@@ -401,9 +542,16 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
       runtimeStatus.database.lastConnectedAt = new Date().toISOString();
     } catch (probeErr) {
       try {
-        await engine.disconnect();
-        await (engine as any).connect?.();
+        // Rebuild using the engine's saved connection config. Calling
+        // disconnect() followed by a no-argument connect() leaves the
+        // module-level Postgres singleton disconnected and causes the next
+        // cycle/extract to fail with "connect() has not been called".
+        if (!await reconnectEngine(engine as any)) {
+          throw new Error('engine does not support configuration-preserving reconnect');
+        }
         autopilotReconnectFails = 0;
+        runtimeStatus.database.state = 'connected';
+        runtimeStatus.database.lastConnectedAt = new Date().toISOString();
       } catch (e) {
         logError('reconnect', e);
         autopilotReconnectFails++;
@@ -780,15 +928,9 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
       // informational; autopilot loop continues.
     }
 
-    // Update runtime status heartbeat + supervisor state each cycle.
-    if (runtimeStatus.state === 'starting') runtimeStatus.state = 'running';
-    if (childSupervisor) {
-      runtimeStatus.supervisor.state = childSupervisor.childAlive ? 'running' : (childSupervisor.inBackoff ? 'restarting' : 'running');
-      runtimeStatus.supervisor.restartCount = childSupervisor.crashCount;
-    }
-    runtimeStatus.updatedAt = new Date().toISOString();
-    runtimeStatus.heartbeatAt = runtimeStatus.updatedAt;
-    try { writeRuntimeStatus(runtimeStatus); } catch { /* best-effort */ }
+    // Keep the loop-end write as an immediate status refresh. The separate
+    // 30-second timer above covers the subsequent long sleep.
+    refreshRuntimeHeartbeat();
 
     // Wait for next cycle
     await new Promise(r => setTimeout(r, interval * 1000));
@@ -921,7 +1063,7 @@ async function installDaemon(engine: BrainEngine, args: string[]) {
   const noInject = args.includes('--no-inject');
 
   if (target === 'windows-task') {
-    await installWindowsTask(engine, repoPath, runtimeEnvFile);
+    await installWindowsTask(engine, repoPath, runtimeEnvFile, !args.includes('--paused'));
     return;
   }
 
@@ -981,7 +1123,7 @@ async function writeInstallManifest(target: InstallTarget, repoPath: string, wra
 }
 
 /** Windows install path: resolve CLI, register Task Scheduler task, start, write manifest. */
-async function installWindowsTask(engine: BrainEngine, repoPath: string, runtimeEnvFile?: string): Promise<void> {
+async function installWindowsTask(engine: BrainEngine, repoPath: string, runtimeEnvFile?: string, startImmediately = true): Promise<void> {
   const cliInvocation = await resolveCliInvocation({ repoRoot: repoPath });
   const result = await windowsTaskSchedulerAdapter.install({
     target: 'windows-task',
@@ -989,11 +1131,13 @@ async function installWindowsTask(engine: BrainEngine, repoPath: string, runtime
     cliInvocation,
     runtimeEnvFile,
     workingDirectory: repoPath,
+    startImmediately,
   });
   console.log(`Installed Windows Task Scheduler entry: ${result.schedulerName ?? 'VoltMind Autopilot'}`);
   console.log(`  Repo: ${repoPath}`);
   console.log(`  Target: windows-task`);
   console.log(`  Worker: supervised (minion_mode must not be off)`);
+  if (!startImmediately) console.log('  State: disabled (start later with voltmind autopilot --start)');
   console.log('  Uninstall: voltmind autopilot --uninstall');
   // Write manifest.
   try {
@@ -1328,7 +1472,153 @@ async function uninstallDaemonUnified(): Promise<void> {
   deleteRuntimeStatus();
 }
 
-async function showStatus(json: boolean) {
+async function pauseWindowsAutopilot(json: boolean, force: boolean): Promise<void> {
+  if (process.platform !== 'win32') {
+    throw new Error('autopilot --pause/--stop is currently supported on Windows Task Scheduler only.');
+  }
+  const paused = await windowsTaskSchedulerAdapter.pause();
+  if (!paused.registered) {
+    throw new Error(`Windows scheduled task "${WINDOWS_TASK_NAME}" is not installed.`);
+  }
+  const request = requestAutopilotPause({ force });
+  const deadline = Date.now() + 40_000;
+  let stopped = false;
+  while (Date.now() < deadline) {
+    const runtime = readRuntimeStatus();
+    if (!runtime || !isProcessAlive(runtime.pid)) {
+      stopped = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  const result = {
+    status: stopped ? 'paused' : 'pause_pending',
+    scheduler_disabled: paused.disabled,
+    graceful_stop_requested_at: request.requested_at,
+    force_requested: force,
+  };
+  if (json) console.log(JSON.stringify(result, null, 2));
+  else if (stopped) console.log('Autopilot paused: scheduled task disabled and running worker drained.');
+  else console.error('Autopilot task is disabled and graceful stop is pending. It was not force-terminated.');
+  if (!stopped) process.exitCode = 1;
+}
+
+async function startWindowsAutopilot(json: boolean): Promise<void> {
+  if (process.platform !== 'win32') {
+    throw new Error('autopilot --start is currently supported on Windows Task Scheduler only.');
+  }
+  const manifest = loadManifest();
+  if (!manifest || manifest.target !== 'windows-task') {
+    throw new Error('No Windows Autopilot installation found. Run `voltmind autopilot --install` first.');
+  }
+  // Clear before enabling so a just-started daemon cannot observe a stale
+  // pause request and immediately drain itself.
+  const clearedPauseRequest = clearAutopilotPauseRequest();
+  const started = await windowsTaskSchedulerAdapter.start();
+  if (!started.registered || !started.started) {
+    throw new Error(`Windows scheduled task "${WINDOWS_TASK_NAME}" could not be started.`);
+  }
+  const result = {
+    status: 'started',
+    scheduler_enabled: started.enabled,
+    pause_request_cleared: clearedPauseRequest,
+  };
+  if (json) console.log(JSON.stringify(result, null, 2));
+  else console.log('Autopilot started: scheduled task enabled and start requested.');
+}
+
+type BusinessReadiness = {
+  state: 'ready' | 'degraded' | 'unknown';
+  reasons: string[];
+  dead_jobs: number | null;
+  consecutive_cycle_skips: number | null;
+  last_successful_cycle_at: string | null;
+};
+
+/**
+ * Runtime liveness alone is not proof that the worker is consuming useful
+ * work. Read the durable queue so `autopilot --status` can distinguish a
+ * healthy scheduler from a brain stalled behind dead sync jobs or repeated
+ * cycle-lock skips.
+ */
+async function readBusinessReadiness(engine: BrainEngine): Promise<BusinessReadiness> {
+  try {
+    type JobRow = {
+      name: string;
+      status: string;
+      result: unknown;
+      finished_at: string | Date | null;
+      created_at: string | Date | null;
+    };
+    const rows = await engine.executeRaw<JobRow>(
+      `SELECT name, status, result, finished_at, created_at
+         FROM minion_jobs
+        WHERE name IN ('sync', 'autopilot-cycle')
+        ORDER BY COALESCE(finished_at, created_at) DESC
+        LIMIT 100`,
+    );
+    const asObject = (value: unknown): Record<string, unknown> => {
+      if (value && typeof value === 'object') return value as Record<string, unknown>;
+      if (typeof value === 'string') {
+        try { return JSON.parse(value) as Record<string, unknown>; } catch { /* fall through */ }
+      }
+      return {};
+    };
+    const asIso = (value: string | Date | null): string | null =>
+      value instanceof Date ? value.toISOString() : value;
+    const timestamp = (row: JobRow): number => {
+      const raw = row.finished_at ?? row.created_at;
+      return raw instanceof Date ? raw.getTime() : raw ? new Date(raw).getTime() : 0;
+    };
+    const completedCycles = rows.filter((r) => r.name === 'autopilot-cycle' && r.status === 'completed');
+    const successfulCycle = completedCycles.find((r) => {
+      const status = asObject(r.result).status;
+      return status === 'ok' || status === 'clean';
+    });
+    const lastSuccessful = successfulCycle ? asIso(successfulCycle.finished_at) : null;
+    const recoveredAfter = successfulCycle ? timestamp(successfulCycle) : 0;
+    const deadJobs = rows.filter((r) => r.status === 'dead' && timestamp(r) >= recoveredAfter).length;
+    const consecutiveSkips = completedCycles.slice(0, 3).filter((r) => {
+      const result = asObject(r.result);
+      const report = asObject(result.report);
+      return result.status === 'skipped' && report.reason === 'cycle_already_running';
+    }).length;
+    const latestCycle = completedCycles[0];
+    const latestReport = latestCycle ? asObject(asObject(latestCycle.result).report) : {};
+    const latestPhases = Array.isArray(latestReport.phases) ? latestReport.phases : [];
+    const latestSyncFailed = latestPhases.some((phase) => {
+      const data = asObject(phase);
+      const details = asObject(data.details);
+      return data.phase === 'sync' && (
+        data.status === 'fail' ||
+        details.syncStatus === 'blocked_by_failures' ||
+        details.syncStatus === 'partial'
+      );
+    });
+    const reasons: string[] = [];
+    if (deadJobs > 0) reasons.push(`unrecovered_dead_jobs:${deadJobs}`);
+    if (consecutiveSkips >= 2) reasons.push(`consecutive_cycle_skips:${consecutiveSkips}`);
+    if (latestSyncFailed) reasons.push('latest_cycle_sync_failed');
+    if (!lastSuccessful) reasons.push('no_successful_full_cycle');
+    return {
+      state: reasons.length === 0 ? 'ready' : 'degraded',
+      reasons,
+      dead_jobs: deadJobs,
+      consecutive_cycle_skips: consecutiveSkips,
+      last_successful_cycle_at: lastSuccessful,
+    };
+  } catch {
+    return {
+      state: 'unknown',
+      reasons: ['business_queue_unavailable'],
+      dead_jobs: null,
+      consecutive_cycle_skips: null,
+      last_successful_cycle_at: null,
+    };
+  }
+}
+
+async function showStatus(engine: BrainEngine, json: boolean) {
   const logFile = join(process.env.HOME || '', '.voltmind', 'autopilot.log');
   let lastLine = '';
   try {
@@ -1340,6 +1630,7 @@ async function showStatus(json: boolean) {
   // Scheduler state (spec §3.3 status). On Windows, query Task Scheduler;
   // on Unix, fall back to file presence (existing behavior).
   let schedulerRegistered = false;
+  let schedulerEnabled: boolean | undefined;
   let schedulerRunning = false;
   let schedulerTarget: string = 'unknown';
   let schedulerLastResult: string | undefined;
@@ -1350,6 +1641,7 @@ async function showStatus(json: boolean) {
     try {
       const s = await windowsTaskSchedulerAdapter.status({ manifest: loadManifest() });
       schedulerRegistered = s.registered;
+      schedulerEnabled = s.enabled;
       schedulerRunning = s.running;
       schedulerLastResult = s.lastResult;
       schedulerLastStartedAt = s.lastStartedAt;
@@ -1371,30 +1663,40 @@ async function showStatus(json: boolean) {
   // Runtime status file (spec §9) — autopilot pid, heartbeat, supervisor, DB.
   const rt = readRuntimeStatus();
   const heartbeatStale = rt ? isHeartbeatStale(rt.heartbeatAt, 120_000) : true;
-  const autopilotActive = !!rt && !heartbeatStale;
+  const autopilotProcessAlive = !!rt && isProcessAlive(rt.pid);
+  const autopilotActive = !!rt && autopilotProcessAlive && !heartbeatStale && rt.state !== 'failed' && rt.state !== 'stopping';
   const manifest = loadManifest();
   if (manifest) schedulerTarget = manifest.target;
 
-  // Overall readiness (spec §8).
+  const workerExpected = rt?.supervisor.workerExpected ?? false;
+  const workerPidAlive = !!rt?.supervisor.workerPid && isProcessAlive(rt.supervisor.workerPid);
+  const workerRunning = !!rt && rt.supervisor.state === 'running' && workerPidAlive;
+  const runtimeReady = autopilotActive && schedulerRunning;
+  const databaseReady = rt?.database.state === 'connected';
+  const workerReady = !workerExpected || workerRunning;
+  const business = await readBusinessReadiness(engine);
+  const queueReady = business.dead_jobs === 0;
+
+  // "ready" is an end-to-end assertion.  A stale status file, an inactive
+  // Task, or a vanished worker must degrade it even when the last successful
+  // business cycle is still recorded in Postgres.
   let overall: AutopilotOverallState = 'not-installed';
   if (manifest || schedulerRegistered) {
     overall = autopilotActive ? 'running' : 'installed';
-    if (rt && rt.engine === 'postgres' && rt.supervisor.workerExpected) {
-      if (rt.supervisor.state === 'running' && rt.database.state === 'connected') {
-        overall = 'ready';
-      } else if (rt.supervisor.state === 'disabled' || rt.database.state === 'error') {
-        overall = 'degraded';
-      }
+    if (rt?.state === 'failed') {
+      overall = 'failed';
+    } else if (!runtimeReady || !databaseReady || !workerReady || !queueReady || business.state !== 'ready') {
+      overall = 'degraded';
+    } else if (rt && rt.engine === 'postgres' && workerExpected) {
+      overall = 'ready';
     }
-    if (rt && rt.state === 'failed') overall = 'failed';
   }
-
-  const workerExpected = rt?.supervisor.workerExpected ?? false;
-  const workerRunning = rt?.supervisor.state === 'running';
 
   const summary = {
     install_target: schedulerTarget,
     scheduler_registered: schedulerRegistered,
+    scheduler_enabled: schedulerEnabled,
+    operator_paused: !!readAutopilotPauseRequest(),
     scheduler_running: schedulerRunning,
     scheduler_last_result: schedulerLastResult,
     scheduler_last_started_at: schedulerLastStartedAt,
@@ -1416,13 +1718,20 @@ async function showStatus(json: boolean) {
     repo_path: rt?.repoPath ?? manifest?.repoPath,
     last_log: lastLine,
     last_error: rt?.supervisor.lastError ?? rt?.database.lastError,
-    overall: overall,
+    runtime_ready: runtimeReady,
+    database_ready: databaseReady,
+    worker_ready: workerReady,
+    queue_ready: queueReady,
+    business_ready: business.state,
+    business_reasons: business.reasons,
+    last_successful_cycle_at: business.last_successful_cycle_at,
+    overall,
   };
 
   if (json) {
     console.log(JSON.stringify(summary, null, 2));
   } else {
-    console.log(`Autopilot: ${overall}`);
+    console.log(`Autopilot: ${summary.overall}`);
     console.log(`  Target: ${schedulerTarget}`);
     console.log(`  Scheduler: ${schedulerRegistered ? 'registered' : 'not registered'}${schedulerRunning ? ', running' : ''}`);
     if (rt) {
@@ -1432,6 +1741,7 @@ async function showStatus(json: boolean) {
       console.log(`  Worker: expected=${workerExpected}, running=${workerRunning}`);
       console.log(`  Database: ${rt.database.state}`);
     }
+    console.log(`  Business: ${business.state}${business.reasons.length ? ` (${business.reasons.join(', ')})` : ''}`);
     if (lastLine) console.log(`Last log: ${lastLine}`);
   }
 }
