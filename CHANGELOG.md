@@ -14019,7 +14019,7 @@ Frontmatter validation surface (the 7 codes shipped):
 | `MISSING_CLOSE` | No closing `---` before first heading | Yes ... inserts `---` |
 | `YAML_PARSE` | YAML failed to parse | Sometimes |
 | `SLUG_MISMATCH` | Frontmatter `slug:` differs from path-derived slug | Yes ... removes field |
-| `NULL_BYTES` | Binary corruption (` `) | Yes ... strips bytes |
+| `NULL_BYTES` | Binary corruption (`NUL byte`) | Yes ... strips bytes |
 | `NESTED_QUOTES` | `title: "outer "inner" outer"` shape | Yes ... switches outer to single quotes |
 | `EMPTY_FRONTMATTER` | Open + close present, nothing meaningful between | No (human review) |
 
