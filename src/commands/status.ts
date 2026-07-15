@@ -11,7 +11,7 @@
  *                  last TARGETED run (any autopilot-* job). Reflects
  *                  v0.36.4.0's health-aware autopilot (healthy brains run
  *                  targeted handlers most ticks, full cycle every ~60min).
- *   - Locks      — active rows in gbrain_cycle_locks
+ *   - Locks      — active rows in voltmind_cycle_locks
  *   - Workers    — supervisor health from the audit JSONL
  *   - Queue      — live minion_jobs counts BY status (NO time window —
  *                  old stuck jobs are exactly what status surfaces)
@@ -208,7 +208,7 @@ async function buildLocks(engine: BrainEngine): Promise<LockRow[]> {
   try {
     const rows = await engine.executeRaw<Row>(
       `SELECT id, holder_pid, holder_host, acquired_at, ttl_expires_at
-         FROM gbrain_cycle_locks
+         FROM voltmind_cycle_locks
         WHERE ttl_expires_at > NOW()
         ORDER BY acquired_at`,
     );

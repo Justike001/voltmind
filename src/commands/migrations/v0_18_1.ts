@@ -62,7 +62,8 @@ export const v0_18_1: Migration = {
       '`voltmind apply-migrations` runs. `voltmind doctor` now scans every ' +
       'public table (no hardcoded allowlist) and exits 1 on gaps. For tables ' +
       'that should stay anon-readable on purpose, operators set a ' +
-      '`GBRAIN:RLS_EXEMPT reason=<why>` comment via psql. See ' +
+      '`VOLTMIND:RLS_EXEMPT reason=<why>` comment via psql (legacy ' +
+      '`GBRAIN:RLS_EXEMPT` comments remain valid). See ' +
       'docs/guides/rls-and-you.md.',
   },
   orchestrator,

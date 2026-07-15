@@ -4840,6 +4840,171 @@ export const MIGRATIONS: Migration[] = [
       `,
     },
   },
+  {
+    version: 106,
+    name: 'voltmind_naming_compatibility_layer',
+    // Keep the old identifiers reachable while switching the application to
+    // VoltMind-owned names. A hard rename of the stable-ID column would make
+    // crash-replay rows written by a pre-upgrade worker unreadable; a hard
+    // rename of the lock table would let old and new workers acquire separate
+    // locks. The view and dual-column trigger deliberately preserve one
+    // physical lock state and one canonical UUID during the rollback window.
+    idempotent: true,
+    sql: `
+      DO $$
+      DECLARE legacy_kind "char";
+      BEGIN
+        SELECT c.relkind INTO legacy_kind
+          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'gbrain_cycle_locks';
+
+        IF legacy_kind IN ('r', 'p') THEN
+          IF to_regclass('public.voltmind_cycle_locks') IS NOT NULL THEN
+            INSERT INTO public.voltmind_cycle_locks
+              (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
+            SELECT id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at
+              FROM public.gbrain_cycle_locks
+            ON CONFLICT (id) DO UPDATE SET
+              holder_pid = EXCLUDED.holder_pid,
+              holder_host = EXCLUDED.holder_host,
+              acquired_at = EXCLUDED.acquired_at,
+              ttl_expires_at = EXCLUDED.ttl_expires_at,
+              last_refreshed_at = EXCLUDED.last_refreshed_at;
+            DROP TABLE public.gbrain_cycle_locks;
+          ELSE
+            ALTER TABLE public.gbrain_cycle_locks RENAME TO voltmind_cycle_locks;
+          END IF;
+        END IF;
+
+        IF to_regclass('public.voltmind_cycle_locks') IS NULL THEN
+          RAISE EXCEPTION 'Cannot migrate lock names: neither legacy nor VoltMind lock table exists';
+        END IF;
+      END $$;
+
+      ALTER TABLE subagent_tool_executions
+        ADD COLUMN IF NOT EXISTS voltmind_tool_use_id UUID;
+      UPDATE subagent_tool_executions
+         SET voltmind_tool_use_id = gbrain_tool_use_id
+       WHERE voltmind_tool_use_id IS NULL
+         AND gbrain_tool_use_id IS NOT NULL;
+
+      CREATE OR REPLACE FUNCTION sync_voltmind_tool_use_id() RETURNS trigger
+      LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.gbrain_tool_use_id IS NOT NULL
+           AND NEW.voltmind_tool_use_id IS NOT NULL
+           AND NEW.gbrain_tool_use_id IS DISTINCT FROM NEW.voltmind_tool_use_id THEN
+          RAISE EXCEPTION 'gbrain_tool_use_id and voltmind_tool_use_id must match';
+        END IF;
+        NEW.voltmind_tool_use_id := COALESCE(NEW.voltmind_tool_use_id, NEW.gbrain_tool_use_id);
+        NEW.gbrain_tool_use_id := COALESCE(NEW.gbrain_tool_use_id, NEW.voltmind_tool_use_id);
+        RETURN NEW;
+      END;
+      $$;
+      DROP TRIGGER IF EXISTS sync_voltmind_tool_use_id_trg ON subagent_tool_executions;
+      CREATE TRIGGER sync_voltmind_tool_use_id_trg
+        BEFORE INSERT OR UPDATE OF gbrain_tool_use_id, voltmind_tool_use_id
+        ON subagent_tool_executions
+        FOR EACH ROW EXECUTE FUNCTION sync_voltmind_tool_use_id();
+
+      DO $$
+      DECLARE legacy_kind "char";
+      BEGIN
+        SELECT c.relkind INTO legacy_kind
+          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'gbrain_cycle_locks';
+        IF legacy_kind IS NULL THEN
+          CREATE VIEW public.gbrain_cycle_locks
+            WITH (security_invoker = true) AS
+            SELECT id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at
+              FROM public.voltmind_cycle_locks;
+        ELSIF legacy_kind <> 'v' THEN
+          RAISE EXCEPTION 'Cannot create compatibility view: gbrain_cycle_locks is not a view';
+        END IF;
+      END $$;
+    `,
+    verify: async (engine) => {
+      const rows = await engine.executeRaw<{ table_name: string }>(
+        `SELECT table_name FROM information_schema.tables
+          WHERE table_schema = 'public'
+            AND table_name IN ('voltmind_cycle_locks', 'gbrain_cycle_locks')`,
+      );
+      const columns = await engine.executeRaw<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_name = 'subagent_tool_executions'
+            AND column_name IN ('gbrain_tool_use_id', 'voltmind_tool_use_id')`,
+      );
+      return rows.length === 2 && columns.length === 2;
+    },
+  },
+  {
+    version: 107,
+    name: 'voltmind_naming_finalize_cleanup',
+    // v106 deliberately installed a rollback bridge. Once the new CLI is
+    // deployed and the operator has verified the bridge, v107 removes every
+    // legacy runtime object so fresh and upgraded Postgres brains converge on
+    // the same VoltMind-only schema. Historical migration bodies retain their
+    // old spelling for auditability; this migration defines the live state.
+    idempotent: true,
+    sql: `
+      DO $$
+      DECLARE legacy_kind "char";
+      BEGIN
+        SELECT c.relkind INTO legacy_kind
+          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = 'gbrain_cycle_locks';
+        IF legacy_kind = 'v' THEN
+          DROP VIEW public.gbrain_cycle_locks;
+        ELSIF legacy_kind IN ('r', 'p') THEN
+          RAISE EXCEPTION 'Refusing finalization: gbrain_cycle_locks is still a physical table';
+        END IF;
+      END $$;
+
+      DROP TRIGGER IF EXISTS sync_voltmind_tool_use_id_trg ON subagent_tool_executions;
+      DROP FUNCTION IF EXISTS sync_voltmind_tool_use_id();
+      ALTER TABLE subagent_tool_executions
+        DROP COLUMN IF EXISTS gbrain_tool_use_id;
+
+      DO $$
+      DECLARE r record;
+      DECLARE normalized TEXT;
+      BEGIN
+        FOR r IN
+          SELECT n.nspname AS schema_name, c.relname AS table_name, d.description
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_description d ON d.objoid = c.oid AND d.objsubid = 0
+           WHERE n.nspname = 'public'
+             AND c.relkind = 'r'
+             AND d.description ~ '^GBRAIN:RLS_EXEMPT\\s+reason='
+        LOOP
+          normalized := regexp_replace(r.description, '^GBRAIN:RLS_EXEMPT', 'VOLTMIND:RLS_EXEMPT');
+          EXECUTE format('COMMENT ON TABLE %I.%I IS %L', r.schema_name, r.table_name, normalized);
+        END LOOP;
+      END $$;
+    `,
+    verify: async (engine) => {
+      const oldObjects = await engine.executeRaw<{ relname: string }>(
+        `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relname = 'gbrain_cycle_locks'`,
+      );
+      const oldColumns = await engine.executeRaw<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_name = 'subagent_tool_executions' AND column_name = 'gbrain_tool_use_id'`,
+      );
+      const newObjects = await engine.executeRaw<{ relname: string; relkind: string }>(
+        `SELECT c.relname, c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relname = 'voltmind_cycle_locks'`,
+      );
+      const newColumns = await engine.executeRaw<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_name = 'subagent_tool_executions' AND column_name = 'voltmind_tool_use_id'`,
+      );
+      return oldObjects.length === 0 && oldColumns.length === 0
+        && newObjects.length === 1 && newObjects[0].relkind === 'r'
+        && newColumns.length === 1;
+    },
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS.length > 0

@@ -505,11 +505,11 @@ CREATE TABLE IF NOT EXISTS subagent_tool_executions (
   schema_version      INTEGER     NOT NULL DEFAULT 1,
   provider_id         TEXT,
   -- v0.38 D11: voltmind-owned stable IDs (ordinal assigned at first observation;
-  -- gbrain_tool_use_id is uuid v7). Reconciliation on crash-replay uses
+  -- voltmind_tool_use_id is uuid v7). Reconciliation on crash-replay uses
   -- (job_id, message_idx, ordinal) as the unique key. Legacy rows (pre-v82)
   -- have ordinal=NULL and resolve via the read-time D5 shim.
   ordinal             INTEGER,
-  gbrain_tool_use_id  UUID,
+  voltmind_tool_use_id UUID,
   started_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   ended_at            TIMESTAMPTZ,
   CONSTRAINT uniq_subagent_tools_use_id UNIQUE (job_id, tool_use_id),
@@ -534,7 +534,7 @@ CREATE INDEX IF NOT EXISTS idx_rate_leases_key_expires ON subagent_rate_leases (
 -- PGLite is single-writer, so the lock doubly protects: the DB-level
 -- row + the file lock at ~/.voltmind/cycle.lock prevent concurrent
 -- CLI invocations from racing.
-CREATE TABLE IF NOT EXISTS gbrain_cycle_locks (
+CREATE TABLE IF NOT EXISTS voltmind_cycle_locks (
   id                 TEXT        PRIMARY KEY,
   holder_pid         INT         NOT NULL,
   holder_host        TEXT,
@@ -546,7 +546,7 @@ CREATE TABLE IF NOT EXISTS gbrain_cycle_locks (
   -- that are actively refreshing.
   last_refreshed_at  TIMESTAMPTZ
 );
-CREATE INDEX IF NOT EXISTS idx_cycle_locks_ttl ON gbrain_cycle_locks(ttl_expires_at);
+CREATE INDEX IF NOT EXISTS idx_voltmind_cycle_locks_ttl ON voltmind_cycle_locks(ttl_expires_at);
 
 -- Eval capture (v0.25.0). PGLite ignores RLS — see src/schema.sql for the
 -- cross-engine spec.

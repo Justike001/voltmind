@@ -28,7 +28,7 @@ const PRESERVE_TABLES: ReadonlySet<string> = new Set([
   // Key-value config; empty in a benchmark run, but config is infrastructure.
   'config',
   // Coordination locks; not content.
-  'gbrain_cycle_locks',
+  'voltmind_cycle_locks',
   'subagent_rate_leases',
 ]);
 

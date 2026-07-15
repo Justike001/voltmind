@@ -1936,7 +1936,7 @@ export function checkAutopilotLockScope(): Check {
 /**
  * v0.41.6.0 D3 — stale_locks doctor check.
  *
- * Surfaces every row in `gbrain_cycle_locks` whose `ttl_expires_at < NOW()`.
+ * Surfaces every row in `voltmind_cycle_locks` whose `ttl_expires_at < NOW()`.
  * The TTL is the canonical staleness signal already trusted by
  * tryAcquireDbLock's UPDATE-on-conflict SQL — when TTL is in the past,
  * the next acquire attempt will sweep the row anyway. Doctor's job is to
@@ -1977,9 +1977,9 @@ export async function checkStaleLocks(engine: BrainEngine): Promise<Check> {
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // Pre-v0.30 brains may not have the gbrain_cycle_locks table yet.
+    // Pre-v0.30 brains may not have the voltmind_cycle_locks table yet.
     if (/relation .* does not exist|no such table/i.test(msg)) {
-      return { name: 'stale_locks', status: 'ok', message: 'gbrain_cycle_locks table not yet provisioned (skipping)' };
+      return { name: 'stale_locks', status: 'ok', message: 'voltmind_cycle_locks table not yet provisioned (skipping)' };
     }
     return { name: 'stale_locks', status: 'warn', message: `Check failed: ${msg}` };
   }
@@ -3629,7 +3629,9 @@ export async function buildChecks(
   // materialized views the anon key needs), they can exempt it with a
   // Postgres COMMENT whose value starts with:
   //
-  //     GBRAIN:RLS_EXEMPT reason=<non-empty reason>
+  //     VOLTMIND:RLS_EXEMPT reason=<non-empty reason>
+  //
+  // GBRAIN:RLS_EXEMPT remains accepted for existing Supabase databases.
   //
   // The comment lives in pg_description, survives pg_dump, is visible in
   // schema diffs, and requires raw SQL in psql to set — there is no
@@ -3662,7 +3664,7 @@ export async function buildChecks(
         FROM pg_tables t
         WHERE t.schemaname = 'public'
       `;
-      const EXEMPT_RE = /^GBRAIN:RLS_EXEMPT\s+reason=\S.{3,}/;
+      const EXEMPT_RE = /^(?:VOLTMIND|GBRAIN):RLS_EXEMPT\s+reason=\S.{3,}/;
       const exempt: string[] = [];
       const gaps: string[] = [];
       for (const t of tables as Array<any>) {
@@ -3701,7 +3703,7 @@ export async function buildChecks(
           message:
             `${gaps.length} table(s) WITHOUT Row Level Security: ${names}.${exemptInfo} ` +
             `Fix: ${fixes} ` +
-            `If a table should stay readable by the anon key on purpose, see docs/guides/rls-and-you.md for the GBRAIN:RLS_EXEMPT comment escape hatch.`,
+            `If a table should stay readable by the anon key on purpose, see docs/guides/rls-and-you.md for the VOLTMIND:RLS_EXEMPT comment escape hatch.`,
         });
       }
     } catch {
@@ -5551,7 +5553,7 @@ export async function buildChecks(
     // 5M — autopilot_lock_scope (PID-safe hint per codex CF11)
     progress.heartbeat('autopilot_lock_scope');
     checks.push(checkAutopilotLockScope());
-    // v0.41.6.0 D3 — stale_locks (gbrain_cycle_locks rows with ttl_expires_at < NOW())
+    // v0.41.6.0 D3 — stale_locks (voltmind_cycle_locks rows with ttl_expires_at < NOW())
     progress.heartbeat('stale_locks');
     checks.push(await checkStaleLocks(engine));
     // v0.38 — cycle_phase_scope (informational; no DB cost)

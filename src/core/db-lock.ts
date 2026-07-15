@@ -1,7 +1,7 @@
 /**
  * Generic DB-backed lock primitive.
  *
- * Reuses the gbrain_cycle_locks table (id PK + holder_pid + ttl_expires_at)
+ * Reuses the voltmind_cycle_locks table (id PK + holder_pid + ttl_expires_at)
  * with a parameterized lock id. Both `voltmind-cycle` (the broad cycle lock)
  * and `voltmind-sync` (performSync's writer lock) live here.
  *
@@ -87,7 +87,7 @@ export async function tryAcquireDbLock(
     // acquired_at) to identify wedged-but-alive holders without stealing
     // healthy long-running holders that are actively refreshing.
     const rows: Array<{ id: string }> = await sql`
-      INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
+      INSERT INTO voltmind_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
       VALUES (${lockId}, ${pid}, ${host}, NOW(), NOW() + ${ttl}::interval, NOW())
       ON CONFLICT (id) DO UPDATE
         SET holder_pid = ${pid},
@@ -95,13 +95,13 @@ export async function tryAcquireDbLock(
             acquired_at = NOW(),
             ttl_expires_at = NOW() + ${ttl}::interval,
             last_refreshed_at = NOW()
-        WHERE gbrain_cycle_locks.ttl_expires_at < NOW()
+        WHERE voltmind_cycle_locks.ttl_expires_at < NOW()
       RETURNING id
     `;
     if (rows.length === 0) return null;
     const deregister = registerCleanup(`db-lock:${lockId}`, async () => {
       await sql`
-        DELETE FROM gbrain_cycle_locks
+        DELETE FROM voltmind_cycle_locks
         WHERE id = ${lockId} AND holder_pid = ${pid}
       `;
     });
@@ -112,7 +112,7 @@ export async function tryAcquireDbLock(
         // Without last_refreshed_at, --max-age would steal healthy locks
         // whose acquired_at is old but whose holder is alive and refreshing.
         await sql`
-          UPDATE gbrain_cycle_locks
+          UPDATE voltmind_cycle_locks
             SET ttl_expires_at = NOW() + ${ttl}::interval,
                 last_refreshed_at = NOW()
           WHERE id = ${lockId} AND holder_pid = ${pid}
@@ -121,7 +121,7 @@ export async function tryAcquireDbLock(
       release: async () => {
         deregister();
         await sql`
-          DELETE FROM gbrain_cycle_locks
+          DELETE FROM voltmind_cycle_locks
           WHERE id = ${lockId} AND holder_pid = ${pid}
         `;
       },
@@ -132,7 +132,7 @@ export async function tryAcquireDbLock(
     const db = maybePGLite.db;
     const ttl = `${ttlMinutes} minutes`;
     const { rows } = await db.query(
-      `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
+      `INSERT INTO voltmind_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
        VALUES ($1, $2, $3, NOW(), NOW() + $4::interval, NOW())
        ON CONFLICT (id) DO UPDATE
          SET holder_pid = $2,
@@ -140,14 +140,14 @@ export async function tryAcquireDbLock(
              acquired_at = NOW(),
              ttl_expires_at = NOW() + $4::interval,
              last_refreshed_at = NOW()
-         WHERE gbrain_cycle_locks.ttl_expires_at < NOW()
+         WHERE voltmind_cycle_locks.ttl_expires_at < NOW()
        RETURNING id`,
       [lockId, pid, host, ttl],
     );
     if (rows.length === 0) return null;
     const deregister = registerCleanup(`db-lock:${lockId}`, async () => {
       await db.query(
-        `DELETE FROM gbrain_cycle_locks WHERE id = $1 AND holder_pid = $2`,
+        `DELETE FROM voltmind_cycle_locks WHERE id = $1 AND holder_pid = $2`,
         [lockId, pid],
       );
     });
@@ -155,7 +155,7 @@ export async function tryAcquireDbLock(
       id: lockId,
       refresh: async () => {
         await db.query(
-          `UPDATE gbrain_cycle_locks
+          `UPDATE voltmind_cycle_locks
               SET ttl_expires_at = NOW() + $1::interval,
                   last_refreshed_at = NOW()
             WHERE id = $2 AND holder_pid = $3`,
@@ -165,7 +165,7 @@ export async function tryAcquireDbLock(
       release: async () => {
         deregister();
         await db.query(
-          `DELETE FROM gbrain_cycle_locks WHERE id = $1 AND holder_pid = $2`,
+          `DELETE FROM voltmind_cycle_locks WHERE id = $1 AND holder_pid = $2`,
           [lockId, pid],
         );
       },
@@ -230,14 +230,14 @@ export async function inspectLock(engine: BrainEngine, lockId: string): Promise<
     const sql = maybePG.sql as any;
     const rows = await sql`
       SELECT id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at
-        FROM gbrain_cycle_locks
+        FROM voltmind_cycle_locks
        WHERE id = ${lockId}
     `;
     row = rows[0];
   } else if (engine.kind === 'pglite' && maybePGLite.db) {
     const { rows } = await maybePGLite.db.query(
       `SELECT id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at
-         FROM gbrain_cycle_locks
+         FROM voltmind_cycle_locks
         WHERE id = $1`,
       [lockId],
     );
@@ -292,14 +292,14 @@ export async function listStaleLocks(engine: BrainEngine): Promise<LockSnapshot[
     const sql = maybePG.sql as any;
     rows = await sql`
       SELECT id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at
-        FROM gbrain_cycle_locks
+        FROM voltmind_cycle_locks
        WHERE ttl_expires_at < NOW()
        ORDER BY acquired_at
     `;
   } else if (engine.kind === 'pglite' && maybePGLite.db) {
     const result = await maybePGLite.db.query(
       `SELECT id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at
-         FROM gbrain_cycle_locks
+         FROM voltmind_cycle_locks
         WHERE ttl_expires_at < NOW()
         ORDER BY acquired_at`,
     );
@@ -358,7 +358,7 @@ export async function deleteLockRow(
   if (engine.kind === 'postgres' && maybePG.sql) {
     const sql = maybePG.sql as any;
     const rows: Array<{ id: string }> = await sql`
-      DELETE FROM gbrain_cycle_locks
+      DELETE FROM voltmind_cycle_locks
        WHERE id = ${lockId} AND holder_pid = ${holderPid}
       RETURNING id
     `;
@@ -366,7 +366,7 @@ export async function deleteLockRow(
   }
   if (engine.kind === 'pglite' && maybePGLite.db) {
     const { rows } = await maybePGLite.db.query(
-      `DELETE FROM gbrain_cycle_locks
+      `DELETE FROM voltmind_cycle_locks
         WHERE id = $1 AND holder_pid = $2
        RETURNING id`,
       [lockId, holderPid],
@@ -397,7 +397,7 @@ export async function deleteLockRowIfOld(
   if (engine.kind === 'postgres' && maybePG.sql) {
     const sql = maybePG.sql as any;
     const rows: Array<{ id: string }> = await sql`
-      DELETE FROM gbrain_cycle_locks
+      DELETE FROM voltmind_cycle_locks
        WHERE id = ${lockId}
          AND holder_pid = ${holderPid}
          AND acquired_at <= NOW() - ${minAgeSeconds} * INTERVAL '1 second'
@@ -407,7 +407,7 @@ export async function deleteLockRowIfOld(
   }
   if (engine.kind === 'pglite' && maybePGLite.db) {
     const { rows } = await maybePGLite.db.query(
-      `DELETE FROM gbrain_cycle_locks
+      `DELETE FROM voltmind_cycle_locks
         WHERE id = $1
           AND holder_pid = $2
           AND acquired_at <= NOW() - $3 * INTERVAL '1 second'
@@ -483,7 +483,7 @@ export async function recoverLocalDeadDbLock(
  * verify-and-delete for `voltmind sync --break-lock --max-age <seconds>`.
  *
  * Runs:
- *   DELETE FROM gbrain_cycle_locks
+ *   DELETE FROM voltmind_cycle_locks
  *    WHERE id = $1
  *      AND holder_pid = $2
  *      AND last_refreshed_at < NOW() - $3 * INTERVAL '1 second'
@@ -530,7 +530,7 @@ export async function deleteLockRowIfStale(
   if (engine.kind === 'postgres' && maybePG.sql) {
     const sql = maybePG.sql as any;
     const rows: Array<{ id: string; last_refreshed_at: Date | string | null }> = await sql`
-      DELETE FROM gbrain_cycle_locks
+      DELETE FROM voltmind_cycle_locks
        WHERE id = ${lockId}
          AND holder_pid = ${holderPid}
          AND last_refreshed_at IS NOT NULL
@@ -544,7 +544,7 @@ export async function deleteLockRowIfStale(
   }
   if (engine.kind === 'pglite' && maybePGLite.db) {
     const { rows } = await maybePGLite.db.query(
-      `DELETE FROM gbrain_cycle_locks
+      `DELETE FROM voltmind_cycle_locks
         WHERE id = $1
           AND holder_pid = $2
           AND last_refreshed_at IS NOT NULL
@@ -720,7 +720,7 @@ async function engineSelectOne(engine: BrainEngine): Promise<void> {
  * re-elects.
  *
  * The codex pass-3 #8 + #9 audit confirmed this should reuse the
- * existing `gbrain_cycle_locks` table (which `tryAcquireDbLock` already
+ * existing `voltmind_cycle_locks` table (which `tryAcquireDbLock` already
  * wraps for both engines) rather than build a parallel new primitive.
  *
  * Semantics:
