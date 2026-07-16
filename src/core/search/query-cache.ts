@@ -179,6 +179,39 @@ export class SemanticQueryCache {
       const meta = safeJsonParse<HybridSearchMeta | undefined>(row.meta, undefined);
       const similarity = 1 - row.distance;
 
+      // Soft-deleted pages can remain inside a cache row until its TTL or
+      // generation gate expires. Cache hits bypass normal search SQL, so
+      // re-check page visibility before returning persisted results.
+      const pageIds = results
+        .map((result) => result.page_id)
+        .filter((id): id is number => Number.isInteger(id));
+      if (pageIds.length > 0) {
+        const pageRows = await this.engine.executeRaw<{ id: number; deleted_at: string | null }>(
+          `SELECT id, deleted_at FROM pages
+           WHERE id = ANY($1::int[])`,
+          [pageIds],
+        );
+        // Test doubles and pre-page migration brains may not have a matching
+        // page row; preserve those cache results. Only an explicit
+        // deleted_at value is authoritative evidence that a result is hidden.
+        const deletedIds = new Set(
+          pageRows
+            .filter((page) => page.deleted_at != null)
+            .map((page) => Number(page.id)),
+        );
+        const visibleResults = results.filter((result) => !deletedIds.has(result.page_id));
+        if (visibleResults.length === 0 && pageRows.length > 0) return { hit: false };
+        if (visibleResults.length !== results.length) {
+          return {
+            hit: true,
+            results: visibleResults,
+            meta,
+            similarity,
+            ageSeconds: row.age_seconds,
+          };
+        }
+      }
+
       // Bump hit_count / last_hit_at \u2014 best-effort.
       void this.bumpHit(row.id).catch(() => { /* swallow */ });
 

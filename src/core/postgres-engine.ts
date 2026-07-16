@@ -1456,7 +1456,8 @@ export class PostgresEngine implements BrainEngine {
         FROM content_chunks cc
         JOIN pages p ON p.id = cc.page_id
         JOIN sources s ON s.id = p.source_id
-        WHERE cc.search_vector @@ websearch_to_tsquery('english', $1)
+        WHERE p.deleted_at IS NULL
+          AND cc.search_vector @@ websearch_to_tsquery('english', $1)
           ${typeClause}
           ${typesClause}
           ${excludeSlugsClause}
@@ -1599,7 +1600,8 @@ export class PostgresEngine implements BrainEngine {
       FROM content_chunks cc
       JOIN pages p ON p.id = cc.page_id
       JOIN sources s ON s.id = p.source_id
-      WHERE cc.search_vector @@ websearch_to_tsquery('english', $1)
+      WHERE p.deleted_at IS NULL
+        AND cc.search_vector @@ websearch_to_tsquery('english', $1)
         ${typeClause}
         ${typesClause}
         ${excludeSlugsClause}
@@ -1748,7 +1750,8 @@ export class PostgresEngine implements BrainEngine {
         FROM content_chunks cc
         JOIN pages p ON p.id = cc.page_id
         JOIN sources s ON s.id = p.source_id
-        WHERE cc.${col} IS NOT NULL ${modalityFilter}
+        WHERE p.deleted_at IS NULL
+          AND cc.${col} IS NOT NULL ${modalityFilter}
           ${detailLow ? `AND cc.chunk_source = 'compiled_truth'` : ''}
           ${typeClause}
           ${typesClause}
