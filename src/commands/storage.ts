@@ -219,7 +219,13 @@ export async function getStorageStatus(
   // Single recursive walk of the brain repo (Issue #14). Replaces per-page
   // existsSync+statSync — was ~400K syscalls on 200K-page brains, now ~one
   // per directory + one stat per .md file, plus O(1) lookups below.
-  const fileMap: Map<string, DiskFileEntry> = repoPath ? walkBrainRepo(repoPath) : new Map();
+  const diskFiles = repoPath ? walkBrainRepo(repoPath) : new Map<string, DiskFileEntry>();
+  // Windows paths are case-insensitive, while database slugs are normalized
+  // lowercase. Preserve exact casing on case-sensitive platforms, but avoid
+  // reporting README.md as missing for a `readme` slug on Windows.
+  const fileMap: Map<string, DiskFileEntry> = process.platform === 'win32'
+    ? new Map(Array.from(diskFiles, ([slug, entry]) => [slug.toLowerCase(), entry]))
+    : diskFiles;
 
   const pages = await engine.listPages({ limit: 1_000_000 });
 
@@ -227,7 +233,7 @@ export async function getStorageStatus(
     const tier = config ? getStorageTier(page.slug, config) : 'unspecified';
     pagesByTier[tier]++;
     if (!repoPath) continue;
-    const entry = fileMap.get(page.slug);
+    const entry = fileMap.get(process.platform === 'win32' ? page.slug.toLowerCase() : page.slug);
     if (entry) {
       diskUsageByTier[tier] += entry.size;
     } else if (config && tier === 'db_only') {

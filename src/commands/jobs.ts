@@ -1017,7 +1017,7 @@ Usage:
         process.exit(1);
       }
 
-      const { resolveGbrainCliPath } = await import('./autopilot.ts');
+      const { resolveVoltMindCliPath } = await import('./autopilot.ts');
 
       const concurrency = parseInt(parseFlag(args, '--concurrency') ?? '2', 10);
       const queueName = parseFlag(args, '--queue') ?? 'default';
@@ -1049,7 +1049,7 @@ Usage:
       // the supervisor, so the watchdog is on by default here.
       const maxRssMb = parseMaxRssFlag(args) ?? 2048;
 
-      const cliPath = parseFlag(args, '--cli-path') ?? resolveGbrainCliPath();
+      const cliPath = parseFlag(args, '--cli-path') ?? resolveVoltMindCliPath();
 
       // --detach: fork a background supervisor, print PID payload, exit 0.
       // Implementation: re-exec the same CLI as a detached child without --detach,

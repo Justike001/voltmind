@@ -24,7 +24,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { copyArtifacts, walkSourceDir } from './copy.ts';
-import { findGbrainRoot, loadBundleManifest } from './bundle.ts';
+import { findVoltMindRoot, loadBundleManifest } from './bundle.ts';
 import { findResolverFile } from '../resolver-filenames.ts';
 
 const MANAGED_BEGIN = '<!-- voltmind:skillpack:begin -->';
@@ -306,10 +306,10 @@ export function runMigrateFence(opts: MigrateFenceOptions): MigrateFenceResult {
   };
 }
 
-// Convenience: auto-discover voltmindRoot via findGbrainRoot when caller
+// Convenience: auto-discover voltmindRoot via findVoltMindRoot when caller
 // doesn't pass one. Used by the CLI dispatch.
 export function runMigrateFenceAuto(opts: MigrateFenceOptions): MigrateFenceResult {
   if (opts.voltmindRoot) return runMigrateFence(opts);
-  const root = findGbrainRoot();
+  const root = findVoltMindRoot();
   return runMigrateFence({ ...opts, voltmindRoot: root ?? undefined });
 }

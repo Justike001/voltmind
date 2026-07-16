@@ -22,7 +22,7 @@ import {
   loadRoutingFixtures,
   runRoutingEval,
 } from './routing-eval.ts';
-import { findGbrainRoot, loadBundleManifest, bundledSkillSlugs } from './skillpack/bundle.ts';
+import { findVoltMindRoot, loadBundleManifest, bundledSkillSlugs } from './skillpack/bundle.ts';
 import { diffSkill } from './skillpack/installer.ts';
 import { getDefaultRegistry, type ResolverContext } from './resolvers/index.ts';
 import { urlReachableResolver } from './resolvers/builtin/url-reachable.ts';
@@ -46,7 +46,7 @@ function resolverRegistry() {
 }
 
 function repoRoot(): string {
-  return findGbrainRoot(process.cwd()) ?? process.cwd();
+  return findVoltMindRoot(process.cwd()) ?? process.cwd();
 }
 
 /** Resolve an existing regular file below the server's repository root. */

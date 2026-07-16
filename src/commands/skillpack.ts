@@ -19,7 +19,7 @@ import { isAbsolute, resolve as resolvePath, join } from 'path';
 
 import {
   bundledSkillSlugs,
-  findGbrainRoot,
+  findVoltMindRoot,
   loadBundleManifest,
   BundleError,
 } from '../core/skillpack/bundle.ts';
@@ -171,8 +171,8 @@ function resolveAbs(p: string): string {
   return isAbsolute(p) ? p : resolvePath(process.cwd(), p);
 }
 
-function findGbrainOrDie(): string {
-  const root = findGbrainRoot();
+function findVoltMindOrDie(): string {
+  const root = findVoltMindRoot();
   if (!root) {
     console.error('Error: could not find voltmind repo root.');
     process.exit(2);
@@ -201,7 +201,7 @@ async function cmdList(args: string[]): Promise<void> {
     process.exit(0);
   }
   const json = args.includes('--json');
-  const voltmindRoot = findGbrainOrDie();
+  const voltmindRoot = findVoltMindOrDie();
   let manifest;
   try {
     manifest = loadBundleManifest(voltmindRoot);
@@ -292,7 +292,7 @@ async function cmdScaffold(args: string[]): Promise<void> {
 
   if (!all && name !== null && !isThirdPartyShape) {
     // Check if the kebab name matches a bundled-skill slug.
-    const voltmindRoot = findGbrainRoot();
+    const voltmindRoot = findVoltMindRoot();
     if (voltmindRoot) {
       try {
         const manifest = loadBundleManifest(voltmindRoot);
@@ -325,7 +325,7 @@ async function cmdScaffold(args: string[]): Promise<void> {
     return;
   }
 
-  const voltmindRoot = findGbrainOrDie();
+  const voltmindRoot = findVoltMindOrDie();
   try {
     const result = runScaffold({
       voltmindRoot,
@@ -525,7 +525,7 @@ async function cmdReference(args: string[]): Promise<void> {
     process.exit(2);
   }
 
-  const voltmindRoot = findGbrainOrDie();
+  const voltmindRoot = findVoltMindOrDie();
   const targetWorkspace = resolveWorkspace({ workspace });
 
   try {
@@ -668,7 +668,7 @@ async function cmdMigrateFence(args: string[]): Promise<void> {
       workspace = a.slice('--workspace='.length) || null;
     }
   }
-  const voltmindRoot = findGbrainOrDie();
+  const voltmindRoot = findVoltMindOrDie();
   const targetWorkspace = resolveWorkspace({ workspace });
   const result = runMigrateFence({ targetWorkspace, voltmindRoot, dryRun });
   if (json) console.log(JSON.stringify(result, null, 2));
@@ -1290,7 +1290,7 @@ async function cmdHarvest(args: string[]): Promise<void> {
     console.error('Error: pass --from <host-repo-root>.');
     process.exit(2);
   }
-  const voltmindRoot = findGbrainOrDie();
+  const voltmindRoot = findVoltMindOrDie();
 
   try {
     const result = runHarvest({
@@ -1362,7 +1362,7 @@ async function cmdDiff(args: string[]): Promise<void> {
     console.error('Error: pass a skill name.');
     process.exit(2);
   }
-  const voltmindRoot = findGbrainOrDie();
+  const voltmindRoot = findVoltMindOrDie();
   const targetSkillsDir = skillsDir
     ? resolveAbs(skillsDir)
     : join(resolveWorkspace({ workspace }), 'skills');

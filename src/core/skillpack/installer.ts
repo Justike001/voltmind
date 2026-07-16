@@ -79,7 +79,7 @@ export interface InstallOptions {
   targetWorkspace: string;
   /** Absolute path to the target skills directory. */
   targetSkillsDir: string;
-  /** Gbrain repo root (source). Defaults to the one found by findGbrainRoot. */
+  /** VoltMind repo root (source). */
   voltmindRoot: string;
   /** Scope to a single skill slug, or `null` for --all. */
   skillSlug: string | null;
@@ -650,7 +650,7 @@ export interface UninstallOptions {
   targetWorkspace: string;
   /** Absolute path to the target skills directory. */
   targetSkillsDir: string;
-  /** Gbrain repo root (source-of-truth bundle). */
+  /** VoltMind repo root (source-of-truth bundle). */
   voltmindRoot: string;
   /** Required: a single skill slug. v0.25.1 has no --all uninstall. */
   skillSlug: string;

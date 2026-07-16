@@ -8,7 +8,7 @@
  */
 
 import { existsSync, readFileSync, statSync, readdirSync } from 'fs';
-import { join, dirname, isAbsolute, resolve } from 'path';
+import { join, dirname, isAbsolute, resolve, posix as posixPath } from 'path';
 
 import { parseMarkdown } from '../markdown.ts';
 
@@ -28,7 +28,7 @@ export class BundleError extends Error {
       | 'manifest_not_found'
       | 'manifest_malformed'
       | 'skill_not_found'
-      | 'gbrain_root_not_found',
+      | 'voltmind_root_not_found',
   ) {
     super(message);
     this.name = 'BundleError';
@@ -39,7 +39,7 @@ export class BundleError extends Error {
  * Walk up from `start` (default cwd) looking for an `openclaw.plugin.json`
  * sibling to `src/cli.ts`. That pair identifies a voltmind repo root.
  */
-export function findGbrainRoot(start: string = process.cwd()): string | null {
+export function findVoltMindRoot(start: string = process.cwd()): string | null {
   let dir = resolve(start);
   for (let i = 0; i < 10; i++) {
     if (
@@ -120,7 +120,8 @@ export function loadBundleManifest(voltmindRoot: string): BundleManifest {
 export interface BundleEntry {
   /** Absolute source path under voltmindRoot. */
   source: string;
-  /** Path under the skill bundle, joined with target skills dir. */
+  /** POSIX-style logical path under the skill bundle; callers join it with
+   * the target skills directory using the host filesystem path module. */
   relTarget: string;
   /** Whether this comes from shared_deps (true) or a skill (false). */
   sharedDep: boolean;
@@ -142,9 +143,12 @@ function walkFiles(absDir: string, prefix: string, out: BundleEntry[], sharedDep
       continue;
     }
     if (stat.isDirectory()) {
-      walkFiles(abs, join(prefix, e), out, sharedDep);
+      walkFiles(abs, posixPath.join(prefix, e), out, sharedDep);
     } else if (stat.isFile()) {
-      out.push({ source: abs, relTarget: join(prefix, e), sharedDep });
+      // relTarget is a logical bundle path, not an OS filesystem path.
+      // Keep it slash-separated so manifests, resolver rows, and tests are
+      // stable on both Windows and POSIX hosts.
+      out.push({ source: abs, relTarget: posixPath.join(prefix, e), sharedDep });
     }
   }
 }
@@ -186,7 +190,7 @@ export function enumerateBundle(opts: EnumerateOptions): BundleEntry[] {
         'skill_not_found',
       );
     }
-    const prefix = rel.replace(/^skills\//, '');
+    const prefix = rel.replace(/^skills[\\/]/, '').replaceAll('\\', '/');
     walkFiles(abs, prefix, entries, false);
   }
 
@@ -196,7 +200,7 @@ export function enumerateBundle(opts: EnumerateOptions): BundleEntry[] {
   for (const dep of manifest.shared_deps) {
     const abs = join(voltmindRoot, dep);
     if (!existsSync(abs)) continue; // missing shared dep is a warning, not fatal
-    const prefix = dep.replace(/^skills\//, '');
+    const prefix = dep.replace(/^skills[\\/]/, '').replaceAll('\\', '/');
     let stat;
     try {
       stat = statSync(abs);
@@ -290,8 +294,8 @@ export function changedSlugsSinceVersion(
 }
 
 export function pathSlug(relPath: string): string {
-  const trimmed = relPath.replace(/\/+$/, '');
-  const parts = trimmed.split('/');
+  const trimmed = relPath.replace(/[\\/]+$/, '');
+  const parts = trimmed.split(/[\\/]/);
   return parts[parts.length - 1];
 }
 

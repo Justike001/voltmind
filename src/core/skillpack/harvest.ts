@@ -107,8 +107,8 @@ export function runHarvest(opts: HarvestOptions): HarvestResult {
     );
   }
 
-  const gbrainSkillDir = join(opts.voltmindRoot, 'skills', opts.slug);
-  if (existsSync(gbrainSkillDir) && !opts.overwriteLocal) {
+  const voltmindSkillDir = join(opts.voltmindRoot, 'skills', opts.slug);
+  if (existsSync(voltmindSkillDir) && !opts.overwriteLocal) {
     throw new HarvestError(
       `Slug collision: voltmind already has skills/${opts.slug}/. Pass --overwrite-local to replace.`,
       'slug_collision',
@@ -124,7 +124,7 @@ export function runHarvest(opts: HarvestOptions): HarvestResult {
   //   - skill dir → voltmind/skills/<slug>/
   //   - paired sources → voltmind/<source-path>
   const items: Array<{ source: string; target: string }> = [];
-  for (const item of walkSourceDir(hostSkillDir, gbrainSkillDir)) {
+  for (const item of walkSourceDir(hostSkillDir, voltmindSkillDir)) {
     items.push(item);
   }
   for (const src of pairedSources) {
@@ -182,7 +182,7 @@ export function runHarvest(opts: HarvestOptions): HarvestResult {
     } catch (err) {
       if (err instanceof PrivacyLintError) {
         // Rollback: remove every file we just wrote.
-        rollbackHarvest(gbrainSkillDir, pairedItems.map(i => i.target));
+        rollbackHarvest(voltmindSkillDir, pairedItems.map(i => i.target));
         return {
           status: 'lint_failed',
           slug: opts.slug,
@@ -230,10 +230,10 @@ function readHostSkillSources(hostRoot: string, slug: string): string[] {
 }
 
 /** Delete everything we just wrote. */
-function rollbackHarvest(gbrainSkillDir: string, pairedTargets: string[]): void {
+function rollbackHarvest(voltmindSkillDir: string, pairedTargets: string[]): void {
   try {
-    if (existsSync(gbrainSkillDir)) {
-      rmSync(gbrainSkillDir, { recursive: true, force: true });
+    if (existsSync(voltmindSkillDir)) {
+      rmSync(voltmindSkillDir, { recursive: true, force: true });
     }
   } catch {}
   for (const p of pairedTargets) {

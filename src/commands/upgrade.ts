@@ -448,7 +448,7 @@ export async function postUpgradeReferenceSweep(
   if (process.env.VOLTMIND_SKIP_REFERENCE_SWEEP) return;
   try {
     const { autoDetectSkillsDirReadOnly } = await import('../core/repo-root.ts');
-    const { findGbrainRoot } = await import('../core/skillpack/bundle.ts');
+    const { findVoltMindRoot } = await import('../core/skillpack/bundle.ts');
     const { runReferenceAll } = await import('../core/skillpack/reference.ts');
     const path = await import('path');
 
@@ -460,7 +460,7 @@ export async function postUpgradeReferenceSweep(
       targetWorkspace = path.resolve(detected.dir, '..');
     }
 
-    const voltmindRoot = opts.voltmindRoot ?? findGbrainRoot();
+    const voltmindRoot = opts.voltmindRoot ?? findVoltMindRoot();
     if (!voltmindRoot) return;
 
     // Dev-mode guard: the detected workspace IS the voltmind repo. Sweeping

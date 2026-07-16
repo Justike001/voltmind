@@ -1,7 +1,7 @@
 /**
  * Unified CLI invocation resolver (spec §4).
  *
- * Replaces the legacy `resolveGbrainCliPath()` single-string resolver with a
+ * Replaces the legacy single-string CLI resolver with a
  * structured `CliInvocation` that captures executable + prefix args + spawn
  * options. Both the Windows Task Scheduler action and the
  * ChildWorkerSupervisor worker spawn share this resolver so there is one

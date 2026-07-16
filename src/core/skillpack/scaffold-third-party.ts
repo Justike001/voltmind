@@ -72,7 +72,7 @@ export class ScaffoldThirdPartyError extends Error {
   constructor(
     message: string,
     public code:
-      | 'gbrain_version_too_old'
+      | 'voltmind_version_too_old'
       | 'manifest_invalid'
       | 'scaffold_failed',
   ) {
@@ -97,7 +97,7 @@ function semverGte(actual: string, required: string): boolean {
 
 export async function runScaffoldThirdParty(
   opts: ScaffoldThirdPartyOptions,
-  currentGbrainVersion: string,
+  currentVoltMindVersion: string,
 ): Promise<ScaffoldThirdPartyResult> {
   // 1. Load + validate the manifest from the resolved pack root.
   let manifest: SkillpackManifest;
@@ -111,10 +111,10 @@ export async function runScaffoldThirdParty(
   }
 
   // 2. voltmind version check.
-  if (!semverGte(currentGbrainVersion, manifest.voltmind_min_version)) {
+  if (!semverGte(currentVoltMindVersion, manifest.voltmind_min_version)) {
     throw new ScaffoldThirdPartyError(
-      `skillpack ${manifest.name} requires voltmind >= ${manifest.voltmind_min_version}; you have ${currentGbrainVersion}. Run \`voltmind upgrade\` first.`,
-      'gbrain_version_too_old',
+      `skillpack ${manifest.name} requires voltmind >= ${manifest.voltmind_min_version}; you have ${currentVoltMindVersion}. Run \`voltmind upgrade\` first.`,
+      'voltmind_version_too_old',
     );
   }
 
