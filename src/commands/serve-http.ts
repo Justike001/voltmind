@@ -2553,6 +2553,17 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       // happens after the inner queue.add try/catch already responded.
       try {
 
+      const legacyHeaderUsed = [
+        'x-gbrain-content-type',
+        'x-gbrain-source-uri',
+        'x-gbrain-source-id',
+        'x-gbrain-slug',
+      ].some(name => req.header(name) !== undefined);
+      if (legacyHeaderUsed) {
+        res.setHeader('Deprecation', 'true');
+        res.setHeader('Warning', '299 - "X-Gbrain-* headers are deprecated; use X-Voltmind-* instead"');
+      }
+
       // v0.39.3.0 BUG-2: explicit null/undefined guard BEFORE body coercion.
       // When the request has no body at all (no Content-Length header, no
       // body-parser fed us anything), `req.body` is `undefined`. The pre-fix
@@ -2589,10 +2600,16 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         return;
       }
 
-      // Detect content_type. Caller can override via the X-Gbrain-Content-Type
-      // header for the JSON case (since the request's Content-Type would say
-      // application/json but the user might intend the body to be markdown).
-      const declared = (req.header('x-voltmind-content-type') || req.header('content-type') || '').toLowerCase();
+      // Canonical ingest overrides: X-Voltmind-Content-Type,
+      // X-Voltmind-Source-Uri, X-Voltmind-Source-Id, and X-Voltmind-Slug.
+      // Keep the old X-Gbrain-* names as compatibility aliases, but mark
+      // their use so clients can migrate.
+      const readCompatHeader = (name: string, legacyName: string): string | undefined => {
+        const current = req.header(name);
+        const legacy = req.header(legacyName);
+        return current ?? legacy;
+      };
+      const declared = (readCompatHeader('x-voltmind-content-type', 'x-gbrain-content-type') || req.header('content-type') || '').toLowerCase();
       let contentType: IngestionContentType;
       if (declared.startsWith('text/markdown')) {
         contentType = 'text/markdown';
@@ -2625,9 +2642,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
 
       const content = body.toString('utf8');
       const contentHash = computeContentHash(content);
-      const sourceUri = (req.header('x-voltmind-source-uri') || `mcp-webhook:${authInfo.clientId}:${Date.now()}`).slice(0, 1024);
-      const sourceId = (req.header('x-voltmind-source-id') || `webhook-${authInfo.clientId}`).slice(0, 256);
-      const callerSlug = req.header('x-voltmind-slug');
+      const sourceUri = (readCompatHeader('x-voltmind-source-uri', 'x-gbrain-source-uri') || `mcp-webhook:${authInfo.clientId}:${Date.now()}`).slice(0, 1024);
+      const sourceId = (readCompatHeader('x-voltmind-source-id', 'x-gbrain-source-id') || `webhook-${authInfo.clientId}`).slice(0, 256);
+      const callerSlug = readCompatHeader('x-voltmind-slug', 'x-gbrain-slug');
 
       const event: IngestionEvent = {
         source_id: sourceId,
