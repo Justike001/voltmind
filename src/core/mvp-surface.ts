@@ -94,6 +94,7 @@ export const VOLTMIND_MVP_CLI_COMMANDS = new Set([
   'orphans',
   'friction',
   'brainstorm',
+  'lsd',
   'book-mirror',
   'onboard',
   // P2.2 — host-local maintenance and code-intelligence utilities.
@@ -105,6 +106,7 @@ export const VOLTMIND_MVP_CLI_COMMANDS = new Set([
   'reindex-code',
   'reindex-frontmatter',
   'reindex-multimodal',
+  'backfill',
 ]);
 
 /**

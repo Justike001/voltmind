@@ -142,7 +142,7 @@ explicitly working on VoltMind internals:
   registry/network actions, and frontmatter fixes remain host-local CLI flows.
 - P2.1 local brain operations (host-local CLI only; no MCP equivalents):
   `voltmind report`, `export`, `features`, `models`, `pages`, `cache`, `lint`,
-  `integrity`, `orphans`, `friction`, `brainstorm`, `book-mirror`, and `onboard`.
+  `integrity`, `orphans`, `friction`, `brainstorm`, `lsd`, `book-mirror`, and `onboard`.
   Preserve command confirmation and cost gates: `features --auto-fix`,
   `pages purge-deleted`, `book-mirror`, and `onboard --auto` can mutate state
   or incur model spend.
@@ -150,11 +150,14 @@ explicitly working on VoltMind internals:
   `voltmind code-callees`, `code-callers`, `code-def`, `code-refs`, `reindex`,
   `reindex-code`, `reindex-frontmatter`, and `reindex-multimodal`.
   `reindex --multimodal` remains supported as an alias for the last command.
+  `voltmind backfill` is the explicit host-local entrypoint for registered
+  bulk backfills and checkpointed repair passes.
 - MCP: `voltmind serve`, `voltmind call`.
 - Jobs: `voltmind jobs list`, `voltmind jobs get`,
   `voltmind jobs cancel`, `voltmind jobs progress`, `voltmind jobs failures`,
   `voltmind jobs checkpoints`, `voltmind jobs undo-report`,
-  `voltmind jobs plan --dry-run`, `voltmind jobs stats`.
+  `voltmind jobs plan --dry-run`, `voltmind jobs stats`, and
+  `voltmind jobs watch` (live/read-only dashboard).
 - Autopilot (host-local): `voltmind autopilot --install`,
   `voltmind autopilot --status`, `voltmind autopilot --uninstall`,
   `voltmind autopilot --help`. Runs on the host with a supervised Minions

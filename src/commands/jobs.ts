@@ -10,7 +10,7 @@ import type { MinionJob, MinionJobStatus } from '../core/minions/types.ts';
 import { loadConfig, isThinClient } from '../core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../core/mcp-client.ts';
 
-const MVP_JOB_SUBCOMMANDS = new Set(['list', 'get', 'cancel', 'stats', 'smoke', 'progress', 'failures', 'checkpoints', 'undo-report', 'plan', 'work']);
+const MVP_JOB_SUBCOMMANDS = new Set(['list', 'get', 'cancel', 'stats', 'smoke', 'progress', 'failures', 'checkpoints', 'undo-report', 'plan', 'work', 'watch']);
 
 function parseFlag(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);
@@ -144,7 +144,20 @@ USAGE
   voltmind jobs plan <name> --dry-run [--source-id id]
   voltmind jobs stats
   voltmind jobs work [--concurrency N] [--max-rss MB]
+  voltmind jobs watch [--refresh-ms=N] [--json]
 
+`);
+    return;
+  }
+
+  if (sub === 'watch' && (args.includes('--help') || args.includes('-h'))) {
+    console.log(`voltmind jobs watch — live job dashboard
+
+Usage:
+  voltmind jobs watch [--refresh-ms=N] [--json]
+
+  --refresh-ms=N  Refresh interval in milliseconds (default: 1000).
+  --json          Emit newline-delimited JSON snapshots instead of a TTY dashboard.
 `);
     return;
   }

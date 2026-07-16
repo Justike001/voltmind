@@ -65,7 +65,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'extract',
@@ -87,6 +87,7 @@ const CLI_ONLY_SELF_HELP = new Set([
   'daemon',
   'actions',
   'jobs',
+  'pages', 'backfill',
   'skillpack', 'skillpack-check',
   'integrations', 'friction',
   'frontmatter', 'check-resolvable',
@@ -2315,12 +2316,14 @@ P2.1 — LOCAL BRAIN OPERATIONS
   features [--auto-fix]              Inspect or apply supported feature fixes
   models [doctor]                    Inspect model routing or probe models
   pages purge-deleted [--dry-run]    Purge expired soft-deleted pages
+  backfill <kind>|list [flags]       Run or inspect registered backfills
   cache stats|clear|prune            Manage the semantic query cache
   lint [flags]                       Deterministic page-quality checks
   integrity [flags]                  Audit and repair URLs and references
   orphans [--json|--count]           List pages without inbound links
   friction log|render|list|summary   Record or review experience friction
   brainstorm <prompt>                Brain-grounded associative ideation
+  lsd <prompt>                       Inverted-review / stale-bias ideation
   book-mirror [flags]                Queue personalized book analysis locally
   onboard [--check|--auto]           Inspect or run onboarding remediation
 
@@ -2374,6 +2377,7 @@ JOBS
   jobs undo-report <id>              Read-only undo report
   jobs plan <name> --dry-run         Preview explicit batch plan
   jobs stats                         Job health dashboard
+  jobs watch [--refresh-ms=N]        Live job dashboard (or --json snapshots)
 
 MCP
   serve                              MCP server (stdio)
