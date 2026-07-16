@@ -29,7 +29,7 @@
 //   4. Brain-wide DB config key `schema_pack`
 //   5. `voltmind.yml schema:` section
 //   6. `~/.voltmind/config.json schema_pack` field
-//   7. Default `voltmind-base`
+//   7. Default `voltmind-personal-brain`
 //
 // Extends chain semantics (E4):
 //   - Depth tracked via BFS during resolve.
@@ -115,7 +115,7 @@ export function resolveActivePackName(input: ResolutionInput): ResolutionResult 
   if (input.dbConfig) return { pack_name: input.dbConfig, source: 'db-config' };
   if (input.voltmindYml) return { pack_name: input.voltmindYml, source: 'voltmind-yml' };
   if (input.homeConfig) return { pack_name: input.homeConfig, source: 'home-config' };
-  return { pack_name: 'voltmind-base', source: 'default' };
+  return { pack_name: 'voltmind-personal-brain', source: 'default' };
 }
 
 /**
@@ -242,22 +242,11 @@ export async function resolvePack(
     loadByPath?: (name: string) => string | null;
   } = {},
 ): Promise<ResolvedPack> {
-  const sha8 = await computeManifestSha8(manifest);
-  const id = packIdentity(manifest, sha8);
-
-  // Reference-equality fast path: if a previous resolvePack(manifest, ...)
-  // produced the SAME identity, return the cached resolved object. This
-  // preserves the v0.38 contract that two calls with the same manifest
-  // bytes return the same JS object reference.
-  const existing = _byName.get(manifest.name);
-  if (existing && existing.resolved.identity === id) {
-    return existing.resolved;
-  }
-
-  // Walk extends chain to enforce depth cap AND collect names for the
-  // cache snapshot (codex C6 — child cache entry must remember every
-  // parent so invalidatePackCache(parentName) can cascade).
+  // Walk the extends chain before computing identity: a child's effective
+  // behavior includes every inherited declaration, so its cache identity
+  // must change when any parent changes.
   const chain: string[] = [manifest.name];
+  const manifests: SchemaPackManifest[] = [manifest];
   let cursor: SchemaPackManifest | null = manifest;
   while (cursor?.extends) {
     const parentName = cursor.extends;
@@ -272,15 +261,25 @@ export async function resolvePack(
       opts.onDepthWarn?.(chain.length, chain);
     }
     cursor = await loadByName(parentName);
+    manifests.push(cursor);
   }
 
-  // For v0.38 skeleton: closure is computed on the manifest itself.
-  // Full extends-merging (child-wins) is the v0.41+ T20 follow-up.
-  const alias_graph = buildAliasGraph(manifest);
-  const alias_closure_hash = await computeAliasClosureHash(manifest);
+  const effectiveManifest = mergeManifestChain(manifests);
+  const sha8 = await computeManifestSha8(effectiveManifest);
+  const id = packIdentity(effectiveManifest, sha8);
+
+  // Reference-equality fast path: if a previous resolvePack call produced
+  // the same effective closure, return its cached resolved object.
+  const existing = _byName.get(manifest.name);
+  if (existing && existing.resolved.identity === id) {
+    return existing.resolved;
+  }
+
+  const alias_graph = buildAliasGraph(effectiveManifest);
+  const alias_closure_hash = await computeAliasClosureHash(effectiveManifest);
 
   const resolved: ResolvedPack = {
-    manifest,
+    manifest: effectiveManifest,
     identity: id,
     manifest_sha8: sha8,
     alias_closure_hash,
@@ -305,6 +304,45 @@ export async function resolvePack(
     lastStatMs: Date.now(),
   });
   return resolved;
+}
+
+/**
+ * Resolve an extends chain into the manifest consumers actually use.
+ *
+ * `manifests` is ordered child → parent. Parent declarations are applied
+ * first; a child replaces entries with the same stable key and its new page
+ * types are evaluated before inherited types, preserving child intent for
+ * overlapping path prefixes.
+ */
+function mergeManifestChain(manifests: readonly SchemaPackManifest[]): SchemaPackManifest {
+  const ordered = [...manifests].reverse();
+  let merged = ordered[0]!;
+  for (const child of ordered.slice(1)) {
+    merged = {
+      ...merged,
+      ...child,
+      extends: child.extends,
+      borrow_from: [...merged.borrow_from, ...child.borrow_from],
+      page_types: mergeNamed(child.page_types, merged.page_types, entry => entry.name),
+      link_types: mergeNamed(child.link_types, merged.link_types, entry => entry.name),
+      frontmatter_links: mergeNamed(
+        child.frontmatter_links,
+        merged.frontmatter_links,
+        entry => `${entry.page_type}:${entry.fields.join(',')}:${entry.link_type}`,
+      ),
+      enrichable_types: mergeNamed(child.enrichable_types, merged.enrichable_types, entry => entry.type),
+      filing_rules: mergeNamed(child.filing_rules, merged.filing_rules, entry => entry.kind),
+      phases: child.phases ?? merged.phases,
+      calibration_domains: mergeNamed(child.calibration_domains ?? [], merged.calibration_domains ?? [], entry => entry.name),
+    };
+  }
+  return merged;
+}
+
+/** Child entries precede inherited entries; duplicate keys are child-wins. */
+function mergeNamed<T>(child: readonly T[], parent: readonly T[], key: (entry: T) => string): T[] {
+  const childKeys = new Set(child.map(key));
+  return [...child, ...parent.filter(entry => !childKeys.has(key(entry)))];
 }
 
 /**

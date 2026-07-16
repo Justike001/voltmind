@@ -151,7 +151,7 @@ Resolution chain (7-tier, tier 1 trust-gated):
   4. Brain-wide DB config schema_pack
   5. voltmind.yml schema: section
   6. ~/.voltmind/config.json schema_pack
-  7. Default: voltmind-base
+  7. Default: voltmind-personal-brain
 `);
 }
 
@@ -173,6 +173,7 @@ async function runActive(_args: string[]): Promise<void> {
 function runList(_args: string[]): void {
   const bundled = [
     'voltmind-base',
+    'voltmind-personal-brain',
     'voltmind-recommended',
     'voltmind-company-core',
     'voltmind-creator',
@@ -304,7 +305,7 @@ function runValidate(args: string[]): void {
       process.exit(1);
     }
   } else {
-    path = packPathByName('voltmind-base');
+    path = packPathByName('voltmind-personal-brain');
     if (!path) {
       console.error('No active pack — provide a pack name.');
       process.exit(1);
@@ -368,6 +369,7 @@ function runUse(args: string[]): void {
 function packPathByName(name: string): string | null {
   const bundled = new Set([
     'voltmind-base',
+    'voltmind-personal-brain',
     'voltmind-recommended',
     'voltmind-company-core',
     'voltmind-creator',
@@ -563,7 +565,7 @@ async function runInitCmd(args: string[]): Promise<void> {
     name,
     version: '0.0.1',
     voltmind_min_version: '0.39.0',
-    extends: 'voltmind-base',
+    extends: 'voltmind-personal-brain',
     description: `Stub pack scaffolded by 'voltmind schema init ${name}'. Edit ${baseDir}/pack.yaml then 'voltmind schema validate' + 'voltmind schema use ${name}'.`,
     page_types: [] as SchemaPackManifest['page_types'],
     link_types: [] as SchemaPackManifest['link_types'],
@@ -573,12 +575,12 @@ async function runInitCmd(args: string[]): Promise<void> {
     enrichable_types: [] as SchemaPackManifest['enrichable_types'],
     filing_rules: [] as SchemaPackManifest['filing_rules'],
   };
-  const yaml = `# Stub pack — extends voltmind-base by default. Add your own page_types below.
+  const yaml = `# Stub pack — extends voltmind-personal-brain by default. Add your own page_types below.
 api_version: ${stub.api_version}
 name: ${stub.name}
 version: ${stub.version}
 voltmind_min_version: ${stub.voltmind_min_version}
-extends: voltmind-base
+extends: voltmind-personal-brain
 description: ${JSON.stringify(stub.description)}
 
 page_types: []
@@ -826,7 +828,7 @@ async function runDowngradeCmd(args: string[]): Promise<void> {
     }
   }
   if (!restoredTo) {
-    restoredTo = 'voltmind-base';
+    restoredTo = 'voltmind-personal-brain';
   }
   const cfg = loadConfig();
   const updated = { ...cfg, schema_pack: restoredTo };

@@ -103,6 +103,7 @@ function defaultPackLocator(name: string): string | null {
   // via extends + borrow_from). Each ships as a real YAML at base/<name>.yaml.
   const BUNDLED: ReadonlyArray<string> = [
     'voltmind-base',
+    'voltmind-personal-brain',
     'voltmind-recommended',
     'voltmind-company-core',
     'voltmind-creator',

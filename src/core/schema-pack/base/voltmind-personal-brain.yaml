@@ -1,0 +1,272 @@
+# Canonical VoltMind Personal Brain layout.
+#
+# This pack mirrors the Markdown scaffold and the directory README contracts.
+# It is deliberately standalone: legacy `voltmind-base` remains available as
+# an explicit compatibility pack, but must not silently classify new pages.
+
+api_version: voltmind-schema-pack-v1
+name: voltmind-personal-brain
+version: 1.0.0
+description: Canonical local-first personal brain layout with operating state and contribution records.
+voltmind_min_version: 0.42.0
+extends: null
+borrow_from: []
+takes_kinds: [fact, take, bet, hunch]
+
+# More-specific nested directories appear first. Unknown paths remain
+# `unclassified` until the user supplies frontmatter or a filing rule.
+page_types:
+  - name: decision
+    primitive: temporal
+    path_prefixes: [state/decisions/]
+    aliases: [decision-record, adr]
+    extractable: true
+    expert_routing: false
+  - name: commitment
+    primitive: temporal
+    path_prefixes: [state/commitments/]
+    aliases: [promise, obligation]
+    extractable: true
+    expert_routing: false
+  - name: action
+    primitive: temporal
+    path_prefixes: [state/actions/]
+    aliases: [task, todo, follow-up]
+    extractable: true
+    expert_routing: false
+  - name: risk
+    primitive: temporal
+    path_prefixes: [state/risks/]
+    aliases: [blocker, concern]
+    extractable: true
+    expert_routing: false
+  - name: index
+    primitive: annotation
+    path_prefixes: [state/indexes/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: contribution_candidate
+    primitive: annotation
+    path_prefixes: [contribution/candidates/]
+    aliases: [publish-candidate]
+    extractable: false
+    expert_routing: false
+  - name: contribution_published
+    primitive: annotation
+    path_prefixes: [contribution/published/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: contribution_rejected
+    primitive: annotation
+    path_prefixes: [contribution/rejected/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: contribution_redacted
+    primitive: annotation
+    path_prefixes: [contribution/redacted/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: contribution_review
+    primitive: annotation
+    path_prefixes: [contribution/reviews/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: person
+    primitive: entity
+    path_prefixes: [people/]
+    aliases: []
+    extractable: false
+    expert_routing: true
+  - name: org
+    primitive: entity
+    path_prefixes: [orgs/]
+    aliases: [team, department, function]
+    extractable: true
+    expert_routing: false
+  - name: company
+    primitive: entity
+    path_prefixes: [companies/]
+    aliases: []
+    extractable: false
+    expert_routing: true
+  - name: workstream
+    primitive: entity
+    path_prefixes: [workstreams/]
+    aliases: [responsibility-domain]
+    extractable: true
+    expert_routing: false
+  - name: project
+    primitive: entity
+    path_prefixes: [projects/]
+    aliases: [initiative]
+    extractable: true
+    expert_routing: false
+  - name: meeting
+    primitive: temporal
+    path_prefixes: [meetings/]
+    aliases: [discussion, sync]
+    extractable: true
+    expert_routing: false
+  - name: artifact
+    primitive: media
+    path_prefixes: [artifacts/]
+    aliases: [deliverable, proposal, report, design-doc]
+    extractable: true
+    expert_routing: false
+  - name: concept
+    primitive: concept
+    path_prefixes: [concepts/]
+    aliases: []
+    extractable: true
+    expert_routing: false
+  - name: idea
+    primitive: concept
+    path_prefixes: [ideas/]
+    aliases: [thesis, bet, observation, product-thought]
+    extractable: true
+    expert_routing: false
+  - name: policy
+    primitive: media
+    path_prefixes: [policy/]
+    aliases: [process, standard, sop]
+    extractable: true
+    expert_routing: false
+  - name: source
+    primitive: media
+    path_prefixes: [sources/]
+    aliases: []
+    extractable: true
+    expert_routing: false
+  - name: daily
+    primitive: temporal
+    path_prefixes: [daily/]
+    aliases: [daily-log, operating-log]
+    extractable: true
+    expert_routing: false
+  - name: inbox
+    primitive: annotation
+    path_prefixes: [inbox/]
+    aliases: [quick-capture]
+    extractable: false
+    expert_routing: false
+  - name: private
+    primitive: annotation
+    path_prefixes: [private/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: archive
+    primitive: annotation
+    path_prefixes: [archive/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: unclassified
+    primitive: annotation
+    path_prefixes: []
+    aliases: []
+    extractable: false
+    expert_routing: false
+
+link_types:
+  - name: attended
+    inference:
+      page_type: meeting
+  - name: member_of
+    inverse: has_member
+  - name: owns
+    inverse: owned_by
+  - name: assigned_to
+    inverse: assigned
+  - name: blocks
+    inverse: blocked_by
+  - name: evidence_for
+    inverse: has_evidence
+  - name: mentions
+
+frontmatter_links:
+  - page_type: meeting
+    fields: [attendees]
+    link_type: attended
+  - page_type: person
+    fields: [team]
+    link_type: member_of
+  - page_type: person
+    fields: [manager]
+    link_type: mentions
+  - page_type: action
+    fields: [owner]
+    link_type: assigned_to
+  - page_type: risk
+    fields: [source_refs]
+    link_type: evidence_for
+
+enrichable_types:
+  - type: person
+    rubric: person-default
+  - type: company
+    rubric: company-default
+
+filing_rules:
+  - kind: person
+    directory: people/
+    examples: [people/alice-example]
+  - kind: company
+    directory: companies/
+    examples: [companies/acme-example]
+  - kind: org
+    directory: orgs/
+    examples: [orgs/platform]
+  - kind: workstream
+    directory: workstreams/
+    examples: [workstreams/company-brain]
+  - kind: project
+    directory: projects/
+    examples: [projects/runtime-mvp]
+  - kind: idea
+    directory: ideas/
+    examples: [ideas/local-first-company-memory]
+  - kind: meeting
+    directory: meetings/
+    examples: [meetings/2026-06-01-weekly-sync]
+  - kind: decision
+    directory: state/decisions/
+    examples: [state/decisions/2026-06-01-adopt-local-first]
+  - kind: commitment
+    directory: state/commitments/
+    examples: [state/commitments/2026-06-01-runtime-review]
+  - kind: action
+    directory: state/actions/
+    examples: [state/actions/2026-06-01-update-runtime-docs]
+  - kind: risk
+    directory: state/risks/
+    examples: [state/risks/schema-drift]
+  - kind: index
+    directory: state/indexes/
+    examples: [state/indexes/open-actions]
+  - kind: artifact
+    directory: artifacts/
+    examples: [artifacts/technical-plan]
+  - kind: policy
+    directory: policy/
+    examples: [policy/privacy-policy]
+  - kind: source
+    directory: sources/
+    examples: [sources/meeting-transcript-2026-06]
+  - kind: daily
+    directory: daily/
+    examples: [daily/2026-06-01]
+  - kind: contribution_candidate
+    directory: contribution/candidates/
+    examples: [contribution/candidates/candidate-2026-06-01]
+  - kind: private
+    directory: private/
+    examples: [private/2026-06-01-reflection]
+  - kind: inbox
+    directory: inbox/
+    examples: [inbox/quick-capture-2026-06-01]

@@ -22,6 +22,7 @@
  */
 
 import type { BrainEngine } from '../engine.ts';
+import { resolveActiveFilingDirectory } from '../schema-pack/filing.ts';
 
 /**
  * Canonicalize a free-form entity reference to a page slug.
@@ -67,7 +68,7 @@ export async function resolveEntitySlug(
   //    `"Alice"` → `people/alice-example` before we phantom-stub a bare
   //    `people/alice.md`.
   if (isBareName(trimmed)) {
-    const expanded = await tryPrefixExpansion(engine, source_id, slugify(trimmed));
+    const expanded = await tryPrefixExpansion(engine, source_id, slugify(trimmed), await prefixExpansionDirs(source_id));
     if (expanded) return expanded;
   }
 
@@ -94,7 +95,12 @@ function isBareName(raw: string): boolean {
   return true;
 }
 
-const PREFIX_EXPANSION_DIRS = ['people', 'companies'] as const;
+async function prefixExpansionDirs(sourceId: string): Promise<string[]> {
+  const directories = await Promise.all(
+    ['person', 'company'].map(kind => resolveActiveFilingDirectory(kind, sourceId).catch(() => null)),
+  );
+  return [...new Set(directories.filter((dir): dir is string => !!dir).map(dir => dir.replace(/\/$/, '')))];
+}
 
 /**
  * v0.40.2.0 — resolution-source-tagged variant for trajectory routing.
@@ -135,7 +141,7 @@ export async function resolveEntitySlugWithSource(
   if (fuzzy) return { slug: fuzzy, source: 'fuzzy_match' };
 
   if (isBareName(trimmed)) {
-    const expanded = await tryPrefixExpansion(engine, source_id, slugify(trimmed));
+    const expanded = await tryPrefixExpansion(engine, source_id, slugify(trimmed), await prefixExpansionDirs(source_id));
     if (expanded) return { slug: expanded, source: 'fuzzy_match' };
   }
 
@@ -174,7 +180,7 @@ export async function resolvePhantomCanonical(
   const fuzzy = await tryFuzzyMatch(engine, source_id, trimmed);
   if (fuzzy && fuzzy !== phantomSlug && fuzzy.includes('/')) return fuzzy;
 
-  const expanded = await tryPrefixExpansion(engine, source_id, slugify(trimmed));
+  const expanded = await tryPrefixExpansion(engine, source_id, slugify(trimmed), await prefixExpansionDirs(source_id));
   if (expanded && expanded !== phantomSlug && expanded.includes('/')) return expanded;
 
   return null;
@@ -208,7 +214,7 @@ export async function findPrefixCandidates(
   // We deliberately do NOT use `people/<token>%` (no hyphen) because that
   // also matches `people/aliceberg` for token="alice" — a false positive.
   const patterns: string[] = [];
-  for (const dir of PREFIX_EXPANSION_DIRS) {
+  for (const dir of await prefixExpansionDirs(source_id)) {
     patterns.push(`${dir}/${token}`);
     patterns.push(`${dir}/${token}-%`);
   }
@@ -252,8 +258,9 @@ async function tryPrefixExpansion(
   engine: BrainEngine,
   source_id: string,
   token: string,
+  directories: readonly string[],
 ): Promise<string | null> {
-  for (const dir of PREFIX_EXPANSION_DIRS) {
+  for (const dir of directories) {
     const pattern = `${dir}/${token}-%`;
     try {
       const rows = await engine.executeRaw<{

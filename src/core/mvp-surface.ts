@@ -84,6 +84,7 @@ export const VOLTMIND_MVP_CLI_COMMANDS = new Set([
   'frontmatter',
   // P2.1 — host-local, directly useful brain operations.
   'report',
+  'source-audit',
   'export',
   'features',
   'models',

@@ -65,7 +65,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'source-audit', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'extract',
@@ -100,6 +100,7 @@ const CLI_ONLY_SELF_HELP = new Set([
   'conversation-parser',
   'recall', 'forget', 'candidates',
   'self-upgrade',
+  'source-audit',
   'autopilot',
   // v0.39.3.0 WARN-5: capture's detailed HELP constant
   // (src/commands/capture.ts:90+) was unreachable because the dispatcher's
@@ -902,7 +903,7 @@ function formatResult(opName: string, result: unknown): string {
  */
 const THIN_CLIENT_REFUSED_COMMANDS = new Set([
   'sync', 'embed', 'extract', 'extract-conversation-facts', 'migrate', 'apply-migrations',
-  'repair-jsonb', 'orphans', 'integrity', 'serve',
+  'repair-jsonb', 'orphans', 'integrity', 'source-audit', 'serve',
   // v0.31.1 (CDX-2 op coverage matrix): more local-only commands
   'dream', 'transcripts', 'storage',
   // v0.31.1 CDX-2 audit: takes/sources have multiple subcommands; some
@@ -944,6 +945,7 @@ const THIN_CLIENT_REFUSE_HINTS: Record<string, string> = {
   orphans: "orphans needs the host's brain. Run on the host or use the `find_orphans` MCP tool from your agent.",
   transcripts: 'transcripts is server-private (raw chat exports stay on the host). Read transcripts on the host machine.',
   storage: 'storage operates on the local repo on disk. Run on the host.',
+  'source-audit': 'source-audit reads the local source directory. Run it on the host machine.',
   takes: 'takes readouts are available on the host CLI; thin clients should use `takes_list` and `takes_search` MCP tools. Mutating/scorecard take flows remain outside the VoltMind MVP runtime.',
   sources: 'sources commands manage local DB + config rows. Per-subcommand thin-client routing lands in v0.31.x. For now: use `sources_list` / `sources_status` MCP tools, or run on the host.',
   // v0.32 audit additions
@@ -1387,6 +1389,12 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
+  if (command === 'source-audit' && (args.includes('--help') || args.includes('-h'))) {
+    const { runSourceAudit } = await import('./commands/source-audit.ts');
+    await runSourceAudit(null as any, args);
+    return;
+  }
+
   if (command === 'extract' && (args.includes('--help') || args.includes('-h'))) {
     const { runExtract } = await import('./commands/extract.ts');
     await runExtract(null as any, args);
@@ -1721,6 +1729,11 @@ async function handleCliOnly(command: string, args: string[]) {
       case 'orphans': {
         const { runOrphans } = await import('./commands/orphans.ts');
         await runOrphans(engine, args);
+        break;
+      }
+      case 'source-audit': {
+        const { runSourceAudit } = await import('./commands/source-audit.ts');
+        await runSourceAudit(engine, args);
         break;
       }
       // v0.32.7 CJK wave — post-upgrade markdown re-chunk sweep.
@@ -2312,6 +2325,7 @@ QUALITY / EVAL
 
 P2.1 — LOCAL BRAIN OPERATIONS
   report <...>                       Save or read local audit reports
+  source-audit --source-dir <path>   Reconcile a local source with active DB pages (read-only)
   export <dir>                       Export the brain as markdown
   features [--auto-fix]              Inspect or apply supported feature fixes
   models [doctor]                    Inspect model routing or probe models

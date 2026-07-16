@@ -949,6 +949,10 @@ async function initPGLite(opts: {
           : {}),
       ...(opts.aiOpts?.expansion_model ? { expansion_model: opts.aiOpts.expansion_model } : {}),
       ...(opts.aiOpts?.chat_model ? { chat_model: opts.aiOpts.chat_model } : {}),
+      // The scaffold created below is the canonical personal-brain layout;
+      // activate the matching pack on first init instead of silently using
+      // the legacy compatibility pack.
+      schema_pack: existingFile.schema_pack ?? 'voltmind-personal-brain',
     };
     saveConfig(config);
 

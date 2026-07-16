@@ -25,7 +25,7 @@ const EMBEDDED_SCAFFOLD: ScaffoldEntry[] = [
 
 Before creating a page, choose exactly one primary home. Preserve relationships with links and frontmatter rather than duplicating pages.
 
-Primary homes: inbox, daily, people, orgs, companies, workstreams, projects, meetings, artifacts, concepts, ideas, ontology, policy, sources, contribution, private, archive.
+Primary homes: inbox, daily, people, orgs, companies, workstreams, projects, meetings, artifacts, concepts, ideas, policy, sources, contribution, private, archive.
 
 State objects: state/decisions, state/commitments, state/actions, state/risks, state/indexes.
 
@@ -49,7 +49,6 @@ Never publish raw daily or private content. Create a reviewed, redacted contribu
 - artifacts/ - deliverables and drafts
 - concepts/ - reusable concepts
 - ideas/ - raw possibilities
-- ontology/ - control-plane vocabulary and department lens definitions
 - policy/ - Phase 0 governance protocol
 - sources/ - raw materials or pointers
 - contribution/ - candidate/review/published promotion records
@@ -258,8 +257,6 @@ const REQUIRED_DIRS = [
   'ideas',
   'inbox',
   'meetings',
-  'ontology',
-  'ontology/lenses',
   'orgs',
   'people',
   'policy',
@@ -323,7 +320,10 @@ function installFromDraft(srcRoot: string, destRoot: string, createdFiles: strin
     for (const name of readdirSync(dir, { withFileTypes: true })) {
       const src = join(dir, name.name);
       const rel = relative(srcRoot, src).replace(/\\/g, '/');
-      if (rel === 'policies' || rel.startsWith('policies/')) continue;
+      if (
+        rel === 'policies' || rel.startsWith('policies/')
+        || rel === 'ontology' || rel.startsWith('ontology/')
+      ) continue;
       if (name.isDirectory()) {
         mkdirSync(join(destRoot, rel), { recursive: true });
         walk(src);

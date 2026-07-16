@@ -24,16 +24,7 @@ export interface ParseOpts {
   /** When validate is true and frontmatter has a `slug:` field that doesn't
    *  match expectedSlug, emits SLUG_MISMATCH. */
   expectedSlug?: string;
-  /**
-   * v0.39 T1.5 — active schema pack to drive type inference. When set,
-   * `inferType` uses the pack's `page_types[].path_prefixes` instead of
-   * the hardcoded voltmind-base table. When unset, falls back to the
-   * pre-v0.39 hardcoded behavior (preserves byte-for-byte parity gate
-   * `test/regressions/voltmind-base-equivalence.test.ts`).
-   *
-   * Callers thread this from `loadActivePack(ctx)` once per command —
-   * NEVER per file inside sync, per codex perf finding #7.
-   */
+  /** Active schema pack driving directory → page-type inference. */
   activePack?: { page_types: ReadonlyArray<{ name: string; path_prefixes: ReadonlyArray<string> }> };
 }
 
@@ -105,9 +96,7 @@ export function parseMarkdown(
 
   const { compiled_truth, timeline } = splitBody(body);
 
-  const type = (frontmatter.type as string) || (
-    opts?.activePack ? inferTypeFromPack(filePath, opts.activePack) : inferType(filePath)
-  );
+  const type = (frontmatter.type as string) || inferTypeFromPack(filePath, opts?.activePack);
   const title = (frontmatter.title as string) || inferTitle(filePath);
   const tags = extractTags(frontmatter);
   const slug = (frontmatter.slug as string) || inferSlug(filePath);
@@ -374,110 +363,25 @@ export function serializeMarkdown(
   return yamlContent + '\n\n' + body + '\n';
 }
 
-// v0.38 T7a (Phase B): inferType is now pack-aware.
-//
-// The original hardcoded behavior is preserved IDENTICALLY when the
-// pack is voltmind-base (or when no pack is provided — back-compat
-// callers). Schema packs can extend the path → type mapping by
-// declaring `page_types[].path_prefixes` in their manifest; users
-// who add `paper: { path_prefixes: [papers/, literature/] }` get
-// papers/foo.md → type 'paper' without forking the engine.
-//
-// inferType (legacy sync wrapper) → calls inferTypeWithPrefixes with
-//   the VOLTMIND_BASE_PATH_PREFIXES table below, which reproduces the
-//   pre-v0.38 hardcoded behavior byte-for-byte (parity-pinned by
-//   test/regressions/voltmind-base-equivalence.test.ts).
-// inferTypeFromPack(filePath, manifest) → new primitive that walks
-//   the active pack's page_types[].path_prefixes. Priority: pack
-//   declarations are scanned in order they appear in the manifest;
-//   first match wins. Empty/unset prefixes do NOT match.
-//
-// Callers in async paths (import-file.ts, sync.ts, cycle phases) can
-// adopt inferTypeFromPack(path, pack) to honor user-defined types.
-// The bare inferType(path) call site remains for sync legacy paths
-// and matches voltmind-base by construction.
-
 /**
- * Hardcoded path-prefix table mirroring pre-v0.38 inferType behavior.
- * MUST stay in lockstep with the voltmind-base.yaml `path_prefixes` field
- * (parity-pinned by test/regressions/voltmind-base-equivalence.test.ts).
- * Order matters: wiki subtypes + writing scan first (stronger signal
- * than ancestor directories).
- */
-const VOLTMIND_BASE_PATH_PREFIXES: ReadonlyArray<{ prefixes: string[]; type: PageType }> = [
-  { prefixes: ['/writing/'], type: 'writing' },
-  { prefixes: ['/wiki/analysis/'], type: 'analysis' },
-  { prefixes: ['/wiki/guides/', '/wiki/guide/'], type: 'guide' },
-  { prefixes: ['/wiki/hardware/'], type: 'hardware' },
-  { prefixes: ['/wiki/architecture/'], type: 'architecture' },
-  { prefixes: ['/wiki/concepts/', '/wiki/concept/'], type: 'concept' },
-  { prefixes: ['/people/', '/person/'], type: 'person' },
-  { prefixes: ['/companies/', '/company/'], type: 'company' },
-  { prefixes: ['/deals/', '/deal/'], type: 'deal' },
-  { prefixes: ['/yc/'], type: 'yc' },
-  { prefixes: ['/civic/'], type: 'civic' },
-  { prefixes: ['/projects/', '/project/'], type: 'project' },
-  { prefixes: ['/sources/', '/source/'], type: 'source' },
-  { prefixes: ['/media/'], type: 'media' },
-  { prefixes: ['/emails/', '/email/'], type: 'email' },
-  { prefixes: ['/slack/'], type: 'slack' },
-  { prefixes: ['/cal/', '/calendar/'], type: 'calendar-event' },
-  { prefixes: ['/notes/', '/note/'], type: 'note' },
-  { prefixes: ['/meetings/', '/meeting/'], type: 'meeting' },
-];
-
-function inferType(filePath?: string): PageType {
-  return inferTypeWithPrefixes(filePath, VOLTMIND_BASE_PATH_PREFIXES);
-}
-
-/**
- * Pack-aware variant. Callers with access to the active pack pass it
- * here to honor user-declared types. Empty `page_types` array (no
- * `extends: null` pack) falls back to voltmind-base defaults.
- *
- * Algorithm: each pack page_type contributes its `path_prefixes` array
- * in declaration order. First prefix that matches wins. Default
- * 'concept' applies when nothing matches.
- *
- * Note on prefix shape: voltmind-base stores prefixes WITHOUT the
- * leading `/` (e.g. `people/`). For matching, we lower-case the path
- * with a leading `/` prepended (matches the original behavior) and
- * test against `'/' + prefix` so `people/` matches `/people/` inside
- * the full path.
+ * Schema-only path inference. A parser without an active pack intentionally
+ * returns `unclassified` rather than reviving a hidden legacy directory map.
  */
 export function inferTypeFromPack(
   filePath: string | undefined,
-  pack: { page_types: ReadonlyArray<{ name: string; path_prefixes: ReadonlyArray<string> }> },
+  pack?: { page_types: ReadonlyArray<{ name: string; path_prefixes: ReadonlyArray<string> }> },
 ): PageType {
-  if (!filePath) return 'concept';
-  // Empty pack → fall back to voltmind-base hardcoded defaults.
-  if (pack.page_types.length === 0) {
-    return inferTypeWithPrefixes(filePath, VOLTMIND_BASE_PATH_PREFIXES);
-  }
-  const lower = ('/' + filePath).toLowerCase();
+  if (!filePath || !pack || pack.page_types.length === 0) return 'unclassified';
+  const normalizedPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
   for (const pt of pack.page_types) {
     for (const prefix of pt.path_prefixes) {
-      const needle = prefix.startsWith('/') ? prefix.toLowerCase() : '/' + prefix.toLowerCase();
-      if (lower.includes(needle)) {
+      const normalizedPrefix = prefix.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+      if (normalizedPrefix && normalizedPath.startsWith(normalizedPrefix)) {
         return pt.name;
       }
     }
   }
-  return 'concept';
-}
-
-function inferTypeWithPrefixes(
-  filePath: string | undefined,
-  table: ReadonlyArray<{ prefixes: ReadonlyArray<string>; type: PageType }>,
-): PageType {
-  if (!filePath) return 'concept';
-  const lower = ('/' + filePath).toLowerCase();
-  for (const row of table) {
-    for (const p of row.prefixes) {
-      if (lower.includes(p)) return row.type;
-    }
-  }
-  return 'concept';
+  return 'unclassified';
 }
 
 function inferTitle(filePath?: string): string {

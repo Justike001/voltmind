@@ -12,6 +12,8 @@ import type { BrainEngine } from './engine.ts';
 import type { Page } from './types.ts';
 import { BudgetLedger } from './enrichment/budget.ts';
 import { isEmbedSkipped } from './embed-skip.ts';
+import { slugify } from './entities/resolve.ts';
+import { resolveActiveFilingDirectory } from './schema-pack/filing.ts';
 
 export type EnrichmentEntityType = 'person' | 'company';
 
@@ -25,6 +27,8 @@ export interface EnrichmentRequest {
   citation?: string;
   external?: boolean;
   dryRun?: boolean;
+  /** Internal per-run cache of the active pack's filing directory. */
+  filingDirectory?: string;
 }
 
 export interface EnrichmentResult {
@@ -65,6 +69,20 @@ export interface SignalEnrichmentSummary {
   budget: Array<{ resolver_id: string; status: string; detail?: string }>;
 }
 
+/**
+ * Conservative guard for the person namespace.  Entity extraction is model-
+ * assisted, but `people/` is a durable filing decision; obvious product,
+ * configuration, workflow, and template phrases must not become person pages.
+ * This intentionally allows one-token and non-Latin names, which are valid
+ * real-world names, and only rejects strong lexical markers.
+ */
+export function isLikelyPersonEntityName(name: string): boolean {
+  const value = name.trim();
+  if (!value) return false;
+  if (value.split(/\s+/).length > 5) return false;
+  return !/\b(?:api|agent|anthropic|apple|brain|calendar|chatgpt|claude|cli|code|command|company|config|configuration|copilot|cursor|database|docker|email|github|google|inbox|integration|markdown|mcp|microsoft|migration|notion|openai|outlook|people|pglite|plugin|postgres|prompt|python|schema|settings?|slack|supabase|template|teams?|tool|typescript|update|url|workflow|yaml|json)\b/i.test(value);
+}
+
 export interface PageSignalEnrichmentSummary extends SignalEnrichmentSummary {
   pages_scanned: number;
   pages_skipped_due_to_limit: number;
@@ -87,20 +105,14 @@ interface DetectedEntity {
 const DEFAULT_LIMIT = 100;
 const EXTERNAL_ESTIMATE_USD = 0.05;
 
-export function slugifyEntity(name: string, type: EnrichmentEntityType): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/['']/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  const prefix = type === 'person' ? 'people' : 'companies';
-  return `${prefix}/${slug}`;
+export function slugifyEntity(name: string, filingDirectory: string): string {
+  const slug = slugify(name.replace(/['’]/g, ''));
+  const directory = filingDirectory.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+  return slug && directory ? `${directory}/${slug}` : '';
 }
 
-export function entityPagePath(name: string, type: EnrichmentEntityType): string {
-  return slugifyEntity(name, type);
+export function entityPagePath(name: string, filingDirectory: string): string {
+  return slugifyEntity(name, filingDirectory);
 }
 
 export async function previewSignalEnrichment(
@@ -163,7 +175,37 @@ export async function enrichEntity(
 ): Promise<EnrichmentResult> {
   const sourceId = request.sourceId ?? 'default';
   const sourceSlug = request.sourceSlug || 'signal';
-  const slug = slugifyEntity(request.entityName, request.entityType);
+  const filingDirectory = request.filingDirectory
+    ?? await resolveActiveFilingDirectory(request.entityType, sourceId).catch(() => null);
+  const slug = filingDirectory ? slugifyEntity(request.entityName, filingDirectory) : '';
+  if (!filingDirectory || !slug) {
+    return {
+      slug,
+      action: 'skipped',
+      tier: request.tier ?? 3,
+      backlinkCreated: false,
+      timelineAdded: false,
+      mentionCount: 0,
+      mentionSources: [],
+      suggestedTier: 3,
+      tierEscalated: false,
+      reason: filingDirectory ? 'entity_slug_invalid' : 'schema_filing_missing',
+    };
+  }
+  if (request.entityType === 'person' && !isLikelyPersonEntityName(request.entityName)) {
+    return {
+      slug,
+      action: 'skipped',
+      tier: request.tier ?? 3,
+      backlinkCreated: false,
+      timelineAdded: false,
+      mentionCount: 0,
+      mentionSources: [],
+      suggestedTier: 3,
+      tierEscalated: false,
+      reason: 'person_name_shape_gate',
+    };
+  }
   const existingPage = await engine.getPage(slug, { sourceId });
   const { mentionCount, mentionSources } = await countMentions(engine, request.entityName);
   const suggestedTier = suggestTier(mentionCount, mentionSources, request.context, sourceSlug);
@@ -317,9 +359,17 @@ async function runSignalEnrichment(
   if (skippedOverflow > 0) warnings.push(`entity_limit_reached:${skippedOverflow}`);
 
   const summary = emptySignalSummary(warnings);
+  const filingDirectories = new Map<EnrichmentEntityType, string | null>();
 
   for (const entity of rawEntities) {
-    const slug = slugifyEntity(entity.name, entity.type);
+    if (!filingDirectories.has(entity.type)) {
+      filingDirectories.set(
+        entity.type,
+        await resolveActiveFilingDirectory(entity.type, sourceId).catch(() => null),
+      );
+    }
+    const filingDirectory = filingDirectories.get(entity.type) ?? null;
+    const slug = filingDirectory ? slugifyEntity(entity.name, filingDirectory) : '';
     const { mentionCount, mentionSources } = await countMentions(engine, entity.name);
     const tier = suggestTier(mentionCount, mentionSources, entity.context, sourceSlug);
     summary.detected.push({ name: entity.name, type: entity.type, slug, tier, confidence: entity.confidence });
@@ -334,6 +384,7 @@ async function runSignalEnrichment(
       citation: sourceCitation(sourceSlug),
       external: opts.external === true,
       dryRun: opts.dryRun === true,
+      filingDirectory: filingDirectory ?? undefined,
     });
 
     if (result.external) {
