@@ -28,11 +28,11 @@ export type DocSection = {
 export const PROJECT = {
   name: "VoltMind",
   summary:
-    "VoltMind is a personal knowledge brain and GStack mod for agent platforms. Pluggable engines (PGLite default, Postgres+pgvector for scale), contract-first operations, 26 fat-markdown skills. Teaches agents brain ops, ingestion, enrichment, scheduling, identity, and access control.",
-  repoUrl: "https://github.com/garrytan/voltmind",
+    "VoltMind is a local-first knowledge brain for AI agents. PGLite is the default engine; Postgres/Supabase enables shared HTTP MCP and the supervised host-local Autopilot runtime. Markdown skills route the public MVP surface.",
+  repoUrl: "https://github.com/Justike001/voltmind",
   rawBaseUrl:
     process.env.LLMS_REPO_BASE ??
-    "https://raw.githubusercontent.com/garrytan/voltmind/master",
+    "https://raw.githubusercontent.com/Justike001/voltmind/master",
 };
 
 export const SECTIONS: DocSection[] = [

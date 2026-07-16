@@ -119,11 +119,16 @@ Key patterns to carry into agent behavior:
 - Quality convention: follow `skills/conventions/quality.md` for citations,
   back-linking, and the notability gate.
 
-Ambient entity detection, cron schedules, autonomous enrichment, autopilot, and
-Minion submit/worker flows remain outside the Windows/PGLite public route.
+Ambient entity detection, unsourced background enrichment, and arbitrary
+Minion submit/worker control remain outside the MVP route. Autopilot is a
+public **host-local** capability only for Postgres/Supabase deployments, with
+the supervised worker topology documented in
+`docs/operations/windows-autopilot-reliability.md`. PGLite supports manual and
+inline maintenance but not the supervised Minions worker. Remote MCP never
+exposes scheduler installation, queue control, credentials, or host files.
 Use explicit `capture`, `import`, `search`, `query`, `get`, `put`, `link`,
-`timeline-add`, `sync`, `embed`, and host-local `files` migration commands
-until those runtime surfaces are re-enabled.
+`timeline-add`, `sync`, `embed`, and host-local `files` migration commands for
+the local-first path.
 
 ## Before shipping
 

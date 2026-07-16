@@ -59,3 +59,8 @@ media/x/
 media/articles/
 meetings/transcripts/
 /nul
+
+# Workspace-local / generated tool caches (not source — keep out of git)
+.understand-anything/
+state/
+.omo/
