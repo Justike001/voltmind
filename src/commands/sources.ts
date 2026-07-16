@@ -23,8 +23,8 @@
  *   - MCP tool-def regen for full source-scoping of all ops (part of Step 2+5)
  */
 
-import { writeFileSync, unlinkSync, existsSync } from 'fs';
-import { join } from 'path';
+import { writeFileSync, unlinkSync, existsSync, statSync } from 'fs';
+import { join, resolve } from 'path';
 import type { BrainEngine } from '../core/engine.ts';
 import {
   assessDestructiveImpact,
@@ -479,6 +479,118 @@ async function runRename(engine: BrainEngine, args: string[]): Promise<void> {
   }
   await engine.executeRaw(`UPDATE sources SET name = $1 WHERE id = $2`, [newName, id]);
   console.log(`Renamed source "${id}" display: ${src.name} → ${newName} (id is immutable).`);
+}
+
+// ── Subcommand: set-path ───────────────────────────────────
+
+/** Update only the filesystem root for an existing source. */
+async function runSetPath(engine: BrainEngine, args: string[]): Promise<void> {
+  const id = args[0];
+  const rawPath = args[1];
+  if (!id || !rawPath || args.length > 2) {
+    console.error('Usage: voltmind sources set-path <id> <directory-path>');
+    process.exit(2);
+  }
+
+  const src = await fetchSource(engine, id);
+  if (!src) {
+    console.error(`Source "${id}" not found.`);
+    process.exit(4);
+  }
+
+  const localPath = resolve(rawPath);
+  let isDirectory = false;
+  try {
+    isDirectory = statSync(localPath).isDirectory();
+  } catch {
+    // Keep the user-facing error stable for missing or inaccessible paths.
+  }
+  if (!isDirectory) {
+    console.error(`Error: source path must be an existing directory: ${localPath}`);
+    process.exit(2);
+  }
+
+  const normalize = (p: string): string => resolve(p).replace(/[\\/]+$/, '').toLowerCase();
+  const target = normalize(localPath);
+  const others = await engine.executeRaw<{ id: string; local_path: string }>(
+    `SELECT id, local_path FROM sources WHERE local_path IS NOT NULL AND id != $1`,
+    [id],
+  );
+  for (const other of others) {
+    const existing = normalize(other.local_path);
+    if (target === existing || target.startsWith(`${existing}\\`) || existing.startsWith(`${target}\\`)) {
+      console.error(
+        `Error: path "${localPath}" overlaps with existing source "${other.id}" at "${other.local_path}".`,
+      );
+      process.exit(3);
+    }
+  }
+
+  await engine.executeRaw(`UPDATE sources SET local_path = $1 WHERE id = $2`, [localPath, id]);
+  console.log(`Updated source "${id}" local path: ${src.local_path ?? '(unset)'} → ${localPath}`);
+}
+
+// ── Subcommand: reconcile ──────────────────────────────────
+
+/**
+ * Soft-delete pages whose recorded source_path no longer exists below the
+ * source's current local_path. This is intentionally opt-in and reversible:
+ * changing a source root must not silently erase old DB rows, but leaving them
+ * visible forever pollutes orphan/graph quality metrics after a root move.
+ */
+async function runReconcile(engine: BrainEngine, args: string[]): Promise<void> {
+  const id = args[0];
+  const dryRun = args.includes('--dry-run');
+  const yes = args.includes('--yes');
+  if (!id || args.some((a, i) => i > 0 && !['--dry-run', '--yes'].includes(a))) {
+    console.error('Usage: voltmind sources reconcile <id> [--dry-run] [--yes]');
+    process.exit(2);
+  }
+  const src = await fetchSource(engine, id);
+  if (!src) {
+    console.error(`Source "${id}" not found.`);
+    process.exit(4);
+  }
+  if (!src.local_path) {
+    console.error(`Source "${id}" has no local_path; nothing to reconcile.`);
+    process.exit(2);
+  }
+  const root = resolve(src.local_path);
+  const rootLower = root.replace(/[\\/]+$/, '').toLowerCase();
+  const rows = await engine.executeRaw<{ slug: string; source_path: string | null; title: string | null }>(
+    `SELECT slug, source_path, title
+       FROM pages
+      WHERE source_id = $1 AND deleted_at IS NULL AND source_path IS NOT NULL
+      ORDER BY slug`,
+    [id],
+  );
+  const missing = rows.filter((row) => {
+    if (!row.source_path) return false;
+    const candidate = resolve(root, row.source_path);
+    const candidateLower = candidate.toLowerCase();
+    if (candidateLower !== rootLower && !candidateLower.startsWith(`${rootLower}\\`)) return true;
+    return !existsSync(candidate);
+  });
+
+  console.log(`Source "${id}" reconcile: ${missing.length} missing page path(s) out of ${rows.length} path-backed page(s).`);
+  for (const row of missing.slice(0, 100)) {
+    console.log(`  ${row.slug}${row.title ? ` — ${row.title}` : ''}`);
+  }
+  if (missing.length > 100) console.log(`  … ${missing.length - 100} more`);
+  if (dryRun || missing.length === 0) {
+    if (dryRun) console.log('(dry-run; no pages changed)');
+    return;
+  }
+  if (!yes) {
+    console.error('Refusing to soft-delete without --yes. Re-run with --dry-run first, then add --yes.');
+    process.exit(5);
+  }
+  let deleted = 0;
+  for (const row of missing) {
+    const result = await engine.softDeletePage(row.slug, { sourceId: id });
+    if (result) deleted++;
+  }
+  console.log(`Soft-deleted ${deleted} missing page(s); recoverable via restore_page for 72h.`);
 }
 
 // ── Subcommand: default ─────────────────────────────────────
@@ -1105,6 +1217,8 @@ export async function runSources(engine: BrainEngine, args: string[]): Promise<v
     case 'list':       return runList(engine, rest);
     case 'remove':     return runRemove(engine, rest);
     case 'rename':     return runRename(engine, rest);
+    case 'set-path':   return runSetPath(engine, rest);
+    case 'reconcile':  return runReconcile(engine, rest);
     case 'default':    return runDefault(engine, rest);
     case 'attach':     runAttach(rest); return;
     case 'detach':     runDetach(); return;
@@ -1163,6 +1277,10 @@ Subcommands:
                                     Without <id>: purge all expired archives.
                                     With <id>: force-purge (requires --confirm-destructive).
   rename <id> <new-name>            Rename display name (id is immutable).
+  set-path <id> <directory-path>    Update the source filesystem root only.
+  reconcile <id> [--dry-run] [--yes]
+                                    Soft-delete path-backed pages missing
+                                    below the current source root (reversible).
   default <id>                      Set the brain-level default source.
   attach <id>                       Write .voltmind-source in CWD (like kubectl context).
   detach                            Remove .voltmind-source from CWD.
