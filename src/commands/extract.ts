@@ -1387,16 +1387,44 @@ async function extractMentionsFromDb(
     return { created: 0, pages: 0 };
   }
 
-  const allRefs = sourceIdFilter
-    ? (await engine.listAllPageRefs()).filter(r => r.source_id === sourceIdFilter)
-    : await engine.listAllPageRefs();
+  // Read the scan payload in one DB round-trip. The previous implementation
+  // listed refs and then called getPage() once per row, which is tolerable on
+  // local PGLite but turns a 300-page Supabase scan into several minutes of
+  // latency (and makes bounded --type previews look hung).
+  const where: string[] = ['deleted_at IS NULL'];
+  const params: unknown[] = [];
+  if (sourceIdFilter) {
+    params.push(sourceIdFilter);
+    where.push(`source_id = $${params.length}`);
+  }
+  if (typeFilter) {
+    params.push(typeFilter);
+    where.push(`type = $${params.length}`);
+  }
+  if (since) {
+    params.push(since);
+    where.push(`updated_at > $${params.length}`);
+  }
+  const rows = await engine.executeRaw<{
+    slug: string;
+    source_id: string;
+    compiled_truth: string | null;
+    timeline: string | null;
+    updated_at: Date | string;
+  }>(
+    `SELECT slug, source_id, compiled_truth, timeline, updated_at
+       FROM pages
+      WHERE ${where.join(' AND ')}
+      ORDER BY id`,
+    params,
+  );
 
   let processed = 0;
   let created = 0;
   const batch: LinkBatchInput[] = [];
 
   const progress = createProgress(cliOptsToProgressOptions(getCliOptions()));
-  progress.start('extract.by_mention.scan', allRefs.length);
+  progress.start('extract.by_mention.scan', rows.length);
 
   async function flush() {
     if (batch.length === 0) return;
@@ -1414,23 +1442,15 @@ async function extractMentionsFromDb(
     }
   }
 
-  const sinceMs = since ? new Date(since).getTime() : null;
-
-  for (const { slug, source_id } of allRefs) {
-    const page = await engine.getPage(slug, { sourceId: source_id });
-    if (!page) continue;
-    if (typeFilter && page.type !== typeFilter) continue;
-    if (sinceMs !== null) {
-      const updatedMs = new Date(page.updated_at).getTime();
-      if (Number.isFinite(updatedMs) && updatedMs <= sinceMs) continue;
-    }
+  for (const row of rows) {
+    const { slug, source_id } = row;
     processed++;
     progress.tick();
 
     // D3: scan both columns joined with a paragraph separator so an
     // end-of-compiled token doesn't accidentally merge with a
     // start-of-timeline token into a false phrase match.
-    const body = page.compiled_truth + '\n\n' + (page.timeline ?? '');
+    const body = (row.compiled_truth ?? '') + '\n\n' + (row.timeline ?? '');
     if (!body.trim()) continue;
 
     const mentions = findMentionedEntities(body, gazetteer, {
