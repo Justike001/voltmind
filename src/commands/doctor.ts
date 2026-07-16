@@ -5090,8 +5090,9 @@ export async function buildChecks(
   try {
     const result = await engine.executeRaw<{ kind: string; count: string }>(
       `WITH sample AS (
-         SELECT slug, frontmatter, effective_date, effective_date_source
+       SELECT slug, frontmatter, effective_date, effective_date_source
            FROM pages
+          WHERE deleted_at IS NULL
           ORDER BY id DESC
           LIMIT 1000
        )
