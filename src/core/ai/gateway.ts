@@ -21,7 +21,7 @@
  *     rotation (via configureGateway()) invalidates stale entries.
  */
 
-import { embed as aiEmbed, embedMany, generateObject, generateText } from 'ai';
+import { embed as aiEmbed, embedMany, generateObject, generateText, jsonSchema } from 'ai';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { listRecipes } from './recipes/index.ts';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -2369,7 +2369,10 @@ export async function chat(opts: ChatOpts): Promise<ChatResult> {
   const tools = (opts.tools ?? []).reduce((acc, t) => {
     acc[t.name] = {
       description: t.description,
-      inputSchema: { jsonSchema: t.inputSchema } as any,
+      // AI SDK v6 expects a Schema (or the SDK's jsonSchema wrapper), not a
+      // plain `{ jsonSchema: ... }` object. The latter reaches OpenRouter's
+      // OpenAI-compatible adapter as `schema()` and fails at runtime.
+      inputSchema: jsonSchema(t.inputSchema),
     };
     return acc;
   }, {} as Record<string, any>);
