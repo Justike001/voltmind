@@ -66,7 +66,9 @@ async function countAffected(
   const params: unknown[] = [];
   if (slugPrefix) {
     params.push(slugPrefix.replace(/[\\%_]/g, (c) => '\\' + c) + '%');
-    where.push(`slug LIKE $${params.length} ESCAPE '\\\\'`);
+    // The prefix is escaped before binding; omit an explicit ESCAPE clause
+    // so PgBouncer/Postgres do not reinterpret the backslash literal.
+    where.push(`slug LIKE $${params.length}`);
   }
   if (sourceId) {
     params.push(sourceId);

@@ -151,7 +151,7 @@ export async function backfillEffectiveDate(
     // Keyset pagination: WHERE id > last_id ORDER BY id LIMIT N. Single-direction
     // walk; safe under concurrent inserts (new rows show up at the tail).
     const slugFilter = slugPrefix
-      ? `AND slug LIKE $2 ESCAPE '\\\\'`
+      ? `AND slug LIKE $2`
       : '';
     const params: unknown[] = [lastId];
     if (slugPrefix) params.push(slugPrefix + '%');
