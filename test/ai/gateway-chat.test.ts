@@ -40,10 +40,10 @@ describe('chat touchpoint — recipe registry', () => {
     }
   });
 
-  test('only Anthropic claims supports_prompt_cache=true', () => {
+  test('Anthropic and direct DeepSeek declare prompt-cache support', () => {
     for (const r of listRecipes()) {
       if (!r.touchpoints.chat) continue;
-      if (r.id === 'anthropic') {
+      if (r.id === 'anthropic' || r.id === 'deepseek') {
         expect(r.touchpoints.chat.supports_prompt_cache).toBe(true);
       } else {
         expect(r.touchpoints.chat.supports_prompt_cache ?? false).toBe(false);

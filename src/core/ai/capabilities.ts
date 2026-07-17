@@ -29,9 +29,10 @@ export interface ProviderCapabilities {
   supportsToolCalling: boolean;
 
   /**
-   * Anthropic-style ephemeral prompt cache markers honored. When false, the
-   * loop runs hot (no cache_control injection) and per-turn costs scale
-   * linearly with conversation length. Doesn't break the loop; just costs more.
+   * Provider supports effective prompt caching. Anthropic uses explicit
+   * markers; some providers cache stable prefixes implicitly. When false,
+   * the loop runs hot and per-turn costs scale linearly with conversation
+   * length. Doesn't break the loop; just costs more.
    */
   supportsPromptCaching: boolean;
 
@@ -88,9 +89,16 @@ export function getProviderCapabilities(modelString: string): ProviderCapabiliti
   // boundary; this function returns capabilities for whatever the user asked
   // for, on the assumption it'll be validated elsewhere.
 
+  // OpenRouter hosts a mixed catalog, so a recipe-wide cache flag would be
+  // misleading. Its DeepSeek routes provide automatic prefix caching (no
+  // cache-control marker required), including deepseek/deepseek-v4-pro.
+  const usesImplicitOpenRouterDeepSeekCache =
+    recipe.id === 'openrouter' && parsed.modelId.startsWith('deepseek/');
+
   return {
     supportsToolCalling: chat.supports_tools === true,
-    supportsPromptCaching: chat.supports_prompt_cache === true,
+    supportsPromptCaching:
+      chat.supports_prompt_cache === true || usesImplicitOpenRouterDeepSeekCache,
     // No recipe exposes parallel-tools-specifically yet; gate on supports_tools.
     // Subsequent waves can split this into its own recipe field if a provider
     // ever supports tools without parallel dispatch.
@@ -102,10 +110,6 @@ export function getProviderCapabilities(modelString: string): ProviderCapabiliti
     maxContext: chat.max_context_tokens ?? 128_000,
   };
 
-  // The `parsed` binding is intentionally unused — `resolveRecipe` is called
-  // here for its validation side-effects (throws on unknown provider). Keeping
-  // the destructure makes future per-model capability overrides cheap.
-  void parsed;
 }
 
 /**

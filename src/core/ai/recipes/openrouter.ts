@@ -30,12 +30,10 @@ import type { Recipe } from '../types.ts';
  * downstream agent stacks (OpenClaw deployments, etc.) get their own
  * attribution on OR's leaderboard instead of polluting voltmind's.
  *
- * Subagent loops: `supports_subagent_loop: false` is INFORMATIONAL. The real
- * gate is `isAnthropicProvider()` in `src/core/model-config.ts` which
- * hard-pins voltmind's subagent infra to Anthropic-direct (stable tool_use_id
- * across crashes/replays). OR-proxied Anthropic is rejected at submit time
- * regardless of this flag — relaxing the gate is a deeper architectural
- * change tracked in TODOS.md.
+ * Subagent loops: use `agent.use_gateway_loop=true` for OpenRouter. The
+ * gateway-native loop supplies VoltMind-owned stable tool-call IDs, so it can
+ * safely resume across providers. Model-specific cache support is resolved in
+ * `capabilities.ts`; a recipe-wide flag would be inaccurate for this catalog.
  */
 export const openrouter: Recipe = {
   id: 'openrouter',
@@ -91,9 +89,11 @@ export const openrouter: Recipe = {
         'anthropic/claude-opus-4.7',
         'google/gemini-3-flash-preview',
         'deepseek/deepseek-chat',
+        'deepseek/deepseek-v4-pro',
       ],
       supports_tools: true,
-      // Informational only — real gate is isAnthropicProvider() upstream.
+      // Model-specific cache support is resolved in capabilities.ts.
+      // The gateway loop is required for non-Anthropic providers.
       supports_subagent_loop: false,
       supports_prompt_cache: false,
       // No max_context_tokens: catalog spans 128K to 1M+; a single recipe-wide

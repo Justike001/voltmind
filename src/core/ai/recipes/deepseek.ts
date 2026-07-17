@@ -18,10 +18,13 @@ export const deepseek: Recipe = {
   },
   touchpoints: {
     chat: {
-      models: ['deepseek-chat', 'deepseek-reasoner'],
+      models: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-pro'],
       supports_tools: true,
       supports_subagent_loop: true,
-      supports_prompt_cache: false,
+      // DeepSeek applies context caching automatically to repeated prompt
+      // prefixes and reports cache-hit tokens in response usage. Unlike
+      // Anthropic it needs no explicit cache-control marker.
+      supports_prompt_cache: true,
       max_context_tokens: 128000,
       cost_per_1m_input_usd: 0.14, // deepseek-chat off-peak baseline
       cost_per_1m_output_usd: 0.28,

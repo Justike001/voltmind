@@ -29,6 +29,7 @@ describe('KNOWN_CONFIG_KEYS', () => {
   test('contains the models-tier keys (v0.31.12)', () => {
     expect(KNOWN_CONFIG_KEYS).toContain('models.default');
     expect(KNOWN_CONFIG_KEYS).toContain('models.tier.subagent');
+    expect(KNOWN_CONFIG_KEYS).toContain('agent.use_gateway_loop');
   });
 
   test('no duplicate entries', () => {

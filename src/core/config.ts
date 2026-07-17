@@ -679,6 +679,8 @@ export const KNOWN_CONFIG_KEYS: readonly string[] = [
   'models.chat',
   'models.eval.longmemeval',
   'facts.extraction_model',
+  // Gateway-native subagent loop (required for non-Anthropic providers).
+  'agent.use_gateway_loop',
   // Dream cycle config
   'dream.synthesize.session_corpus_dir',
   'dream.synthesize.meeting_transcripts_dir',

@@ -24,6 +24,18 @@ describe('getProviderCapabilities (v0.38 Slice 1 — D6/D7 recipe-driven capabil
     expect(caps.maxContext).toBe(1000000); // Gemini 1.5 Pro
   });
 
+  it('returns cached subagent capabilities for direct DeepSeek', () => {
+    const caps = getProviderCapabilities('deepseek:deepseek-v4-pro');
+    expect(caps.supportsToolCalling).toBe(true);
+    expect(caps.supportsPromptCaching).toBe(true);
+  });
+
+  it('recognizes implicit caching for DeepSeek models routed by OpenRouter', () => {
+    const caps = getProviderCapabilities('openrouter:deepseek/deepseek-v4-pro');
+    expect(caps.supportsToolCalling).toBe(true);
+    expect(caps.supportsPromptCaching).toBe(true);
+  });
+
   it('honors Anthropic alias (undated → dated)', () => {
     const caps = getProviderCapabilities('anthropic:claude-haiku-4-5');
     expect(caps.supportsToolCalling).toBe(true);
@@ -56,6 +68,14 @@ describe('classifyCapabilities (D6 — three-tier capability verdict)', () => {
 
   it('returns degraded:no_caching for Google Gemini', () => {
     expect(classifyCapabilities('google:gemini-1.5-pro')).toBe('degraded:no_caching');
+  });
+
+  it('returns ok for direct DeepSeek implicit prefix caching', () => {
+    expect(classifyCapabilities('deepseek:deepseek-v4-pro')).toBe('ok');
+  });
+
+  it('returns ok for OpenRouter DeepSeek V4 Pro implicit prefix caching', () => {
+    expect(classifyCapabilities('openrouter:deepseek/deepseek-v4-pro')).toBe('ok');
   });
 
   it('returns unknown for unrecognized providers', () => {

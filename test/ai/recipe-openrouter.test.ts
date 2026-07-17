@@ -48,8 +48,8 @@ describe('recipe: openrouter', () => {
     const r = getRecipe('openrouter')!;
     expect(r.touchpoints.chat).toBeDefined();
     expect(r.touchpoints.chat!.supports_tools).toBe(true);
-    // supports_subagent_loop is informational; isAnthropicProvider() is the
-    // real gate. Field stays false per the recipe docstring.
+    // The flag is informational. Non-Anthropic OpenRouter jobs use the
+    // gateway-native loop, enabled with agent.use_gateway_loop=true.
     expect(r.touchpoints.chat!.supports_subagent_loop).toBe(false);
     expect(() =>
       assertTouchpoint(r, 'chat', 'some/provider-model'),
