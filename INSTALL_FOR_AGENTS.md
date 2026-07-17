@@ -3,6 +3,82 @@
 Read this entire file, then follow the steps. Ask the user for API keys when needed.
 Target: ~30 minutes to a fully working brain.
 
+## Before Step 0: Prepare the computer
+
+This checklist assumes a clean computer where nothing has been installed yet and
+the operator is not familiar with command-line tools. Complete it before reading
+or following Step 0. The commands below are checks only; they do not install
+anything.
+
+### Required for the standard local install
+
+You need all of the following:
+
+1. **A supported desktop operating system and a terminal.** On Windows, use
+   PowerShell (already included with Windows 10/11). On macOS, use Terminal. On
+   Linux, use the distribution's terminal.
+2. **An internet connection** that can reach `bun.sh`, GitHub, and any AI API
+   provider selected later. A corporate proxy or firewall may need to allow these
+   sites.
+3. **Git**, because the standard install downloads VoltMind from GitHub and the
+   fallback install uses `git clone`.
+4. **Node.js LTS**, because the package installation hook and helper scripts invoke
+   `node`. The VoltMind CLI itself runs on Bun, but Node.js is still needed for the
+   normal installation path.
+5. **Bun 1.3.10 or newer**, which is VoltMind's required runtime and package manager.
+6. **A working PATH**, so a newly opened terminal can find `git`, `node`, and `bun`.
+
+`npm` is normally installed together with Node.js, but VoltMind does not require
+`npm`; use Bun for the commands in this guide.
+
+### Check before continuing
+
+Run these commands in a new terminal. Every required command must print a version
+number. If a command says that it is not recognized or not found, install that
+tool first, open a new terminal, and run the checks again.
+
+PowerShell (Windows):
+
+```powershell
+git --version
+node --version
+bun --version
+```
+
+Terminal (macOS/Linux):
+
+```bash
+git --version
+node --version
+bun --version
+```
+
+Confirm that the Bun version is at least `1.3.10`. If the version is older, update
+Bun before continuing. On Windows, install Git and Node.js LTS from their official
+download pages, then install Bun with the official Windows installer at
+<https://bun.sh/docs/installation>. On macOS/Linux, install Git and Node.js LTS
+using the operating system's official package source, then install Bun from
+<https://bun.sh/docs/installation>.
+
+After installing anything, close and reopen the terminal so the updated PATH is
+loaded. Do not continue to Step 0 until `git --version`, `node --version`, and
+`bun --version` all work in that new terminal.
+
+### Not required for the default first install
+
+Do **not** block the local PGLite setup on these optional components:
+
+- Docker or a local PostgreSQL server
+- A Supabase account or database
+- Python
+- An IDE or code editor
+- `npm`
+
+The default `voltmind init` path uses an embedded local database and does not need
+those components. Cloud API keys are checked and requested later in Step 2. A
+PostgreSQL/Supabase setup or platform integrations may introduce additional
+requirements; install those only if the operator chooses that path.
+
 ## Step 0: If you are not Claude Code
 
 Read `AGENTS.md` at the repo root first. It's the non-Claude-agent operating
