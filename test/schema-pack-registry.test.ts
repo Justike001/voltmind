@@ -80,6 +80,25 @@ describe('resolvePack — happy path', () => {
 });
 
 describe('resolvePack — extends-chain depth ladder', () => {
+  test('merges inherited declarations with child precedence', async () => {
+    const parent = makeManifest('parent', null);
+    parent.page_types = [
+      { name: 'person', primitive: 'entity', path_prefixes: ['people/'], aliases: [], extractable: false, expert_routing: true },
+      { name: 'project', primitive: 'concept', path_prefixes: ['projects/'], aliases: [], extractable: false, expert_routing: false },
+    ];
+    parent.filing_rules = [{ kind: 'person', directory: 'people/', examples: [] }];
+    const child = makeManifest('child', 'parent');
+    child.page_types = [
+      { name: 'project', primitive: 'entity', path_prefixes: ['projects/'], aliases: [], extractable: true, expert_routing: false },
+    ];
+    child.filing_rules = [{ kind: 'project', directory: 'projects/', examples: [] }];
+
+    const resolved = await resolvePack(child, chainLoader({ parent }));
+    expect(resolved.manifest.page_types.map(type => type.name)).toEqual(['project', 'person']);
+    expect(resolved.manifest.page_types[0]?.primitive).toBe('entity');
+    expect(resolved.manifest.filing_rules.map(rule => rule.kind)).toEqual(['project', 'person']);
+  });
+
   test('two-link chain succeeds with no warn callback', async () => {
     // child -> parent.
     const child = makeManifest('child', 'parent');

@@ -184,7 +184,7 @@ describe('runScaffoldThirdParty — voltmind version gate', () => {
       throw new Error('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(ScaffoldThirdPartyError);
-      expect((err as ScaffoldThirdPartyError).code).toBe('gbrain_version_too_old');
+      expect((err as ScaffoldThirdPartyError).code).toBe('voltmind_version_too_old');
     }
   });
 

@@ -28,6 +28,8 @@ writes_to:
 
 # Enrich Skill
 
+> **Convention:** see [conventions/brain-first.md](../conventions/brain-first.md) for the lookup chain (search → query → get_page → external).
+
 Enrich person and company pages from external sources. Scale effort to importance.
 
 ## Contract

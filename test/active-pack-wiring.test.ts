@@ -1,8 +1,7 @@
 // v0.39 T1.5 — engine wiring regression test.
 //
 // Asserts that the `activePack` parameter threaded through parseMarkdown
-// actually CHANGES type inference at runtime, while preserving byte-for-byte
-// parity with the voltmind-base hardcoded behavior when no pack is passed.
+// actually CHANGES type inference at runtime without a hidden legacy map.
 //
 // Pinned by codex finding #1 (engine inert at runtime is the central v0.38
 // gap). Without this test, T1.5's API additions could be silently
@@ -12,9 +11,9 @@ import { describe, test, expect } from 'bun:test';
 import { parseMarkdown } from '../src/core/markdown.ts';
 
 describe('v0.39 T1.5 — parseMarkdown activePack threading', () => {
-  test('no activePack passed → falls back to legacy inferType (voltmind-base parity)', () => {
+  test('no activePack passed → remains explicitly unclassified', () => {
     const result = parseMarkdown('# Alice', 'people/alice.md');
-    expect(result.type).toBe('person');
+    expect(result.type).toBe('unclassified');
   });
 
   test('activePack with custom type → uses pack inference (NOT legacy)', () => {
@@ -30,11 +29,11 @@ describe('v0.39 T1.5 — parseMarkdown activePack threading', () => {
     expect(result.type).toBe('project-x');
   });
 
-  test('activePack empty → falls back to voltmind-base hardcoded', () => {
+  test('activePack empty → remains unclassified', () => {
     const result = parseMarkdown('# alice', 'people/alice.md', {
       activePack: { page_types: [] },
     });
-    expect(result.type).toBe('person');
+    expect(result.type).toBe('unclassified');
   });
 
   test('frontmatter type wins over activePack inference', () => {
@@ -63,7 +62,7 @@ describe('v0.39 T1.5 — parseMarkdown activePack threading', () => {
     expect(parseMarkdown('x', 'Projects/p1.md', { activePack: pack }).type).toBe('project');
     expect(parseMarkdown('x', 'Reading/a1.md', { activePack: pack }).type).toBe('reading-note');
     expect(parseMarkdown('x', 'Daily Notes/today.md', { activePack: pack }).type).toBe('daily-note');
-    // Unmapped path falls back to `concept`.
-    expect(parseMarkdown('x', 'Other/foo.md', { activePack: pack }).type).toBe('concept');
+    // Unmapped paths must not silently acquire a semantic type.
+    expect(parseMarkdown('x', 'Other/foo.md', { activePack: pack }).type).toBe('unclassified');
   });
 });

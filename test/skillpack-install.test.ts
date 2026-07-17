@@ -19,7 +19,7 @@ import { tmpdir } from 'os';
 
 import {
   bundledSkillSlugs,
-  findGbrainRoot,
+  findVoltMindRoot,
   loadBundleManifest,
   enumerateBundle,
   BundleError,
@@ -115,15 +115,15 @@ afterEach(() => {
   }
 });
 
-describe('findGbrainRoot', () => {
+describe('findVoltMindRoot', () => {
   it('walks up to find openclaw.plugin.json + src/cli.ts', () => {
     const { voltmindRoot } = scratchGbrain();
     const nested = join(voltmindRoot, 'a', 'b', 'c');
     mkdirSync(nested, { recursive: true });
-    expect(findGbrainRoot(nested)).toBe(voltmindRoot);
+    expect(findVoltMindRoot(nested)).toBe(voltmindRoot);
   });
   it('returns null when no voltmind root above', () => {
-    expect(findGbrainRoot('/tmp/definitely-not-a-voltmind-repo-XYZ')).toBeNull();
+    expect(findVoltMindRoot('/tmp/definitely-not-a-voltmind-repo-XYZ')).toBeNull();
   });
 });
 

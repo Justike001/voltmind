@@ -31,8 +31,11 @@ describe('VoltMind Personal Brain scaffold', () => {
       expect(existsSync(join(root, '.system', 'task-registry.jsonl'))).toBe(true);
       expect(existsSync(join(root, '.system', 'automation-registry.jsonl'))).toBe(true);
       expect(existsSync(join(root, '.system', 'sync-state.json'))).toBe(true);
-      expect(existsSync(join(root, 'ontology', 'lenses'))).toBe(true);
+      expect(existsSync(join(root, 'ontology', 'lenses'))).toBe(false);
       expect(existsSync(join(root, 'policies'))).toBe(false);
+      for (const evidenceDir of ['teams', 'meetings', 'emails', 'calendar']) {
+        expect(existsSync(join(root, 'sources', evidenceDir))).toBe(true);
+      }
 
       for (const template of [
         'people',

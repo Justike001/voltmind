@@ -41,6 +41,8 @@ writes_to:
 
 # Cold Start — Microsoft-First Day-One Brain Bootstrapping
 
+> **Convention:** see [conventions/brain-first.md](../conventions/brain-first.md) for the lookup chain (search → query → get_page → external).
+
 You have a working VoltMind brain. Search works. Now what?
 
 An empty brain is a static database. A brain with your meeting history, active

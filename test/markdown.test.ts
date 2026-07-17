@@ -1,6 +1,15 @@
 import { describe, test, expect } from 'bun:test';
 import { parseMarkdown, serializeMarkdown, splitBody } from '../src/core/markdown.ts';
 
+const PERSONAL_PATHS = {
+  page_types: [
+    { name: 'person', path_prefixes: ['people/'] },
+    { name: 'concept', path_prefixes: ['concepts/'] },
+    { name: 'company', path_prefixes: ['companies/'] },
+    { name: 'writing', path_prefixes: ['writing/'] },
+  ],
+};
+
 describe('Markdown Parser', () => {
   test('parses frontmatter + compiled_truth + timeline (explicit sentinel)', () => {
     const md = `---
@@ -282,23 +291,13 @@ Some content.`;
   });
 
   test('infers type from various directory paths', () => {
-    expect(parseMarkdown('', 'people/someone.md').type).toBe('person');
-    expect(parseMarkdown('', 'concepts/thing.md').type).toBe('concept');
-    expect(parseMarkdown('', 'companies/acme.md').type).toBe('company');
+    expect(parseMarkdown('', 'people/someone.md', { activePack: PERSONAL_PATHS }).type).toBe('person');
+    expect(parseMarkdown('', 'concepts/thing.md', { activePack: PERSONAL_PATHS }).type).toBe('concept');
+    expect(parseMarkdown('', 'companies/acme.md', { activePack: PERSONAL_PATHS }).type).toBe('company');
   });
 
-  test('infers type from wiki subdirectory paths', () => {
-    expect(parseMarkdown('', 'tech/wiki/concepts/longevity-science.md').type).toBe('concept');
-    expect(parseMarkdown('', 'tech/wiki/guides/team-os-claude-code.md').type).toBe('guide');
-    expect(parseMarkdown('', 'tech/wiki/analysis/agi-timeline-debate.md').type).toBe('analysis');
-    expect(parseMarkdown('', 'tech/wiki/hardware/h100-vs-gb200-training-benchmarks.md').type).toBe('hardware');
-    expect(parseMarkdown('', 'tech/wiki/architecture/kb-infrastructure.md').type).toBe('architecture');
-    expect(parseMarkdown('', 'finance/wiki/analysis/polymarket-bot-automation-thesis.md').type).toBe('analysis');
-    expect(parseMarkdown('', 'personal/wiki/concepts/career-regrets-2026-framework.md').type).toBe('concept');
-  });
-
-  test('infers writing type from /writing/ paths', () => {
-    expect(parseMarkdown('', 'writing/post.md').type).toBe('writing');
-    expect(parseMarkdown('', 'projects/blog/writing/essay.md').type).toBe('writing');
+  test('matches declared prefixes only at the path root', () => {
+    expect(parseMarkdown('', 'writing/post.md', { activePack: PERSONAL_PATHS }).type).toBe('writing');
+    expect(parseMarkdown('', 'projects/blog/writing/essay.md', { activePack: PERSONAL_PATHS }).type).toBe('unclassified');
   });
 });

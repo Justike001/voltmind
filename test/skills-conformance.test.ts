@@ -1,6 +1,8 @@
 import { describe, test, expect } from "bun:test";
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
+import { analyzeSkillBrainFirst } from "../src/core/skill-brain-first.ts";
+import { parseSkillFrontmatter } from "../src/core/skill-frontmatter.ts";
 
 const SKILLS_DIR = join(import.meta.dir, "..", "skills");
 const MANIFEST_PATH = join(SKILLS_DIR, "manifest.json");
@@ -101,6 +103,18 @@ describe("skills conformance", () => {
         expect(names).not.toContain(name);
         names.push(name);
       }
+    }
+  });
+
+  test("brain-writing ingestion skills declare canonical brain-first compliance", () => {
+    for (const dir of ["cold-start", "enrich", "ingest"]) {
+      const skillPath = join(SKILLS_DIR, dir, "SKILL.md");
+      const content = readFileSync(skillPath, "utf-8");
+      const result = analyzeSkillBrainFirst(content, dir, parseSkillFrontmatter(content));
+
+      expect(result.status).toBe("ok");
+      expect(result.reason).not.toBe("missing_brain_first");
+      expect(content).toMatch(/^>\s*\*\*Convention:\*\*[^\n]*brain-first/im);
     }
   });
 });

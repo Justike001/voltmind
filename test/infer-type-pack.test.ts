@@ -1,13 +1,5 @@
-// v0.38 T7a: pack-aware inferType parity + extension tests.
-//
-// Parity gate: `inferTypeFromPack(path, voltmind-base)` must produce
-// IDENTICAL output to the legacy `inferType(path)` for every known
-// path prefix. If this drifts, voltmind-base.yaml is out of sync with
-// the VOLTMIND_BASE_PATH_PREFIXES table in markdown.ts.
-//
-// Extension test: a user pack adding `paper: { path_prefixes:
-// ['papers/'] }` must route `papers/foo.md` to 'paper' (the pack
-// declaration), bypassing the voltmind-base fallback.
+// Schema-pack path inference. Every result must come from the supplied pack;
+// there is no hardcoded fallback table in markdown.ts.
 
 import { describe, expect, test } from 'bun:test';
 import { parseMarkdown } from '../src/core/markdown.ts';
@@ -40,21 +32,18 @@ const PARITY_FIXTURES: ReadonlyArray<{ path: string; expected: string; reason: s
   { path: 'slack/sl-0037.md', expected: 'slack', reason: 'slack/ prefix' },
   { path: 'cal/2026-05-20.md', expected: 'calendar-event', reason: 'cal/ prefix' },
   // Stronger-signal wins: writing/ inside projects/
-  { path: 'projects/blog/writing/essay.md', expected: 'writing', reason: 'writing/ wins over projects/' },
+  { path: 'projects/blog/writing/essay.md', expected: 'project', reason: 'root-relative prefixes do not match nested directories' },
   // Fallback: paths not matching any prefix
-  { path: 'random/path.md', expected: 'concept', reason: 'no prefix match → concept default' },
+  { path: 'random/path.md', expected: 'unclassified', reason: 'no prefix match remains explicit' },
 ];
 
-describe('inferTypeFromPack (T7a) — voltmind-base parity', () => {
-  test('parity: every known path maps to the same type via pack as via legacy', () => {
+describe('inferTypeFromPack', () => {
+  test('each known path maps through the supplied pack', () => {
     const pack = loadPackFromFile(VOLTMIND_BASE_PATH);
     for (const { path, expected, reason } of PARITY_FIXTURES) {
       const actual = inferTypeFromPack(path, pack);
-      // For parity, the pack result MUST match the legacy hardcoded result.
-      // Verify by parsing markdown — parseMarkdown calls the legacy inferType
-      // when frontmatter doesn't override.
       const md = `# ${path}\nbody`;
-      const parsed = parseMarkdown(md, path);
+      const parsed = parseMarkdown(md, path, { activePack: pack });
       expect(parsed.type).toBe(expected);
       expect(actual).toBe(expected);
       // Sanity: the reason annotation isn't a test assertion but documents
@@ -63,7 +52,7 @@ describe('inferTypeFromPack (T7a) — voltmind-base parity', () => {
     }
   });
 
-  test('user pack extends voltmind-base with researcher type', () => {
+  test('user pack can define its own paths', () => {
     // Synthetic pack declaring a new type with its own prefix.
     const pack = parseSchemaPackManifest({
       api_version: 'voltmind-schema-pack-v1',
@@ -78,13 +67,10 @@ describe('inferTypeFromPack (T7a) — voltmind-base parity', () => {
     });
     expect(inferTypeFromPack('researchers/alice.md', pack)).toBe('researcher');
     expect(inferTypeFromPack('papers/smith-2024.md', pack)).toBe('paper');
-    // Paths NOT in the pack's prefixes default to 'concept'.
-    expect(inferTypeFromPack('people/alice.md', pack)).toBe('concept');
+    expect(inferTypeFromPack('people/alice.md', pack)).toBe('unclassified');
   });
 
-  test('pack with empty page_types falls back to voltmind-base defaults', () => {
-    // E.g. a pack mid-construction with no page_types declared — should
-    // not crash, should match voltmind-base behavior.
+  test('pack with empty page_types remains unclassified', () => {
     const emptyPack = parseSchemaPackManifest({
       api_version: 'voltmind-schema-pack-v1',
       name: 'empty',
@@ -93,13 +79,13 @@ describe('inferTypeFromPack (T7a) — voltmind-base parity', () => {
       page_types: [],
       link_types: [],
     });
-    expect(inferTypeFromPack('people/alice.md', emptyPack)).toBe('person');
-    expect(inferTypeFromPack('media/foo.md', emptyPack)).toBe('media');
+    expect(inferTypeFromPack('people/alice.md', emptyPack)).toBe('unclassified');
+    expect(inferTypeFromPack('media/foo.md', emptyPack)).toBe('unclassified');
   });
 
-  test('undefined filePath returns concept default', () => {
+  test('undefined filePath remains unclassified', () => {
     const pack = loadPackFromFile(VOLTMIND_BASE_PATH);
-    expect(inferTypeFromPack(undefined, pack)).toBe('concept');
+    expect(inferTypeFromPack(undefined, pack)).toBe('unclassified');
   });
 
   test('case-insensitive matching', () => {

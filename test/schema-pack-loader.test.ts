@@ -258,8 +258,8 @@ describe('per-source bindings', () => {
 });
 
 describe('7-tier resolution (D13)', () => {
-  test('default to voltmind-base when nothing set', () => {
-    expect(resolveActivePackName({ remote: false })).toEqual({ pack_name: 'voltmind-base', source: 'default' });
+  test('default to voltmind-personal-brain when nothing set', () => {
+    expect(resolveActivePackName({ remote: false })).toEqual({ pack_name: 'voltmind-personal-brain', source: 'default' });
   });
 
   test('per-call wins when remote=false', () => {
