@@ -86,7 +86,19 @@ export interface LintContentOpts {
   };
 }
 
+/** Repository instructions are not knowledge pages and may intentionally use
+ * sparse frontmatter or placeholder examples. */
+export function isStructuralDocument(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, '/').toLowerCase();
+  const base = normalized.slice(normalized.lastIndexOf('/') + 1);
+  return base === 'readme.md' || base === 'index.md' ||
+    normalized === 'resolver.md' || normalized === 'schema.md' ||
+    normalized === 'contribution/rules.md' ||
+    normalized.startsWith('policy/') || normalized.startsWith('templates/');
+}
+
 export function lintContent(content: string, filePath: string, opts: LintContentOpts = {}): LintIssue[] {
+  if (isStructuralDocument(filePath)) return [];
   const issues: LintIssue[] = [];
   const lines = content.split('\n');
 

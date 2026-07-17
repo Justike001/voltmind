@@ -71,6 +71,44 @@ describe('Bug 11 — brain_score breakdown sums to total', () => {
 });
 
 describe('Bug 11 — orphan_pages is "no inbound links"', () => {
+  test('soft-deleted pages and their links do not affect active-brain health', async () => {
+    await engine.putPage('people/active-example', { type: 'person', title: 'Active Example', compiled_truth: 'active', frontmatter: {} });
+    await engine.putPage('people/deleted-example', { type: 'person', title: 'Deleted Example', compiled_truth: 'deleted', frontmatter: {} });
+    const activeId = (await (engine as any).db.query(`SELECT id FROM pages WHERE slug='people/active-example'`)).rows[0].id;
+    const deletedId = (await (engine as any).db.query(`SELECT id FROM pages WHERE slug='people/deleted-example'`)).rows[0].id;
+    await (engine as any).db.query(
+      `INSERT INTO links (from_page_id, to_page_id, link_type) VALUES ($1, $2, 'mentions')`,
+      [deletedId, activeId],
+    );
+    await (engine as any).db.query(`UPDATE pages SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`, [deletedId]);
+
+    const h = await engine.getHealth();
+    expect(h.page_count).toBe(1);
+    expect(h.link_density_score).toBe(0);
+    expect(h.orphan_pages).toBe(1);
+    expect(h.dead_links).toBe(0);
+    expect(h.link_coverage).toBe(0);
+  });
+
+  test('structural pages do not lower timeline or orphan content scores', async () => {
+    await engine.putPage('notes/a', { type: 'note', title: 'A', compiled_truth: 'a', frontmatter: {} });
+    await engine.putPage('notes/b', { type: 'note', title: 'B', compiled_truth: 'b', frontmatter: {} });
+    await engine.putPage('index', { type: 'note', title: 'Index', compiled_truth: 'nav', frontmatter: {} });
+    await engine.putPage('policy/privacy', { type: 'note', title: 'Policy', compiled_truth: 'policy', frontmatter: {} });
+    await engine.putPage('templates/person', { type: 'template', title: 'Template', compiled_truth: 'template', frontmatter: {} });
+
+    const aId = (await (engine as any).db.query(`SELECT id FROM pages WHERE slug='notes/a'`)).rows[0].id;
+    const bId = (await (engine as any).db.query(`SELECT id FROM pages WHERE slug='notes/b'`)).rows[0].id;
+    await (engine as any).db.query(
+      `INSERT INTO links (from_page_id, to_page_id, link_type) VALUES ($1, $2, 'mentions')`,
+      [aId, bId],
+    );
+
+    const h = await engine.getHealth();
+    expect(h.orphan_pages).toBe(0);
+    expect(h.no_orphans_score).toBe(15);
+  });
+
   test('a page with outbound-only links is NOT an orphan', async () => {
     // Hub page: links out to three others, but nothing links back to it.
     // Previous (buggy) behavior: hub counted as orphan because it had no

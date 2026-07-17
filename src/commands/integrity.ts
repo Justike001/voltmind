@@ -372,7 +372,7 @@ async function scanIntegrityBatch(
   const rows = await sql`
     SELECT slug, compiled_truth, frontmatter
     FROM pages
-    WHERE 1=1 ${typeCondition} ${validateCondition}
+    WHERE deleted_at IS NULL ${typeCondition} ${validateCondition}
     ORDER BY source_id, slug
     LIMIT ${limit}
   `;

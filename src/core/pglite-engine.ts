@@ -4228,29 +4228,57 @@ export class PGLiteEngine implements BrainEngine {
     // dashboard, v0.10.3 metrics give entity-page-level granularity.
     const { rows: [h] } = await this.db.query(`
       WITH entity_pages AS (
-        SELECT id, slug FROM pages WHERE type IN ('person', 'company')
+        SELECT id, slug FROM pages
+        WHERE type IN ('person', 'company') AND deleted_at IS NULL
+      ), scored_pages AS (
+        -- Navigation, policy, and template documents are deliberately sparse.
+        -- Excluding them prevents their lack of timelines/links from lowering
+        -- content-page scores without hiding index health.
+        SELECT id FROM pages
+        WHERE deleted_at IS NULL
+          AND slug NOT IN ('index', 'schema', 'resolver')
+          AND slug NOT LIKE '%/readme'
+          AND slug NOT LIKE 'templates/%'
+          AND slug NOT LIKE 'policy/%'
       )
       SELECT
-        (SELECT count(*) FROM pages) as page_count,
-        (SELECT count(*) FROM content_chunks WHERE embedded_at IS NOT NULL)::float /
-          GREATEST((SELECT count(*) FROM content_chunks), 1)::float as embed_coverage,
+        (SELECT count(*) FROM pages WHERE deleted_at IS NULL) as page_count,
+        (SELECT count(*) FROM content_chunks cc
+         JOIN pages p ON p.id = cc.page_id AND p.deleted_at IS NULL
+         WHERE cc.embedded_at IS NOT NULL)::float /
+          GREATEST((SELECT count(*) FROM content_chunks cc
+                    JOIN pages p ON p.id = cc.page_id AND p.deleted_at IS NULL), 1)::float as embed_coverage,
         (SELECT count(*) FROM pages p
-         WHERE p.updated_at < (SELECT MAX(te.created_at) FROM timeline_entries te WHERE te.page_id = p.id)
+         WHERE p.deleted_at IS NULL
+           AND p.updated_at < (SELECT MAX(te.created_at) FROM timeline_entries te WHERE te.page_id = p.id)
         ) as stale_pages,
         -- Bug 11 — orphan = islanded (no inbound AND no outbound).
         -- See BrainHealth.orphan_pages docstring; docs updated to match this.
-        (SELECT count(*) FROM pages p
-         WHERE NOT EXISTS (SELECT 1 FROM links l WHERE l.to_page_id = p.id)
-           AND NOT EXISTS (SELECT 1 FROM links l WHERE l.from_page_id = p.id)
+        (SELECT count(*) FROM scored_pages p
+         WHERE NOT EXISTS (SELECT 1 FROM links l
+                           JOIN pages src ON src.id = l.from_page_id AND src.deleted_at IS NULL
+                           WHERE l.to_page_id = p.id)
+           AND NOT EXISTS (SELECT 1 FROM links l
+                           JOIN pages dst ON dst.id = l.to_page_id AND dst.deleted_at IS NULL
+                           WHERE l.from_page_id = p.id)
         ) as orphan_pages,
         (SELECT count(*) FROM links l
-         WHERE NOT EXISTS (SELECT 1 FROM pages p WHERE p.id = l.to_page_id)
+         JOIN pages src ON src.id = l.from_page_id AND src.deleted_at IS NULL
+         WHERE NOT EXISTS (SELECT 1 FROM pages p WHERE p.id = l.to_page_id AND p.deleted_at IS NULL)
         ) as dead_links,
-        (SELECT count(*) FROM content_chunks WHERE embedded_at IS NULL) as missing_embeddings,
-        (SELECT count(*) FROM links) as link_count,
-        (SELECT count(DISTINCT page_id) FROM timeline_entries) as pages_with_timeline,
+        (SELECT count(*) FROM content_chunks cc
+         JOIN pages p ON p.id = cc.page_id AND p.deleted_at IS NULL
+         WHERE cc.embedded_at IS NULL) as missing_embeddings,
+        (SELECT count(*) FROM links l
+         JOIN pages src ON src.id = l.from_page_id AND src.deleted_at IS NULL
+         JOIN pages dst ON dst.id = l.to_page_id AND dst.deleted_at IS NULL) as link_count,
+        (SELECT count(DISTINCT te.page_id) FROM timeline_entries te
+         JOIN scored_pages p ON p.id = te.page_id) as pages_with_timeline,
+        (SELECT count(*) FROM scored_pages) as scored_page_count,
         (SELECT count(*) FROM entity_pages e
-         WHERE EXISTS (SELECT 1 FROM links l WHERE l.to_page_id = e.id))::float /
+         WHERE EXISTS (SELECT 1 FROM links l
+                       JOIN pages src ON src.id = l.from_page_id AND src.deleted_at IS NULL
+                       WHERE l.to_page_id = e.id))::float /
           GREATEST((SELECT count(*) FROM entity_pages), 1)::float as link_coverage,
         (SELECT count(*) FROM entity_pages e
          WHERE EXISTS (SELECT 1 FROM timeline_entries te WHERE te.page_id = e.id))::float /
@@ -4260,9 +4288,12 @@ export class PGLiteEngine implements BrainEngine {
     // Top 5 most connected entities by total link count (in + out).
     const { rows: connected } = await this.db.query(`
       SELECT p.slug,
-             (SELECT count(*) FROM links l WHERE l.from_page_id = p.id OR l.to_page_id = p.id)::int as link_count
+             (SELECT count(*) FROM links l
+              JOIN pages src ON src.id = l.from_page_id AND src.deleted_at IS NULL
+              JOIN pages dst ON dst.id = l.to_page_id AND dst.deleted_at IS NULL
+              WHERE l.from_page_id = p.id OR l.to_page_id = p.id)::int as link_count
       FROM pages p
-      WHERE p.type IN ('person', 'company')
+      WHERE p.type IN ('person', 'company') AND p.deleted_at IS NULL
       ORDER BY link_count DESC
       LIMIT 5
     `);
@@ -4274,10 +4305,11 @@ export class PGLiteEngine implements BrainEngine {
     const deadLinks = Number(r.dead_links);
     const linkCount = Number(r.link_count);
     const pagesWithTimeline = Number(r.pages_with_timeline);
+    const scoredPageCount = Number(r.scored_page_count);
 
     const linkDensity = pageCount > 0 ? Math.min(linkCount / pageCount, 1) : 0;
-    const timelineCoverageDensity = pageCount > 0 ? Math.min(pagesWithTimeline / pageCount, 1) : 0;
-    const noOrphans = pageCount > 0 ? 1 - (orphanPages / pageCount) : 1;
+    const timelineCoverageDensity = scoredPageCount > 0 ? Math.min(pagesWithTimeline / scoredPageCount, 1) : 1;
+    const noOrphans = scoredPageCount > 0 ? 1 - (orphanPages / scoredPageCount) : 1;
     const noDeadLinks = pageCount > 0 ? 1 - Math.min(deadLinks / pageCount, 1) : 1;
     // Bug 11 — per-component points. Sum equals brainScore by construction
     // so `doctor` can render a breakdown that adds up to the total.

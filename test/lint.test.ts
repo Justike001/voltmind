@@ -62,6 +62,13 @@ describe('lintContent', () => {
     expect(issues.some(i => i.rule === 'no-frontmatter')).toBe(true);
   });
 
+  test('skips structural navigation, policy, and template documents', () => {
+    const sparse = '# Deliberately sparse instruction document\n\nYYYY-MM-DD';
+    for (const path of ['README.md', 'index.md', 'policy/privacy-policy.md', 'templates/people.md']) {
+      expect(lintContent(sparse, path)).toHaveLength(0);
+    }
+  });
+
   test('detects empty sections', () => {
     const content = '---\ntitle: Test\ntype: person\ncreated: 2026-04-11\n---\n\n# Test\n\n## What They Believe\n\n[No data yet]\n\n## State\n\nReal content here.';
     const issues = lintContent(content, 'test.md');
