@@ -77,14 +77,16 @@ describe("build-llms generator", () => {
     expect(llmsTxt).toContain("CLAUDE.md");
   });
 
-  test("content contract: AGENTS.md mirrors README + INSTALL_FOR_AGENTS install path", () => {
+  test("content contract: AGENTS.md stays runtime-focused and install docs stay discoverable", () => {
     const agents = readFileSync(join(repoRoot, "AGENTS.md"), "utf8");
     expect(agents).toContain("CLAUDE.md");
     expect(agents).toContain("skills/RESOLVER.md");
-    expect(agents).toContain("INSTALL_FOR_AGENTS.md");
-    expect(agents).toContain("llms.txt");
     // Trust boundary is the non-obvious security concept agents need up-front.
     expect(agents.toLowerCase()).toContain("trust boundary");
+
+    const install = readFileSync(join(repoRoot, "docs", "INSTALL.md"), "utf8");
+    expect(install).toContain("INSTALL_FOR_AGENTS.md");
+    expect(install).toContain("windows-release-acceptance");
   });
 
   test("llms-full.txt stays within size budget", () => {

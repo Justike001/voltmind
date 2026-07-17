@@ -2,6 +2,8 @@
 
 Three install paths. Pick one. Mix later if needed.
 
+For the complete agent-led setup flow, see [`INSTALL_FOR_AGENTS.md`](../INSTALL_FOR_AGENTS.md).
+
 ## 1. Run with an agent platform (recommended)
 
 Already running [OpenClaw](https://github.com/openclawagents/openclaw) or [Hermes](https://github.com/openclawagents/hermes)?

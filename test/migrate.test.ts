@@ -536,9 +536,8 @@ describe('migration v35 — auto_rls_event_trigger structural guards', () => {
   test('backfill exemption regex matches the doctor.ts contract', () => {
     const v35 = MIGRATIONS.find(m => m.version === 35);
     const sql = ((v35?.sqlFor as any)?.postgres ?? '') as string;
-    // doctor.ts:418 EXEMPT_RE = /^GBRAIN:RLS_EXEMPT\s+reason=\S.{3,}/
-    // The plpgsql side must use the same pattern (via ~) so the two surfaces
-    // honor identical exemptions.
+    // v35 is immutable historical migration SQL. Its original GBRAIN marker
+    // remains valid; doctor accepts it alongside the new VoltMind marker.
     expect(sql).toMatch(/'\^GBRAIN:RLS_EXEMPT\\s\+reason=\\S\.\{3,\}'/);
   });
 

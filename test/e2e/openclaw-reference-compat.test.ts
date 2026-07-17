@@ -24,7 +24,7 @@ import {
   applyInstall,
   planInstall,
 } from '../../src/core/skillpack/installer.ts';
-import { findGbrainRoot } from '../../src/core/skillpack/bundle.ts';
+import { findVoltMindRoot } from '../../src/core/skillpack/bundle.ts';
 
 const FIXTURE = join(import.meta.dir, '..', 'fixtures', 'openclaw-reference-minimal');
 const SKILLS_DIR = join(FIXTURE, 'skills');
@@ -126,7 +126,7 @@ describe('OpenClaw reference workspace compat (W1 + W2 + W3)', () => {
       '# AGENTS\n\n| Trigger | Skill |\n|---------|-------|\n',
     );
 
-    const voltmindRoot = findGbrainRoot();
+    const voltmindRoot = findVoltMindRoot();
     expect(voltmindRoot).not.toBeNull();
 
     const opts = {

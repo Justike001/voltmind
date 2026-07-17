@@ -1401,4 +1401,3 @@ Internal, confidential, or restricted.
 ## Timeline
 
 - YYYY-MM-DD | Source - Raised, updated, mitigated, escalated, published, or closed.
-```
