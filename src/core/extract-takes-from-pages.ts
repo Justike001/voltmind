@@ -114,7 +114,8 @@ export async function extractTakesFromPages(
     };
   }
 
-  if (!isAvailable('chat')) {
+  const model = opts.model ?? 'anthropic:claude-haiku-4-5';
+  if (!isAvailable('chat', model)) {
     return {
       pages_scanned: 0,
       claims_extracted: 0,
@@ -174,7 +175,7 @@ export async function extractTakesFromPages(
     let response: { text: string };
     try {
       response = await chat({
-        model: opts.model ?? 'anthropic:claude-haiku-4-5',
+        model,
         system: CLASSIFIER_SYSTEM,
         messages: [
           {

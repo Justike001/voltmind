@@ -527,6 +527,8 @@ Subcommands:
                                           List takes for a page
   takes search "<query>" [--limit N] [--json]
                                           Keyword search across all takes
+  takes extract --from-pages [--yes] [--model provider:model]
+                                          Extract gradeable claims into Takes
   Mutating and aggregate judgment subcommands are available when their
   configured engine and source context are present.
 
@@ -546,6 +548,7 @@ Common flags:
 
   switch (sub) {
     case 'search':      return cmdSearch(engine, rest);
+    case 'extract':     return cmdExtract(engine, rest);
     default:
       // No subcommand keyword → treat first arg as <slug> for the list path.
       return cmdList(engine, args);
@@ -565,7 +568,7 @@ async function cmdExtract(engine: BrainEngine, rest: string[]): Promise<void> {
   const sub = rest[0];
   if (sub !== '--from-pages') {
     process.stderr.write(
-      'Usage: voltmind takes extract --from-pages [--yes] [--dry-run] [--source-id <id>] [--max-pages N] [--holder <name>]\n',
+      'Usage: voltmind takes extract --from-pages [--yes] [--dry-run] [--source-id <id>] [--max-pages N] [--holder <name>] [--model provider:model]\n',
     );
     process.exit(1);
   }
@@ -578,6 +581,8 @@ async function cmdExtract(engine: BrainEngine, rest: string[]): Promise<void> {
   const maxPages = maxPagesRaw ? Math.max(1, Math.min(1000, parseInt(maxPagesRaw, 10) || 50)) : 50;
   const holderIdx = rest.indexOf('--holder');
   const holder = holderIdx >= 0 ? rest[holderIdx + 1] : 'system';
+  const modelIdx = rest.indexOf('--model');
+  const explicitModel = modelIdx >= 0 ? rest[modelIdx + 1] : undefined;
 
   // A12 consent gate.
   const bootstrapEnabledCfg = await engine.getConfig('takes.bootstrap_enabled');
@@ -590,19 +595,21 @@ async function cmdExtract(engine: BrainEngine, rest: string[]): Promise<void> {
   }
   if (!dryRun && !skipConfirm) {
     process.stderr.write(
-      `[takes extract] sends concept/atom/lore/briefing/writing/originals page content to Haiku.\n` +
+      `[takes extract] sends concept/atom/lore/briefing/writing/originals page content to the configured model.\n` +
       `Pass --yes to proceed (or --dry-run to preview).\n`,
     );
     process.exit(1);
   }
 
   const { extractTakesFromPages } = await import('../core/extract-takes-from-pages.ts');
+  const model = explicitModel ?? await engine.getConfig('models.tier.subagent') ?? undefined;
   const result = await extractTakesFromPages(engine, {
     bootstrapEnabled: true,
     dryRun,
     sourceIdFilter,
     maxPages,
     holder,
+    model,
   });
   if (result.llm_unavailable) {
     process.stderr.write(`[takes extract] chat gateway unavailable (no API key configured).\n`);
