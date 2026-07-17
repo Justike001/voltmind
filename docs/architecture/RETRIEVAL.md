@@ -1,6 +1,6 @@
 # Why the hybrid + graph stack works
 
-Vector search alone underdelivers on real personal-knowledge queries. This doc explains why gbrain layers four strategies together and how they compound.
+Vector search alone underdelivers on real personal-knowledge queries. This doc explains why voltmind layers four strategies together and how they compound.
 
 ## The four strategies in concert
 
@@ -21,14 +21,14 @@ Vector search alone underdelivers on real personal-knowledge queries. This doc e
 
 ## The benchmark
 
-BrainBench (corpus + harness in the sibling [gbrain-evals](https://github.com/garrytan/gbrain-evals) repo) measures retrieval P@5, R@5, MRR, nDCG@5 on a 240-page Opus-generated rich-prose corpus.
+BrainBench (corpus + harness in the sibling [voltmind-evals](https://github.com/garrytan/voltmind-evals) repo) measures retrieval P@5, R@5, MRR, nDCG@5 on a 240-page Opus-generated rich-prose corpus.
 
 | Strategy | P@5 | R@5 | Notes |
 |---|---|---|---|
 | ripgrep BM25 only | ~18 | ~75 | Lexical-only baseline |
 | vector-only RAG | ~18 | ~80 | Standard RAG implementation |
-| gbrain graph-disabled (hybrid + RRF, no graph traversal) | ~18 | ~85 | Hybrid alone |
-| **gbrain default (full stack)** | **49.1** | **97.9** | Graph + extract-quality lift |
+| voltmind graph-disabled (hybrid + RRF, no graph traversal) | ~18 | ~85 | Hybrid alone |
+| **voltmind default (full stack)** | **49.1** | **97.9** | Graph + extract-quality lift |
 
 **+31 P@5 points** from the graph + extract quality work. The graph isn't a marginal feature; it's the load-bearing wall.
 
@@ -50,13 +50,13 @@ v0.36.0.0 ships ZeroEntropy's `zerank-2` as the default reranker (on for the `ba
 
 The mechanical reason: hybrid ranking is locally optimal per strategy but globally suboptimal. A cross-encoder reranker reads the query + each candidate document jointly, with full attention. It catches the cases where the vector + keyword + graph signals all agreed on a document that's semantically related but topically wrong.
 
-The cost: +150ms p50 latency, ~$0.025/M tokens. Disabled with `gbrain config set search.reranker.enabled false`. For agent loops that do downstream LLM work after retrieval, the latency is invisible.
+The cost: +150ms p50 latency, ~$0.025/M tokens. Disabled with `voltmind config set search.reranker.enabled false`. For agent loops that do downstream LLM work after retrieval, the latency is invisible.
 
 ## Source-aware ranking
 
 Hybrid search applies a source-factor CASE expression at the SQL layer (lives in `src/core/search/sql-ranking.ts`). Curated content like `originals/`, `concepts/`, `writing/` outranks bulk content like `your-openclaw/chat/`, `daily/`, `media/x/`. Hard-exclude prefixes (`test/`, `archive/`, `attachments/`, `.raw/`) filter at retrieval, not post-rank.
 
-The boost map is configurable via `GBRAIN_SOURCE_BOOST` env var or per-call `SearchOpts.exclude_slug_prefixes`. Temporal queries (`detail: 'high'`) bypass the boost so chat pages re-surface for time-sensitive lookups.
+The boost map is configurable via `VOLTMIND_SOURCE_BOOST` env var or per-call `SearchOpts.exclude_slug_prefixes`. Temporal queries (`detail: 'high'`) bypass the boost so chat pages re-surface for time-sensitive lookups.
 
 ## Intent-aware query rewriting
 
@@ -114,17 +114,17 @@ Each stage is testable in isolation. Each stage is replaceable. The whole pipeli
 
 ```bash
 # Run the public LongMemEval benchmark
-gbrain eval longmemeval datasets/longmemeval_s.jsonl
+voltmind eval longmemeval datasets/longmemeval_s.jsonl
 
 # Capture your own queries and replay against retrieval changes
-export GBRAIN_CONTRIBUTOR_MODE=1
-# ... use gbrain normally ...
-gbrain eval export > before.ndjson
+export VOLTMIND_CONTRIBUTOR_MODE=1
+# ... use voltmind normally ...
+voltmind eval export > before.ndjson
 # ... change something ...
-gbrain eval replay --against before.ndjson
+voltmind eval replay --against before.ndjson
 
 # A/B retrieval strategies on a labeled fixture
-gbrain eval --qrels labels.tsv --config balanced.json
+voltmind eval --qrels labels.tsv --config balanced.json
 ```
 
 Methodology + metric glossary in [`docs/eval/SEARCH_MODE_METHODOLOGY.md`](../eval/SEARCH_MODE_METHODOLOGY.md).

@@ -1,6 +1,6 @@
 # Brains and Sources — the mental model
 
-GBrain has two orthogonal axes for organizing knowledge. Users and agents both
+VoltMind has two orthogonal axes for organizing knowledge. Users and agents both
 need to understand both of them, or queries misroute silently.
 
 **TL;DR:**
@@ -23,11 +23,11 @@ Each brain has:
 - Its own separate lifecycle, backup, access control.
 
 Brains are enumerated by:
-- **host** — your default brain, configured in `~/.gbrain/config.json`.
-- **mounts** — additional brains registered in `~/.gbrain/mounts.json` via
-  `gbrain mounts add <id>` (v0.19+).
+- **host** — your default brain, configured in `~/.voltmind/config.json`.
+- **mounts** — additional brains registered in `~/.voltmind/mounts.json` via
+  `voltmind mounts add <id>` (v0.19+).
 
-Routing: `--brain <id>`, `GBRAIN_BRAIN_ID`, `.gbrain-mount` dotfile, or
+Routing: `--brain <id>`, `VOLTMIND_BRAIN_ID`, `.voltmind-mount` dotfile, or
 longest-path match against registered mount paths. Falls back to `host`.
 
 ### Sources (the repo axis, v0.18.0+)
@@ -38,7 +38,7 @@ carries a `source_id`. Slugs are unique per source, not globally.
 Example: in one brain, the slug `topics/ai` can exist under `source=wiki`
 AND under `source=gstack` — they're different pages.
 
-Routing: `--source <id>`, `GBRAIN_SOURCE`, `.gbrain-source` dotfile, or
+Routing: `--source <id>`, `VOLTMIND_SOURCE`, `.voltmind-source` dotfile, or
 registered `local_path` match in the `sources` table.
 
 ### When does each axis move?
@@ -49,8 +49,8 @@ registered `local_path` match in the `sources` table.
 | Query a team-published brain that isn't yours | `--brain` |
 | Isolate a topic so it never leaks into personal search | `--source` with `federated=false` |
 | Share a brain with teammates | `--brain` (mount the team brain) |
-| Add a new repo to your personal brain | `--source` via `gbrain sources add` |
-| Add a team brain | `--brain` via `gbrain mounts add` |
+| Add a new repo to your personal brain | `--source` via `voltmind sources add` |
+| Add a team brain | `--brain` via `voltmind mounts add` |
 
 **Rule of thumb:** if the data owner changes, it's a brain boundary. If the
 data owner stays the same but the topic/repo changes, it's a source boundary.
@@ -63,13 +63,13 @@ Simplest case. One brain, one source.
 
 ```
 ┌─────────────────────────────────────────┐
-│  host brain (~/.gbrain)                 │
+│  host brain (~/.voltmind)                 │
 │  ├── source: default (federated=true)   │
 │  │   └── all pages                      │
 └─────────────────────────────────────────┘
 ```
 
-`gbrain query "retry budgets"` finds everything. No `--brain`, no `--source`
+`voltmind query "retry budgets"` finds everything. No `--brain`, no `--source`
 needed.
 
 ---
@@ -82,7 +82,7 @@ inside one brain. Cross-source search is on by default so a query about
 
 ```
 ┌──────────────────────────────────────────────┐
-│  host brain (~/.gbrain)                      │
+│  host brain (~/.voltmind)                      │
 │  ├── source: wiki      (federated=true)      │
 │  │   └── personal notes, people, companies   │
 │  ├── source: gstack    (federated=true)      │
@@ -94,7 +94,7 @@ inside one brain. Cross-source search is on by default so a query about
 └──────────────────────────────────────────────┘
 ```
 
-Inside `~/openclaw/` the `.gbrain-source` dotfile pins every command to
+Inside `~/openclaw/` the `.voltmind-source` dotfile pins every command to
 `source=openclaw`. Inside `~/gstack/` the dotfile pins to `source=gstack`.
 Everything still targets one DB.
 
@@ -112,7 +112,7 @@ as-is; you mount the team brain alongside it.
 
 ```
 ┌──────────────────────────────────────────────┐
-│  host brain (~/.gbrain)  — YOUR personal DB  │
+│  host brain (~/.voltmind)  — YOUR personal DB  │
 │  ├── source: wiki                            │
 │  ├── source: gstack                          │
 │  └── ...                                     │
@@ -126,9 +126,9 @@ as-is; you mount the team brain alongside it.
 └──────────────────────────────────────────────┘
 ```
 
-`gbrain query "X"` (no flags) → runs against host (your personal brain).
-`gbrain query "X" --brain media-team` → runs against the team's DB.
-Inside `~/team-brains/media/` a `.gbrain-mount` dotfile pins brain to
+`voltmind query "X"` (no flags) → runs against host (your personal brain).
+`voltmind query "X" --brain media-team` → runs against the team's DB.
+Inside `~/team-brains/media/` a `.voltmind-mount` dotfile pins brain to
 `media-team` automatically.
 
 Use this topology when:
@@ -170,9 +170,9 @@ internally however the team owner chose.
 └──────────────────────────────────────────────┘
 ```
 
-Inside each team's checkout, a `.gbrain-mount` dotfile pins the brain. Inside
-a specific subdirectory, a `.gbrain-source` dotfile pins the source. So `cd
-~/team-brains/policy/research && gbrain query "X"` targets
+Inside each team's checkout, a `.voltmind-mount` dotfile pins the brain. Inside
+a specific subdirectory, a `.voltmind-source` dotfile pins the source. So `cd
+~/team-brains/policy/research && voltmind query "X"` targets
 `brain=policy-team, source=research` with zero flags.
 
 Use this topology when:
@@ -192,8 +192,8 @@ sane and access control clean.
 ```
 WHICH BRAIN (DB)?                    WHICH SOURCE (repo in DB)?
  1. --brain <id>                      1. --source <id>
- 2. GBRAIN_BRAIN_ID env               2. GBRAIN_SOURCE env
- 3. .gbrain-mount dotfile             3. .gbrain-source dotfile
+ 2. VOLTMIND_BRAIN_ID env               2. VOLTMIND_SOURCE env
+ 3. .voltmind-mount dotfile             3. .voltmind-source dotfile
  4. longest-prefix mount path match   4. longest-prefix source path match
  5. (reserved: brains.default v2)     5. sources.default config
  6. fallback: 'host'                  6. fallback: 'default'
@@ -213,7 +213,7 @@ know the other.
   (e.g. "what did Team X decide last week?"), the right move is to *query
   the team's brain explicitly* rather than searching host with "team x".
 - Cross-brain federation is YOUR JOB, not the DB's. You have the brain list
-  (`gbrain mounts list`). You decide when to fan out. You synthesize
+  (`voltmind mounts list`). You decide when to fan out. You synthesize
   findings. You cite `brain:source:slug`.
 - When writing a page, respect the brain boundary. A fact about a team's
   work belongs in the team's brain, not in the user's personal brain. Ask
@@ -222,11 +222,11 @@ know the other.
 
 ## For users reading this
 
-- **Default path:** set up your personal brain (`gbrain init`), add a source
-  per repo you care about (`gbrain sources add gstack --path ~/gstack`).
+- **Default path:** set up your personal brain (`voltmind init`), add a source
+  per repo you care about (`voltmind sources add gstack --path ~/gstack`).
   You'll almost never need `--brain`.
-- **When a team publishes a brain:** `gbrain mounts add <team-id> --path
-  <clone> --db-url <url>` and the `.gbrain-mount` dotfile in that checkout
+- **When a team publishes a brain:** `voltmind mounts add <team-id> --path
+  <clone> --db-url <url>` and the `.voltmind-mount` dotfile in that checkout
   routes queries there automatically.
 - **When you are the CEO-class user with multiple team memberships:** mount
   each team brain. Trust the resolver — inside a team's directory the

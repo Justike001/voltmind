@@ -56,6 +56,7 @@ background page creation.
 | "Set up VoltMind", first boot, Bun install, local init | `skills/setup/SKILL.md` |
 | "brain health", "doctor", "status", "embedding freshness", "job status", "cancel job" | `skills/maintain/SKILL.md` |
 | "brain report", "audit report", "save report" | `skills/reports/SKILL.md` + `voltmind report` |
+| "source audit", "Supabase source reconciliation", "source cleanup report" | host-local read-only `voltmind source-audit` |
 | "export my brain", "markdown export" | `skills/publish/SKILL.md` + `voltmind export` |
 | "orphan pages", "page lint", "integrity audit", "reindex", "multimodal backfill" | `skills/maintain/SKILL.md` + the matching host-local P2 command |
 | "model routing", "models doctor", "feature recommendations" | `skills/enrich/SKILL.md` + `voltmind models|features` |
@@ -143,6 +144,9 @@ explicitly working on VoltMind internals:
 - P2.1 local brain operations (host-local CLI only; no MCP equivalents):
   `voltmind report`, `export`, `features`, `models`, `pages`, `cache`, `lint`,
   `integrity`, `orphans`, `friction`, `brainstorm`, `lsd`, `book-mirror`, and `onboard`.
+  `voltmind source-audit` is also host-local and read-only: it compares one
+  local Markdown source with active DB pages and emits JSON/Markdown review
+  artifacts; it never soft-deletes pages.
   Preserve command confirmation and cost gates: `features --auto-fix`,
   `pages purge-deleted`, `book-mirror`, and `onboard --auto` can mutate state
   or incur model spend.

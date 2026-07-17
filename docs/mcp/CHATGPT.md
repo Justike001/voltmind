@@ -1,6 +1,6 @@
-# Connect GBrain to ChatGPT
+# Connect VoltMind to ChatGPT
 
-**Status (v0.26.0):** Unblocked. GBrain's `gbrain serve --http` ships OAuth 2.1
+**Status (v0.26.0):** Unblocked. VoltMind's `voltmind serve --http` ships OAuth 2.1
 with PKCE, which is the ChatGPT MCP connector's hard requirement. Before v1.0,
 this was a P0 TODO — the only major AI client that could not connect.
 
@@ -12,7 +12,7 @@ HTTP server.
 ### 1. Start the HTTP server
 
 ```bash
-gbrain serve --http --port 3131
+voltmind serve --http --port 3131
 ```
 
 Save the admin bootstrap token printed on stderr. Open

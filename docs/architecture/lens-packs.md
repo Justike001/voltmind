@@ -1,29 +1,29 @@
 # Lens packs (v0.41.2.0)
 
-Four bundled schema packs that turn the gbrain dream cycle into a multi-lens
-brain. Activate one with `gbrain config set schema_pack <name>` and the cycle
-picks up the pack's declared phases on the next `gbrain dream` run.
+Four bundled schema packs that turn the voltmind dream cycle into a multi-lens
+brain. Activate one with `voltmind config set schema_pack <name>` and the cycle
+picks up the pack's declared phases on the next `voltmind dream` run.
 
 ## The four packs
 
 ```
-                gbrain-base (shipped v0.38)
+                voltmind-base (shipped v0.38)
                        ▲
                        │ extends
         ┌──────────────┼──────────────────────┐
         │              │                       │
-   gbrain-creator  gbrain-investor      gbrain-engineer
+   voltmind-creator  voltmind-investor      voltmind-engineer
    (atom + concept  (deal/thesis/        (learning bridge
     lifecycle)       bet_resolution)      for gstack)
         │              │                       │
         └──────────────┼───────────────────────┘
                        │ extends + borrow chain
                        ▼
-              gbrain-everything (meta-pack)
+              voltmind-everything (meta-pack)
               one brain, three lenses active
 ```
 
-### gbrain-creator
+### voltmind-creator
 Atom + concept content-creator lifecycle. Drives two cycle phases:
 
 - `extract_atoms` — per source, Haiku extracts 1-3 atoms from each
@@ -40,9 +40,9 @@ One calibration domain: `concept_themes` / cluster_summary / [concept]
 — tier histogram + page count, not Brier (concepts don't have binary
 outcomes to score against).
 
-### gbrain-investor
+### voltmind-investor
 YC / investor lens. Declares 2 net-new page types on top of
-gbrain-base's deal/person/company/yc seed:
+voltmind-base's deal/person/company/yc seed:
 
 - `thesis` (NEW) — investment thesis with thesis_text + key_bets[] +
   market_view + vintage. Files at `investing/theses/{slug}`. Extractable
@@ -58,7 +58,7 @@ takes), `founder_evaluation` (scalar_brier over person-attached takes),
 `market_call` (weighted_brier over thesis-attached takes; weighted by
 conviction so high-stakes misses cost more).
 
-### gbrain-engineer
+### voltmind-engineer
 Bridge-only pack. Declares `learning` page type + reuses base `code`.
 No new cycle phases — the daemon-side `gstack-learnings` IngestionSource
 (T8) watches `~/.gstack/projects/{repo}/learnings.jsonl` and emits
@@ -69,13 +69,13 @@ calibration domains: `architecture_calls` (scalar_brier),
 Speculative ADR/postmortem/refactor_thesis/tech_debt types deferred
 to v0.42+ — they'll ship when a real user authors the first one (D8).
 
-### gbrain-everything
+### voltmind-everything
 Meta-pack stacking creator + investor + engineer via the v0.38
 `extends` + `borrow_from` chain. Single-active-pack constraint
 preserved — this IS the active pack; the registry walks extends +
 borrow to materialize the merged view.
 
-Activate via `gbrain config set schema_pack gbrain-everything` and
+Activate via `voltmind config set schema_pack voltmind-everything` and
 calibration_profile produces all 7 domain scorecards in one JSONB.
 
 ## Calibration profile widening (T10)
@@ -97,7 +97,7 @@ extras}` entry. Four aggregator algorithms (closed enum):
 
 Pack manifests declare domains with `{name, aggregator, page_types}`.
 Domain names are OPEN (third-party packs can declare new domain labels
-without a gbrain release). Aggregator algorithms are CLOSED (safe SQL
+without a voltmind release). Aggregator algorithms are CLOSED (safe SQL
 stays in code, validated at pack-load).
 
 ## take_domain_assignments table (T1)
@@ -113,14 +113,14 @@ investment in Anthropic" can land in BOTH `deal_success` AND
 
 - **Atoms + concepts ship in the binary.** Your OpenClaw's parallel
   atom-pipeline-coordinator + atom-backfill-coordinator + concept-
-  synthesis crons can retire (T12 follow-up). One `gbrain dream` cron
+  synthesis crons can retire (T12 follow-up). One `voltmind dream` cron
   covers everything.
-- **gstack learnings reach gbrain.** Engineer-pack-active brains
+- **gstack learnings reach voltmind.** Engineer-pack-active brains
   surface every gstack-logged learning as a queryable page within
   seconds of being written.
-- **Multi-lens calibration.** Activate gbrain-everything and see how
+- **Multi-lens calibration.** Activate voltmind-everything and see how
   often you're wrong on deals AND market calls AND architecture
-  AND effort estimates in one `gbrain calibration --json` call.
+  AND effort estimates in one `voltmind calibration --json` call.
 - **Lossless OpenClaw migration.** The `markdown-greenfield`
   importer (T7, mode='migration') re-ingests existing OpenClaw
   pages with permanent slug-keyed idempotency + per-row JSONL audit

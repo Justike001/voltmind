@@ -1,12 +1,12 @@
 # Switching embedding models or dimensions on an existing brain
 
-GBrain stores embeddings in a fixed-dimension `vector(N)` column on
+VoltMind stores embeddings in a fixed-dimension `vector(N)` column on
 `content_chunks`. If you switch to a model with a different dimension
 (e.g. `openai:text-embedding-3-large` 1536 → `zeroentropyai:zembed-1`
 1280, or `voyage:voyage-4-large` 2048), the on-disk column type doesn't
 change automatically.
 
-`gbrain init`, `gbrain doctor`, and `gbrain embed --stale` all detect
+`voltmind init`, `voltmind doctor`, and `voltmind embed --stale` all detect
 this mismatch and refuse to silently proceed. This doc is the recipe
 they point at.
 
@@ -34,14 +34,14 @@ The path that works on PGLite is **wipe-and-reinit**. v0.37 ships a
 single-command wrapper:
 
 ```bash
-gbrain reinit-pglite \
+voltmind reinit-pglite \
   --embedding-model zeroentropyai:zembed-1 \
   --embedding-dimensions 1280
 ```
 
-This backs up the existing brain to `<path>.bak`, runs `gbrain init`
+This backs up the existing brain to `<path>.bak`, runs `voltmind init`
 with the new flags (preserving every other field in
-`~/.gbrain/config.json`), and re-syncs the brain repo. Add `--no-sync`
+`~/.voltmind/config.json`), and re-syncs the brain repo. Add `--no-sync`
 to skip the resync, `--yes` to skip the TTY confirmation, `--json` for
 structured output.
 
@@ -49,23 +49,23 @@ Equivalent by hand:
 
 ```bash
 # 1. Back up the existing brain (in case you want to roll back).
-mv ~/.gbrain/brain.pglite ~/.gbrain/brain.pglite.bak
+mv ~/.voltmind/brain.pglite ~/.voltmind/brain.pglite.bak
 
-# 2. Re-init with the new model + dimensions. `gbrain init` writes
+# 2. Re-init with the new model + dimensions. `voltmind init` writes
 #    the schema sized to the new dim, and (as of v0.37) preserves
-#    every other field in ~/.gbrain/config.json (chat model,
+#    every other field in ~/.voltmind/config.json (chat model,
 #    expansion model, API keys).
-gbrain init --pglite \
+voltmind init --pglite \
   --embedding-model zeroentropyai:zembed-1 \
   --embedding-dimensions 1280
 
-# 3. Re-import your brain repo. `gbrain sync` reads the brain repo
+# 3. Re-import your brain repo. `voltmind sync` reads the brain repo
 #    from disk and re-creates the page rows.
-gbrain sync
+voltmind sync
 
 # 4. Re-embed. The embed pipeline now uses the new model and the
 #    column accepts the new dim.
-gbrain embed --stale
+voltmind embed --stale
 ```
 
 If your brain repo is large enough that re-syncing from disk is
@@ -73,8 +73,8 @@ expensive (>50K pages), see the Postgres section below — migrating to
 Postgres temporarily lets you run the SQL recipe, then migrate back to
 PGLite.
 
-`GBRAIN_HOME` users: substitute the active database path (or use
-`gbrain config get database_path` to find it).
+`VOLTMIND_HOME` users: substitute the active database path (or use
+`voltmind config get database_path` to find it).
 
 ## Postgres (Supabase / self-hosted)
 
@@ -94,7 +94,7 @@ ALTER TABLE content_chunks ALTER COLUMN embedding TYPE vector(<NEW_DIMS>);
 UPDATE content_chunks SET embedding = NULL, embedded_at = NULL;
 
 -- 4. Recreate the HNSW index ONLY IF dims <= 2000. Above that, leave it
---    indexless and rely on exact scans (gbrain searchVector handles this
+--    indexless and rely on exact scans (voltmind searchVector handles this
 --    automatically — search just gets slower, not broken).
 -- For dims <= 2000 (e.g. 1024, 1280, 1536, 768):
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding
@@ -107,7 +107,7 @@ COMMIT;
 Then re-init config with the new model:
 
 ```bash
-gbrain init --supabase \
+voltmind init --supabase \
   --embedding-model <provider:model> \
   --embedding-dimensions <NEW_DIMS>
 ```
@@ -115,27 +115,27 @@ gbrain init --supabase \
 And re-embed:
 
 ```bash
-gbrain embed --stale
+voltmind embed --stale
 ```
 
-## A note on `gbrain config set`
+## A note on `voltmind config set`
 
-Pre-v0.37 docs recommended `gbrain config set embedding_model X` to
+Pre-v0.37 docs recommended `voltmind config set embedding_model X` to
 switch models. **This is a no-op for the embed pipeline.** `config set`
 writes the DB plane; the embed gateway reads the file plane
-(`~/.gbrain/config.json`). The pre-v0.37 recipe shipped the lie because
+(`~/.voltmind/config.json`). The pre-v0.37 recipe shipped the lie because
 the contract wasn't surfaced.
 
-As of v0.37, `gbrain config set embedding_model` and `gbrain config set
+As of v0.37, `voltmind config set embedding_model` and `voltmind config set
 embedding_dimensions` REFUSE and print the wipe-and-reinit recipe.
 
-To change schema-sizing fields, use `gbrain init` (PGLite) or the SQL
+To change schema-sizing fields, use `voltmind init` (PGLite) or the SQL
 recipe (Postgres). Both update the file plane AND the schema together.
 
 ## Verify
 
-After the recipe lands, `gbrain doctor --fast` should report green and
-`gbrain doctor` should pass the `embedding_width_consistency` check:
+After the recipe lands, `voltmind doctor --fast` should report green and
+`voltmind doctor` should pass the `embedding_width_consistency` check:
 
 ```
 ✓ embedding_width_consistency   dim parity: config 1280 / column vector(1280)

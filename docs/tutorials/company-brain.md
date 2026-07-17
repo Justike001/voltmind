@@ -1,13 +1,13 @@
 # Tutorial: Extend your personal brain into a company brain
 
-This tutorial picks up where the [personal brain tutorial](personal-brain.md) leaves off. You already have a working agent (OpenClaw on Render, talking to you on Telegram, with GBrain as memory and Supabase storing embeddings). Now you want your whole team to use it as shared institutional memory, with each person seeing only what they're allowed to see.
+This tutorial picks up where the [personal brain tutorial](personal-brain.md) leaves off. You already have a working agent (OpenClaw on Render, talking to you on Telegram, with VoltMind as memory and Supabase storing embeddings). Now you want your whole team to use it as shared institutional memory, with each person seeing only what they're allowed to see.
 
 **Time:** about 90 more minutes on top of the personal-brain install.
 **Cost:** under $100 a month sustained for a 25-person company.
 
 If you haven't done the personal-brain install yet, [start there first](personal-brain.md). Come back when you've got the agent responding to you on Telegram. This tutorial assumes that's already working.
 
-I'm Garry Tan. I built GBrain to run my own AI agents at Y Combinator. After a couple of months of multi-user features landing (parallel sync across team sources, per-user OAuth scoping, leak-free isolation across every read path), it's finally usable as a company brain too. This is the recipe I'd run if I were standing it up for a 10-50 person company today.
+I'm Garry Tan. I built VoltMind to run my own AI agents at Y Combinator. After a couple of months of multi-user features landing (parallel sync across team sources, per-user OAuth scoping, leak-free isolation across every read path), it's finally usable as a company brain too. This is the recipe I'd run if I were standing it up for a 10-50 person company today.
 
 ---
 
@@ -23,7 +23,7 @@ The personal brain you built is a single-user system: one git repo, one agent, y
 
 ### What this is NOT
 
-It is **not** a different install. The agent runtime, Supabase backend, GBrain CLI, and AlphaClaw harness from the personal brain stay exactly as you set them up. We're adding to that stack, not replacing it.
+It is **not** a different install. The agent runtime, Supabase backend, VoltMind CLI, and AlphaClaw harness from the personal brain stay exactly as you set them up. We're adding to that stack, not replacing it.
 
 It is also **not** a thin-client-everywhere setup. Your personal agent stays as it is (OpenClaw + Telegram). Each teammate adds their own client of choice (Claude Code, Cursor, Claude Desktop, their own OpenClaw, whatever) and points it at the brain.
 
@@ -38,12 +38,12 @@ It is also **not** a thin-client-everywhere setup. Your personal agent stays as 
 
 ## Part 2: Switch the brain backend to multi-user Postgres
 
-The personal-brain install uses Supabase as the embeddings layer but the GBrain runtime itself might be using PGLite (single-machine) depending on which path you took. For a company brain, you want a real Postgres for the runtime too. If your personal-brain install is already on Postgres or Supabase end-to-end, skip to Part 3.
+The personal-brain install uses Supabase as the embeddings layer but the VoltMind runtime itself might be using PGLite (single-machine) depending on which path you took. For a company brain, you want a real Postgres for the runtime too. If your personal-brain install is already on Postgres or Supabase end-to-end, skip to Part 3.
 
 If you're on PGLite, migrate:
 
 ```bash
-gbrain migrate --to supabase
+voltmind migrate --to supabase
 ```
 
 This copies every page, chunk, embedding, link, and config over to your Supabase project. Run from the agent host machine, same one you set up in the personal-brain tutorial. Takes a few minutes per 10K pages.
@@ -51,8 +51,8 @@ This copies every page, chunk, embedding, link, and config over to your Supabase
 Verify:
 
 ```bash
-gbrain doctor
-gbrain stats
+voltmind doctor
+voltmind stats
 ```
 
 Page count and chunk count should match what you had on PGLite.
@@ -65,13 +65,13 @@ The personal brain has one source (called `default`) holding everything. For a c
 
 ```bash
 # A shared all-hands source for content everyone reads
-gbrain sources add shared --path /srv/brain-repos/shared --name "Shared company wiki"
+voltmind sources add shared --path /srv/brain-repos/shared --name "Shared company wiki"
 
 # A scoped source for sales/customer notes
-gbrain sources add customers --path /srv/brain-repos/customers --name "Customer notes"
+voltmind sources add customers --path /srv/brain-repos/customers --name "Customer notes"
 
 # A scoped source for internal-only docs (legal, HR, performance, board)
-gbrain sources add internal --path /srv/brain-repos/internal --name "Internal-only"
+voltmind sources add internal --path /srv/brain-repos/internal --name "Internal-only"
 ```
 
 Each `--path` is a directory on disk where you've checked out a git repo. Create them:
@@ -126,7 +126,7 @@ Same shape for `internal/`: `internal/alice-example/` for her HR docs, `internal
 Now sync everything:
 
 ```bash
-gbrain sync --all
+voltmind sync --all
 ```
 
 Each source syncs in parallel under its own lock so they don't step on each other. Output looks like:
@@ -141,7 +141,7 @@ Each source syncs in parallel under its own lock so they don't step on each othe
 Check the dashboard:
 
 ```bash
-gbrain sources status
+voltmind sources status
 ```
 
 You should see all three sources with recent sync timestamps and page counts.
@@ -153,7 +153,7 @@ You should see all three sources with recent sync timestamps and page counts.
 The personal brain talks to you through the AlphaClaw harness over Telegram. For a company brain we need a path that each teammate's AI client can hit independently. The HTTP MCP server is that path.
 
 ```bash
-gbrain serve --http --port 3131 --bind 0.0.0.0
+voltmind serve --http --port 3131 --bind 0.0.0.0
 ```
 
 The `--bind 0.0.0.0` is important. By default the server binds to localhost only, which is correct for a personal install but blocks remote teammates. Setting `0.0.0.0` accepts connections from any interface.
@@ -171,7 +171,7 @@ For production, put your server behind a real hostname with a real TLS certifica
 Re-run the server with the public URL so the OAuth discovery metadata matches what clients hit:
 
 ```bash
-gbrain serve --http --port 3131 --bind 0.0.0.0 --public-url https://brain.acme-co.com
+voltmind serve --http --port 3131 --bind 0.0.0.0 --public-url https://brain.acme-co.com
 ```
 
 You should be able to hit `https://brain.acme-co.com/health` and get `{"status":"ok"}` back.
@@ -184,21 +184,21 @@ Each teammate (or each AI agent for a teammate) gets their own OAuth client. The
 
 ```bash
 # Alice (sales): writes customers/alice-example, reads customers + shared
-gbrain auth register-client alice-example \
+voltmind auth register-client alice-example \
   --grant-types client_credentials \
   --scopes read,write \
   --source customers \
   --federated-read customers,shared
 
 # Bob (ops): writes internal/bob-example, reads internal + shared
-gbrain auth register-client bob-example \
+voltmind auth register-client bob-example \
   --grant-types client_credentials \
   --scopes read,write \
   --source internal \
   --federated-read internal,shared
 
 # Carol (legal): writes shared/legal, reads all three
-gbrain auth register-client carol-example \
+voltmind auth register-client carol-example \
   --grant-types client_credentials \
   --scopes read,write \
   --source shared \
@@ -209,7 +209,7 @@ Each `register-client` command prints a `client_id` and a `client_secret`. Save 
 
 A note on the flags:
 
-- `--scopes read,write` lets the client query the brain and write new pages. You can omit `write` for read-only clients (executive summaries, dashboards). The `admin` scope is needed for operational commands like `gbrain remote doctor` and is usually reserved for your own admin client.
+- `--scopes read,write` lets the client query the brain and write new pages. You can omit `write` for read-only clients (executive summaries, dashboards). The `admin` scope is needed for operational commands like `voltmind remote doctor` and is usually reserved for your own admin client.
 - `--source` controls write authority. A client can only write to one source. Within that source, your folder convention from Part 3 keeps each person's writes in their own subfolder.
 - `--federated-read` controls read scope. A client can read from one or more sources.
 
@@ -219,18 +219,18 @@ Before you hand the brain to teammates, verify isolation. Two terminal windows o
 
 ```bash
 # Terminal 1, as Alice
-export GBRAIN_REMOTE_CLIENT_ID=<Alice's client_id>
-export GBRAIN_REMOTE_CLIENT_SECRET=<Alice's client_secret>
-export GBRAIN_REMOTE_MCP_URL=https://brain.acme-co.com/mcp
+export VOLTMIND_REMOTE_CLIENT_ID=<Alice's client_id>
+export VOLTMIND_REMOTE_CLIENT_SECRET=<Alice's client_secret>
+export VOLTMIND_REMOTE_MCP_URL=https://brain.acme-co.com/mcp
 
-gbrain search "performance review" --remote
+voltmind search "performance review" --remote
 ```
 
 Alice should see results only from `customers` and `shared`. The performance-review notes live in `internal`, which she's not scoped to read. She shouldn't see them.
 
 ```bash
 # Terminal 2, as Bob (export his credentials similarly)
-gbrain search "performance review" --remote
+voltmind search "performance review" --remote
 ```
 
 Bob should see the performance-review notes from `internal`, plus anything related from `shared`. He shouldn't see anything that lives only in `customers`.
@@ -243,7 +243,7 @@ If both queries return correctly scoped results, isolation is working.
 
 The personal-brain install runs the dream cycle (overnight enrichment) once per night for one user. A company brain needs per-person crons because each teammate has their own context: Alice wants a 7am customer-pipeline digest, Bob wants a 9am ops-status report, Carol wants a contract-compliance check every Monday.
 
-Each cron is just a scheduled `gbrain agent run` call scoped to the teammate's client credentials. The schedule lives in the workspace repo (the one AlphaClaw deployed in the personal-brain tutorial), in a `crons/` directory. A typical layout:
+Each cron is just a scheduled `voltmind agent run` call scoped to the teammate's client credentials. The schedule lives in the workspace repo (the one AlphaClaw deployed in the personal-brain tutorial), in a `crons/` directory. A typical layout:
 
 ```
 your-org/myagent/
@@ -274,13 +274,13 @@ copy to customers/alice-example/digests/YYYY-MM-DD-pipeline.md.
 
 The `client:` field tells the cron runner which OAuth client to use, which enforces the scoping. Alice's cron can only read Alice's sources and write to Alice's folder. It cannot accidentally touch Bob's customer notes.
 
-To install the cron schedule, commit the file to the workspace repo and let AlphaClaw pick it up on next deploy. The cron-scheduler skill (one of the 60 that GBrain installed) handles the dispatch.
+To install the cron schedule, commit the file to the workspace repo and let AlphaClaw pick it up on next deploy. The cron-scheduler skill (one of the 60 that VoltMind installed) handles the dispatch.
 
 ---
 
 ## Part 7: Add per-person skills
 
-The 60+ skills GBrain installs are generic. Your team probably wants a few that are specific to them. Examples:
+The 60+ skills VoltMind installs are generic. Your team probably wants a few that are specific to them. Examples:
 
 - `onboarding-new-hire`. Only Carol (HR) runs this. Walks through generating a welcome packet, scheduling intro meetings, provisioning accounts.
 - `customer-success-followup`. Only Alice (sales) runs this. Pulls latest customer page, drafts a follow-up email, posts to her review queue.
@@ -299,10 +299,10 @@ your-org/myagent/
         └── SKILL.md
 ```
 
-Each `SKILL.md` declares the trigger (verbs in plain English the agent listens for) and the procedure. Use the `gbrain skillify scaffold <name>` command to generate the boilerplate:
+Each `SKILL.md` declares the trigger (verbs in plain English the agent listens for) and the procedure. Use the `voltmind skillify scaffold <name>` command to generate the boilerplate:
 
 ```bash
-gbrain skillify scaffold onboarding-new-hire
+voltmind skillify scaffold onboarding-new-hire
 ```
 
 That creates the directory + SKILL.md + routing entry. Edit the SKILL.md to describe the procedure, commit, deploy. The agent picks up the new skill on next request.
@@ -337,7 +337,7 @@ Slack is the integration most teams want first, and it has enough sharp edges to
 
 **Per-channel scoping mirrors per-person scoping.** Sensitive channels (#executive, #legal, #performance) should be scoped to teammates with the appropriate `--federated-read`. The brain stores everything, but who can query for it is gated by the same OAuth client model from Part 5.
 
-The actual skills that implement this in production are named `slack`, `slack-scan`, `slack-archive`. Scaffold equivalents in your workspace with `gbrain skillify scaffold slack-scan`, then edit the generated SKILL.md to declare your channel mapping and triggers.
+The actual skills that implement this in production are named `slack`, `slack-scan`, `slack-archive`. Scaffold equivalents in your workspace with `voltmind skillify scaffold slack-scan`, then edit the generated SKILL.md to declare your channel mapping and triggers.
 
 ---
 
@@ -388,9 +388,9 @@ Recommended path for each teammate: the thin-client install. On their machine:
 
 ```bash
 curl -fsSL https://bun.sh/install | bash
-bun install -g github:garrytan/gbrain
+bun install -g github:garrytan/voltmind
 
-gbrain init --mcp-only \
+voltmind init --mcp-only \
   --issuer-url https://brain.acme-co.com \
   --mcp-url https://brain.acme-co.com/mcp \
   --oauth-client-id <their client_id> \
@@ -405,25 +405,25 @@ Now they configure their AI client. For Claude Desktop, the teammate adds an MCP
 {
   "mcpServers": {
     "company-brain": {
-      "command": "gbrain",
+      "command": "voltmind",
       "args": ["serve"]
     }
   }
 }
 ```
 
-When Claude Desktop launches, it talks to the local `gbrain serve` stdio bridge, which forwards every request to your remote brain over HTTPS with their OAuth token attached. From Claude Desktop's perspective it's just one MCP server.
+When Claude Desktop launches, it talks to the local `voltmind serve` stdio bridge, which forwards every request to your remote brain over HTTPS with their OAuth token attached. From Claude Desktop's perspective it's just one MCP server.
 
-For Claude Code, Cursor, OpenClaw, Hermes, and other clients, per-client setup steps live in [`docs/mcp/`](../mcp/). They all follow the same shape: point the agent at the local `gbrain serve` bridge, which knows about the remote.
+For Claude Code, Cursor, OpenClaw, Hermes, and other clients, per-client setup steps live in [`docs/mcp/`](../mcp/). They all follow the same shape: point the agent at the local `voltmind serve` bridge, which knows about the remote.
 
 ---
 
 ## Part 11: First real query as a teammate
 
-Have Alice run a real query from her machine. The interesting verb is `gbrain think`, which gives back a synthesized answer instead of raw pages.
+Have Alice run a real query from her machine. The interesting verb is `voltmind think`, which gives back a synthesized answer instead of raw pages.
 
 ```bash
-gbrain think "What's the latest update from acme-co? When did we last talk to them?"
+voltmind think "What's the latest update from acme-co? When did we last talk to them?"
 ```
 
 What Alice gets back, assuming the brain has been syncing for a week and her sources contain a customer page for acme-co and several meeting notes:
@@ -462,22 +462,22 @@ Bob asking the same question would get nothing about acme-co. He's not scoped to
 
 Three commands do most of the operational work.
 
-### Background daemon: `gbrain autopilot`
+### Background daemon: `voltmind autopilot`
 
 The personal-brain install already turned this on. For a company brain, the same autopilot covers all your sources because they live in one database. It runs every five minutes; on a healthy brain (health score 95+) it sleeps; on a brain that's drifting it submits targeted maintenance jobs.
 
-### Self-healing: `gbrain doctor --remediate`
+### Self-healing: `voltmind doctor --remediate`
 
 ```bash
-gbrain doctor --remediate --yes --target-score 90 --max-usd 5
+voltmind doctor --remediate --yes --target-score 90 --max-usd 5
 ```
 
 Computes a dependency-ordered plan of maintenance jobs that would raise the brain's health score to the `--target-score`, runs the plan, refuses to spend past the `--max-usd` cap. Safe to cron.
 
-### Monitoring: `gbrain sources status` and the admin dashboard
+### Monitoring: `voltmind sources status` and the admin dashboard
 
 ```bash
-gbrain sources status
+voltmind sources status
 ```
 
 Returns a per-source dashboard: when each source last synced, how many pages, how many embedded, how many unacked sync failures. The at-a-glance health check.
@@ -488,15 +488,15 @@ The admin dashboard at `https://brain.acme-co.com/admin` shows live request volu
 
 ## Part 13: Cost and speed expectations
 
-Real numbers from the published benchmark, running the default stack (GBrain with ZeroEntropy for embedding + reranker):
+Real numbers from the published benchmark, running the default stack (VoltMind with ZeroEntropy for embedding + reranker):
 
-- **Embedding cost:** $0.05 per million tokens. For comparison, GBrain configured with OpenAI is $0.13 (2.6× more expensive), Voyage is $0.18 (3.6× more).
+- **Embedding cost:** $0.05 per million tokens. For comparison, VoltMind configured with OpenAI is $0.13 (2.6× more expensive), Voyage is $0.18 (3.6× more).
 - **Ingest speed:** about 22 seconds for a small test corpus of 164 pages on the host machine. For a 10K-page corpus, expect about 20 minutes the first time, then most syncs are incremental and finish in seconds.
-- **Query latency:** about 122 ms median for a `gbrain search`. For comparison, the same query through GBrain with OpenAI takes about 282 ms.
+- **Query latency:** about 122 ms median for a `voltmind search`. For comparison, the same query through VoltMind with OpenAI takes about 282 ms.
 - **Synthesized-answer latency:** a few seconds, dominated by the Anthropic API.
-- **Retrieval quality:** on the public LongMemEval benchmark, GBrain hits 97.60% recall at the top 5 retrieved sessions, beating the previous published state of the art at 96.6%. On the in-house BrainBench corpus of relational queries, GBrain beats commodity vector retrieval by 38 percentage points, because the graph layer surfaces relationships that vector similarity alone misses.
+- **Retrieval quality:** on the public LongMemEval benchmark, VoltMind hits 97.60% recall at the top 5 retrieved sessions, beating the previous published state of the art at 96.6%. On the in-house BrainBench corpus of relational queries, VoltMind beats commodity vector retrieval by 38 percentage points, because the graph layer surfaces relationships that vector similarity alone misses.
 
-Full methodology and per-run receipt JSONs live in [the gbrain-evals repo](https://github.com/garrytan/gbrain-evals/blob/main/docs/benchmarks/2026-05-23-v0.40.6.0-snapshot.md).
+Full methodology and per-run receipt JSONs live in [the voltmind-evals repo](https://github.com/garrytan/voltmind-evals/blob/main/docs/benchmarks/2026-05-23-v0.40.6.0-snapshot.md).
 
 For a 25-person company at sustained use, expect about $35 a month in embeddings (ZeroEntropy at $0.05/million tokens), $50 a month in Anthropic calls for the synthesized-answer queries, plus your hosting bill. Under $100 a month for the AI side at most companies your size.
 
@@ -506,32 +506,32 @@ For a 25-person company at sustained use, expect about $35 a month in embeddings
 
 ### "My teammate can't see anything"
 
-Check `gbrain auth list` on the host and confirm their client has `--source` set to a source that actually exists. Empty or null `--source` means the client falls through to the `default` source, which probably has no content if you set up three named sources.
+Check `voltmind auth list` on the host and confirm their client has `--source` set to a source that actually exists. Empty or null `--source` means the client falls through to the `default` source, which probably has no content if you set up three named sources.
 
 ### "Sync is slow and feels stuck"
 
-The first sync embeds every page, which takes time. Check `gbrain sources status` for the live page count. If it's climbing you're not stuck, you're just embedding. If you've got a 10K-page corpus and ZeroEntropy is being throttled, the per-source parallel sync looks like progress on three sources at once rather than one source moving fast.
+The first sync embeds every page, which takes time. Check `voltmind sources status` for the live page count. If it's climbing you're not stuck, you're just embedding. If you've got a 10K-page corpus and ZeroEntropy is being throttled, the per-source parallel sync looks like progress on three sources at once rather than one source moving fast.
 
 ### "I see a page I shouldn't see"
 
-This shouldn't happen, but if you suspect it, run `gbrain search <query> --remote --json` as the constrained client and inspect the `source_id` field on every returned result. Every row should be in the client's `--federated-read` set. If one isn't, file an issue with the exact slug and source IDs.
+This shouldn't happen, but if you suspect it, run `voltmind search <query> --remote --json` as the constrained client and inspect the `source_id` field on every returned result. Every row should be in the client's `--federated-read` set. If one isn't, file an issue with the exact slug and source IDs.
 
 ### "The synthesized answer is wrong"
 
-The brain layer is grounded in the retrieved pages. If the retrieved pages contain bad information, the answer will too. The gap-analysis note often catches this: if the answer says "based on retrieved pages from date X" and date X is six months ago, the brain is telling you the information is stale. Run `gbrain sync --all` to refresh and try again.
+The brain layer is grounded in the retrieved pages. If the retrieved pages contain bad information, the answer will too. The gap-analysis note often catches this: if the answer says "based on retrieved pages from date X" and date X is six months ago, the brain is telling you the information is stale. Run `voltmind sync --all` to refresh and try again.
 
 ### "OAuth `/token` endpoint returns 401 for my client"
 
-Verify the client secret matches what was printed at register-client time. The server stores only a SHA-256 hash; if you lost the original, you have to revoke the client and re-register. Use `gbrain auth revoke-client <client_id>` and re-run `register-client`.
+Verify the client secret matches what was printed at register-client time. The server stores only a SHA-256 hash; if you lost the original, you have to revoke the client and re-register. Use `voltmind auth revoke-client <client_id>` and re-run `register-client`.
 
 ### "Postgres connection is exhausting"
 
-Each parallel sync worker opens its own pool. With three sources and the default four workers per source, you can hit your Postgres connection limit if it's set low. Either reduce the worker count with `gbrain sync --all --parallel 2 --workers 2`, or raise your Postgres `max_connections` to at least 100. Supabase's free tier defaults to 60, which is tight.
+Each parallel sync worker opens its own pool. With three sources and the default four workers per source, you can hit your Postgres connection limit if it's set low. Either reduce the worker count with `voltmind sync --all --parallel 2 --workers 2`, or raise your Postgres `max_connections` to at least 100. Supabase's free tier defaults to 60, which is tight.
 
 ### "I want to add a fourth teammate but they need access to all three sources"
 
 ```bash
-gbrain auth register-client diana-example \
+voltmind auth register-client diana-example \
   --grant-types client_credentials \
   --scopes read,write \
   --source shared \
@@ -550,8 +550,8 @@ What to do next:
 
 - **Wire ingestion** from external systems (Granola, Linear, Slack) using the [ingestion source contract](../skillpack-anatomy.md). Most companies want their meetings auto-ingested so the brain stays current without anyone typing notes.
 - **Set up team-specific dashboards** through the admin UI. Each team lead can have their own view of brain health and activity.
-- **Explore the rest of the brain layer.** `gbrain whoknows` (find the expert on a topic), `gbrain find_trajectory` (how a metric changed over time), `gbrain founder scorecard` (especially useful for VC and ops teams), the contradiction-detection cycle that surfaces conflicts between different people's notes.
+- **Explore the rest of the brain layer.** `voltmind whoknows` (find the expert on a topic), `voltmind find_trajectory` (how a metric changed over time), `voltmind founder scorecard` (especially useful for VC and ops teams), the contradiction-detection cycle that surfaces conflicts between different people's notes.
 
 If you're building in this space (which YC has flagged as the [company-brain category in its Request for Startups](https://www.ycombinator.com/rfs#company-brain)), you might as well build on this. Everything described above is open source, MIT licensed, and what I run in production behind my own AI agents.
 
-Questions, gotchas, or wins worth sharing? Open an issue at [github.com/garrytan/gbrain](https://github.com/garrytan/gbrain/issues).
+Questions, gotchas, or wins worth sharing? Open an issue at [github.com/garrytan/voltmind](https://github.com/garrytan/voltmind/issues).

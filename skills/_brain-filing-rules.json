@@ -136,10 +136,10 @@
       "description": "Format-prefixed parent for media-by-source-format ingest. Subdirectories like media/x/{handle}/ hold X/Twitter archives, media/audio/ holds podcast/voice captures. The format-prefix lives only when the content is sui generis to the source format AND lacks a clean primary-subject directory. Prefer subject-by-subject filing; fall through to media/ only when the source format IS the unifying frame."
     },
     {
-      "kind": "conversation",
-      "directory": "conversations/",
-      "examples": ["conversations/chatgpt/{thread-slug}.md", "conversations/claude/{thread-slug}.md"],
-      "description": "Imported chat exports (ChatGPT, Claude, etc.) where the conversation itself is the artifact. Cross-link concepts and people from the conversation; the conversation page is the source-of-truth for the dialog. Distinct from voice-notes/ (which holds raw voice capture)."
+      "kind": "raw-teams-transcript",
+      "directory": "sources/teams/",
+      "examples": ["sources/teams/{date}-{topic}.md"],
+      "description": "Raw Microsoft Teams transcript evidence. Preserve message text, sender, timestamp, attachment markers, and source references. Split mixed episodes by coherent topic. Do not place summaries, project state, decisions, risks, or actions here; those belong in their canonical directories. Redact credentials from the local evidence copy."
     },
     {
       "kind": "state-action",

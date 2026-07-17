@@ -14,7 +14,7 @@ enforces it programmatically.
 The DB is a derived index over the markdown content. It exists to make
 search fast, to dedup embedding-similar claims, to materialize the
 cross-page graph. None of that data is irreplaceable — as long as the
-markdown is intact, `gbrain sync && gbrain extract all` rebuilds the
+markdown is intact, `voltmind sync && voltmind extract all` rebuilds the
 entire DB from scratch.
 
 This means:
@@ -22,13 +22,13 @@ This means:
 - **Disaster recovery is one command.** If your DB volume corrupts, if
   Postgres eats itself, if PGLite's WASM lock wedges — you don't need
   a backup. You wipe the DB, re-import from your brain repo, and the
-  derived state regenerates. v0.32.3 ships `gbrain rebuild
+  derived state regenerates. v0.32.3 ships `voltmind rebuild
   --confirm-destructive` as the documented one-liner.
 - **Multi-machine sync is git.** Your brain is a repo. Push from one
   machine, pull from another, and the second machine's DB rebuilds on
   its next sync. No "back up the database" step.
 - **Privacy is in your hands.** Sensitive entity pages can be
-  gitignored (via `gbrain.yml` `db_only` paths or per-page) and they
+  gitignored (via `voltmind.yml` `db_only` paths or per-page) and they
   stay on disk but not in git. The fence respects whatever git
   tracking choice you make at the page level.
 - **Cross-agent collaboration is possible.** Multiple agents can write
@@ -37,21 +37,21 @@ This means:
 
 ## The three categories
 
-Every table in the gbrain schema belongs to exactly one of three
+Every table in the voltmind schema belongs to exactly one of three
 categories. The category determines how it gets rebuilt during
 disaster recovery.
 
 ### FS-canonical (markdown is the source of truth)
 
 These are user-authored knowledge. The DB row is a derived index over
-the markdown — wipe the table and `gbrain extract` rebuilds it
+the markdown — wipe the table and `voltmind extract` rebuilds it
 identically. The CI gate keeps direct DB writes from drifting away
 from the markdown contract.
 
 | Category | How it's stored in markdown | Derived DB table | Reconciler |
 |---|---|---|---|
-| **Takes** (incl. hunches, bets) | `## Takes` fenced table between `<!--- gbrain:takes:begin -->` / `:end -->` markers | `takes` | `extract takes` |
-| **Facts** | `## Facts` fenced table between `<!--- gbrain:facts:begin -->` / `:end -->` markers | `facts` | `extract_facts` cycle phase |
+| **Takes** (incl. hunches, bets) | `## Takes` fenced table between `<!--- voltmind:takes:begin -->` / `:end -->` markers | `takes` | `extract takes` |
+| **Facts** | `## Facts` fenced table between `<!--- voltmind:facts:begin -->` / `:end -->` markers | `facts` | `extract_facts` cycle phase |
 | **Links** | Inline `[text](slug)` / `[[slug]]` in markdown body + frontmatter `direction: incoming` | `links` | `extract links` |
 | **Timeline** | `## Timeline` section after `<!-- timeline -->` sentinel | `timeline_entries` | `extract timeline` |
 | **Tags** | Frontmatter `tags:` YAML array | `tags` | `importFromFile` (reconciles per-page on import) |
@@ -85,7 +85,7 @@ the repo. The architectural rule still holds — these aren't
 | `minion_jobs` / `minion_inbox` / `minion_attachments` | Job queue. Restarts re-enqueue or drop. |
 | `eval_candidates` / `eval_capture_failures` | Contributor-mode dev loop; opt-in capture. |
 | `dream_verdicts` | Cheap verdict cache. Rebuildable by re-running Haiku. |
-| `gbrain_cycle_locks` / migration ledger | Infrastructure. |
+| `voltmind_cycle_locks` / migration ledger | Infrastructure. |
 | `config` (some keys) | Site-local routing config (e.g. `sync.repo_path`). |
 
 A new derived table that holds user-knowledge MUST land FS-first.
@@ -112,16 +112,16 @@ a 3-layer strip:
    takes fence). Local CLI (`ctx.remote === false`) sees the full
    fence.
 3. **Layer C (git tracking):** the user decides whether to commit the
-   entity page. `gbrain.yml` `db_only` paths are gitignored
+   entity page. `voltmind.yml` `db_only` paths are gitignored
    automatically; per-page choices via the user's normal git workflow.
 
 For universally-private entities (a friend's name, an investor's
 internal notes), mark the entity page's directory as `db_only` in
-`gbrain.yml`. The file stays on disk but never lands in git.
+`voltmind.yml`. The file stays on disk but never lands in git.
 
 ## The forget contract
 
-`gbrain forget <id>` and the MCP `forget_fact` op rewrite the fence
+`voltmind forget <id>` and the MCP `forget_fact` op rewrite the fence
 row with strikethrough + `valid_until = today` + `context: "forgotten:
 <reason>"`. The DB's `expired_at = valid_until + now()` derivation
 reconstructs the forget state on every rebuild because the fence is
@@ -144,19 +144,19 @@ The promise the rule makes:
 
 ```bash
 # Snapshot what's there
-gbrain stats > /tmp/before.txt
+voltmind stats > /tmp/before.txt
 
 # Wipe and rebuild
-gbrain rebuild --confirm-destructive   # v0.32.3 — deletes derived tables
+voltmind rebuild --confirm-destructive   # v0.32.3 — deletes derived tables
                                        # (pages + content_chunks survive
                                        # the CASCADE-safe design)
                                        # OR manually for v0.32.2:
 psql -c 'DELETE FROM facts; DELETE FROM takes; DELETE FROM links; DELETE FROM timeline_entries;'
-gbrain sync
-gbrain extract all
+voltmind sync
+voltmind extract all
 
 # Counts match
-gbrain stats > /tmp/after.txt
+voltmind stats > /tmp/after.txt
 diff /tmp/before.txt /tmp/after.txt
 ```
 
@@ -167,7 +167,7 @@ exercises this exact flow on every CI run.
 
 When you add a new user-knowledge category:
 
-1. **Define the markdown shape.** Fence (`<!--- gbrain:NAME:begin
+1. **Define the markdown shape.** Fence (`<!--- voltmind:NAME:begin
    --> ... :end -->` table) or frontmatter field.
 2. **Build a parser** that produces structured data from markdown.
    See `src/core/fence-shared.ts` for the shared primitives.
@@ -179,7 +179,7 @@ When you add a new user-knowledge category:
 5. **Add a reconciler:** a cycle phase that walks pages, parses the
    fence, and rebuilds the derived table from scratch. The reconciler
    is the only legitimate call site for the engine method;
-   `// gbrain-allow-direct-insert: <reason>` annotates it explicitly.
+   `// voltmind-allow-direct-insert: <reason>` annotates it explicitly.
 6. **Add a round-trip test** in `test/e2e/system-of-record-invariant.test.ts`
    that proves DELETE + reconcile rebuilds the table byte-identically.
 

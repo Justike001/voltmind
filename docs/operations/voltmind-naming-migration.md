@@ -7,9 +7,9 @@ existing Supabase brain incompatible with an older VoltMind binary.
 
 | Legacy identifier | VoltMind runtime identifier | Compatibility during rollback window |
 | --- | --- | --- |
-| `gbrain_cycle_locks` | `voltmind_cycle_locks` | The old name is an updatable, `security_invoker` view over the renamed table. Old and new workers therefore contend for the same lock rows. |
-| `gbrain_tool_use_id` | `voltmind_tool_use_id` | Both columns remain. A trigger backfills either name and rejects conflicting values. |
-| `GBRAIN:RLS_EXEMPT` | `VOLTMIND:RLS_EXEMPT` | Doctor accepts both markers. New operator documentation uses the VoltMind marker. |
+| `voltmind_cycle_locks` | `voltmind_cycle_locks` | The old name is an updatable, `security_invoker` view over the renamed table. Old and new workers therefore contend for the same lock rows. |
+| `voltmind_tool_use_id` | `voltmind_tool_use_id` | Both columns remain. A trigger backfills either name and rejects conflicting values. |
+| `VOLTMIND:RLS_EXEMPT` | `VOLTMIND:RLS_EXEMPT` | Doctor accepts both markers. New operator documentation uses the VoltMind marker. |
 
 ## Deployment procedure
 
@@ -26,9 +26,9 @@ tables. Resolve that manually rather than allowing two independent lock
 domains.
 
 After v106 is verified and all worker leases are stopped, the compatibility
-bridge may be finalized as a one-way cleanup: drop the `gbrain_cycle_locks`
-view, drop the `gbrain_tool_use_id` column and its sync trigger, and normalize
-existing `GBRAIN:RLS_EXEMPT` comments to `VOLTMIND:RLS_EXEMPT`. This finalization
+bridge may be finalized as a one-way cleanup: drop the `voltmind_cycle_locks`
+view, drop the `voltmind_tool_use_id` column and its sync trigger, and normalize
+existing `VOLTMIND:RLS_EXEMPT` comments to `VOLTMIND:RLS_EXEMPT`. This finalization
 was completed on the configured Supabase brain after confirming zero active
 leases. Keep Autopilot paused until the updated CLI binary is deployed.
 
@@ -57,8 +57,8 @@ BEGIN
   END IF;
 END $$;
 
-DROP VIEW IF EXISTS public.gbrain_cycle_locks;
-ALTER TABLE public.voltmind_cycle_locks RENAME TO gbrain_cycle_locks;
+DROP VIEW IF EXISTS public.voltmind_cycle_locks;
+ALTER TABLE public.voltmind_cycle_locks RENAME TO voltmind_cycle_locks;
 
 DROP TRIGGER IF EXISTS sync_voltmind_tool_use_id_trg
   ON public.subagent_tool_executions;

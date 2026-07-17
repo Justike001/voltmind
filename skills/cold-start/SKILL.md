@@ -33,7 +33,7 @@ writes_to:
   - companies/
   - meetings/
   - daily/
-  - conversations/
+  - sources/teams/
   - sources/
   - projects/
   - concepts/
@@ -492,8 +492,9 @@ For each conversation:
 2. **Extract entities** — people, companies, concepts discussed
 3. **Capture original thinking** — the user's exact phrasing is the signal.
    Never paraphrase.
-4. **File by primary subject** — not in a "conversations/" dump. A conversation
-   about a person goes to people/, about a concept goes to concepts/, etc.
+4. **File by primary subject** — do not create a mixed conversation dump. For
+   Microsoft Teams, preserve only the topic-split raw transcript under
+   `sources/teams/`; summaries and extracted state go to their canonical homes.
 
 ### Quality rule
 

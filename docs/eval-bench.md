@@ -1,17 +1,17 @@
-# Running real-world eval benchmarks against your gbrain changes
+# Running real-world eval benchmarks against your voltmind changes
 
-Audience: gbrain maintainers and contributors. If you're touching retrieval
+Audience: voltmind maintainers and contributors. If you're touching retrieval
 (search, ranking, embeddings, intent classification, query expansion, source
 boost, hybrid fusion), this is the doc.
 
-For the **NDJSON wire format** consumed by gbrain-evals, see
+For the **NDJSON wire format** consumed by voltmind-evals, see
 [`eval-capture.md`](./eval-capture.md). This doc is the human dev loop
 that lives on top of that format.
 
 ## v0.41 update — the LOOP is now real
 
 Before v0.41, you could capture eval rows and replay them but nothing
-stitched them into a gate. `gbrain bench publish` + `gbrain eval gate`
+stitched them into a gate. `voltmind bench publish` + `voltmind eval gate`
 close the loop. Two gates:
 
 - **Regression gate** (`--baseline X.baseline.ndjson`): replays a baseline
@@ -29,28 +29,28 @@ one is required.
 
 ```bash
 # 1. Capture (one-time; uses queries already in eval_candidates)
-gbrain eval export --limit 200 --tool query > /tmp/captured.ndjson
+voltmind eval export --limit 200 --tool query > /tmp/captured.ndjson
 
 # 2. Publish a baseline
-mkdir -p ~/.gbrain/baselines
-gbrain bench publish --from /tmp/captured.ndjson --to ~/.gbrain/baselines/personal.baseline.ndjson --label "personal-$(date +%Y%m%d)"
+mkdir -p ~/.voltmind/baselines
+voltmind bench publish --from /tmp/captured.ndjson --to ~/.voltmind/baselines/personal.baseline.ndjson --label "personal-$(date +%Y%m%d)"
 
 # 3. Gate against it
-gbrain eval gate --baseline ~/.gbrain/baselines/personal.baseline.ndjson
+voltmind eval gate --baseline ~/.voltmind/baselines/personal.baseline.ndjson
 ```
 
 ### Privacy posture (D9)
 
-**Public baselines in `gbrain-evals` are hermetic-synthetic ONLY.** Real
-user captures stay local in `~/.gbrain/baselines/`. The boundary is
+**Public baselines in `voltmind-evals` are hermetic-synthetic ONLY.** Real
+user captures stay local in `~/.voltmind/baselines/`. The boundary is
 enforced at the file source, not by post-hoc scrubbing. If you publish a
-baseline to `gbrain-evals`, generate it from a fixture-seeded test brain
+baseline to `voltmind-evals`, generate it from a fixture-seeded test brain
 (placeholder names like `alice-example`, `widget-co-example`) — never
 from a real user's `eval_candidates` table.
 
 ### Deterministic-pipeline disclosure
 
-`gbrain eval gate --qrels` uses bare `hybridSearch` (not the production
+`voltmind eval gate --qrels` uses bare `hybridSearch` (not the production
 `query` op handler). This is deliberate: gates need to be deterministic in
 CI. Production retrieval differs via the query cache, salience freshness,
 expansion, etc. The gate measures retrieval quality with a fixed pipeline;
@@ -95,7 +95,7 @@ gate. The compare everywhere is `${source_id}::${slug}` strings.
 ### Example GitHub Actions workflow
 
 ```yaml
-name: gbrain-eval-gate
+name: voltmind-eval-gate
 on: [pull_request]
 jobs:
   gate:
@@ -106,9 +106,9 @@ jobs:
       - run: bun install
       - run: |
           # Run both gates; CI fails on any breach.
-          gbrain eval gate \
-            --baseline gbrain-evals/baselines/v0.41-launch.baseline.ndjson \
-            --qrels gbrain-evals/qrels/v0.41-launch.qrels.json \
+          voltmind eval gate \
+            --baseline voltmind-evals/baselines/v0.41-launch.baseline.ndjson \
+            --qrels voltmind-evals/qrels/v0.41-launch.qrels.json \
             --json | tee /tmp/gate.json
 ```
 
@@ -121,17 +121,17 @@ surprise data accumulation). Contributors flip it on with one line:
 
 ```bash
 # In ~/.zshrc or ~/.bashrc:
-export GBRAIN_CONTRIBUTOR_MODE=1
+export VOLTMIND_CONTRIBUTOR_MODE=1
 ```
 
 Verify:
 
 ```bash
-gbrain query "anything" >/dev/null
+voltmind query "anything" >/dev/null
 psql $DATABASE_URL -c 'SELECT count(*) FROM eval_candidates'   # should be > 0
 ```
 
-To override (force on/off regardless of env var), edit `~/.gbrain/config.json`:
+To override (force on/off regardless of env var), edit `~/.voltmind/config.json`:
 
 ```json
 {"eval": {"capture": true}}    // force on
@@ -145,17 +145,17 @@ Explicit config beats the env var both directions.
 ```bash
 # ① Capture: writes to eval_candidates whenever CONTRIBUTOR_MODE is set.
 #   Inspect what's been collected:
-gbrain doctor                                     # surfaces capture failures
+voltmind doctor                                     # surfaces capture failures
 psql $DATABASE_URL -c 'SELECT count(*) FROM eval_candidates'
 
 # ② Snapshot: freeze a baseline before your code change.
-gbrain eval export --since 7d > baseline.ndjson
+voltmind eval export --since 7d > baseline.ndjson
 
 # ③ Code change: do whatever you want — tune RRF_K, swap embed model, edit
 #    hybrid.ts, add a new boost source, change the intent classifier.
 
 # ④ Replay: re-run every captured query against the current build.
-gbrain eval replay --against baseline.ndjson
+voltmind eval replay --against baseline.ndjson
 ```
 
 Output:
@@ -187,7 +187,7 @@ Three numbers tell you whether the change is safe to land:
 
 ## What it actually does
 
-`gbrain eval replay` reads your NDJSON snapshot and, for each row:
+`voltmind eval replay` reads your NDJSON snapshot and, for each row:
 
 1. Re-executes the same op (`searchKeyword` for `tool_name='search'`,
    `hybridSearch` for `tool_name='query'`) with the captured `detail` and
@@ -199,16 +199,16 @@ Three numbers tell you whether the change is safe to land:
 
 It does NOT compute MRR or nDCG — those need ground-truth relevance labels,
 not a baseline comparison. For metric-against-truth eval, use
-`gbrain eval --qrels <path>` (the legacy IR-eval path, still supported). The
+`voltmind eval --qrels <path>` (the legacy IR-eval path, still supported). The
 replay tool answers a different question: "did my code change move
 retrieval, and which queries did it move most?"
 
 For a third evaluation axis — public benchmark, ground-truth labels, full
-question-answer pipeline (not just retrieval) — `gbrain eval longmemeval
-<dataset.jsonl>` (v0.28.8) runs the LongMemEval benchmark against gbrain's
+question-answer pipeline (not just retrieval) — `voltmind eval longmemeval
+<dataset.jsonl>` (v0.28.8) runs the LongMemEval benchmark against voltmind's
 hybrid retrieval. Each question gets a clean in-memory PGLite, its haystack
 imported, the question asked, the hypothesis emitted as JSONL — exactly the
-shape LongMemEval's `evaluate_qa.py` consumes. Your `~/.gbrain` brain is
+shape LongMemEval's `evaluate_qa.py` consumes. Your `~/.voltmind` brain is
 never opened. See `## Public benchmarks: LongMemEval` below.
 
 ## Best-effort by design
@@ -232,7 +232,7 @@ Pair them with manual inspection of the top regressions.
 ## Cost
 
 Every `query` row in the snapshot embeds the query string via OpenAI to run
-the vector half of `hybridSearch`. Cost is identical to a normal `gbrain
+the vector half of `hybridSearch`. Cost is identical to a normal `voltmind
 query` invocation — text-embedding-3-large at OpenAI list price, batched
 inside a single replay row.
 
@@ -242,16 +242,16 @@ enough to catch direction; expand for the final pre-merge run.
 
 ```bash
 # Iteration mode — 50 most recent queries
-gbrain eval replay --against baseline.ndjson --limit 50
+voltmind eval replay --against baseline.ndjson --limit 50
 
 # Pre-merge — full snapshot
-gbrain eval replay --against baseline.ndjson --top-regressions 20
+voltmind eval replay --against baseline.ndjson --top-regressions 20
 ```
 
 ## CI integration
 
 ```bash
-gbrain eval replay --against baseline.ndjson --json > replay.json
+voltmind eval replay --against baseline.ndjson --json > replay.json
 jq -e '.summary.mean_jaccard >= 0.85' replay.json || exit 1
 jq -e '.summary.top1_stability_rate >= 0.85' replay.json || exit 1
 ```
@@ -304,27 +304,27 @@ week before merging), you can hand-author an NDJSON file:
 {"schema_version":1,"id":2,"tool_name":"search","query":"acme deal","retrieved_slugs":["deals/acme-seed","companies/acme"],"latency_ms":0,"remote":false}
 ```
 
-Then run `gbrain eval replay --against handcrafted.ndjson` to confirm the
+Then run `voltmind eval replay --against handcrafted.ndjson` to confirm the
 authoritative slugs come back. This is the seam between the BrainBench-Real
 pipeline (replay against live captures) and the BrainBench fixed-fixture
-pipeline (`gbrain eval --qrels` with the sibling
-[gbrain-evals](https://github.com/garrytan/gbrain-evals) corpus).
+pipeline (`voltmind eval --qrels` with the sibling
+[voltmind-evals](https://github.com/garrytan/voltmind-evals) corpus).
 
 ## Off-switch
 
 Two ways to disable capture:
 
 ```bash
-unset GBRAIN_CONTRIBUTOR_MODE             # easy: just unset the env var
+unset VOLTMIND_CONTRIBUTOR_MODE             # easy: just unset the env var
 ```
 
-Or force off regardless of the env var via `~/.gbrain/config.json`:
+Or force off regardless of the env var via `~/.voltmind/config.json`:
 
 ```json
 {"eval": {"capture": false}}
 ```
 
-Existing `eval_candidates` rows stay until you `gbrain eval prune
+Existing `eval_candidates` rows stay until you `voltmind eval prune
 --older-than 0d` (or just drop the table).
 
 ## Failure modes
@@ -339,8 +339,8 @@ Existing `eval_candidates` rows stay until you `gbrain eval prune
 
 ## Public benchmarks: LongMemEval (v0.28.8)
 
-`gbrain eval longmemeval` runs the public [LongMemEval](https://huggingface.co/datasets/xiaowu0162/longmemeval)
-benchmark directly against gbrain's hybrid retrieval. Different evaluation
+`voltmind eval longmemeval` runs the public [LongMemEval](https://huggingface.co/datasets/xiaowu0162/longmemeval)
+benchmark directly against voltmind's hybrid retrieval. Different evaluation
 axis from `eval replay`: public dataset with ground-truth labels, end-to-end
 question-answer pipeline, hermetic per-question brains.
 
@@ -349,11 +349,11 @@ question-answer pipeline, hermetic per-question brains.
 # Place longmemeval_oracle.json (or _s.json) somewhere local.
 
 # Retrieval-only (no LLM answer-gen, fastest path, no Anthropic key needed):
-gbrain eval longmemeval ./longmemeval_oracle.json --limit 50 --retrieval-only \
+voltmind eval longmemeval ./longmemeval_oracle.json --limit 50 --retrieval-only \
   > /tmp/hypothesis.jsonl
 
 # Full pipeline (Anthropic key required for answer-gen):
-gbrain eval longmemeval ./longmemeval_oracle.json --limit 50 \
+voltmind eval longmemeval ./longmemeval_oracle.json --limit 50 \
   > /tmp/hypothesis.jsonl
 
 # Score with LongMemEval's published evaluate_qa.py (not bundled — needs
@@ -364,11 +364,11 @@ python evaluate_qa.py /tmp/hypothesis.jsonl
 ### Architecture (read this if you're touching the harness)
 
 - One in-memory PGLite per benchmark run via `createBenchmarkBrain` +
-  `withBenchmarkBrain`. Your `~/.gbrain` is never opened.
+  `withBenchmarkBrain`. Your `~/.voltmind` is never opened.
 - Between questions: `TRUNCATE` over runtime-enumerated `pg_tables`, NOT a
   hardcoded list — schema migrations don't silently leak data across
   questions. Infrastructure tables (`sources`, `config`,
-  `gbrain_cycle_locks`, `subagent_rate_leases`) are preserved across resets.
+  `voltmind_cycle_locks`, `subagent_rate_leases`) are preserved across resets.
 - Sanitization parity: re-uses `INJECTION_PATTERNS` from
   `src/core/think/sanitize.ts` so adding a new injection pattern
   automatically covers takes AND benchmarks. One source of truth.
@@ -400,7 +400,7 @@ LLM latency.
 
 ## Measuring brain consistency over time (v0.32.6)
 
-`gbrain eval suspected-contradictions` is a complementary measurement
+`voltmind eval suspected-contradictions` is a complementary measurement
 instrument: it samples retrieval results for unmarked semantic
 contradictions (e.g., compiled_truth vs chat content, intra-page chunk
 vs active take). Where LongMemEval measures retrieval correctness on a
@@ -411,22 +411,22 @@ brain surfaces conflicting answers.
 
 ```bash
 # Once a day, against your top 50 most-frequent queries:
-gbrain eval suspected-contradictions \
-  --queries-file ~/.gbrain/queries.jsonl \
+voltmind eval suspected-contradictions \
+  --queries-file ~/.voltmind/queries.jsonl \
   --top-k 5 \
   --budget-usd 5 \
-  --output ~/.gbrain/probe-runs/$(date +%Y-%m-%d).json
+  --output ~/.voltmind/probe-runs/$(date +%Y-%m-%d).json
 ```
 
 Persistent cache (`eval_contradictions_cache`) makes re-runs near-zero
 cost until you bump `PROMPT_VERSION`. Trend-track via:
 
 ```bash
-gbrain eval suspected-contradictions trend --days 30
+voltmind eval suspected-contradictions trend --days 30
 ```
 
 The ASCII bar chart shows total flagged per day. Headline % surfaces in
-`gbrain doctor`'s `contradictions` check with paste-ready resolution
+`voltmind doctor`'s `contradictions` check with paste-ready resolution
 commands per high-severity finding.
 
 ### See also
@@ -440,13 +440,13 @@ commands per high-severity finding.
 Three eval surfaces grew non-trivial capabilities in v0.40.1.0. This section
 covers the dev loop that uses them and the gates they enforce.
 
-### `gbrain eval longmemeval --by-type` — per-question-type R@k breakdown
+### `voltmind eval longmemeval --by-type` — per-question-type R@k breakdown
 
 LongMemEval has always computed per-question-type recall internally; v0.40.1.0
 surfaces it in machine-readable form. Two additive changes:
 
 1. Every per-question JSONL row now includes a `question: string` field so the
-   `gbrain eval cross-modal --batch` consumer (below) can read it without
+   `voltmind eval cross-modal --batch` consumer (below) can read it without
    joining back against the source dataset.
 2. New `--by-type` flag emits a final aggregate line keyed by `question_type`:
 
@@ -468,12 +468,12 @@ exactly ONE summary at the tail.
 
 ```bash
 # Diagnose per-type ranking quality after a search-touching change.
-gbrain eval longmemeval ~/datasets/longmemeval_s.jsonl \
+voltmind eval longmemeval ~/datasets/longmemeval_s.jsonl \
   --by-type --output /tmp/run.jsonl
 tail -1 /tmp/run.jsonl | jq .   # summary line
 
 # Strict gate in a CI script.
-gbrain eval longmemeval test/fixtures/longmemeval-mini.jsonl \
+voltmind eval longmemeval test/fixtures/longmemeval-mini.jsonl \
   --by-type --by-type-floor 0.80 --output /tmp/run.jsonl
 echo "exit=$?"  # 1 if any type fell below 0.80
 ```
@@ -521,26 +521,26 @@ clearly better-aligned with the query intent.
 #### Env-overrides for floors
 
 ```bash
-GBRAIN_REPLAY_GATE_TOP1_FLOOR=0.85 \
-GBRAIN_REPLAY_GATE_RECALL_FLOOR=0.90 \
+VOLTMIND_REPLAY_GATE_TOP1_FLOOR=0.85 \
+VOLTMIND_REPLAY_GATE_RECALL_FLOOR=0.90 \
   bun test test/eval-replay-gate.test.ts
 ```
 
 Use to tighten or loosen the gate as the qrels fixture matures.
 
-### `gbrain eval cross-modal --batch` — batch quality scoring
+### `voltmind eval cross-modal --batch` — batch quality scoring
 
 Single-task cross-modal eval scores one (task, output) pair. Batch mode runs
 the same scoring over an entire LongMemEval JSONL output, with cost guardrails.
 
 ```bash
 # Step 1: produce LongMemEval hypotheses (real cost: depends on model + N).
-gbrain eval longmemeval ~/datasets/longmemeval_s.jsonl \
+voltmind eval longmemeval ~/datasets/longmemeval_s.jsonl \
   --limit 10 --output /tmp/run.jsonl
 
 # Step 2: batch-score those hypotheses (real cost: ~$0.70 for 10 questions,
 # 1 cycle, 3 model slots at default --max-usd 5 budget cap).
-gbrain eval cross-modal --batch /tmp/run.jsonl \
+voltmind eval cross-modal --batch /tmp/run.jsonl \
   --limit 10 --cycles 1 --concurrent 3 --max-usd 5 --json
 echo "exit=$?"  # 0=all-pass, 1=any-fail, 2=any-error-or-inconclusive
 ```
@@ -567,8 +567,8 @@ echo "exit=$?"  # 0=all-pass, 1=any-fail, 2=any-error-or-inconclusive
 API spend. Enable per-host:
 
 ```bash
-gbrain config set autopilot.nightly_quality_probe.enabled true
-gbrain config set autopilot.nightly_quality_probe.max_usd 5.00   # optional override
+voltmind config set autopilot.nightly_quality_probe.enabled true
+voltmind config set autopilot.nightly_quality_probe.max_usd 5.00   # optional override
 ```
 
 Note: `--phase nightly_quality_probe` wiring into the autopilot scheduler is
@@ -581,12 +581,12 @@ bun test test/nightly-quality-probe.test.ts
 ```
 
 Observability:
-- `~/.gbrain/audit/quality-probe-YYYY-Www.jsonl` — one event per run with
+- `~/.voltmind/audit/quality-probe-YYYY-Www.jsonl` — one event per run with
   outcome (pass / fail / inconclusive / error / budget_exceeded /
   rate_limited / no_embedding_key), pass/fail/inconclusive/error counts,
   est_cost_usd, fixture_sha8. ISO-week rotation (mirrors slug-fallback
   audit).
-- `gbrain doctor` surfaces `nightly_quality_probe_health`:
+- `voltmind doctor` surfaces `nightly_quality_probe_health`:
   - SKIPPED (disabled) — with paste-ready enable command.
   - OK (enabled, no events yet) — autopilot hasn't fired its first run.
   - OK (last 7d all PASS) — with timestamp of latest run.

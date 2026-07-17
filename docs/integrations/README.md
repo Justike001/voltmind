@@ -1,6 +1,6 @@
 # Getting Data Into Your Brain
 
-GBrain is the retrieval layer. But retrieval is only as good as what you put in.
+VoltMind is the retrieval layer. But retrieval is only as good as what you put in.
 This directory covers how to get data flowing into your brain automatically.
 
 ## How Data Flows In
@@ -14,7 +14,7 @@ Agent analyzes it (LLM, judgment, entity detection)
   ↓
 Brain pages created/updated (compiled truth + timeline)
   ↓
-GBrain indexes it (chunking, embedding, search-ready)
+VoltMind indexes it (chunking, embedding, search-ready)
   ↓
 Next query is smarter (the compounding effect)
 ```
@@ -24,7 +24,7 @@ Next query is smarter (the compounding effect)
 ### Self-Installing Recipes
 
 These are integration recipes your agent can set up for you. Run
-`gbrain integrations` to see what's available and their status.
+`voltmind integrations` to see what's available and their status.
 
 | Recipe | Category | Requires | What It Does | Setup Time |
 |--------|----------|----------|-------------|------------|
@@ -81,9 +81,9 @@ each one, configures the integration, and runs a smoke test.
 
 ### Recipe trust boundary
 
-Only recipes shipped inside the gbrain package itself (the `recipes/` directory in
+Only recipes shipped inside the voltmind package itself (the `recipes/` directory in
 a source install, or the global install copy) are trusted. Recipes discovered at
-runtime from `$GBRAIN_RECIPES_DIR` or a cwd-local `./recipes/` are marked untrusted:
+runtime from `$VOLTMIND_RECIPES_DIR` or a cwd-local `./recipes/` are marked untrusted:
 they cannot run `command` health checks, cannot run `http` health checks (SSRF
 defense), and cannot use the deprecated string health_check form. Untrusted recipes
 can still use `env_exists` and `any_of` compositions. To ship a recipe that runs

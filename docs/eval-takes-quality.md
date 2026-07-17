@@ -1,11 +1,11 @@
-# `gbrain eval takes-quality` — reproducible cross-modal quality eval
+# `voltmind eval takes-quality` — reproducible cross-modal quality eval
 
 v0.32+ ships a CI-able quality gate for the takes layer. Three frontier models
 score a sample of takes against a 5-dimension rubric, the runner aggregates to
 PASS / FAIL / INCONCLUSIVE, and the receipt persists to `eval_takes_quality_runs`
 so a follow-up `trend` or `regress` can compare against history.
 
-This doc is the consumer contract. The sibling [gbrain-evals](https://github.com/garrytan/gbrain-evals)
+This doc is the consumer contract. The sibling [voltmind-evals](https://github.com/garrytan/voltmind-evals)
 repo and any future CI gate read receipts shaped exactly like the JSON below.
 Fields are additive-stable at `schema_version: 1`. A breaking shape change
 bumps the version.
@@ -14,10 +14,10 @@ bumps the version.
 
 | Command | Brain required? | Exit codes |
 |---|---|---|
-| `gbrain eval takes-quality run [flags]` | yes (samples takes) | 0 PASS, 1 FAIL, 2 INCONCLUSIVE |
-| `gbrain eval takes-quality replay <receipt>` | **no** (disk-only) | 0 PASS, 1 FAIL, 2 INCONCLUSIVE |
-| `gbrain eval takes-quality trend [flags]` | yes (reads runs table) | 0 |
-| `gbrain eval takes-quality regress --against <receipt>` | yes | 0 OK, 1 regression |
+| `voltmind eval takes-quality run [flags]` | yes (samples takes) | 0 PASS, 1 FAIL, 2 INCONCLUSIVE |
+| `voltmind eval takes-quality replay <receipt>` | **no** (disk-only) | 0 PASS, 1 FAIL, 2 INCONCLUSIVE |
+| `voltmind eval takes-quality trend [flags]` | yes (reads runs table) | 0 |
+| `voltmind eval takes-quality regress --against <receipt>` | yes | 0 OK, 1 regression |
 
 `replay` is the only mode that runs without `DATABASE_URL` — it reads the
 receipt file from disk and re-renders it. The other modes need the brain.
@@ -94,7 +94,7 @@ receipt file from disk and re-renders it. The other modes need the brain.
 ## Receipt persistence
 
 Receipts persist to **`eval_takes_quality_runs`** (DB-authoritative per
-codex review #6) AND to disk at `~/.gbrain/eval-receipts/takes-quality-<corpus>-<prompt>-<models>-<rubric>.json`
+codex review #6) AND to disk at `~/.voltmind/eval-receipts/takes-quality-<corpus>-<prompt>-<models>-<rubric>.json`
 as a best-effort artifact. The DB row carries the full receipt JSON in the
 `receipt_json` JSONB column, so when the disk artifact is gone, `replay`
 can still reconstruct via `loadReceiptFromDb` (v0.33+ flag wiring).
@@ -129,11 +129,11 @@ JSON shape (`--json`):
 
 ```bash
 # Capture a baseline.
-gbrain eval takes-quality run --limit 100 --json \
+voltmind eval takes-quality run --limit 100 --json \
   > .ci/takes-quality-baseline.json
 
 # Later, after changing the extraction prompt:
-gbrain eval takes-quality regress --against .ci/takes-quality-baseline.json \
+voltmind eval takes-quality regress --against .ci/takes-quality-baseline.json \
   --threshold 0.5
 # exit 0 → no regression past threshold
 # exit 1 → some dim dropped > 0.5; CI fails

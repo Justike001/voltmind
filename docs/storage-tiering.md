@@ -2,46 +2,91 @@
 
 ## Overview
 
-GBrain supports storage tiering to separate version-controlled content from bulk machine-generated data. This prevents git repositories from becoming bloated with large amounts of automatically generated content while still preserving it in the database.
+VoltMind supports storage tiering to separate version-controlled content from bulk machine-generated data. This prevents git repositories from becoming bloated with large amounts of automatically generated content while still preserving it in the database.
 
-> Note on naming: prior to v0.22.11 the keys were `git_tracked` / `supabase_only`. The canonical names are now `db_tracked` / `db_only` (engine-agnostic — works on both PGLite and Postgres). The deprecated keys still load with a once-per-process warning. Run `gbrain doctor --fix` for an automated rename when that path lands.
+> Note on naming: prior to v0.22.11 the keys were `git_tracked` / `supabase_only`. The canonical names are now `db_tracked` / `db_only` (engine-agnostic — works on both PGLite and Postgres). The deprecated keys still load with a once-per-process warning. Run `voltmind doctor --fix` for an automated rename when that path lands.
 
 ## Configuration
 
-Add a `storage` section to your `gbrain.yml` file in the brain repository root:
+Add a `storage` section to `voltmind.yml` in the active source vault root. For
+the local-first Personal Brain, this is the directory returned by
+`voltmind sources current` (for example, `<source-vault>/voltmind.yml`), not
+the VoltMind runtime checkout unless that checkout is itself the source vault:
 
 ```yaml
 storage:
-  # Directories that are version-controlled (human-edited, committed to git).
+  # Durable, human-reviewed knowledge, governance, and audit records.
   db_tracked:
-    - people/
+    - archive/
+    - artifacts/
     - companies/
-    - deals/
     - concepts/
-    - yc/
+    - contribution/
     - ideas/
+    - meetings/
+    - orgs/
+    - people/
+    - policy/
     - projects/
+    - sources/teams/
+    - state/actions/
+    - state/commitments/
+    - state/decisions/
+    - state/risks/
+    - templates/
+    - workstreams/
 
-  # Directories persisted via the brain database only (bulk machine-generated
-  # content). Written to disk as a local cache but not committed to git;
-  # `gbrain sync` auto-manages .gitignore for these paths. `gbrain export
-  # --restore-only` repopulates missing files from the database.
+  # Private, temporary, raw, or reproducibly derived material. This is a Git
+  # visibility policy, not an access-control or encryption boundary.
   db_only:
-    - media/x/
-    - media/articles/
-    - meetings/transcripts/
+    - daily/
+    - inbox/
+    - private/
+    - sources/
+    - state/indexes/
 ```
+
+All pages are still indexed in the brain database and remain searchable in
+both tiers. The tier only controls the file/Git policy, automatic `.gitignore`
+management, storage-status accounting, and `voltmind export --restore-only`.
+
+The Personal Brain schema makes the distinction explicit:
+
+- `sources/teams/` is a reviewed and redacted evidence/audit exception, so it
+  is `db_tracked`.
+- Other `sources/` material is raw input and can be high-volume, so it is
+  `db_only`; `daily/`, `inbox/`, `private/`, and `state/indexes/` are likewise
+  private, transient, or reproducibly derived.
+- `state/actions/`, `state/commitments/`, `state/decisions/`, and
+  `state/risks/` are small operational records with owners and evidence, not
+  disposable generated indexes, so they are `db_tracked`.
+
+Because `sources/` is `db_only` while `sources/teams/` is an exception, retain
+the schema README files and the Teams subtree with explicit `.gitignore`
+negation rules after VoltMind's managed block:
+
+```gitignore
+!sources/
+sources/*
+!sources/README.md
+!sources/teams/
+!sources/teams/**
+```
+
+Add equivalent README exceptions for any `db_only` directory whose README is
+part of the schema pack. `db_only` keeps content out of Git; it does not encrypt
+it, restrict local access, or change its visibility/promotion policy.
 
 Path requirements:
 
 - Each directory must end with `/` for canonical form. The validator auto-normalizes missing trailing slashes (one-time info note shows what changed).
-- A directory cannot appear in both tiers — that's a tier-overlap error and `loadStorageConfig` throws `StorageConfigError`. Edit `gbrain.yml` to remove the overlap and try again.
+- A directory cannot appear in both tiers — that's a tier-overlap error and `loadStorageConfig` throws `StorageConfigError`. Edit `voltmind.yml` to remove the overlap and try again.
 
 ## Behavior Changes
 
-### 1. `gbrain sync` — automatic .gitignore management
+### 1. `voltmind sync` — automatic .gitignore management
 
-When storage configuration is present, `gbrain sync` automatically manages `.gitignore` entries on every successful sync:
+When storage configuration is present, `voltmind sync` automatically manages `.gitignore` entries on every successful sync:
 
 - Adds missing `db_only` directory patterns to `.gitignore`.
 - Idempotent — re-running adds no duplicate entries.
@@ -49,32 +94,32 @@ When storage configuration is present, `gbrain sync` automatically manages `.git
 - Skipped on `--dry-run` (don't mutate disk in preview mode).
 - Skipped on `blocked_by_failures` status (sync state is inconsistent).
 - Skipped when the repo is a git submodule (`.git` is a file, not a directory) — submodule .gitignore changes don't survive parent updates. A warning explains.
-- Skipped entirely when `GBRAIN_NO_GITIGNORE=1` is set (escape hatch for shared-repo setups where a maintainer wants gbrain to leave .gitignore alone).
+- Skipped entirely when `VOLTMIND_NO_GITIGNORE=1` is set (escape hatch for shared-repo setups where a maintainer wants voltmind to leave .gitignore alone).
 - Failures (write permission denied, etc.) are caught and logged, never crash sync.
 
 Example `.gitignore` addition:
 
 ```gitignore
-# Auto-managed by gbrain (db_only directories)
+# Auto-managed by voltmind (db_only directories)
 media/x/
 media/articles/
-meetings/transcripts/
+sources/meetings/
 ```
 
-### 2. `gbrain export --restore-only` — repopulate missing db_only files
+### 2. `voltmind export --restore-only` — repopulate missing db_only files
 
 ```bash
 # Restore only missing db_only files from the database.
-gbrain export --restore-only --repo /path/to/brain
+voltmind export --restore-only --repo /path/to/brain
 
 # Filter by page type.
-gbrain export --restore-only --type media --repo /path/to/brain
+voltmind export --restore-only --type media --repo /path/to/brain
 
 # Filter by slug prefix.
-gbrain export --restore-only --slug-prefix media/x/ --repo /path/to/brain
+voltmind export --restore-only --slug-prefix media/x/ --repo /path/to/brain
 
 # Combine filters.
-gbrain export --restore-only --type media --slug-prefix media/x/ --repo /path/to/brain
+voltmind export --restore-only --type media --slug-prefix media/x/ --repo /path/to/brain
 ```
 
 The `--restore-only` flag:
@@ -84,14 +129,14 @@ The `--restore-only` flag:
 - Only exports pages that match `db_only` patterns AND are missing from disk.
 - Ideal for container restart recovery and fresh clones.
 
-### 3. `gbrain storage status` — storage-tier health dashboard
+### 3. `voltmind storage status` — storage-tier health dashboard
 
 ```bash
 # Human-readable status.
-gbrain storage status --repo /path/to/brain
+voltmind storage status --repo /path/to/brain
 
 # JSON output for scripts and orchestrators.
-gbrain storage status --repo /path/to/brain --json
+voltmind storage status --repo /path/to/brain --json
 ```
 
 Output includes:
@@ -128,7 +173,7 @@ Missing Files (need restore):
   media/x/tweet-0987654321
   ... and 47 more
 
-Use: gbrain export --restore-only --repo "/data/brain"
+Use: voltmind export --restore-only --repo "/data/brain"
 
 Configuration:
 --------------
@@ -140,7 +185,7 @@ DB tracked directories:
 DB-only directories:
   - media/x/
   - media/articles/
-  - meetings/transcripts/
+  - sources/meetings/
 ```
 
 ## Validation
@@ -169,7 +214,7 @@ Essential for ephemeral container environments:
 
 - Git repo contains only essential files.
 - Container restarts don't lose db_only data.
-- `gbrain export --restore-only` quickly restores bulk files when needed.
+- `voltmind export --restore-only` quickly restores bulk files when needed.
 - Local disk acts as a cache layer.
 
 ### Multi-environment consistency
@@ -182,12 +227,12 @@ Enables consistent data access across environments:
 
 ## Migration strategy
 
-1. **Assess current repository**: use `gbrain storage status` to understand current distribution.
+1. **Assess current repository**: use `voltmind storage status` to understand current distribution.
 2. **Plan directory structure**: identify which directories should be db_tracked vs db_only.
-3. **Create `gbrain.yml`**: add storage configuration to the repository root.
-4. **Test with dry-run**: `gbrain sync --dry-run` to verify behavior; `.gitignore` is NOT touched on dry-run.
-5. **Run a real sync**: `gbrain sync` updates `.gitignore` automatically on success.
-6. **Verify restore**: test `gbrain export --restore-only --repo .` against a small db_only directory.
+3. **Create `voltmind.yml`**: add storage configuration to the repository root.
+4. **Test with dry-run**: `voltmind sync --dry-run` to verify behavior; `.gitignore` is NOT touched on dry-run.
+5. **Run a real sync**: `voltmind sync` updates `.gitignore` automatically on success.
+6. **Verify restore**: test `voltmind export --restore-only --repo .` against a small db_only directory.
 
 ## Best practices
 
@@ -195,15 +240,15 @@ Enables consistent data access across environments:
 - **Start small**: begin with clearly machine-generated directories in `db_only`.
 - **Address validation errors**: tier overlap is an error, not a warning. Fix it before sync.
 - **Test restore**: regularly test `--restore-only` in staging environments.
-- **Document decisions**: comment your `gbrain.yml` to explain tier choices.
+- **Document decisions**: comment your `voltmind.yml` to explain tier choices.
 
 ## PGLite engine note
 
-On the PGLite engine (gbrain's local-only embedded Postgres), the "DB" your db_only pages live in IS the local file gbrain uses for everything else. The `.gitignore` housekeeping still helps (keeps bulk content out of git history), but the offload-to-DB promise is technically vacuous. A once-per-process soft-warn explains when the engine is detected. To get full tiering, migrate to Postgres with `gbrain migrate --to supabase`.
+On the PGLite engine (voltmind's local-only embedded Postgres), the "DB" your db_only pages live in IS the local file voltmind uses for everything else. The `.gitignore` housekeeping still helps (keeps bulk content out of git history), but the offload-to-DB promise is technically vacuous. A once-per-process soft-warn explains when the engine is detected. To get full tiering, migrate to Postgres with `voltmind migrate --to supabase`.
 
 ## Compatibility
 
-- **Backward compatible**: systems without `gbrain.yml` work unchanged.
+- **Backward compatible**: systems without `voltmind.yml` work unchanged.
 - **Progressive enhancement**: add configuration when needed.
 - **Database unchanged**: all data remains in Postgres regardless of tier.
 - **Existing workflows**: all existing `sync` and `export` behavior preserved.

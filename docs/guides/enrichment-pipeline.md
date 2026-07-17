@@ -18,9 +18,9 @@ on enrich(entity, trigger):
 
     # Step 2: Check brain state -- UPDATE or CREATE path?
     for entity in entities:
-        existing = gbrain search "{entity.name}"
+        existing = voltmind search "{entity.name}"
         if existing:
-            page = gbrain get <entity_slug>
+            page = voltmind get <entity_slug>
             path = "UPDATE"
         else:
             path = "CREATE"
@@ -36,7 +36,7 @@ on enrich(entity, trigger):
 
     # Step 4: Run external lookups (priority order, stop when enough signal)
     data = {}
-    data["brain"] = gbrain search "{entity.name}"          # Always first (free)
+    data["brain"] = voltmind search "{entity.name}"          # Always first (free)
     if tier <= 2:
         data["web"] = brave_search("{entity.name}")        # Background, press, talks
     if tier <= 2:
@@ -49,23 +49,23 @@ on enrich(entity, trigger):
         data["contacts"] = google_contacts(entity.email)   # Contact data
 
     # Step 5: Store raw data (auditable, re-processable)
-    gbrain put_raw_data <entity_slug> \
+    voltmind put_raw_data <entity_slug> \
         --data '{"sources": {"crustdata": {"fetched_at": "...", "data": {...}}, ...}}'
     # Overwrite on re-enrichment, don't append
 
     # Step 6: Write to brain page
     if path == "CREATE":
-        gbrain put <entity_slug> --content "<compiled_truth_from_all_sources>"
-        gbrain add_timeline_entry <entity_slug> --entry "Page created via enrichment"
+        voltmind put <entity_slug> --content "<compiled_truth_from_all_sources>"
+        voltmind add_timeline_entry <entity_slug> --entry "Page created via enrichment"
     elif path == "UPDATE":
         # Append timeline, update compiled truth ONLY if materially new
-        gbrain add_timeline_entry <entity_slug> --entry "Enriched: {new_signal}"
+        voltmind add_timeline_entry <entity_slug> --entry "Enriched: {new_signal}"
         # Flag contradictions -- don't silently resolve them
 
     # Step 7: Cross-reference the graph
-    gbrain add_link <person_slug> <company_slug>       # person -> company
-    gbrain add_link <company_slug> <person_slug>       # company -> person
-    gbrain add_link <person_slug> <deal_slug>          # person -> deal
+    voltmind add_link <person_slug> <company_slug>       # person -> company
+    voltmind add_link <company_slug> <person_slug>       # company -> person
+    voltmind add_link <person_slug> <deal_slug>          # person -> deal
     # Every entity page links to every other entity page that references it
 
 # People page sections (not a LinkedIn profile -- a living portrait):
@@ -93,11 +93,11 @@ on enrich(entity, trigger):
 
 ## How to Verify
 
-1. Enrich a Tier 1 person. Run `gbrain get <slug>` and confirm the page has Executive Summary, State, What They Believe, Contact, and Timeline sections populated from multiple sources.
-2. Run `gbrain get_raw_data <slug>`. Confirm raw API responses are stored with `sources.{provider}.fetched_at` timestamps.
-3. Run `gbrain get_links <slug>`. Confirm cross-reference links exist to the person's company page, deal pages, and related entities.
+1. Enrich a Tier 1 person. Run `voltmind get <slug>` and confirm the page has Executive Summary, State, What They Believe, Contact, and Timeline sections populated from multiple sources.
+2. Run `voltmind get_raw_data <slug>`. Confirm raw API responses are stored with `sources.{provider}.fetched_at` timestamps.
+3. Run `voltmind get_links <slug>`. Confirm cross-reference links exist to the person's company page, deal pages, and related entities.
 4. Check a page that was enriched AND has a user-written Assessment. Confirm the Assessment section was preserved, not overwritten by API data.
 5. Try to re-enrich the same person. Confirm the system checks the `fetched_at` timestamp and skips if less than a week old.
 
 ---
-*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*
+*Part of the [VoltMind Skillpack](../VOLTMIND_SKILLPACK.md).*

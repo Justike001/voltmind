@@ -1,7 +1,7 @@
 # RLS and you
 
-Short version: every table in your gbrain's `public` schema needs Row Level
-Security enabled. If one doesn't, `gbrain doctor` now fails, not warns, and the
+Short version: every table in your voltmind's `public` schema needs Row Level
+Security enabled. If one doesn't, `voltmind doctor` now fails, not warns, and the
 process exits 1.
 
 This guide explains why, what to do when you hit the check, and the escape hatch
@@ -15,8 +15,8 @@ If RLS is off on a public table, the anon key can read it. On anything sensitive
 (auth tokens, chat history, financial data) that's an exfiltration vector, not
 a footgun.
 
-gbrain's service-role connection holds `BYPASSRLS`, so enabling RLS without
-policies does NOT break gbrain itself. It just blocks the anon key's default
+voltmind's service-role connection holds `BYPASSRLS`, so enabling RLS without
+policies does NOT break voltmind itself. It just blocks the anon key's default
 read. That's the security posture: deny-by-default to anon, full access for
 the service role.
 
@@ -29,14 +29,14 @@ line per table:
 1 table(s) WITHOUT Row Level Security: expenses_ramp.
 Fix: ALTER TABLE "public"."expenses_ramp" ENABLE ROW LEVEL SECURITY;
 If a table should stay readable by the anon key on purpose, see
-docs/guides/rls-and-you.md for the GBRAIN:RLS_EXEMPT comment escape hatch.
+docs/guides/rls-and-you.md for the VOLTMIND:RLS_EXEMPT comment escape hatch.
 ```
 
-99% of the time, you want the fix. Run the SQL. Re-run `gbrain doctor`. Done.
+99% of the time, you want the fix. Run the SQL. Re-run `voltmind doctor`. Done.
 
 ## v0.26.7 — auto-RLS event trigger and one-time backfill
 
-Starting in v0.26.7 (migration v35), gbrain ships two changes that close the
+Starting in v0.26.7 (migration v35), voltmind ships two changes that close the
 gap where a table could exist in your `public` schema without RLS for any
 amount of time at all.
 
@@ -44,7 +44,7 @@ amount of time at all.
 `auto_rls_on_create_table` runs `ALTER TABLE … ENABLE ROW LEVEL SECURITY`
 on every newly created `public.*` table. It covers `CREATE TABLE`,
 `CREATE TABLE AS … SELECT`, and `SELECT … INTO` — every syntax Postgres
-reports as a table-creation command. Tables created by gbrain itself, by
+reports as a table-creation command. Tables created by voltmind itself, by
 your other apps sharing the same Supabase project (Baku, Hermes, anything),
 or by a human running raw SQL all get RLS enabled the moment they exist.
 Non-`public` schemas (`auth`, `storage`, `realtime`, etc.) are explicitly
@@ -52,15 +52,15 @@ ignored — Supabase manages those, and we should not touch them.
 
 **2. The one-time backfill.** When you upgrade to v0.26.7, the migration
 walks every existing `public.*` base table whose RLS is off and whose comment
-doesn't carry the `GBRAIN:RLS_EXEMPT` exemption (see below) and enables RLS
-on each. After the upgrade, `gbrain doctor`'s `rls` check should be a no-op
+doesn't carry the `VOLTMIND:RLS_EXEMPT` exemption (see below) and enables RLS
+on each. After the upgrade, `voltmind doctor`'s `rls` check should be a no-op
 on every brain.
 
 ### Breaking change: read this before upgrading
 
 If you have public tables that are intentionally RLS-off and you want them
-to stay that way, you MUST add the `GBRAIN:RLS_EXEMPT` comment **before**
-running `gbrain upgrade` to v0.26.7. The backfill flips RLS on for any public
+to stay that way, you MUST add the `VOLTMIND:RLS_EXEMPT` comment **before**
+running `voltmind upgrade` to v0.26.7. The backfill flips RLS on for any public
 table that doesn't carry the exact comment contract documented below. There
 is no `--dry-run` flag on the migration.
 
@@ -71,7 +71,7 @@ prevent a re-flip on a later doctor run. No data is lost.
 
 ### Cross-app implications
 
-If a non-gbrain app (Baku, Hermes, a script you wrote, anything) creates
+If a non-voltmind app (Baku, Hermes, a script you wrote, anything) creates
 tables in the same Supabase project, the trigger will enable RLS on those
 tables too. Two ways to handle that:
 
@@ -85,18 +85,18 @@ tables too. Two ways to handle that:
    app's policy lands.
 
 If neither condition holds, the app will fail to read its own freshly-created
-tables. The fix is at the app side, not gbrain's: either grant BYPASSRLS or
+tables. The fix is at the app side, not voltmind's: either grant BYPASSRLS or
 ship a policy.
 
 ### What if the trigger gets dropped?
 
-`gbrain doctor` includes a new `rls_event_trigger` check that verifies the
+`voltmind doctor` includes a new `rls_event_trigger` check that verifies the
 trigger is installed and enabled. If you drop it manually for any reason
 (debugging, migration testing, anything), doctor warns and gives you the
 recovery command:
 
 ```
-gbrain apply-migrations --force-retry 35
+voltmind apply-migrations --force-retry 35
 ```
 
 Re-running migration v35 is idempotent — it `DROP EVENT TRIGGER IF EXISTS`
@@ -108,10 +108,10 @@ Postgres has two RLS dials. `ENABLE` blocks anon/authenticated; `FORCE` also
 blocks the table OWNER unless they hold BYPASSRLS. We use `ENABLE` only,
 matching the posture in `src/schema.sql`, migrations v24, and v29. `FORCE`
 would lock non-BYPASSRLS apps out of their own freshly-created tables (the
-trigger function inherits the caller's role, not the gbrain role) — which
+trigger function inherits the caller's role, not the voltmind role) — which
 defeats the cross-app coexistence story above. If you want defense-in-depth
-`FORCE` on a specific gbrain-owned table, add it explicitly in your own
-migration; gbrain's auto-RLS does not opt you in by default.
+`FORCE` on a specific voltmind-owned table, add it explicitly in your own
+migration; voltmind's auto-RLS does not opt you in by default.
 
 ## The 1% case: deliberate exemption
 
@@ -120,7 +120,7 @@ analytics view backing a public dashboard. A read-only reference table. A
 plugin that ships its own frontend and intentionally uses the anon key for
 reads.
 
-gbrain has an escape hatch for these. It is deliberately painful to set up.
+voltmind has an escape hatch for these. It is deliberately painful to set up.
 That is the feature.
 
 ### The format
@@ -128,12 +128,12 @@ That is the feature.
 ```sql
 -- In psql, connected as a BYPASSRLS role (e.g. postgres):
 COMMENT ON TABLE public.your_table IS
-  'GBRAIN:RLS_EXEMPT reason=<why this is anon-readable on purpose>';
+  'VOLTMIND:RLS_EXEMPT reason=<why this is anon-readable on purpose>';
 ```
 
 Rules:
 
-- The comment value MUST start with `GBRAIN:RLS_EXEMPT` (case-sensitive).
+- The comment value MUST start with `VOLTMIND:RLS_EXEMPT` (case-sensitive).
 - It MUST include `reason=` followed by at least 4 characters of justification.
 - No other prefix, no checkbox in a config file, no environment variable. Only
   a Postgres table comment counts.
@@ -147,10 +147,10 @@ Rules:
 ```sql
 ALTER TABLE public.expenses_ramp DISABLE ROW LEVEL SECURITY;
 COMMENT ON TABLE public.expenses_ramp IS
-  'GBRAIN:RLS_EXEMPT reason=analytics-only, anon-readable ok, owner=garry, 2026-04-22';
+  'VOLTMIND:RLS_EXEMPT reason=analytics-only, anon-readable ok, owner=garry, 2026-04-22';
 ```
 
-After that, `gbrain doctor` reports:
+After that, `voltmind doctor` reports:
 
 ```
 rls: ok — RLS enabled on 20/21 public tables (1 explicitly exempt: expenses_ramp)
@@ -158,11 +158,11 @@ rls: ok — RLS enabled on 20/21 public tables (1 explicitly exempt: expenses_ra
 
 Note that every subsequent run re-enumerates your exemptions by name. That's
 intentional. The escape hatch is not a one-time sign-off, it's a recurring
-reminder. If you ever want to know which tables are open, run `gbrain doctor`.
+reminder. If you ever want to know which tables are open, run `voltmind doctor`.
 
 ## Why SQL and not a CLI subcommand
 
-gbrain does NOT ship a `gbrain rls-exempt add <table>` command. A CLI command
+voltmind does NOT ship a `voltmind rls-exempt add <table>` command. A CLI command
 would make it easy for an agent to silently open a table to anon reads. The
 comment-in-psql requirement forces the operator to type the justification
 in SQL, which is:
@@ -170,7 +170,7 @@ in SQL, which is:
 - Visible in shell history.
 - Visible in a git-tracked schema dump.
 - Visible in `pg_dump` output the next time you restore.
-- Visible in `gbrain doctor` output on every run.
+- Visible in `voltmind doctor` output on every run.
 
 An agent CAN still run the SQL, but it can't do it without the user seeing the
 action. That's the "write it in blood" design.
@@ -187,7 +187,7 @@ FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public'
   AND c.relkind = 'r'
-  AND obj_description(c.oid, 'pg_class') LIKE 'GBRAIN:RLS_EXEMPT%';
+  AND obj_description(c.oid, 'pg_class') LIKE 'VOLTMIND:RLS_EXEMPT%';
 ```
 
 If that list is longer than you remember signing off on, that's the signal.
@@ -201,7 +201,7 @@ ALTER TABLE public.expenses_ramp ENABLE ROW LEVEL SECURITY;
 COMMENT ON TABLE public.expenses_ramp IS NULL;
 ```
 
-`gbrain doctor` stops listing the table as exempt and goes back to checking
+`voltmind doctor` stops listing the table as exempt and goes back to checking
 it like any other.
 
 ## PGLite
@@ -220,12 +220,12 @@ running and will flag any table that came over without RLS.
 ## Self-hosted Postgres
 
 If you're running Postgres without PostgREST in front, the anon-key exposure
-doesn't apply. But gbrain still fails the check on missing RLS, because:
+doesn't apply. But voltmind still fails the check on missing RLS, because:
 
-- The framing is "RLS on all public tables" is a gbrain security invariant,
+- The framing is "RLS on all public tables" is a voltmind security invariant,
   not a Supabase-specific workaround.
 - The `ALTER TABLE ... ENABLE RLS` fix is harmless on any Postgres: it only
-  constrains non-bypass roles, which gbrain doesn't use.
+  constrains non-bypass roles, which voltmind doesn't use.
 - If you ever put PostgREST or a similar tool in front later, the guard is
   already in place.
 

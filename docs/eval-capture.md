@@ -5,7 +5,7 @@ on every row; additive changes increment the minor version; removals
 are breaking-schema-v2.
 
 **Audience:** downstream consumers (primarily the sibling
-[gbrain-evals](https://github.com/garrytan/gbrain-evals) repo) that
+[voltmind-evals](https://github.com/garrytan/voltmind-evals) repo) that
 replay captured real-world queries as a BrainBench-Real fixture.
 
 ## The pipeline
@@ -40,10 +40,10 @@ return to caller                                   ▼
                                                                   scrubber_exception | other)
 ```
 
-## `gbrain eval export` — the consumer contract
+## `voltmind eval export` — the consumer contract
 
 ```sh
-gbrain eval export [--since DUR] [--limit N] [--tool query|search]
+voltmind eval export [--since DUR] [--limit N] [--tool query|search]
 ```
 
 Emits NDJSON to **stdout**. One JSON object per `\n`-terminated line.
@@ -51,16 +51,16 @@ stderr receives progress heartbeats. Every line starts with
 `"schema_version": 1` so a forward-compat parser can fail loudly on
 schema v2 instead of silently misparsing.
 
-Typical usage from gbrain-evals:
+Typical usage from voltmind-evals:
 
 ```sh
 # Snapshot the last week of real traffic for replay
-gbrain eval export --since 7d > brainbench-real.ndjson
+voltmind eval export --since 7d > brainbench-real.ndjson
 ```
 
 ```sh
 # Stream through jq for ad-hoc analysis
-gbrain eval export --tool query | jq -c 'select(.latency_ms > 500)'
+voltmind eval export --tool query | jq -c 'select(.latency_ms > 500)'
 ```
 
 ## Row schema (v1)
@@ -100,7 +100,7 @@ tiebreaker. Replay tools can consume rows in order and assume:
 ## Schema versioning promise
 
 - **v1 (shipped v0.21.0)** — this document. All fields listed above.
-- **Additive changes** increment gbrain minor version (v0.25.0, v0.23.0
+- **Additive changes** increment voltmind minor version (v0.25.0, v0.23.0
   …) and ship with new optional fields. Consumers keyed on known fields
   ignore unknown keys and keep working.
 - **Breaking changes** (rename, type change, removal) increment
@@ -109,15 +109,15 @@ tiebreaker. Replay tools can consume rows in order and assume:
 
 ## `eval_capture_failures` — companion audit table
 
-Not exported by `gbrain eval export`. Surfaced via `gbrain doctor`:
+Not exported by `voltmind eval export`. Surfaced via `voltmind doctor`:
 
 ```sh
-gbrain doctor   # warns when failures in last 24h > 0
+voltmind doctor   # warns when failures in last 24h > 0
 ```
 
 Reason enum (stable): `db_down` | `rls_reject` | `check_violation` |
 `scrubber_exception` | `other`. Cross-process visibility is the whole
-point — `gbrain doctor` runs in its own process and reads the table
+point — `voltmind doctor` runs in its own process and reads the table
 directly, so in-process counters wouldn't work.
 
 ## Config + CONTRIBUTOR_MODE
@@ -128,10 +128,10 @@ earlier drafts). Two paths to turn it on:
 **Path A — env var (contributor opt-in, the common case):**
 
 ```bash
-export GBRAIN_CONTRIBUTOR_MODE=1     # in ~/.zshrc or ~/.bashrc
+export VOLTMIND_CONTRIBUTOR_MODE=1     # in ~/.zshrc or ~/.bashrc
 ```
 
-**Path B — explicit config (`~/.gbrain/config.json`, file-plane only):**
+**Path B — explicit config (`~/.voltmind/config.json`, file-plane only):**
 
 ```json
 {
@@ -148,13 +148,13 @@ Resolution order (most explicit wins):
 
 1. `eval.capture: true` in config → on
 2. `eval.capture: false` in config → off (overrides CONTRIBUTOR_MODE=1)
-3. `GBRAIN_CONTRIBUTOR_MODE === '1'` → on
+3. `VOLTMIND_CONTRIBUTOR_MODE === '1'` → on
 4. otherwise → off
 
 `scrub_pii` defaults to `true` independent of capture. Set
 `eval.scrub_pii: false` to preserve raw query text (only if you control
 the brain's distribution).
 
-`gbrain config set eval.capture false` does **not** work — that
+`voltmind config set eval.capture false` does **not** work — that
 command writes the DB-plane config, and the MCP server reads the
 file-plane. Edit the JSON directly or use the env var.

@@ -119,4 +119,4 @@ which are 10-40x cheaper than the main session model.
 
 ---
 
-*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*
+*Part of the [VoltMind Skillpack](../VOLTMIND_SKILLPACK.md).*

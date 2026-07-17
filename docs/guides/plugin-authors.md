@@ -1,7 +1,7 @@
 # Plugin authors guide (v0.15)
 
-`gbrain` discovers subagent definitions from outside this repo via
-`GBRAIN_PLUGIN_PATH`. If you maintain a downstream agent (your OpenClaw
+`voltmind` discovers subagent definitions from outside this repo via
+`VOLTMIND_PLUGIN_PATH`. If you maintain a downstream agent (your OpenClaw
 deployment, a workflow host, a private tool) and want to ship custom
 subagents alongside it, drop a plugin directory on that env path.
 
@@ -11,18 +11,18 @@ This guide is for plugin authors. The CLI user doesn't need to read it.
 
 ```
 /path/to/my-plugin/
-├── gbrain.plugin.json
+├── voltmind.plugin.json
 └── subagents/
     └── my-summarizer.md
 ```
 
-`gbrain.plugin.json`:
+`voltmind.plugin.json`:
 
 ```json
 {
   "name": "my-plugin",
   "version": "1.0.0",
-  "plugin_version": "gbrain-plugin-v1"
+  "plugin_version": "voltmind-plugin-v1"
 }
 ```
 
@@ -44,25 +44,25 @@ a 3-sentence summary.
 ## Turning it on
 
 ```bash
-export GBRAIN_PLUGIN_PATH="/path/to/my-plugin"
-gbrain jobs work           # worker startup prints the plugin load line
-gbrain agent run "summarize meetings/2026-04-20" --subagent-def my-summarizer
+export VOLTMIND_PLUGIN_PATH="/path/to/my-plugin"
+voltmind jobs work           # worker startup prints the plugin load line
+voltmind agent run "summarize meetings/2026-04-20" --subagent-def my-summarizer
 ```
 
 Multiple plugins: colon-separated, just like `$PATH`.
 
 ```bash
-export GBRAIN_PLUGIN_PATH="/path/to/plugin-a:/path/to/plugin-b"
+export VOLTMIND_PLUGIN_PATH="/path/to/plugin-a:/path/to/plugin-b"
 ```
 
 ## Rules (strict by design)
 
 **Path policy.** Absolute paths only. Relative paths, `~`-prefixed paths,
 and URL-style paths (`https://`, `file://`) are rejected with a warning.
-You control where your plugin lives on disk; `gbrain` doesn't guess.
+You control where your plugin lives on disk; `voltmind` doesn't guess.
 
 **Collision policy.** If two plugins ship a subagent with the same `name`,
-the one listed FIRST in `GBRAIN_PLUGIN_PATH` wins. The other is dropped
+the one listed FIRST in `VOLTMIND_PLUGIN_PATH` wins. The other is dropped
 with a warning naming both sources.
 
 **Trust policy.** Plugins ship subagent definitions ONLY in v0.15:
@@ -79,15 +79,15 @@ with a warning naming both sources.
 v0.16+ may open up plugin-declared tools with a separate contract. Don't
 expect it.
 
-## `gbrain.plugin.json`
+## `voltmind.plugin.json`
 
 | field            | type   | required | notes                                                              |
 |------------------|--------|----------|--------------------------------------------------------------------|
 | `name`           | string | yes      | Human-readable plugin id. Shows up in warnings and collision logs. |
 | `version`        | string | yes      | Your plugin's semver. Informational.                               |
-| `plugin_version` | string | yes      | Contract lock. Must equal `"gbrain-plugin-v1"` for v0.15.          |
+| `plugin_version` | string | yes      | Contract lock. Must equal `"voltmind-plugin-v1"` for v0.15.          |
 | `subagents`      | string | no       | Subdir name (default `subagents`). Escape-attempts are rejected.   |
-| `description`    | string | no       | Shown in future `gbrain plugin list`.                              |
+| `description`    | string | no       | Shown in future `voltmind plugin list`.                              |
 
 ## Subagent definition files
 
@@ -113,8 +113,8 @@ may consume more of them.
    effect until you restart the worker. This is deliberate — live
    reloads would break crash-resumable replay.
 
-2. **`~/.gbrain/audit/subagent-jobs-*.jsonl` is local only.** If your
-   worker runs on a different host than the `gbrain agent logs` caller,
+2. **`~/.voltmind/audit/subagent-jobs-*.jsonl` is local only.** If your
+   worker runs on a different host than the `voltmind agent logs` caller,
    the CLI won't see heartbeats from that worker. v0.16 will unify this;
    for now assume worker + CLI share a filesystem.
 
@@ -134,21 +134,21 @@ may consume more of them.
 
 ```
 ~/your-openclaw/
-└── gbrain-plugin/
-    ├── gbrain.plugin.json
+└── voltmind-plugin/
+    ├── voltmind.plugin.json
     └── subagents/
         ├── meeting-ingestion.md
         ├── signal-detector.md
         └── daily-task-prep.md
 ```
 
-`~/your-openclaw/gbrain-plugin/gbrain.plugin.json`:
+`~/your-openclaw/voltmind-plugin/voltmind.plugin.json`:
 
 ```json
 {
   "name": "your-openclaw",
   "version": "2026.4.20",
-  "plugin_version": "gbrain-plugin-v1",
+  "plugin_version": "voltmind-plugin-v1",
   "description": "Your OpenClaw's personal-brain subagents"
 }
 ```
@@ -156,8 +156,8 @@ may consume more of them.
 Environment:
 
 ```bash
-export GBRAIN_PLUGIN_PATH="$HOME/your-openclaw/gbrain-plugin"
+export VOLTMIND_PLUGIN_PATH="$HOME/your-openclaw/voltmind-plugin"
 ```
 
-Then your OpenClaw calls `gbrain agent run --subagent-def meeting-ingestion
+Then your OpenClaw calls `voltmind agent run --subagent-def meeting-ingestion
 --fanout-by transcript ...` and its definitions load automatically.

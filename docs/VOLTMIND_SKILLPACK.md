@@ -1,13 +1,13 @@
 <!-- skillpack-version: 0.7.0 -->
-<!-- source: https://raw.githubusercontent.com/garrytan/gbrain/master/docs/VOLTMIND_SKILLPACK.md -->
-# GBrain Skillpack: Reference Architecture for AI Agents
+<!-- source: https://raw.githubusercontent.com/garrytan/voltmind/master/docs/VOLTMIND_SKILLPACK.md -->
+# VoltMind Skillpack: Reference Architecture for AI Agents
 
-This is a reference architecture for how a production AI agent uses gbrain as its
+This is a reference architecture for how a production AI agent uses voltmind as its
 knowledge backbone. Based on patterns from a real deployment with 14,700+ brain
 files, 40+ skills, and 20+ cron jobs running continuously.
 
 **The memex vision, realized.** Vannevar Bush imagined a device where an individual
-stores everything, mechanized so it may be consulted with exceeding speed. GBrain is
+stores everything, mechanized so it may be consulted with exceeding speed. VoltMind is
 that device, except the memex builds itself. The agent detects entities, enriches
 pages, creates cross-references, and maintains compiled truth automatically.
 
@@ -59,13 +59,13 @@ Running a production brain.
 | [Skill Development Cycle](guides/skill-development.md) | 5-step cycle: concept, prototype, evaluate, codify, cron |
 
 **Subagent routing (v0.11.0+):** agents that dispatch background work should route through
-`skills/conventions/subagent-routing.md` — it reads `~/.gbrain/preferences.json#minion_mode`
+`skills/conventions/subagent-routing.md` — it reads `~/.voltmind/preferences.json#minion_mode`
 and branches between native subagents and Minion jobs. The v0.11.0 migration auto-injects
 a marker into AGENTS.md pointing at this convention.
 
 **Cron routing (v0.11.0+):** scheduled work goes through Minions, not OpenClaw's `agentTurn`.
 See `skills/conventions/cron-via-minions.md` for the rewrite pattern. The v0.11.0 migration
-auto-rewrites entries whose handler is a gbrain builtin; host-specific handlers (e.g.
+auto-rewrites entries whose handler is a voltmind builtin; host-specific handlers (e.g.
 `ea-inbox-sweep`) need a code-level registration per `docs/guides/plugin-handlers.md`.
 
 ## Architecture
@@ -77,7 +77,7 @@ How to structure your system.
 | [Two-Repo Architecture](guides/repo-architecture.md) | Agent repo vs brain repo, boundary rules, decision tree |
 | [Sub-Agent Model Routing](guides/sub-agent-routing.md) | Which model for which task, signal detector pattern, cost optimization |
 | [The Three Search Modes](guides/search-modes.md) | Keyword, hybrid, direct. When to use each |
-| [Brain vs Agent Memory](guides/brain-vs-memory.md) | 3 layers: GBrain (world knowledge), agent memory, session |
+| [Brain vs Agent Memory](guides/brain-vs-memory.md) | 3 layers: VoltMind (world knowledge), agent memory, session |
 
 ## Integrations
 
@@ -114,22 +114,22 @@ data sources to populate it:
 
 ---
 
-## Appendix: GBrain CLI Quick Reference
+## Appendix: VoltMind CLI Quick Reference
 
 | Command | Purpose |
 |---------|---------|
-| `gbrain search "term"` | Keyword search across all brain pages |
-| `gbrain query "question"` | Hybrid search (vector + keyword + RRF) |
-| `gbrain get <slug>` | Read a specific brain page by slug |
-| `gbrain sync` | Sync local markdown repo to gbrain index |
-| `gbrain import <path>` | Import files into the brain |
-| `gbrain embed --stale` | Re-embed pages with stale or missing embeddings |
-| `gbrain integrations` | Manage integration recipes (senses + reflexes) |
-| `gbrain stats` | Show brain statistics (page count, last sync, etc.) |
-| `gbrain doctor` | Diagnose brain health issues |
-| `gbrain check-update` | Check for new versions and integration recipes |
+| `voltmind search "term"` | Keyword search across all brain pages |
+| `voltmind query "question"` | Hybrid search (vector + keyword + RRF) |
+| `voltmind get <slug>` | Read a specific brain page by slug |
+| `voltmind sync` | Sync local markdown repo to voltmind index |
+| `voltmind import <path>` | Import files into the brain |
+| `voltmind embed --stale` | Re-embed pages with stale or missing embeddings |
+| `voltmind integrations` | Manage integration recipes (senses + reflexes) |
+| `voltmind stats` | Show brain statistics (page count, last sync, etc.) |
+| `voltmind doctor` | Diagnose brain health issues |
+| `voltmind check-update` | Check for new versions and integration recipes |
 
-Run `gbrain --help` for the full command reference.
+Run `voltmind --help` for the full command reference.
 
 ---
 

@@ -1,6 +1,6 @@
 # Takes vs Facts — Architectural Distinction
 
-gbrain has two epistemological storage layers that serve different purposes.
+voltmind has two epistemological storage layers that serve different purposes.
 **Never conflate them.**
 
 ## Takes (cold storage — `takes` table)
@@ -19,7 +19,7 @@ The epistemological layer. WHO believes WHAT, with confidence weight and time.
 - `holder=world kind=fact` "Clipboard raised $100M Series C" (w=1.0)
 - `holder=brain kind=hunch` "Garry has a hero/rescuer pattern" (w=0.70)
 
-**Query surface:** `gbrain takes list`, `gbrain takes search`, `gbrain think`
+**Query surface:** `voltmind takes list`, `voltmind takes search`, `voltmind think`
 
 ## Facts (hot memory — `facts` table, v0.31)
 
@@ -37,7 +37,7 @@ Personal knowledge from the brain owner's conversations. Real-time capture.
 - `kind=commitment` "We decided on nesting custody"
 - `kind=belief` "I think the market is overheated"
 
-**Query surface:** `gbrain recall`, MCP `_meta.brain_hot_memory`
+**Query surface:** `voltmind recall`, MCP `_meta.brain_hot_memory`
 
 ## The Category Error
 

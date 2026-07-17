@@ -21,7 +21,7 @@ search, send), GitHub, Slack.
 standing task. Tasks declare: purpose (verbose, 2-3 sentences), authorized actions with
 expected use patterns, auto-execute flag, lifetime (standing vs ephemeral).
 
-**Why this matters for GBrain:** The EA workflow needs Gmail (sender lookup before
+**Why this matters for VoltMind:** The EA workflow needs Gmail (sender lookup before
 triage), Calendar (meeting prep, attendee pages), Contacts (enrichment trigger), and
 iMessage (direct instructions). ClawVisor gives the agent access without giving it
 raw credentials.
@@ -49,4 +49,4 @@ in the gateway config. Hermes's scheduled automations can run the same EA workfl
 
 ---
 
-*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md). See also: [Getting Data In](README.md)*
+*Part of the [VoltMind Skillpack](../VOLTMIND_SKILLPACK.md). See also: [Getting Data In](README.md)*

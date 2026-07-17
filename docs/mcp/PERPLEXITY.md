@@ -1,4 +1,4 @@
-# Connect GBrain to Perplexity Computer
+# Connect VoltMind to Perplexity Computer
 
 Perplexity Computer supports remote MCP servers with bearer token authentication.
 
@@ -9,8 +9,8 @@ Perplexity Computer supports remote MCP servers with bearer token authentication
 3. Add a new remote connector:
    - **URL:** `https://YOUR-DOMAIN.ngrok.app/mcp`
    - **Authentication:** API Key / Bearer Token
-   - **Token:** your GBrain access token
-     (create one with `gbrain auth create "perplexity"`)
+   - **Token:** your VoltMind access token
+     (create one with `voltmind auth create "perplexity"`)
 4. Save
 
 Replace `YOUR-DOMAIN` with your ngrok domain (see
@@ -21,11 +21,11 @@ Replace `YOUR-DOMAIN` with your ngrok domain (see
 In a Perplexity conversation, ask it to use your brain:
 
 ```
-Use my GBrain to search for [topic]
+Use my VoltMind to search for [topic]
 ```
 
 ## Notes
 
 - Perplexity Computer is available to Pro subscribers
 - Both the Perplexity Mac app and web version support MCP connectors
-- The Mac app also supports local MCP servers if you prefer `gbrain serve` (stdio)
+- The Mac app also supports local MCP servers if you prefer `voltmind serve` (stdio)

@@ -28,8 +28,8 @@ for a v0.35.2.0 release-note headline.
 Locked decisions from the planning review (see plan file + `GSTACK REVIEW REPORT` at
 the bottom of the linked plan):
 
-- **Synthetic-only** — LongMemEval (public) + BrainBench (in-house). No `~/.gbrain` data.
-- **Answer-gen mode** — `gbrain eval longmemeval` runs the default answer-gen path
+- **Synthetic-only** — LongMemEval (public) + BrainBench (in-house). No `~/.voltmind` data.
+- **Answer-gen mode** — `voltmind eval longmemeval` runs the default answer-gen path
   (Anthropic Sonnet), then feeds the resulting hypothesis JSONL to LongMemEval's
   published `evaluate_qa.py` (OpenAI gpt-4o judge) for real correctness numbers.
   `--retrieval-only` is NOT used (would produce an attackable headline; the judge
@@ -49,7 +49,7 @@ the bottom of the linked plan):
   scan. Helps quality (no HNSW approximation) but adds latency. Footnoted in writeup.
 - Reranker disable key is **`search.reranker.enabled false`**, NOT `reranker_model none`.
   `tokenmax` mode defaults reranker=true.
-- `gbrain/ai/gateway` is NOT exported in v0.35.0.0. PR α exposes it.
+- `voltmind/ai/gateway` is NOT exported in v0.35.0.0. PR α exposes it.
 
 ## Matrix
 
@@ -65,14 +65,14 @@ the bottom of the linked plan):
 
 ## PR structure — as few as possible
 
-**PR α — gbrain repo: v0.35.1.0 infra.** All gbrain changes bundled. Lands first.
+**PR α — voltmind repo: v0.35.1.0 infra.** All voltmind changes bundled. Lands first.
 Bisect-friendly commits inside, ship at the very end.
 
-**PR β — gbrain-evals repo: adapter + smoke + curation + eval receipts + writeup.** The
+**PR β — voltmind-evals repo: adapter + smoke + curation + eval receipts + writeup.** The
 big one. Includes the full eval-run output committed alongside the code that produced
 it, plus the comparison writeup. Lands when everything is done.
 
-**PR γ (optional) — gbrain repo: v0.35.2.0 release** that cross-links the gbrain-evals
+**PR γ (optional) — voltmind repo: v0.35.2.0 release** that cross-links the voltmind-evals
 benchmark in CHANGELOG. Small commit; no code changes.
 
 Total: 2 substantive PRs + 1 optional release commit. **No mid-stream ships.**
@@ -84,29 +84,29 @@ to hand off. Each session ends with a clean deliverable.
 
 ---
 
-## Session 1 — PR α: gbrain infra (v0.35.1.0)
+## Session 1 — PR α: voltmind infra (v0.35.1.0)
 
-**Repo:** `/Users/garrytan/conductor/workspaces/gbrain/<NEW-WORKSPACE>` (fresh from `master`)
+**Repo:** `/Users/garrytan/conductor/workspaces/voltmind/<NEW-WORKSPACE>` (fresh from `master`)
 **Branch:** `garrytan/v0.35.1.0-infra`
 **Wallclock:** ~2h
 **API spend:** $0
 
 ### What this session ships
-Three changes in one PR, bundled so the embedder shootout in gbrain-evals (PR β) has a
+Three changes in one PR, bundled so the embedder shootout in voltmind-evals (PR β) has a
 clean prereq baseline:
 
 1. Add `voyage:voyage-4-large` ($0.18/M) and `zeroentropyai:zembed-1` ($0.05/M) to the
-   embedding pricing table. Patch the `gbrain models doctor` cost estimator + test.
-2. Expose `gbrain/ai/gateway` in `package.json` exports map so the gbrain-evals
+   embedding pricing table. Patch the `voltmind models doctor` cost estimator + test.
+2. Expose `voltmind/ai/gateway` in `package.json` exports map so the voltmind-evals
    adapters can call `configureGateway({embedding_model, embedding_dimensions, reranker_model})`
-   from outside the gbrain process.
-3. Add `--resume-from <jsonl>` to `gbrain eval longmemeval` so a mid-run abort
+   from outside the voltmind process.
+3. Add `--resume-from <jsonl>` to `voltmind eval longmemeval` so a mid-run abort
    (rate-limit, cost-cap, OS interrupt) doesn't lose the cells we already paid for.
 
 Ships at the end as v0.35.1.0.
 
 ### Prereqs (verify before starting)
-- On gbrain master at v0.35.0.0 baseline. `cat VERSION` shows `0.35.0.0`.
+- On voltmind master at v0.35.0.0 baseline. `cat VERSION` shows `0.35.0.0`.
 - `bun test` and `bun run verify` both pass on master.
 
 ### Commits (bisect-friendly, one feature per commit)
@@ -117,7 +117,7 @@ Ships at the end as v0.35.1.0.
    - test/embedding-pricing.test.ts: pin both with $0.18 and $0.05
    - Verify: bun test test/embedding-pricing.test.ts
 
-2. feat(exports): expose gbrain/ai/gateway with canary test
+2. feat(exports): expose voltmind/ai/gateway with canary test
    - package.json: add "./ai/gateway" to exports map
    - test/public-exports.test.ts: add canary for configureGateway + embed
    - scripts/check-exports-count.sh: 17 -> 18
@@ -148,30 +148,30 @@ bun test test/embedding-pricing.test.ts test/public-exports.test.ts test/eval-lo
 ```
 
 ### Deliverable
-- `master` of gbrain at v0.35.1.0
-- `gbrain/ai/gateway` reachable from external consumers (verified by canary test)
+- `master` of voltmind at v0.35.1.0
+- `voltmind/ai/gateway` reachable from external consumers (verified by canary test)
 - `git tag eval-run-v0.35.1.0-baseline` (annotated, names this exact commit)
-- `gbrain --version` prints `0.35.1.0`
+- `voltmind --version` prints `0.35.1.0`
 
 ### Hand-off to Session 2
-- gbrain-evals can now `bun update gbrain` to v0.35.1.0
+- voltmind-evals can now `bun update voltmind` to v0.35.1.0
 - The tag preserves the exact commit for any future reproducibility need
 
 ---
 
-## Session 2 — PR β setup: gbrain-evals adapter + smoke + subset flag
+## Session 2 — PR β setup: voltmind-evals adapter + smoke + subset flag
 
-**Repo:** `/Users/garrytan/git/gbrain-evals` (or a fresh Conductor workspace cloned from it)
+**Repo:** `/Users/garrytan/git/voltmind-evals` (or a fresh Conductor workspace cloned from it)
 **Branch:** `garrytan/embedder-shootout`
 **Wallclock:** ~3-4h
 **API spend:** ~$0.10 (smoke verification calls only)
 
 ### What this session ships into PR β (does NOT merge yet)
-Wire the harness to drive 3 embedding providers via the newly-exposed gbrain gateway:
+Wire the harness to drive 3 embedding providers via the newly-exposed voltmind gateway:
 
 1. New typed `EvalAdapterConfig {embedder, dim, reranker?}` passed into each adapter.
 2. Rewrite `vector.ts` + `hybrid-rrf.ts` to call `configureGateway()` from
-   `gbrain/ai/gateway` instead of the hardcoded `gbrain/embedding` import.
+   `voltmind/ai/gateway` instead of the hardcoded `voltmind/embedding` import.
 3. Critical: hybrid adapter must also route `search.reranker.enabled` (true/false) and
    `search.mode` (tokenmax) — codex flagged that the existing hybrid never sets these.
 4. New 3-phase smoke harness: wiring (5 queries × embed roundtrip + dim check) +
@@ -181,14 +181,14 @@ Wire the harness to drive 3 embedding providers via the newly-exposed gbrain gat
    itself comes in Session 3).
 
 ### Prereqs
-- Session 1 done. gbrain master at v0.35.1.0.
+- Session 1 done. voltmind master at v0.35.1.0.
 - API keys present: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY`,
   `ZEROENTROPY_API_KEY`. Smoke fails-loud on missing key.
 
 ### Commits
 
 ```
-1. chore(deps): bump gbrain pin to v0.35.1.0
+1. chore(deps): bump voltmind pin to v0.35.1.0
    - package.json + bun.lock
    - Verify: bun install && bun run typecheck
 
@@ -196,7 +196,7 @@ Wire the harness to drive 3 embedding providers via the newly-exposed gbrain gat
    - NEW: eval/runner/eval-adapter-config.ts (the type)
    - eval/runner/adapters/vector.ts: constructor takes EvalAdapterConfig,
      calls configureGateway({embedding_model, embedding_dimensions})
-   - Drop hardcoded gbrain/embedding import
+   - Drop hardcoded voltmind/embedding import
    - Verify: existing vector adapter unit tests still pass
 
 3. feat(adapter): hybrid-rrf wires reranker_enabled + search.mode
@@ -252,7 +252,7 @@ EOF
 ```
 
 ### Deliverable
-- PR β open against gbrain-evals `main`, green CI
+- PR β open against voltmind-evals `main`, green CI
 - Smoke verified against all 3 providers (paste the smoke output in the PR body)
 - Branch ready for Session 3 (Cat 13 curation)
 
@@ -265,7 +265,7 @@ EOF
 
 ## Session 3 — PR β: Cat 13 conceptual-recall curation
 
-**Repo:** `/Users/garrytan/git/gbrain-evals`, branch `garrytan/embedder-shootout` (same as Session 2)
+**Repo:** `/Users/garrytan/git/voltmind-evals`, branch `garrytan/embedder-shootout` (same as Session 2)
 **Wallclock:** ~3-4h (heavily user-interactive; AI proposes, you review each)
 **API spend:** $0
 
@@ -335,7 +335,7 @@ feat(eval): curate Cat 13 conceptual-recall subset (50 embedder-sensitive querie
 
 ## Session 4 — PR β Phase 1: LongMemEval × 7 cells (overnight)
 
-**Repo:** Same gbrain-evals branch
+**Repo:** Same voltmind-evals branch
 **Wallclock:** ~10.5h (mostly hands-off, kick off and walk away)
 **API spend:** ~$476 (LongMemEval-heavy; 7 × $68/cell)
 
@@ -352,14 +352,14 @@ hypotheses + a JSON file of correctness scores from `evaluate_qa.py`.
   `ZEROENTROPY_API_KEY`.
 
 ### Wrapper script
-Claude writes `scripts/run-shootout-phase1.sh` in the gbrain-evals branch. Single
+Claude writes `scripts/run-shootout-phase1.sh` in the voltmind-evals branch. Single
 entry point that loops the 7 cells serially with smoke gating + cost-cap aborts.
 
 ```
 NEW: scripts/run-shootout-phase1.sh
-- Per cell: gbrain config set (embedder, dim, reranker, search.reranker.enabled, search.mode=tokenmax)
+- Per cell: voltmind config set (embedder, dim, reranker, search.reranker.enabled, search.mode=tokenmax)
 - Per cell: bun run eval:smoke (abort cell on non-zero)
-- Per cell: gbrain eval longmemeval ... --output results/longmemeval-{cell}.jsonl
+- Per cell: voltmind eval longmemeval ... --output results/longmemeval-{cell}.jsonl
 - Per cell: cost-cap check ($90/cell hard stop)
 - Per cell: --resume-from existing results/longmemeval-{cell}.jsonl if present
 - Logs to results/phase1-run-log.txt
@@ -414,7 +414,7 @@ Each scored file has correctness %.
 
 ## Session 5 — PR β Phase 2 + writeup + ship
 
-**Repo:** Same gbrain-evals branch
+**Repo:** Same voltmind-evals branch
 **Wallclock:** ~7h (3.5h BrainBench + 3h writeup + /ship)
 **API spend:** ~$56 (BrainBench is cheap)
 
@@ -449,11 +449,11 @@ bash scripts/run-shootout-phase2.sh 2>&1 | tee results/phase2-run-log.txt
    - Does zerank-2 carry ZE's win? (C0 vs C1 vs A1 vs B1)
    - Bonus: does dim matter for ZE? (C1 vs C2)
 3. **Paired-bootstrap p-values** per headline pair (methodology in
-   `gbrain/docs/eval/SEARCH_MODE_METHODOLOGY.md`)
+   `voltmind/docs/eval/SEARCH_MODE_METHODOLOGY.md`)
 4. **HNSW footnote** — Voyage 2048 and ZE 2560 used exact vector scan; OpenAI 1536
    and ZE 1280 used HNSW. Quality is primary, latency is secondary
 5. **What this does NOT prove** — synthetic-only, tokenmax-only, no real-brain replay
-6. **Recommendation:** explicit NON-recommendation to change `gbrain init` default;
+6. **Recommendation:** explicit NON-recommendation to change `voltmind init` default;
    defer to a v0.36.x evidence pass with real-brain replay data
 
 ### Commits
@@ -472,44 +472,44 @@ bash scripts/run-shootout-phase2.sh 2>&1 | tee results/phase2-run-log.txt
 
 ### Ship
 ```bash
-# Merge PR β to gbrain-evals main
+# Merge PR β to voltmind-evals main
 gh pr merge --squash --auto
 # Or non-auto if reviewing one more time:
 gh pr merge --squash
 ```
 
 ### Deliverable
-- PR β merged to gbrain-evals `main`
+- PR β merged to voltmind-evals `main`
 - Comparison report public at
-  `gbrain-evals/docs/benchmarks/2026-05-22-embedder-shootout.md`
+  `voltmind-evals/docs/benchmarks/2026-05-22-embedder-shootout.md`
 
 ### Hand-off to Session 6 (optional)
-- gbrain-evals master has the full data + writeup
-- Ready for a v0.35.2.0 gbrain release that cross-links it
+- voltmind-evals master has the full data + writeup
+- Ready for a v0.35.2.0 voltmind release that cross-links it
 
 ---
 
-## Session 6 (optional) — PR γ: gbrain v0.35.2.0 release
+## Session 6 (optional) — PR γ: voltmind v0.35.2.0 release
 
-**Repo:** `/Users/garrytan/conductor/workspaces/gbrain/<NEW-WORKSPACE>` (fresh from master)
+**Repo:** `/Users/garrytan/conductor/workspaces/voltmind/<NEW-WORKSPACE>` (fresh from master)
 **Branch:** `garrytan/v0.35.2.0-benchmark-release`
 **Wallclock:** ~30min
 **API spend:** $0
 
 ### What this session ships
-A release-notes-only PR that bumps gbrain to v0.35.2.0 with a CHANGELOG entry
+A release-notes-only PR that bumps voltmind to v0.35.2.0 with a CHANGELOG entry
 cross-linking the embedder shootout benchmark. Optional — could be folded into the
 next routine release if no rush.
 
 ### Prereqs
-- Session 5 done. gbrain-evals merged with the comparison writeup.
+- Session 5 done. voltmind-evals merged with the comparison writeup.
 
 ### Commits
 
 ```
 1. docs(benchmark): mirror embedder shootout summary
    - NEW: docs/benchmarks/2026-05-22-embedder-shootout.md (slim mirror)
-   - Cross-link to gbrain-evals canonical version
+   - Cross-link to voltmind-evals canonical version
 
 2. chore: v0.35.2.0
    - VERSION: 0.35.2.0
@@ -524,7 +524,7 @@ next routine release if no rush.
 ```
 
 ### Deliverable
-- gbrain v0.35.2.0 on master
+- voltmind v0.35.2.0 on master
 - CHANGELOG entry that drives the release-note headline
 
 ---
@@ -550,28 +550,28 @@ JSONL preserved for resume).
 |---|---|
 | Voyage/ZE 429 rate-limit mid-cell | `gateway._shrinkState` halves safety_factor and retries. Cell continues. |
 | ZE 5MB rerank payload cap hit | `applyReranker` fail-opens, returns un-reranked results. Stderr warn. |
-| Mid-cell OS interrupt / cost-cap abort | Re-run with `gbrain eval longmemeval --resume-from results/longmemeval-{cell}.jsonl`. Picks up where it left off. |
+| Mid-cell OS interrupt / cost-cap abort | Re-run with `voltmind eval longmemeval --resume-from results/longmemeval-{cell}.jsonl`. Picks up where it left off. |
 | `evaluate_qa.py` auth fail | OPENAI_API_KEY check in wrapper aborts before any spend. |
 | Adapter typo (bad dim) | `EvalAdapterConfig` runtime assertion at constructor throws AIConfigError. Cell aborts before API call. |
 
 ## NOT in scope (deliberate)
 
-- **Real `~/.gbrain` replay** — adds 6-12h wallclock + $40-80 embed. Filed as v0.36.x.
+- **Real `~/.voltmind` replay** — adds 6-12h wallclock + $40-80 embed. Filed as v0.36.x.
 - **All 3 search modes** — pinned to tokenmax. `conservative` + `balanced` are v0.35.3.0
   follow-ups if reviewers push back.
 - **Matched-dim cross-vendor row** — no shared dim exists across all 3 vendors.
   Permanently out.
-- **`gbrain eval whoknows` / `cross-modal` / `takes-quality`** — embedding-invariant;
+- **`voltmind eval whoknows` / `cross-modal` / `takes-quality`** — embedding-invariant;
   rerunning across embedders produces noise.
-- **`gbrain eval code-retrieval`** — code corpus, separate concern.
-- **`gbrain eval suspected-contradictions`** — wants a real brain.
-- **`gbrain init --recommended` default change** — codex correctly flagged the evidence
+- **`voltmind eval code-retrieval`** — code corpus, separate concern.
+- **`voltmind eval suspected-contradictions`** — wants a real brain.
+- **`voltmind init --recommended` default change** — codex correctly flagged the evidence
   base as insufficient. Defer to v0.36.x with real-brain replay data.
 
 ## What already exists (reused, not rebuilt)
 
-- `gbrain eval longmemeval` CLI (in-tree, answer-gen mode default)
-- gbrain-evals BrainBench runner (`eval:run`) — needs adapter parameterization but
+- `voltmind eval longmemeval` CLI (in-tree, answer-gen mode default)
+- voltmind-evals BrainBench runner (`eval:run`) — needs adapter parameterization but
   per-cell test plumbing is reused
 - Gateway routing for Voyage + ZE (shipped v0.35.0.0)
 - Reranker pipeline (`src/core/search/rerank.ts`, fail-open)

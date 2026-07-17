@@ -1,9 +1,9 @@
 # Upgrading Downstream Agents
 
-GBrain ships skills in `skills/`. Downstream agents (custom OpenClaw deployments,
+VoltMind ships skills in `skills/`. Downstream agents (custom OpenClaw deployments,
 agent forks of any kind) often **copy** these skill files into their own workspace and
 diverge over time — adding agent-specific phases, removing irrelevant ones, tightening
-language. Once that happens, gbrain can't push updates to those forks. The agent has
+language. Once that happens, voltmind can't push updates to those forks. The agent has
 to apply the diffs by hand.
 
 This doc lists the exact diffs each downstream agent needs to apply when upgrading.
@@ -11,13 +11,13 @@ Cross-reference against your fork's local skill files.
 
 ## Why this exists
 
-`gbrain upgrade` ships the new binary. `gbrain post-upgrade [--execute --yes]` runs
+`voltmind upgrade` ships the new binary. `voltmind post-upgrade [--execute --yes]` runs
 the schema migrations and backfills the data. But the **skill files themselves**
 that tell the agent how to behave — those are user-owned. If your `~/git/<your-agent>/workspace/skills/brain-ops/SKILL.md`
-says `# Based on gbrain v0.10.0` at the top, it doesn't know about v0.12.0 features.
+says `# Based on voltmind v0.10.0` at the top, it doesn't know about v0.12.0 features.
 
-The agent will keep manually calling `gbrain link` after every `put_page` (now redundant —
-auto-link does it), miss out on `gbrain graph-query` for relationship questions, and
+The agent will keep manually calling `voltmind link` after every `put_page` (now redundant —
+auto-link does it), miss out on `voltmind graph-query` for relationship questions, and
 not know to backfill the structured timeline.
 
 ## How to apply
@@ -25,7 +25,7 @@ not know to backfill the structured timeline.
 1. Identify your forked skill files. Typically at `~/git/<your-agent>/workspace/skills/` or wherever your agent's skill directory lives.
 2. For each skill listed below, find the matching phase/section in your fork.
 3. Apply the diff (paste the new block in the indicated location).
-4. Update the version banner at the top of your fork (`# Based on gbrain v0.12.0`).
+4. Update the version banner at the top of your fork (`# Based on voltmind v0.12.0`).
 5. Verify: ask the agent to write a test page and confirm the response includes
    `auto_links: { created, removed, errors }`.
 
@@ -38,7 +38,7 @@ Total time: ~10 minutes for all four skills.
 **Where:** Insert a new `### Phase 2.5` section immediately after `### Phase 2: On Every Inbound Signal`.
 
 **Why:** Phase 2.5 declares that auto-link runs automatically. Without this, the
-agent's mental model says it must call `gbrain link` after every `put_page`, which
+agent's mental model says it must call `voltmind link` after every `put_page`, which
 is now redundant and can cause double-add warnings.
 
 ```markdown
@@ -54,9 +54,9 @@ to the graph (`links` table) with inferred relationship types. Stale links
   `founded`, `advises`, `source` (frontmatter), `mentions` (default).
 - The `put_page` MCP response includes `auto_links: { created, removed, errors }`
   so the agent can verify outcomes.
-- To disable: `gbrain config set auto_link false`. Default is on.
-- Timeline entries with specific dates still need explicit `gbrain timeline-add`
-  (or batch via `gbrain extract timeline --source db`).
+- To disable: `voltmind config set auto_link false`. Default is on.
+- Timeline entries with specific dates still need explicit `voltmind timeline-add`
+  (or batch via `voltmind extract timeline --source db`).
 ```
 
 **Also update the Iron Law section.** If your fork still says "Back-links maintained
@@ -76,14 +76,14 @@ relationships you can't express in markdown content.
 
 **Where:** Append to the end of `### Phase 3: Attendee enrichment`.
 
-**Why:** Eliminates redundant `gbrain link` calls per attendee (auto-link handles them
+**Why:** Eliminates redundant `voltmind link` calls per attendee (auto-link handles them
 when the meeting page references attendees as `[Name](people/slug)`).
 
 ```markdown
-**Note (v0.12.0):** Once the meeting page is written via `gbrain put`, the
+**Note (v0.12.0):** Once the meeting page is written via `voltmind put`, the
 auto-link post-hook automatically creates `attended` links from the meeting
 to each attendee whose page is referenced as `[Name](people/slug)`. You don't
-need to call `gbrain link` for attendees. You DO still need `gbrain timeline-add`
+need to call `voltmind link` for attendees. You DO still need `voltmind timeline-add`
 for dated events (auto-link only handles links, not timeline entries).
 ```
 
@@ -103,14 +103,14 @@ to meeting page" can be replaced with:
 
 **Where:** Append to the end of `### Phase 2: Entity Detection`.
 
-**Why:** Same logic as brain-ops — eliminates manual `gbrain link` after writing
+**Why:** Same logic as brain-ops — eliminates manual `voltmind link` after writing
 originals/ideas pages that reference people or companies.
 
 ```markdown
 **Auto-link (v0.12.0):** When you write/update an originals or ideas page that
 references a person or company, the auto-link post-hook on `put_page`
 automatically creates the link from the new page to that entity. You don't
-need to call `gbrain link` manually. Timeline entries still need explicit calls.
+need to call `voltmind link` manually. Timeline entries still need explicit calls.
 ```
 
 ---
@@ -130,7 +130,7 @@ Old (delete):
 - Update company pages from person enrichment (and vice versa)
 - Update related project/deal pages if relevant context surfaced
 - Check index files if the brain uses them
-- Add back-links manually via `gbrain link` for any new entity references
+- Add back-links manually via `voltmind link` for any new entity references
 ```
 
 New (paste):
@@ -146,7 +146,7 @@ New (paste):
 cross-references (updating related pages' compiled truth with new signal
 from this enrichment), not on creating links. Verify via the `auto_links`
 field in the put_page response (`{ created, removed, errors }`).
-Timeline entries still need explicit `gbrain timeline-add` calls.
+Timeline entries still need explicit `voltmind timeline-add` calls.
 ```
 
 ---
@@ -155,12 +155,12 @@ Timeline entries still need explicit `gbrain timeline-add` calls.
 
 1. **Bump the version banner** at the top of each forked file:
    ```
-   # Based on gbrain v0.12.0 skills/<skill-name>, extended with <your-agent>-specific config
+   # Based on voltmind v0.12.0 skills/<skill-name>, extended with <your-agent>-specific config
    ```
 
 2. **Run the v0.12.0 backfill** (this populates the graph for your existing brain):
    ```bash
-   gbrain post-upgrade
+   voltmind post-upgrade
    ```
    The v0.12.0 release wires post-upgrade to call `apply-migrations --yes`
    automatically, which runs the v0_12_0 orchestrator (schema → config check →
@@ -173,7 +173,7 @@ Timeline entries still need explicit `gbrain timeline-add` calls.
 
 4. **Verify graph traversal works:**
    ```bash
-   gbrain graph-query people/some-well-connected-person --depth 2
+   voltmind graph-query people/some-well-connected-person --depth 2
    ```
    Should return an indented tree of typed edges.
 
@@ -188,10 +188,10 @@ and you should know about one behavior change in markdown parsing.
 ### 1. Run the migration (Postgres-backed brains)
 
 ```bash
-gbrain upgrade
+voltmind upgrade
 ```
 
-The `v0_12_2` orchestrator runs `gbrain repair-jsonb` automatically. It rewrites
+The `v0_12_2` orchestrator runs `voltmind repair-jsonb` automatically. It rewrites
 rows where `jsonb_typeof = 'string'` across `pages.frontmatter`, `raw_data.data`,
 `ingest_log.pages_updated`, `files.metadata`, and `page_versions.frontmatter`.
 Idempotent, safe to re-run. PGLite brains no-op cleanly.
@@ -199,7 +199,7 @@ Idempotent, safe to re-run. PGLite brains no-op cleanly.
 Verify after upgrade:
 
 ```bash
-gbrain repair-jsonb --dry-run --json    # expect totalRepaired: 0
+voltmind repair-jsonb --dry-run --json    # expect totalRepaired: 0
 ```
 
 ### 2. Recover any truncated wiki articles
@@ -209,7 +209,7 @@ silently truncated (any standalone `---` in body content was treated as a
 timeline separator). Re-import from source:
 
 ```bash
-gbrain sync --full
+voltmind sync --full
 ```
 
 The new `splitBody` rebuilds `compiled_truth` correctly.
@@ -266,7 +266,7 @@ If `unresolved.length > 0`:
 - Option 1 (create pages now): trigger an enrichment pass to build the missing people pages.
 - Option 2 (defer): log the unresolved names to the enrichment queue for later.
 - Option 3 (accept the gap): the attendee edge will not be created until a page exists.
-  Re-running `gbrain extract links --source db --include-frontmatter` after creating
+  Re-running `voltmind extract links --source db --include-frontmatter` after creating
   the page fills in the missing edges.
 ```
 
@@ -314,11 +314,11 @@ v0.13 edges carry new `link_type` values. If your fork has graph-query skills th
 
 ### Migration timing
 
-`gbrain upgrade` takes 2-5 min on a 46K-page brain (one-time). Runs out-of-process via `gbrain post-upgrade`. If your agent holds a DB connection during the upgrade, reconnect after; otherwise keep serving.
+`voltmind upgrade` takes 2-5 min on a 46K-page brain (one-time). Runs out-of-process via `voltmind post-upgrade`. If your agent holds a DB connection during the upgrade, reconnect after; otherwise keep serving.
 
 ### Type normalization NOT in v0.13
 
-Legacy rows with `link_type='attendee'` or `link_type='mention'` coexist with new `'attended'` / `'mentions'` rows. Your queries filtering on old type names keep working. A separate opt-in `gbrain normalize-types` command in v0.14 handles the rename.
+Legacy rows with `link_type='attendee'` or `link_type='mention'` coexist with new `'attended'` / `'mentions'` rows. Your queries filtering on old type names keep working. A separate opt-in `voltmind normalize-types` command in v0.14 handles the rename.
 ## v0.14.0 shell jobs (optional adoption, no skill edits)
 
 Adds a `shell` job type to Minions so deterministic cron scripts (API fetch, token
@@ -328,7 +328,7 @@ installs keep running exactly as they did before. Nothing breaks.
 
 To adopt, follow `skills/migrations/v0.14.0.md`. The short version:
 
-1. Set `GBRAIN_ALLOW_SHELL_JOBS=1` on the worker process, then `gbrain jobs work`
+1. Set `VOLTMIND_ALLOW_SHELL_JOBS=1` on the worker process, then `voltmind jobs work`
    (Postgres). On PGLite, every crontab invocation uses `--follow` for inline
    execution; no persistent worker.
 2. Classify each of your host's cron entries: LLM-requiring (keep on gateway) vs
@@ -341,11 +341,11 @@ To adopt, follow `skills/migrations/v0.14.0.md`. The short version:
 3. For each deterministic cron, rewrite as:
    ```cron
    3 13,16,19,22,1,4,7,10 * * * \
-     gbrain jobs submit shell \
+     voltmind jobs submit shell \
        --params '{"cmd":"node scripts/your-script.mjs","cwd":"/data/.openclaw/workspace"}' \
        --max-attempts 3 --timeout-ms 300000
    ```
-4. Watch `gbrain jobs get <id>` for exit_code / stdout_tail / stderr_tail on each
+4. Watch `voltmind jobs get <id>` for exit_code / stdout_tail / stderr_tail on each
    fire. Compare against pre-migration behavior before approving the next batch.
 
 **No skill edits required.** The handler runs worker-side; skill files don't
@@ -354,13 +354,13 @@ they still work the same way.
 
 Iron rule: **never auto-rewrite the operator's crontab.** Every rewrite is
 per-cron, human-approved, with a diff. If you want automation later, the
-upcoming `gbrain crontab-to-minions <file>` helper is P1 in TODOS.
+upcoming `voltmind crontab-to-minions <file>` helper is P1 in TODOS.
 
 ---
 
 ## v0.16.0: durable agent runtime
 
-v0.15 ships `gbrain agent run` / `gbrain agent logs`, a new `subagent` handler
+v0.15 ships `voltmind agent run` / `voltmind agent logs`, a new `subagent` handler
 type in Minions, and a plugin contract for host-repo subagent defs. None of the
 existing skills need surgery. The question for downstream agents is *how* to
 adopt the new runtime, not how to patch around a breaking change.
@@ -371,11 +371,11 @@ The subagent handlers (`subagent` and `subagent_aggregator`) are always
 registered on the worker. No separate opt-in flag — `ANTHROPIC_API_KEY` is
 the natural cost gate (no key, the SDK call fails on the first turn), and
 who-can-submit is already protected (`PROTECTED_JOB_NAMES` + trusted-submit:
-MCP callers get `permission_denied`; only `gbrain agent run` can insert
+MCP callers get `permission_denied`; only `voltmind agent run` can insert
 these rows).
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-... gbrain jobs work
+ANTHROPIC_API_KEY=sk-ant-... voltmind jobs work
 ```
 
 Worker startup prints:
@@ -386,25 +386,25 @@ Worker startup prints:
 
 ### 2. Ship your subagents as a plugin (OpenClaw + similar)
 
-Move your custom subagent definitions out of your gbrain fork and into your own
+Move your custom subagent definitions out of your voltmind fork and into your own
 repo as a plugin. Concretely:
 
 ```
-~/<your-agent>/gbrain-plugin/
-├── gbrain.plugin.json
+~/<your-agent>/voltmind-plugin/
+├── voltmind.plugin.json
 └── subagents/
     ├── meeting-ingestion.md
     ├── signal-detector.md
     └── daily-task-prep.md
 ```
 
-`gbrain.plugin.json`:
+`voltmind.plugin.json`:
 
 ```json
 {
   "name": "your-openclaw",
   "version": "2026.4.20",
-  "plugin_version": "gbrain-plugin-v1"
+  "plugin_version": "voltmind-plugin-v1"
 }
 ```
 
@@ -415,7 +415,7 @@ body-as-system-prompt. Recognized frontmatter fields: `name`, `model`,
 Turn it on:
 
 ```bash
-export GBRAIN_PLUGIN_PATH="$HOME/<your-agent>/gbrain-plugin"
+export VOLTMIND_PLUGIN_PATH="$HOME/<your-agent>/voltmind-plugin"
 ```
 
 Worker startup prints `[plugin-loader] loaded '<name>' v<ver> (N subagents)`
@@ -427,15 +427,15 @@ time failure. See `docs/guides/plugin-authors.md` for the full contract.
 
 If your agent currently spawns ephemeral subagents (OpenClaw `Agent()`, ad-hoc
 Anthropic API calls, etc.) for work that should survive crashes, sleeps, or
-worker restarts, migrate those to `gbrain agent run`. The durability is free:
+worker restarts, migrate those to `voltmind agent run`. The durability is free:
 
 ```bash
-gbrain agent run "analyze my last 50 journal pages for recurring themes" \
+voltmind agent run "analyze my last 50 journal pages for recurring themes" \
   --subagent-def analyzer --fanout-manifest manifests/journal-pages.json
 ```
 
 Every turn persists to `subagent_messages`, every tool call is a two-phase
-ledger, and `gbrain agent logs <job>` shows where it died + what the last
+ledger, and `voltmind agent logs <job>` shows where it died + what the last
 successful call returned. No more "re-run from scratch because the session
 context evaporated."
 
@@ -463,21 +463,21 @@ in depth, not the primary boundary.
 ### 1. Stop hand-rolling frontmatter validators
 
 If your fork has scripts that call `js-yaml` directly to validate brain page
-frontmatter, replace them with `gbrain frontmatter validate` calls. The CLI
+frontmatter, replace them with `voltmind frontmatter validate` calls. The CLI
 covers the seven canonical error classes and ships a `--json` envelope that's
 stable across releases.
 
 ```diff
 - # Custom validator script
 - node scripts/validate-frontmatter.mjs <path>
-+ gbrain frontmatter validate <path> --json
++ voltmind frontmatter validate <path> --json
 ```
 
 For consumers that need the validator inside another script, import from
-gbrain's `markdown` export instead of duplicating logic:
+voltmind's `markdown` export instead of duplicating logic:
 
 ```ts
-import { parseMarkdown } from 'gbrain/markdown';
+import { parseMarkdown } from 'voltmind/markdown';
 
 const parsed = parseMarkdown(content, filePath, { validate: true, expectedSlug });
 for (const err of parsed.errors ?? []) {
@@ -490,15 +490,15 @@ for (const err of parsed.errors ?? []) {
 
 If your fork's skills or scripts referenced an aspirational
 `lib/brain-writer.mjs` (it never shipped — the spec was in PR #392 and never
-landed), replace those references with the gbrain CLI. The `frontmatter-guard`
+landed), replace those references with the voltmind CLI. The `frontmatter-guard`
 skill lives at `skills/frontmatter-guard/SKILL.md` and points at
-`gbrain frontmatter validate` / `audit` / `install-hook`.
+`voltmind frontmatter validate` / `audit` / `install-hook`.
 
 ### 3. Wire the doctor subcheck into your health pipeline
 
-`gbrain doctor` now reports `frontmatter_integrity` automatically. If your
+`voltmind doctor` now reports `frontmatter_integrity` automatically. If your
 fork has a custom health pipeline (e.g. a daily Slack post about brain
-health), pull from `gbrain doctor --json` and surface the
+health), pull from `voltmind doctor --json` and surface the
 `frontmatter_integrity` row counts.
 
 ### 4. (Optional) Install the pre-commit hook on brain repos
@@ -507,7 +507,7 @@ For sources backed by git, the v0.22.4 install-hook helper drops a
 pre-commit script that blocks commits with malformed frontmatter:
 
 ```bash
-gbrain frontmatter install-hook
+voltmind frontmatter install-hook
 ```
 
 Skip this if your brain isn't a git repo or if your downstream agent already
@@ -516,10 +516,10 @@ the full recipe.
 
 ### 5. Migration ergonomics — read pending-host-work.jsonl
 
-After `gbrain apply-migrations --yes` runs the v0.22.4 audit, your agent
-should read `~/.gbrain/migrations/pending-host-work.jsonl` (filter to
+After `voltmind apply-migrations --yes` runs the v0.22.4 audit, your agent
+should read `~/.voltmind/migrations/pending-host-work.jsonl` (filter to
 `migration === "0.22.4"`) and walk each entry's `command` field. Each entry
-points to a per-source `gbrain frontmatter validate <source_path> --fix`
+points to a per-source `voltmind frontmatter validate <source_path> --fix`
 command — surface counts to the user, get explicit consent, then run.
 
 The migration is **audit-only**. It never mutates brain content during
@@ -529,18 +529,18 @@ The migration is **audit-only**. It never mutates brain content during
 
 ## Future versions
 
-When gbrain ships a new version, this doc will be updated with the diffs for that
+When voltmind ships a new version, this doc will be updated with the diffs for that
 version. Each new version appends a section; old sections stay so you can catch up
 multiple versions at once.
 
 To check what your fork is missing:
 ```bash
-diff <(grep -A3 "Based on gbrain" ~/<your-fork>/skills/brain-ops/SKILL.md) \
-     <(grep "v[0-9]" ~/gbrain/skills/migrations/ | tail -3)
+diff <(grep -A3 "Based on voltmind" ~/<your-fork>/skills/brain-ops/SKILL.md) \
+     <(grep "v[0-9]" ~/voltmind/skills/migrations/ | tail -3)
 ```
 
 
-## v0.36.5.0 — Free-form secret inheritance for shell jobs calling `gbrain` CLI
+## v0.36.5.0 — Free-form secret inheritance for shell jobs calling `voltmind` CLI
 
 **The change.** Shell-job params get a new `inherit:` field. Pass any
 snake_case config-key name on it; the worker resolves the value from its
@@ -549,9 +549,9 @@ land in the row; values never persist from `inherit:`. Validation runs
 **pre-enqueue** in both submit paths (CLI + `submit_job` op), so a malformed
 payload never lands in `minion_jobs.data`.
 
-**Why.** Pre-v0.36.5.0, agents that wanted to call `gbrain` from shell jobs
-had to either write `database_url` to `~/.gbrain/config.json` plaintext or
-pass `env: { GBRAIN_DATABASE_URL: "..." }` per-job. Both left plaintext
+**Why.** Pre-v0.36.5.0, agents that wanted to call `voltmind` from shell jobs
+had to either write `database_url` to `~/.voltmind/config.json` plaintext or
+pass `env: { VOLTMIND_DATABASE_URL: "..." }` per-job. Both left plaintext
 secrets somewhere — disk or DB row. `inherit:` keeps names in the row and
 resolves values at spawn time.
 
@@ -559,14 +559,14 @@ resolves values at spawn time.
 
 ```jsonc
 {
-  "cmd": "gbrain sync --skip-failed && gbrain embed --stale",
-  "cwd": "/data/gbrain",
+  "cmd": "voltmind sync --skip-failed && voltmind embed --stale",
+  "cwd": "/data/voltmind",
   "inherit": ["database_url", "anthropic_api_key", "voyage_api_key"]
 }
 ```
 
 The env-key name in the child is derived by uppercasing the config-key:
-`database_url` → `GBRAIN_DATABASE_URL`, `anthropic_api_key` →
+`database_url` → `VOLTMIND_DATABASE_URL`, `anthropic_api_key` →
 `ANTHROPIC_API_KEY`, `voyage_api_key` → `VOYAGE_API_KEY`, etc. The validator
 does NOT police which config keys you inherit — the agent is in the same
 uid as the worker, so it's the agent's call.
@@ -578,25 +578,25 @@ correlation token, or a secret you know is OK to persist), pass it via
 
 **Worker setup** (one-time, per host):
 
-- `gbrain config set database_url postgresql://...` (or any other key you
+- `voltmind config set database_url postgresql://...` (or any other key you
   want available for inherit)
-- OR put the key in `~/.gbrain/config.json` directly
-- OR set `GBRAIN_DATABASE_URL` / `DATABASE_URL` / per-provider env on the
+- OR put the key in `~/.voltmind/config.json` directly
+- OR set `VOLTMIND_DATABASE_URL` / `DATABASE_URL` / per-provider env on the
   worker process
 
 If the worker can't resolve a requested name, the validator fail-fasts at
-submit time with `gbrain config set <X>` hint. No more silent "No database
+submit time with `voltmind config set <X>` hint. No more silent "No database
 URL" failures in child stderr minutes after submission.
 
-**Also new.** A `gbrain doctor` check `home_dir_in_worktree` warns if
-`~/.gbrain/` lives inside a git worktree. A retroactive `~/.gbrain/.gitignore`
+**Also new.** A `voltmind doctor` check `home_dir_in_worktree` warns if
+`~/.voltmind/` lives inside a git worktree. A retroactive `~/.voltmind/.gitignore`
 (single line `*`) is now laid down by every `saveConfig()` call AND by
-`gbrain post-upgrade`, so existing users get coverage without re-running
-`gbrain init`. Honest scope: the `.gitignore` covers casual `git add` but does
+`voltmind post-upgrade`, so existing users get coverage without re-running
+`voltmind init`. Honest scope: the `.gitignore` covers casual `git add` but does
 NOT cover already-tracked files, screenshots, backups, or `git add -f`.
 
-**Strategy framing.** For agent-to-gbrain calls, the new canonical guide is
-`docs/guides/agent-to-gbrain.md`. Two distinct surfaces: HTTP MCP via OAuth
+**Strategy framing.** For agent-to-voltmind calls, the new canonical guide is
+`docs/guides/agent-to-voltmind.md`. Two distinct surfaces: HTTP MCP via OAuth
 for ops with MCP equivalents (`search`, `query`, `put_page`, etc.), and shell
 job + `inherit:` for `localOnly` admin ops (`sync`, `embed`, `dream`,
 `doctor`, etc.). Not a fallback hierarchy — pick by op.
@@ -608,4 +608,4 @@ job + `inherit:` for `localOnly` admin ops (`sync`, `embed`, `dream`,
 | `shell: inherit must be an array of config-key names` | `inherit` wasn't an array. | Pass `"inherit": ["database_url", ...]`. |
 | `shell: inherit entries must be non-empty strings` | Element was empty, non-string, or null. | Use snake_case config-key names. |
 | `shell: inherit name "<X>" must match [a-z][a-z0-9_]*` | Name failed snake_case regex (uppercase, leading underscore, etc.). | Use the config-key verbatim — `database_url`, not `DATABASE_URL`. |
-| `shell: inherit requested "<X>" but worker has no <X> configured` | Worker can't resolve the name from its `loadConfig()`. | Run `gbrain config set <X> <value>` on the worker host. |
+| `shell: inherit requested "<X>" but worker has no <X> configured` | Worker can't resolve the name from its `loadConfig()`. | Run `voltmind config set <X> <value>` on the worker host. |

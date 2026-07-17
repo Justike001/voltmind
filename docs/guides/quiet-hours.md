@@ -162,4 +162,4 @@ Set `enabled: false` to disable quiet hours entirely (e.g., for 24/7 monitoring)
 
 ---
 
-*Part of the [GBrain Skillpack](../VOLTMIND_SKILLPACK.md).*
+*Part of the [VoltMind Skillpack](../VOLTMIND_SKILLPACK.md).*

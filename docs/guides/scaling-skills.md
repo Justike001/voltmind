@@ -122,14 +122,14 @@ This is the routing-table pattern but applied to the skill manifest itself.
 The resolver routes to skills, but it also routes around skills, keeping
 them out of the context window until they're needed.
 
-GBrain ships with a [bundled `skills/RESOLVER.md`](../../skills/RESOLVER.md)
+VoltMind ships with a [bundled `skills/RESOLVER.md`](../../skills/RESOLVER.md)
 you can use as a reference shape. The skillpack story for distributing
 your own resolvers across machines is covered in
 [skillpacks as scaffolding](skillpacks-as-scaffolding.md).
 
 ## The compact list format (v0.41.7.0)
 
-GBrain's resolver parser used to require markdown tables:
+VoltMind's resolver parser used to require markdown tables:
 
 ```markdown
 | Trigger | Skill |
@@ -146,7 +146,7 @@ format that scales better:
 - **flight-tracker**: track my flight | flight status | when does my flight land
 ```
 
-Before v0.41.7.0, `gbrain doctor` only spoke the table dialect. On a
+Before v0.41.7.0, `voltmind doctor` only spoke the table dialect. On a
 306-skill compact-format resolver, the doctor reported every skill as
 unreachable: **238 FAIL errors on every doctor run**. The parser was
 silently treating the compact dialect as zero skills.
@@ -154,7 +154,7 @@ silently treating the compact dialect as zero skills.
 v0.41.7.0 ships dual-format support. The same `parseResolverEntries`
 function reads both table rows and list rows in the same file, with the
 v0.31.7 multi-resolver merge (skillpack `skills/RESOLVER.md` + workspace
-`../AGENTS.md`) folding everything into one unified view. Run `gbrain doctor`
+`../AGENTS.md`) folding everything into one unified view. Run `voltmind doctor`
 and the 238 FAILs collapse to 0.
 
 ### The list-format contract
@@ -178,7 +178,7 @@ A few rules to keep the parser unambiguous:
   works as a fallback.
 
 You can mix table and list rows in the same file. Useful when a brain
-inherits a table-format `RESOLVER.md` from gbrain and a list-format
+inherits a table-format `RESOLVER.md` from voltmind and a list-format
 `../AGENTS.md` from OpenClaw.
 
 ## The doctor safety net
@@ -187,7 +187,7 @@ The danger with tiering is invisible skill loss. You disable a skill from
 native scanning, forget to add it to the resolver, and now the agent can't
 do something it used to do. You won't notice until the moment you need it.
 
-`gbrain doctor` walks every skill on disk and verifies it's reachable,
+`voltmind doctor` walks every skill on disk and verifies it's reachable,
 either through native scanning (Tier A) or through the resolver (Tier B
 and C). On Garry's setup, the first run after tiering found 63 unreachable
 skills. Sixty-three capabilities that existed on disk but had no routing
@@ -196,14 +196,14 @@ path. Fixed in an hour by adding resolver entries.
 Run it after every skill change:
 
 ```bash
-gbrain doctor
+voltmind doctor
 ```
 
 For CI gates, use the JSON-emitting variant:
 
 ```bash
-gbrain check-resolvable --json
-gbrain check-resolvable --strict  # warnings fail too
+voltmind check-resolvable --json
+voltmind check-resolvable --strict  # warnings fail too
 ```
 
 If a skill is unreachable, the output tells you which one and suggests
@@ -256,7 +256,7 @@ actually ask for things:
 That's it. The model handles the rest. When a request doesn't match Tier A,
 it checks the resolver, reads the matching SKILL.md, and executes.
 
-### 4. Run `gbrain doctor` and fix any unreachable skills
+### 4. Run `voltmind doctor` and fix any unreachable skills
 
 The doctor sweep tells you which skills don't have a routing path. Add a
 resolver entry for each one, re-run, repeat until the count is zero.
@@ -304,7 +304,7 @@ capability. You're organizing, not deleting.
 - [Sub-agent routing](sub-agent-routing.md) — when to delegate to a
   sub-agent vs handle in-line, and the model routing table for each path.
 
-GBrain: [github.com/garrytan/gbrain](https://github.com/garrytan/gbrain).
+VoltMind: [github.com/garrytan/voltmind](https://github.com/garrytan/voltmind).
 The `parseResolverEntries` parser lives at
 [`src/core/check-resolvable.ts`](../../src/core/check-resolvable.ts);
 the bundled resolver lives at [`skills/RESOLVER.md`](../../skills/RESOLVER.md).

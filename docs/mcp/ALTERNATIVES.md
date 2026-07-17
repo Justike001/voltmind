@@ -1,7 +1,7 @@
 # Remote MCP Deployment Options
 
-GBrain's MCP server runs via `gbrain serve` (stdio transport). To make it
-accessible from other devices and AI clients, run `gbrain serve --http`
+VoltMind's MCP server runs via `voltmind serve` (stdio transport). To make it
+accessible from other devices and AI clients, run `voltmind serve --http`
 (built-in HTTP transport with bearer auth, Postgres-only ... see
 [DEPLOY.md](DEPLOY.md)) behind a public tunnel. Here are your tunnel options.
 
@@ -15,7 +15,7 @@ accessible from other devices and AI clients, run `gbrain serve --http`
 brew install ngrok
 
 # 2. Start the built-in HTTP transport
-gbrain serve --http --port 8787
+voltmind serve --http --port 8787
 # See docs/mcp/DEPLOY.md for token setup
 
 # 3. Expose via ngrok
@@ -61,7 +61,7 @@ Both run Bun natively. No bundling, no Deno, no cold start, no timeout limits.
 | All 30 operations | Yes | Yes | Yes |
 | Setup time | 5 min | 10 min | 15 min |
 
-**Note:** `gbrain serve --http` is the built-in HTTP transport (v0.22.7+). Bearer auth
+**Note:** `voltmind serve --http` is the built-in HTTP transport (v0.22.7+). Bearer auth
 against the `access_tokens` table, default-deny CORS, two-bucket rate limit, body cap,
 per-request audit log. Postgres-only by design (PGLite is local-only). See
 [DEPLOY.md](DEPLOY.md) and [SECURITY.md](../../SECURITY.md) for env vars and tunables.

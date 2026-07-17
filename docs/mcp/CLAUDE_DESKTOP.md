@@ -1,4 +1,4 @@
-# Connect GBrain to Claude Desktop
+# Connect VoltMind to Claude Desktop
 
 **Important:** Claude Desktop does NOT connect to remote MCP servers via
 `claude_desktop_config.json`. That file only works for local stdio servers.
@@ -16,7 +16,7 @@ Remote HTTP servers must be added through the GUI.
    Replace `YOUR-DOMAIN` with your ngrok domain (see
    [ngrok-tunnel recipe](../../recipes/ngrok-tunnel.md) for setup).
 5. Set authentication to **Bearer Token** and paste your token
-   (create one with `gbrain auth create "claude-desktop"`)
+   (create one with `voltmind auth create "claude-desktop"`)
 6. Save
 
 ## Verify
@@ -27,7 +27,7 @@ Start a new conversation and try:
 Search my brain for [any topic]
 ```
 
-Claude Desktop will use your GBrain tools automatically.
+Claude Desktop will use your VoltMind tools automatically.
 
 ## Common Mistakes
 

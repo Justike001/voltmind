@@ -3,7 +3,7 @@
 [`llama-server`](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)
 is the HTTP wrapper that ships with llama.cpp. With `--reranking`, it
 exposes an OpenAI-style `POST /v1/rerank` endpoint that returns
-`{results: [{index, relevance_score}]}` — exactly the wire shape gbrain
+`{results: [{index, relevance_score}]}` — exactly the wire shape voltmind
 already drives for ZeroEntropy's hosted reranker. The
 `llama-server-reranker` recipe (added in v0.40.6.1) routes
 `gateway.rerank()` at your local llama.cpp instance instead of ZE.
@@ -69,25 +69,25 @@ doc — see llama.cpp's `convert_hf_to_gguf.py`).
 
 The `--alias` matters: without it, llama-server's `/v1/models` (and the
 `model` field rerank requests echo) defaults to the full gguf file
-path, which makes the gbrain config string ugly and brittle. With
+path, which makes the voltmind config string ugly and brittle. With
 `--alias qwen3-reranker-4b`, your config string is short and stable.
 
 `--reranking` and `--embeddings` are mutually exclusive at server
 launch. If you also run a local embedder via the
 [`llama-server`](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)
 recipe, run two separate llama-server processes on two different ports
-(typically 8080 for embeddings, 8081 for reranking — gbrain's defaults
+(typically 8080 for embeddings, 8081 for reranking — voltmind's defaults
 match that convention).
 
-### 4. Wire gbrain at your server
+### 4. Wire voltmind at your server
 
 ```bash
-# Point gbrain at the llama.cpp host (skip if running locally on default port)
-gbrain config set provider_base_urls.llama-server-reranker http://your-host:8081/v1
+# Point voltmind at the llama.cpp host (skip if running locally on default port)
+voltmind config set provider_base_urls.llama-server-reranker http://your-host:8081/v1
 
 # Tell search to use this reranker
-gbrain config set search.reranker.model llama-server-reranker:qwen3-reranker-4b
-gbrain config set search.reranker.enabled true
+voltmind config set search.reranker.model llama-server-reranker:qwen3-reranker-4b
+voltmind config set search.reranker.enabled true
 ```
 
 The `qwen3-reranker-4b` after the colon is your `--alias` value from
@@ -104,15 +104,15 @@ export LLAMA_SERVER_RERANKER_API_KEY=your-bearer-token
 ### 5. Verify
 
 ```bash
-gbrain models doctor
+voltmind models doctor
 # Expect: ✔ reranker_config llama-server-reranker:qwen3-reranker-4b ok
 #         ✔ reranker_config llama-server-reranker:qwen3-reranker-4b ok (reachability)
 
-gbrain search "some query" --json | jq '.[].rerank_score'
+voltmind search "some query" --json | jq '.[].rerank_score'
 # Expect: rerank_score on every row
 ```
 
-If `gbrain models doctor` reports the reachability probe as `network`
+If `voltmind models doctor` reports the reachability probe as `network`
 status, two common causes:
 
 1. The server is reachable but in embedding mode, not reranking mode.
@@ -131,7 +131,7 @@ search-mode resolution unless you override it:
 
 ```bash
 # Tighten or loosen per-search timeout (overrides recipe default):
-gbrain config set search.reranker.timeout_ms 60000
+voltmind config set search.reranker.timeout_ms 60000
 ```
 
 Per-call overrides in `SearchOpts.reranker_timeout_ms` still win for
@@ -146,7 +146,7 @@ hard-fail when configured for local rerank. Local rerank costs
 electricity, not API tokens.
 
 ```bash
-GBRAIN_MAX_USD=0.01 gbrain search "..." --reranker llama-server-reranker:qwen3-reranker-4b
+VOLTMIND_MAX_USD=0.01 voltmind search "..." --reranker llama-server-reranker:qwen3-reranker-4b
 # Works: rerank fires, recorded at $0, cumulative cap untouched.
 ```
 
@@ -154,7 +154,7 @@ GBRAIN_MAX_USD=0.01 gbrain search "..." --reranker llama-server-reranker:qwen3-r
 
 `applyReranker` in `src/core/search/rerank.ts` still has the
 fail-open posture: any error class (network, timeout, malformed
-response) logs to `~/.gbrain/audit/rerank-failures-*.jsonl` and
+response) logs to `~/.voltmind/audit/rerank-failures-*.jsonl` and
 returns the original RRF order unchanged. Search reliability beats
 reranker quality. If your llama.cpp host goes down, your searches keep
 working — they just stop ranking against the cross-encoder until you

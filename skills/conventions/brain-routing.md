@@ -6,9 +6,9 @@ lives in `docs/architecture/brains-and-sources.md` — read it once.**
 
 ## The two axes (one-line summary)
 
-- **Brain** = which DATABASE. `--brain`, `GBRAIN_BRAIN_ID`, `.gbrain-mount`.
-- **Source** = which REPO INSIDE the database. `--source`, `GBRAIN_SOURCE`,
-  `.gbrain-source`.
+- **Brain** = which DATABASE. `--brain`, `VOLTMIND_BRAIN_ID`, `.voltmind-mount`.
+- **Source** = which REPO INSIDE the database. `--source`, `VOLTMIND_SOURCE`,
+  `.voltmind-source`.
 
 Orthogonal. Pick one on each axis per operation.
 
@@ -16,13 +16,13 @@ Orthogonal. Pick one on each axis per operation.
 
 Start in the brain + source resolved by the environment:
 
-1. Run `gbrain mounts list` if you haven't seen the user's mounts yet.
+1. Run `voltmind mounts list` if you haven't seen the user's mounts yet.
 2. Trust the resolver. If the user is in `~/team-brains/media/`, their
-   `.gbrain-mount` pins brain=media-team. Don't override that silently.
+   `.voltmind-mount` pins brain=media-team. Don't override that silently.
 3. For every brain op, pass the resolved brain id explicitly when calling
    tools (even if it matches the default). Makes routing visible in logs.
 
-Bare `gbrain query "X"` routes to the default brain's default source. That
+Bare `voltmind query "X"` routes to the default brain's default source. That
 is the right answer 90% of the time. Don't cross the boundary without a
 reason.
 
@@ -48,47 +48,47 @@ Do NOT switch brain when:
 
 ## Source resolution chain (7-tier, v0.41.13+)
 
-`gbrain` resolves the active source via `resolveSourceId()` in
+`voltmind` resolves the active source via `resolveSourceId()` in
 `src/core/source-resolver.ts`. Seven tiers, highest priority first:
 
 | # | Tier | Signal |
 |---|---|---|
-| 1 | `flag` | Explicit `--source <id>` CLI flag (or `--source-id <id>` on `gbrain extract` / `gbrain import`) |
-| 2 | `env` | `GBRAIN_SOURCE` environment variable |
-| 3 | `dotfile` | `.gbrain-source` file in CWD or any ancestor directory |
+| 1 | `flag` | Explicit `--source <id>` CLI flag (or `--source-id <id>` on `voltmind extract` / `voltmind import`) |
+| 2 | `env` | `VOLTMIND_SOURCE` environment variable |
+| 3 | `dotfile` | `.voltmind-source` file in CWD or any ancestor directory |
 | 4 | `local_path` | A registered source whose `local_path` contains CWD (longest prefix wins) |
 | 5 | `brain_default` | Brain-level `sources.default` config key (explicit user intent) |
-| 5.5 | `sole_non_default` | When tiers 1–5 missed AND exactly one registered source has a `local_path` AND isn't `'default'`, auto-route to it. Fires a one-time stderr nudge per CLI invocation. Suppress with `GBRAIN_NO_SOLE_NON_DEFAULT_NUDGE=1`. |
+| 5.5 | `sole_non_default` | When tiers 1–5 missed AND exactly one registered source has a `local_path` AND isn't `'default'`, auto-route to it. Fires a one-time stderr nudge per CLI invocation. Suppress with `VOLTMIND_NO_SOLE_NON_DEFAULT_NUDGE=1`. |
 | 6 | `seed_default` | Literal `'default'` (always exists post-migration v16) |
 
 **v0.41.13 tier 5.5 (`sole_non_default`):** added for single-source brains
 (typical for users with one Obsidian vault, one notes folder, one project).
-Pre-fix, `gbrain sync` from `/tmp` against a brain registering only
+Pre-fix, `voltmind sync` from `/tmp` against a brain registering only
 `studiovault` silently routed to `'default'` and every edit failed at
 `createVersion` because the slug didn't exist there. The tier auto-routes
 to the obvious single answer. Multi-source brains (2+ non-default registered)
 still fall through to `seed_default` and require explicit `--source`.
 
 Placement AFTER `brain_default` is deliberate: a user who explicitly set
-`sources.default` via `gbrain sources default <id>` has stated intent that
+`sources.default` via `voltmind sources default <id>` has stated intent that
 wins over the auto-route. Archived sources are excluded from the count.
 
 **v0.37.7.0 tooling:**
 
-- `gbrain sources current [--json]` echoes the resolved source AND
+- `voltmind sources current [--json]` echoes the resolved source AND
   which tier won. Run this before any destructive op to verify what
   you're about to target.
-- `gbrain sources current --source X` shows what an explicit flag
+- `voltmind sources current --source X` shows what an explicit flag
   WOULD resolve to (validates X exists in the sources table).
 
-CLI commands honoring this chain: `gbrain sync`, `gbrain import`,
-`gbrain search`, `gbrain extract` (via `--source-id <id>` since
-`--source` is the fs|db data-source axis), `gbrain graph-query`
+CLI commands honoring this chain: `voltmind sync`, `voltmind import`,
+`voltmind search`, `voltmind extract` (via `--source-id <id>` since
+`--source` is the fs|db data-source axis), `voltmind graph-query`
 (via `--include-foreign` for cross-source traversal).
 
 **Trust boundary (v0.34.1.0):** the resolver is CLI-layer only.
-Operations.ts handlers do NOT read `.gbrain-source` or
-`GBRAIN_SOURCE`. MCP/remote callers go through
+Operations.ts handlers do NOT read `.voltmind-source` or
+`VOLTMIND_SOURCE`. MCP/remote callers go through
 `ctx.auth.sourceId` / `ctx.auth.allowedSources` instead. A remote
 caller cannot inherit the server process's CLI source context.
 
@@ -96,7 +96,7 @@ caller cannot inherit the server process's CLI source context.
 
 Switch source (`--source <id>`) when:
 
-- The user is working in a specific repo (the `.gbrain-source` dotfile
+- The user is working in a specific repo (the `.voltmind-source` dotfile
   usually handles this — don't fight it).
 - The user asks about something scoped to a repo ("what's in my gstack
   notes about retry policy?").
@@ -117,7 +117,7 @@ unified ranking. The AGENT federates.
 Pattern when the user asks something that might span brains:
 
 1. Query host with the obvious query.
-2. Check `gbrain mounts list` for relevant brain ids.
+2. Check `voltmind mounts list` for relevant brain ids.
 3. If you think another brain has the answer, re-query THAT brain
    explicitly (`--brain <id>`).
 4. Synthesize across results. Cite `<brain>:<source>:<slug>` so the user
@@ -171,7 +171,7 @@ with a brain prefix when relevant.
   are now in your personal brain" = bad surprise).
 - Cross-brain federation in a single query without citations that name the
   source brain. The user cannot trace the answer back.
-- Ignoring `.gbrain-mount` / `.gbrain-source` dotfiles. They're load-bearing
+- Ignoring `.voltmind-mount` / `.voltmind-source` dotfiles. They're load-bearing
   context — the user set them up for a reason.
 
 ## Read more

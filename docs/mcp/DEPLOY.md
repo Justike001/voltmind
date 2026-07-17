@@ -1,6 +1,6 @@
-# Deploy GBrain Remote MCP Server
+# Deploy VoltMind Remote MCP Server
 
-> **v0.26.0+:** `gbrain serve --http` ships full OAuth 2.1 (client credentials,
+> **v0.26.0+:** `voltmind serve --http` ships full OAuth 2.1 (client credentials,
 > auth code + PKCE, refresh rotation, optional DCR), an embedded React admin
 > dashboard at `/admin`, scoped operations, and a live SSE activity feed.
 > Pre-v0.26 legacy bearer tokens still work — `verifyAccessToken` falls back
@@ -9,8 +9,8 @@
 > OAuth tables work on both PGLite and Postgres. See [SECURITY.md](../../SECURITY.md)
 > for env vars and tunable defaults.
 
-Access your brain from any device, any AI client. GBrain ships two transports:
-`gbrain serve` (stdio) for local agents, and `gbrain serve --http` (v0.26.0+)
+Access your brain from any device, any AI client. VoltMind ships two transports:
+`voltmind serve` (stdio) for local agents, and `voltmind serve --http` (v0.26.0+)
 for remote clients over OAuth 2.1.
 
 ## Three Paths
@@ -18,7 +18,7 @@ for remote clients over OAuth 2.1.
 ### Local stdio (zero setup)
 
 ```bash
-gbrain serve
+voltmind serve
 ```
 
 Works with Claude Code, Cursor, Windsurf, and any MCP client that supports stdio.
@@ -27,9 +27,9 @@ No server, no tunnel, no token needed. Works on both PGLite and Postgres engines
 ### Remote over OAuth 2.1 (recommended, v0.26.0+)
 
 ```bash
-gbrain serve --http --port 3131
+voltmind serve --http --port 3131
 ngrok http 3131 --url your-brain.ngrok.app
-gbrain serve --http --port 3131 --public-url https://your-brain.ngrok.app
+voltmind serve --http --port 3131 --public-url https://your-brain.ngrok.app
 ```
 
 Built-in HTTP transport with OAuth 2.1, scoped operations, an admin dashboard
@@ -52,16 +52,16 @@ See the [OAuth 2.1 setup](#oauth-21-setup-v100) section below.
 ```
 Your AI client (Claude Desktop, Perplexity, etc.)
   → ngrok tunnel (https://YOUR-DOMAIN.ngrok.app)
-  → gbrain serve --http  (built-in transport with bearer auth)
+  → voltmind serve --http  (built-in transport with bearer auth)
   → Postgres (pooler connection or self-hosted)
 ```
 
 This requires:
 1. A Postgres-backed brain (the `access_tokens` table only exists on Postgres;
-   running `gbrain serve --http` against a PGLite install fails fast at startup)
-2. A machine running `gbrain serve --http`
+   running `voltmind serve --http` against a PGLite install fails fast at startup)
+2. A machine running `voltmind serve --http`
 3. A public tunnel (ngrok, Tailscale, or cloud host)
-4. A bearer token created via `gbrain auth create <name>`
+4. A bearer token created via `voltmind auth create <name>`
 
 Pre-v1.0 tokens are grandfathered as `read+write+admin` scopes when you upgrade
 to the HTTP server, so no migration is required.
@@ -71,7 +71,7 @@ to the HTTP server, so no migration is required.
 ### 1. Start the HTTP server
 
 ```bash
-gbrain serve --http --port 3131
+voltmind serve --http --port 3131
 ```
 
 On first start, the server prints an **admin bootstrap token** to stderr:
@@ -90,7 +90,7 @@ and per-client config export.
 > Declared param keys are kept (intersected against the operation's spec); unknown
 > keys are counted but never named, and byte sizes round up to 1KB so size-probe
 > attacks can't binary-search secret content. Operators on a personal laptop who
-> want raw payloads back can pass `gbrain serve --http --log-full-params` (loud
+> want raw payloads back can pass `voltmind serve --http --log-full-params` (loud
 > stderr warning fires at startup). Multi-tenant deployments should leave it on
 > the redacted default.
 
@@ -112,7 +112,7 @@ Register clients from the **`/admin` dashboard**:
 Or from the CLI — faster for scripting:
 
 ```bash
-gbrain auth register-client perplexity \
+voltmind auth register-client perplexity \
   --grant-types client_credentials \
   --scopes "read write"
 ```
@@ -122,7 +122,7 @@ write authority to one source and its read scope to a curated set with the
 new `--source` and `--federated-read` flags:
 
 ```bash
-gbrain auth register-client dept-x-agent \
+voltmind auth register-client dept-x-agent \
   --grant-types client_credentials \
   --scopes "read write" \
   --source dept-x \
@@ -133,7 +133,7 @@ gbrain auth register-client dept-x-agent \
 land in `dept-x`. `--federated-read` controls the read axis independently;
 queries return rows from any of the listed sources. Omit both flags for the
 v0.33-compatible super-client shape. Pre-v0.34 clients are backfilled to
-`source_id='default'` on `gbrain upgrade`.
+`source_id='default'` on `voltmind upgrade`.
 
 Host-repo wrappers can register programmatically:
 
@@ -151,12 +151,12 @@ start the server with `--enable-dcr`. DCR is off by default.
 
 ### 3. Expose the server
 
-**v0.34 — bind explicitly.** `gbrain serve --http` defaults to `127.0.0.1`.
+**v0.34 — bind explicitly.** `voltmind serve --http` defaults to `127.0.0.1`.
 To accept connections from the ngrok tunnel (or any non-loopback source),
 restart with `--bind`:
 
 ```bash
-gbrain serve --http --port 3131 --bind 0.0.0.0 --public-url https://your-brain.ngrok.app
+voltmind serve --http --port 3131 --bind 0.0.0.0 --public-url https://your-brain.ngrok.app
 ```
 
 When `--public-url` is set without `--bind`, a stderr WARN fires at
@@ -206,13 +206,13 @@ ngrok http 8787 --url your-brain.ngrok.app  # Hobby tier for fixed domain
 
 ```bash
 # Create a token for each client
-gbrain auth create "claude-desktop"
+voltmind auth create "claude-desktop"
 
 # List all tokens
-gbrain auth list
+voltmind auth list
 
 # Revoke a token
-gbrain auth revoke "claude-desktop"
+voltmind auth revoke "claude-desktop"
 ```
 
 Tokens are per-client. Create one for each device/app. Revoke individually
@@ -220,7 +220,7 @@ if compromised. Tokens are stored SHA-256 hashed in your database.
 
 ### 3. Connect your AI client
 
-- **ChatGPT:** [setup guide](CHATGPT.md) (OAuth 2.1 + PKCE, requires `gbrain serve --http`)
+- **ChatGPT:** [setup guide](CHATGPT.md) (OAuth 2.1 + PKCE, requires `voltmind serve --http`)
 - **Claude Code:** [setup guide](CLAUDE_CODE.md)
 - **Claude Desktop:** [setup guide](CLAUDE_DESKTOP.md) (must use GUI, not JSON config)
 - **Claude Cowork:** [setup guide](CLAUDE_COWORK.md)
@@ -229,21 +229,21 @@ if compromised. Tokens are stored SHA-256 hashed in your database.
 ### 4. Verify
 
 ```bash
-gbrain auth test \
+voltmind auth test \
   https://YOUR-DOMAIN.ngrok.app/mcp \
   --token YOUR_TOKEN
 ```
 
 ## Operations
 
-All 30 GBrain operations are available remotely, including `sync_brain` and
+All 30 VoltMind operations are available remotely, including `sync_brain` and
 `file_upload` (no timeout limits with self-hosted server).
 
 **Security note on `file_upload`:** remote MCP callers are confined to the working
-directory where `gbrain serve` was launched. Symlinks, `..` traversal, and absolute
+directory where `voltmind serve` was launched. Symlinks, `..` traversal, and absolute
 paths outside cwd are rejected. Page slugs and filenames are allowlist-validated
 (alphanumeric + hyphens; no control chars, RTL overrides, or backslashes). Local
-CLI callers (`gbrain file upload ...`) keep unrestricted filesystem access since
+CLI callers (`voltmind file upload ...`) keep unrestricted filesystem access since
 the user owns the machine.
 
 ## Deployment Options
@@ -257,7 +257,7 @@ Funnel, and cloud hosts (Fly.io, Railway).
 Include the Authorization header: `Authorization: Bearer YOUR_TOKEN`
 
 **"invalid_token" error**
-Run `gbrain auth list` to see active tokens.
+Run `voltmind auth list` to see active tokens.
 
 **"service_unavailable" error**
 Database connection failed. Check your Supabase dashboard for outages.
@@ -277,7 +277,7 @@ Remote servers must be added via Settings > Integrations, NOT
 | put_page | 100-500ms | Write + trigger search_vector update |
 | get_stats | < 100ms | Aggregate query |
 
-**Note:** `gbrain serve --http` shipped in v0.26.0 with OAuth 2.1 + admin
+**Note:** `voltmind serve --http` shipped in v0.26.0 with OAuth 2.1 + admin
 dashboard baked into the binary. The custom HTTP wrapper pattern (see
 [voice recipe](../../recipes/twilio-voice-brain.md)) is still supported for
 teams that need bespoke middleware, but for most remote deployments the

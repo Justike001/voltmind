@@ -1,12 +1,12 @@
 # Headless install: Docker, CI, postinstall
 
-As of v0.37, `gbrain init --pglite` in a non-TTY context (Docker `RUN`, CI step, postinstall hook) exits 1 when no embedding-provider API key is present in the environment. This is a deliberate fail-loud — the alternative was the v0.36 silent-broken-state class where init succeeded with a default that didn't match any real key.
+As of v0.37, `voltmind init --pglite` in a non-TTY context (Docker `RUN`, CI step, postinstall hook) exits 1 when no embedding-provider API key is present in the environment. This is a deliberate fail-loud — the alternative was the v0.36 silent-broken-state class where init succeeded with a default that didn't match any real key.
 
 Two patterns work for headless installs. Pick whichever fits your image lifecycle.
 
 ## Pattern 1: Provider key available at image build time
 
-If your CI / Docker pipeline can inject the API key as a build-time env var, set it before `gbrain init`:
+If your CI / Docker pipeline can inject the API key as a build-time env var, set it before `voltmind init`:
 
 ```dockerfile
 # Multi-stage Dockerfile sketch
@@ -16,21 +16,21 @@ FROM oven/bun:1 AS builder
 ARG OPENAI_API_KEY
 ENV OPENAI_API_KEY=$OPENAI_API_KEY
 
-RUN bun install -g github:garrytan/gbrain
-RUN gbrain init --pglite  # auto-picks OpenAI, persists config
+RUN bun install -g github:garrytan/voltmind
+RUN voltmind init --pglite  # auto-picks OpenAI, persists config
 ```
 
 ```yaml
 # GitHub Actions equivalent
-- name: Initialize gbrain
+- name: Initialize voltmind
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   run: |
-    bun install -g github:garrytan/gbrain
-    gbrain init --pglite
+    bun install -g github:garrytan/voltmind
+    voltmind init --pglite
 ```
 
-Init writes `~/.gbrain/config.json` with the resolved `embedding_model` + `embedding_dimensions`. Subsequent runs (in the same image / runner) read from that config and don't re-resolve.
+Init writes `~/.voltmind/config.json` with the resolved `embedding_model` + `embedding_dimensions`. Subsequent runs (in the same image / runner) read from that config and don't re-resolve.
 
 ## Pattern 2: Provider key only at runtime (deferred-setup)
 
@@ -38,22 +38,22 @@ If the API key is a runtime secret (Kubernetes secret, runtime env injection, en
 
 ```dockerfile
 FROM oven/bun:1
-RUN bun install -g github:garrytan/gbrain
+RUN bun install -g github:garrytan/voltmind
 
 # Build the brain shape without a provider — schema lands at the default
 # width, but no embed callsite will actually run until runtime config.
-RUN gbrain init --pglite --no-embedding
+RUN voltmind init --pglite --no-embedding
 
 # At container start (entrypoint), provide the real provider:
 ENTRYPOINT ["/bin/sh", "-c", "\
-  gbrain config set embedding_model openai:text-embedding-3-large \
-  && gbrain init --force --pglite \
-  && exec gbrain serve"]
+  voltmind config set embedding_model openai:text-embedding-3-large \
+  && voltmind init --force --pglite \
+  && exec voltmind serve"]
 ```
 
-The `gbrain init --no-embedding` opt-in writes `embedding_disabled: true` to config. Every embed callsite (`gbrain import`, `gbrain embed`, the `runEmbedCore` library entry point) checks this and refuses cleanly with a `gbrain config set embedding_model <id>` hint rather than proceeding with a silent default.
+The `voltmind init --no-embedding` opt-in writes `embedding_disabled: true` to config. Every embed callsite (`voltmind import`, `voltmind embed`, the `runEmbedCore` library entry point) checks this and refuses cleanly with a `voltmind config set embedding_model <id>` hint rather than proceeding with a silent default.
 
-The runtime `gbrain init --force` re-runs the init flow against the now-populated env, which:
+The runtime `voltmind init --force` re-runs the init flow against the now-populated env, which:
 
 - Removes `embedding_disabled` from config.
 - Resolves the provider via env detection.
@@ -64,17 +64,17 @@ The runtime `gbrain init --force` re-runs the init flow against the now-populate
 ```dockerfile
 # Don't do this — silent default leaves you with vector(1280) ZE column
 # and 1536d OpenAI provider at runtime, mismatched.
-RUN gbrain init --pglite
+RUN voltmind init --pglite
 ```
 
-If you upgrade from a pre-v0.37 image that used this pattern, `gbrain doctor` will surface the mismatch on first run after upgrade and print a paste-ready repair command (`gbrain init --force --embedding-model …` for empty brains, `gbrain retrieval-upgrade --reindex` for non-empty).
+If you upgrade from a pre-v0.37 image that used this pattern, `voltmind doctor` will surface the mismatch on first run after upgrade and print a paste-ready repair command (`voltmind init --force --embedding-model …` for empty brains, `voltmind retrieval-upgrade --reindex` for non-empty).
 
 ## Verifying a headless install
 
-After init, run `gbrain doctor --json` to verify state:
+After init, run `voltmind doctor --json` to verify state:
 
 ```bash
-gbrain doctor --json | jq '.checks[] | select(.name=="embedding_provider")'
+voltmind doctor --json | jq '.checks[] | select(.name=="embedding_provider")'
 ```
 
 The `embedding_provider` check returns `status: 'ok'` when:

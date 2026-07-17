@@ -1,6 +1,6 @@
 # Skillpack anatomy
 
-The canonical one-page reference for what a third-party gbrain skillpack
+The canonical one-page reference for what a third-party voltmind skillpack
 looks like. The reference pack at `examples/skillpack-reference/` is the
 live artifact this page describes; clone its tree and you have a 10/10
 starting point.
@@ -28,21 +28,21 @@ my-skillpack/
 └── .gitignore
 ```
 
-`gbrain skillpack init <name>` scaffolds this exact tree, pre-filled
-with stubs that score 10/10 on `gbrain skillpack doctor . --quick`
+`voltmind skillpack init <name>` scaffolds this exact tree, pre-filled
+with stubs that score 10/10 on `voltmind skillpack doctor . --quick`
 immediately. Replace the stubs with real content, run the doctor
-between edits, and `gbrain skillpack pack` produces a deterministic
+between edits, and `voltmind skillpack pack` produces a deterministic
 `<name>-<version>.tgz` ready to publish to the registry.
 
 ## How the agent uses a scaffolded pack
 
-After `gbrain skillpack scaffold <source>` lands the files:
+After `voltmind skillpack scaffold <source>` lands the files:
 
 1. The user's agent walks `skills/*/SKILL.md` frontmatter and reads
    each pack's `triggers:` array on startup or per-message.
 2. When a user phrasing matches a trigger, the agent reads that
    SKILL.md body top-to-bottom as in-context instructions.
-3. gbrain DISPLAYS `runbooks/bootstrap.md` once after the scaffold
+3. voltmind DISPLAYS `runbooks/bootstrap.md` once after the scaffold
    but does NOT auto-execute it. The agent decides whether to walk
    the steps. This is the codex T1 supply-chain hardening: an
    auto-walker would let a malicious pack mutate the user's brain
@@ -93,16 +93,16 @@ _Generated from `src/core/skillpack/rubric.ts` by `bun run scripts/build-skillpa
 
 ```bash
 # Publisher side
-gbrain skillpack init my-pack         # scaffold the tree
-gbrain skillpack doctor my-pack       # see the score + fix hints
-gbrain skillpack doctor my-pack --fix --yes  # auto-scaffold missing pieces
-gbrain skillpack pack my-pack         # deterministic tarball + SHA-256
+voltmind skillpack init my-pack         # scaffold the tree
+voltmind skillpack doctor my-pack       # see the score + fix hints
+voltmind skillpack doctor my-pack --fix --yes  # auto-scaffold missing pieces
+voltmind skillpack pack my-pack         # deterministic tarball + SHA-256
 
 # Consumer side
-gbrain skillpack search <query>       # browse the registry
-gbrain skillpack info <name>          # show full pack metadata
-gbrain skillpack scaffold <source>    # owner/repo, https, ./dir, ./*.tgz
-gbrain skillpack registry --url X     # point at a custom registry
+voltmind skillpack search <query>       # browse the registry
+voltmind skillpack info <name>          # show full pack metadata
+voltmind skillpack scaffold <source>    # owner/repo, https, ./dir, ./*.tgz
+voltmind skillpack registry --url X     # point at a custom registry
 ```
 
 ## See also

@@ -13,19 +13,19 @@ _How v0.32.3 measures the difference between `conservative`, `balanced`, and `to
 - Latency under concurrent load.
 - Production cost (the cost numbers are model-pricing estimates × dataset size, not your actual API spend).
 
-If you want to know how a mode behaves on YOUR brain, run `gbrain search stats --days 30` after a real usage window, then run `gbrain search tune` for actionable recommendations.
+If you want to know how a mode behaves on YOUR brain, run `voltmind search stats --days 30` after a real usage window, then run `voltmind search tune` for actionable recommendations.
 
 ## 2. Datasets and sizes
 
 - **LongMemEval** — public split, `n=500` questions. Downloaded from [Hugging Face](https://huggingface.co/datasets/xiaowu0162/longmemeval). The corpus + answer keys are pinned to a specific commit; recorded in every per-run record.
-- **Replay captures** — NDJSON from the sibling `gbrain-evals` repo, `n=200` queries. Each query carries a `retrieved_slugs` baseline + a `latency_ms` measurement from the original production run.
-- **BrainBench v1** — `n=1240` documents / `n=350` qrels (binary relevance judgments). Lives in the sibling [`gbrain-evals`](https://github.com/garrytan/gbrain-evals) repo, SHA-pinned at every run.
+- **Replay captures** — NDJSON from the sibling `voltmind-evals` repo, `n=200` queries. Each query carries a `retrieved_slugs` baseline + a `latency_ms` measurement from the original production run.
+- **BrainBench v1** — `n=1240` documents / `n=350` qrels (binary relevance judgments). Lives in the sibling [`voltmind-evals`](https://github.com/garrytan/voltmind-evals) repo, SHA-pinned at every run.
 
-No private brain content is used in any reported result. The committed NDJSON dumps under `<repo>/.gbrain-evals/` contain only the LongMemEval question IDs + the rank-ordered retrieved session IDs.
+No private brain content is used in any reported result. The committed NDJSON dumps under `<repo>/.voltmind-evals/` contain only the LongMemEval question IDs + the rank-ordered retrieved session IDs.
 
 ## 3. Sample selection
 
-- **Random seed:** `42` throughout. Set via `--seed N` on `gbrain eval run-all`; recorded in every per-run record.
+- **Random seed:** `42` throughout. Set via `--seed N` on `voltmind eval run-all`; recorded in every per-run record.
 - **No per-question curation.** Splits are taken whole; no question is filtered for reporting.
 - **No mode-specific tuning.** The same dataset + same seed feeds every mode. The mode is the only independent variable.
 - **Stability across re-runs:** with `--seed 42` and the same dataset SHA, two runs of the same (mode, suite) produce identical retrieval orderings (modulo the optional Haiku expansion call, which is non-deterministic). Persisted in `eval_results` so anyone can re-score from the committed dumps.
@@ -35,11 +35,11 @@ No private brain content is used in any reported result. The committed NDJSON du
 The command is the doc. Anyone can reproduce.
 
 ```bash
-# Setup: in your gbrain working tree, with OPENAI_API_KEY + ANTHROPIC_API_KEY exported.
+# Setup: in your voltmind working tree, with OPENAI_API_KEY + ANTHROPIC_API_KEY exported.
 git rev-parse HEAD  # record the commit for the methodology footer
 
 # Sweep all 3 modes × 2 retrieval-focused suites with seed 42.
-gbrain eval run-all \
+voltmind eval run-all \
   --modes conservative,balanced,tokenmax \
   --suites longmemeval,replay \
   --seed 42 \
@@ -49,11 +49,11 @@ gbrain eval run-all \
   --output docs/eval/results/v0.32.3/
 
 # Render the comparison.
-gbrain eval compare --md > docs/eval/results/v0.32.3/README.md
-gbrain eval compare --json > docs/eval/results/v0.32.3/comparison.json
+voltmind eval compare --md > docs/eval/results/v0.32.3/README.md
+voltmind eval compare --json > docs/eval/results/v0.32.3/comparison.json
 ```
 
-The orchestrator writes per-run records to `<repo>/.gbrain-evals/eval-results.jsonl`. Every record carries: `run_id`, `ran_at`, `suite`, `mode`, `commit`, `seed`, `limit`, `params`, `status`, `duration_ms`. The dumps under `docs/eval/results/v0.32.3/` carry the raw question-level outputs so a reviewer can re-score with their own metric implementation.
+The orchestrator writes per-run records to `<repo>/.voltmind-evals/eval-results.jsonl`. Every record carries: `run_id`, `ran_at`, `suite`, `mode`, `commit`, `seed`, `limit`, `params`, `status`, `duration_ms`. The dumps under `docs/eval/results/v0.32.3/` carry the raw question-level outputs so a reviewer can re-score with their own metric implementation.
 
 ## 5. Threats to validity
 
@@ -90,7 +90,7 @@ Then we publish whether the data agrees. **If a hypothesis fails, that's documen
 
 ## 8. Re-run cadence
 
-This document + the eval results are regenerated on every release that touches retrieval-affecting code. The `gbrain doctor eval_drift` check surfaces changes to the curated watch-list in `src/core/eval/drift-watch.ts`:
+This document + the eval results are regenerated on every release that touches retrieval-affecting code. The `voltmind doctor eval_drift` check surfaces changes to the curated watch-list in `src/core/eval/drift-watch.ts`:
 
 - `src/core/search/**`
 - `src/core/embedding.ts`
@@ -103,7 +103,7 @@ Additions to the watch-list require a CHANGELOG line.
 
 ## Statistical-significance discipline
 
-When `gbrain eval compare --md` reports a Δ between two modes, it computes:
+When `voltmind eval compare --md` reports a Δ between two modes, it computes:
 
 - **Paired bootstrap** with 10,000 resamples per metric. Each resample draws _question-level_ pairs (same question, mode A vs mode B), so question-level variance is differenced out.
 - **Bonferroni correction** across the 12 comparisons (3 modes × 4 metrics). The reported p-value is the comparison's raw p-value × 12 (clamped at 1.0).
@@ -117,7 +117,7 @@ Every metric the report prints has a plain-English entry in `docs/eval/METRIC_GL
 
 ## Cost anchors
 
-The mode-picker prompt at `gbrain init` and the CLAUDE.md `## Search Mode` table both surface these rough cost anchors. Working through the math so they're auditable:
+The mode-picker prompt at `voltmind init` and the CLAUDE.md `## Search Mode` table both surface these rough cost anchors. Working through the math so they're auditable:
 
 **Variables:**
 - `T` = avg tokens per search-result chunk. The recursive chunker targets 300 words / chunk → ~400 tokens (English, OpenAI tiktoken approx).
@@ -149,7 +149,7 @@ The mode-picker prompt at `gbrain init` and the CLAUDE.md `## Search Mode` table
 | balanced | \$50 | \$500 | \$5,000 |
 | tokenmax | \$100 | \$1,000 | \$10,000 |
 
-**gbrain's own cost** on top:
+**voltmind's own cost** on top:
 - Query embedding (text-embedding-3-large @ \$0.13/M tokens): ~\$0.00001 per query. Negligible at every scale.
 - Tokenmax Haiku expansion call (\$1/M input, \$5/M output, ~500 input + 200 output per call): ~\$0.0015 per query, or \$150/mo at 100K queries. Cache hits cut this in half.
 - Per-page indexing (one-time): bounded by your import volume, not query volume. Not modeled here.
@@ -157,7 +157,7 @@ The mode-picker prompt at `gbrain init` and the CLAUDE.md `## Search Mode` table
 **Cache hit adjustment.** A warmed brain typically sees 30-50% cache hits on repeat-query traffic. Cache hits skip the downstream input cost entirely (the cached result was already in the agent's context once). So real-world costs run ~50-70% of the table above on a busy brain.
 
 **Why these numbers DRIFT from your actual bill:**
-- Your agent's system prompt + reasoning tokens add input that gbrain doesn't see.
+- Your agent's system prompt + reasoning tokens add input that voltmind doesn't see.
 - Compaction reduces input over a long session.
 - Most agents make 1-5 searches per turn; cost-per-turn is what bills you, not cost-per-query.
 - The model price column drifts as providers reprice; pin the rate via `src/core/anthropic-pricing.ts` for a current snapshot.
@@ -214,11 +214,11 @@ The per-query math above is honest but theoretical: it treats each search as an 
 | Average cost per turn | ~\$0.85 |
 | Anthropic prompt-cache hit rate | ~88% |
 
-A "turn" here is one agent loop iteration: read user message, plan, execute tool calls (including gbrain searches), generate response. Each turn typically includes 2-4 gbrain searches.
+A "turn" here is one agent loop iteration: read user message, plan, execute tool calls (including voltmind searches), generate response. Each turn typically includes 2-4 voltmind searches.
 
 **Per-mode scaling from the tokenmax anchor:**
 
-The cost difference between modes is concentrated in the search-attributable fraction of per-turn cost. System prompt, tool definitions, conversation history, and reasoning tokens don't change with mode — only the chunks gbrain delivers do. Assume 3 searches per turn at the mode's `searchLimit`:
+The cost difference between modes is concentrated in the search-attributable fraction of per-turn cost. System prompt, tool definitions, conversation history, and reasoning tokens don't change with mode — only the chunks voltmind delivers do. Assume 3 searches per turn at the mode's `searchLimit`:
 
 | Mode | Search tokens/turn | Search cost/turn (at \$3/M effective) | Search-attributable @ 860 turns | Δ vs tokenmax |
 |---|---|---|---|---|
@@ -239,7 +239,7 @@ tokens all bill at that rate:
 
 **4x spread across natural pairings.** The model tier dominates because
 the per-token rate applies to the WHOLE per-turn payload (system + tools
-+ history + reasoning + search), not just gbrain's chunks. Mode choice
++ history + reasoning + search), not just voltmind's chunks. Mode choice
 contributes ~10-20% on top of that base.
 
 **Mismatched pairings push you off the curve:**
@@ -270,7 +270,7 @@ no improvement.
 - The 88% cache hit rate is the high end of what's achievable. Half that is closer to a default agent without cache-aware prompt layout.
 - The "Δ vs tokenmax" math assumes the OTHER cost components (system, tools, history, reasoning) stay constant. In practice, conservative's smaller per-turn payload also leaves more room in the context window for history → which can change agent behavior in either direction.
 
-This anchor + the per-query math both live in this doc on purpose. The per-query framing is what an isolated benchmark would measure (and what `gbrain eval run-all` will produce). The realistic-scale anchor is what an operator actually pays. Both are honest; neither is the whole truth.
+This anchor + the per-query math both live in this doc on purpose. The per-query framing is what an isolated benchmark would measure (and what `voltmind eval run-all` will produce). The realistic-scale anchor is what an operator actually pays. Both are honest; neither is the whole truth.
 
 ## Reproducibility footer
 

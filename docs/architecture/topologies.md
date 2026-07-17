@@ -1,8 +1,8 @@
-# GBrain Deployment Topologies
+# VoltMind Deployment Topologies
 
-GBrain supports three deployment shapes. They compose: a single user can mix
+VoltMind supports three deployment shapes. They compose: a single user can mix
 all three on the same machine without conflict, because every shape resolves
-to "which `~/.gbrain/config.json` is active right now?" and `GBRAIN_HOME`
+to "which `~/.voltmind/config.json` is active right now?" and `VOLTMIND_HOME`
 controls that selection.
 
 This page covers the three topologies, when each fits, and concrete setup
@@ -13,7 +13,7 @@ this doc is about WHERE that database lives.
 ## Quick decision tree
 
 ```
-   "I'm setting up gbrain..."
+   "I'm setting up voltmind..."
         │
         ▼
   Just for me, on one machine? ─── yes ───▶ Topology 1 (single brain)
@@ -41,25 +41,25 @@ brain at a remote server.
   ┌────────────────┐
   │   one machine  │
   │  ┌──────────┐  │
-  │  │  gbrain  │──┼──→  ~/.gbrain/  →  PGLite  or  Supabase
+  │  │  voltmind  │──┼──→  ~/.voltmind/  →  PGLite  or  Supabase
   │  │   CLI    │  │
   │  └──────────┘  │
   └────────────────┘
 ```
 
 What you get: one local DB (PGLite for small brains, Supabase for ~1000+
-files). All commands work directly against it. `gbrain serve` exposes it
+files). All commands work directly against it. `voltmind serve` exposes it
 to a single agent over MCP.
 
 When it fits: solo use, single machine, one agent, no Conductor parallelism.
-This is the default; `gbrain init` (no flags) gives you this.
+This is the default; `voltmind init` (no flags) gives you this.
 
 Setup:
 
 ```
-gbrain init           # interactive — defaults to PGLite
-gbrain init --pglite  # explicit local
-gbrain init --supabase  # remote Supabase (recommended for 1000+ files)
+voltmind init           # interactive — defaults to PGLite
+voltmind init --pglite  # explicit local
+voltmind init --supabase  # remote Supabase (recommended for 1000+ files)
 ```
 
 Nothing else here is special. The other two topologies are variations on
@@ -71,12 +71,12 @@ Nothing else here is special. The other two topologies are variations on
   ┌────────────┐                    ┌──────────────────┐
   │ neuromancer│                    │    brain-host    │
   │ ┌────────┐ │ HTTP MCP / OAuth   │  ┌────────────┐  │
-  │ │ Hermes │─┼───────────────────→│  │   gbrain   │──┼──→ Supabase
+  │ │ Hermes │─┼───────────────────→│  │   voltmind   │──┼──→ Supabase
   │ │ agent  │ │                    │  │ serve --http│  │
   │ └────────┘ │                    │  └────────────┘  │
   │            │                    │   (with autopilot)│
   │  no local  │                    │                  │
-  │  gbrain DB │                    │                  │
+  │  voltmind DB │                    │                  │
   └────────────┘                    └──────────────────┘
 ```
 
@@ -93,7 +93,7 @@ When it fits:
 - Spinning up a parallel local install would create source-ID contention or
   duplicate work.
 
-The thin client's `~/.gbrain/config.json` carries a `remote_mcp` field
+The thin client's `~/.voltmind/config.json` carries a `remote_mcp` field
 instead of a local DB connection:
 
 ```jsonc
@@ -103,7 +103,7 @@ instead of a local DB connection:
     "issuer_url": "https://brain-host.local:3001",
     "mcp_url":    "https://brain-host.local:3001/mcp",
     "oauth_client_id": "neuromancer-...",
-    "oauth_client_secret": "..."  // or set GBRAIN_REMOTE_CLIENT_SECRET
+    "oauth_client_secret": "..."  // or set VOLTMIND_REMOTE_CLIENT_SECRET
   }
 }
 ```
@@ -111,7 +111,7 @@ instead of a local DB connection:
 The CLI dispatch guard refuses any DB-bound command (`sync`, `embed`,
 `extract`, `migrate`, `apply-migrations`, `repair-jsonb`, `orphans`,
 `integrity`, `serve`) on a thin-client install with a clear error pointing
-at the remote host. `gbrain doctor` runs a dedicated thin-client check set
+at the remote host. `voltmind doctor` runs a dedicated thin-client check set
 (OAuth discovery, token round-trip, MCP smoke).
 
 ### Setup
@@ -119,16 +119,16 @@ at the remote host. `gbrain doctor` runs a dedicated thin-client check set
 **Step 1 — On the host (brain-host):**
 
 ```bash
-gbrain init --supabase                         # or --pglite, doesn't matter
-gbrain serve --http --port 3001 --bind 0.0.0.0 # v0.34: bind explicitly for remote access
+voltmind init --supabase                         # or --pglite, doesn't matter
+voltmind serve --http --port 3001 --bind 0.0.0.0 # v0.34: bind explicitly for remote access
                                                 # (defaults to 127.0.0.1 since v0.34)
-gbrain auth register-client neuromancer \
+voltmind auth register-client neuromancer \
   --grant-types client_credentials \
   --scopes read,write,admin                    # admin needed for ping/doctor
 
 # v0.34: source-scoped client (write to one source, federate reads across
 # multiple sources). Omit both flags for a v0.33-compatible super-client.
-gbrain auth register-client neuromancer-dept \
+voltmind auth register-client neuromancer-dept \
   --grant-types client_credentials \
   --scopes read,write \
   --source dept-x \
@@ -137,13 +137,13 @@ gbrain auth register-client neuromancer-dept \
 
 The `register-client` command prints a `client_id` and `client_secret`.
 Note both. **Scope must include `admin`** — `submit_job` (used by
-`gbrain remote ping`) and `run_doctor` (used by `gbrain remote doctor`)
+`voltmind remote ping`) and `run_doctor` (used by `voltmind remote doctor`)
 both require it.
 
 **Step 2 — On the thin client (neuromancer):**
 
 ```bash
-gbrain init --mcp-only \
+voltmind init --mcp-only \
   --issuer-url https://brain-host.local:3001 \
   --mcp-url https://brain-host.local:3001/mcp \
   --oauth-client-id <id> \
@@ -152,7 +152,7 @@ gbrain init --mcp-only \
 
 Pre-flight smoke runs three probes (OAuth discovery, token round-trip,
 MCP initialize). If any fails, init exits with an actionable error. On
-success, `~/.gbrain/config.json` gets `remote_mcp` set and NO local DB
+success, `~/.voltmind/config.json` gets `remote_mcp` set and NO local DB
 is created.
 
 **Step 3 — Configure your agent's MCP client.**
@@ -164,7 +164,7 @@ Example for Claude Desktop's `~/.config/claude/claude_desktop_config.json`:
 ```jsonc
 {
   "mcpServers": {
-    "gbrain": {
+    "voltmind": {
       "type": "url",
       "url": "https://brain-host.local:3001/mcp",
       "headers": { "Authorization": "Bearer <client_secret>" }
@@ -176,30 +176,30 @@ Example for Claude Desktop's `~/.config/claude/claude_desktop_config.json`:
 **Step 4 — Verify.**
 
 ```bash
-gbrain doctor             # runs thin-client checks (no local DB needed)
-gbrain remote ping        # triggers an autopilot cycle on the host (Tier B)
-gbrain remote doctor      # asks the host to run its own doctor (Tier B)
+voltmind doctor             # runs thin-client checks (no local DB needed)
+voltmind remote ping        # triggers an autopilot cycle on the host (Tier B)
+voltmind remote doctor      # asks the host to run its own doctor (Tier B)
 ```
 
-`gbrain sync` and friends will refuse with a clear thin-client error
+`voltmind sync` and friends will refuse with a clear thin-client error
 naming the `mcp_url`. That's the correct behavior — those commands need
 a local engine that doesn't exist here.
 
 ### Re-run guard
 
-Running `gbrain init` (no flags) on a machine that already has thin-client
+Running `voltmind init` (no flags) on a machine that already has thin-client
 config set refuses without `--force`. This catches the scripted-setup-loop
 friction where an orchestrator keeps trying to create a local DB. Use
-`gbrain init --mcp-only --force` to refresh thin-client config.
+`voltmind init --mcp-only --force` to refresh thin-client config.
 
 ### Storing the OAuth secret
 
 Three storage paths in priority order:
 
-1. **`GBRAIN_REMOTE_CLIENT_SECRET` env var** (preferred for headless agents).
+1. **`VOLTMIND_REMOTE_CLIENT_SECRET` env var** (preferred for headless agents).
    When set, overrides whatever's in the config file. The init flow doesn't
    persist a config-file copy when the env var was the source.
-2. **`~/.gbrain/config.json` with 0600 perms** (default for interactive
+2. **`~/.voltmind/config.json` with 0600 perms** (default for interactive
    setup; mirrors how Supabase keys are stored today).
 3. macOS Keychain integration is on the roadmap; not in v1.
 
@@ -210,22 +210,22 @@ Three storage paths in priority order:
   │                  one machine                         │
   │                                                      │
   │  ┌─ worktree A ──────────────┐                       │
-  │  │  GBRAIN_HOME=A/.conductor │                       │
-  │  │  gbrain serve --port 3001 │── PGLite (code A)     │
+  │  │  VOLTMIND_HOME=A/.conductor │                       │
+  │  │  voltmind serve --port 3001 │── PGLite (code A)     │
   │  └───────────────────────────┘                       │
   │                                                      │
   │  ┌─ worktree B ──────────────┐                       │
-  │  │  GBRAIN_HOME=B/.conductor │                       │
-  │  │  gbrain serve --port 3002 │── PGLite (code B)     │
+  │  │  VOLTMIND_HOME=B/.conductor │                       │
+  │  │  voltmind serve --port 3002 │── PGLite (code B)     │
   │  └───────────────────────────┘                       │
   │                                                      │
-  │  ┌─ default ~/.gbrain ───────┐    HTTP MCP / OAuth   │
-  │  │  gbrain serve --port 3000 │──────────────────────→ remote artifacts
+  │  ┌─ default ~/.voltmind ───────┐    HTTP MCP / OAuth   │
+  │  │  voltmind serve --port 3000 │──────────────────────→ remote artifacts
   │  └───────────────────────────┘                        (Supabase / brain-host)
   │                                                      │
   │  Agent's MCP config (Hermes / Claude Desktop):       │
-  │    mcp__gbrain_code__*       → http://localhost:3001 │
-  │    mcp__gbrain_artifacts__*  → http://brain-host/mcp │
+  │    mcp__voltmind_code__*       → http://localhost:3001 │
+  │    mcp__voltmind_artifacts__*  → http://brain-host/mcp │
   └──────────────────────────────────────────────────────┘
 ```
 
@@ -245,25 +245,25 @@ When it fits:
 
 ### How it works
 
-`GBRAIN_HOME` selects which `~/.gbrain` directory is active. Set per worktree:
+`VOLTMIND_HOME` selects which `~/.voltmind` directory is active. Set per worktree:
 
 ```bash
-export GBRAIN_HOME=/path/to/worktree-A/.conductor/gbrain
-gbrain init --pglite
-gbrain serve --http --port 3001
+export VOLTMIND_HOME=/path/to/worktree-A/.conductor/voltmind
+voltmind init --pglite
+voltmind serve --http --port 3001
 ```
 
-Each worktree's `gbrain serve` instance binds its own port and indexes its
-own DB. Multiple `gbrain serve` processes coexist fine — they're separate
+Each worktree's `voltmind serve` instance binds its own port and indexes its
+own DB. Multiple `voltmind serve` processes coexist fine — they're separate
 OS processes with separate config and separate connection pools.
 
-The artifact brain runs as a separate `gbrain serve` instance with the
-default `~/.gbrain` (no GBRAIN_HOME override) — or remote, in which case
+The artifact brain runs as a separate `voltmind serve` instance with the
+default `~/.voltmind` (no VOLTMIND_HOME override) — or remote, in which case
 it's a Topology 2 setup.
 
 The agent's MCP client config lists multiple servers, each with a unique
 alias. Tool names are namespaced as `mcp__<alias>__<tool>`, so the agent
-calls `mcp__gbrain_code__search` for code lookups and `mcp__gbrain_artifacts__search`
+calls `mcp__voltmind_code__search` for code lookups and `mcp__voltmind_artifacts__search`
 for artifact lookups.
 
 ### Recommended embedding model
@@ -274,8 +274,8 @@ Voyage's code-tuned model at init time so the config can't be lost to a
 later `init` overwrite:
 
 ```bash
-export GBRAIN_HOME=/path/to/worktree-A/.conductor/gbrain
-gbrain init --pglite \
+export VOLTMIND_HOME=/path/to/worktree-A/.conductor/voltmind
+voltmind init --pglite \
   --embedding-model voyage:voyage-code-3 \
   --embedding-dimensions 1024
 ```
@@ -287,54 +287,54 @@ brains, switch with the one-command wipe-and-reinit (preserves every
 other config field):
 
 ```bash
-gbrain reinit-pglite --embedding-model voyage:voyage-code-3 --embedding-dimensions 1024
-gbrain reindex --code --yes
+voltmind reinit-pglite --embedding-model voyage:voyage-code-3 --embedding-dimensions 1024
+voltmind reindex --code --yes
 ```
 
-(`gbrain config set embedding_model` is refused as of v0.37.11.0 because
+(`voltmind config set embedding_model` is refused as of v0.37.11.0 because
 the schema column has to resize alongside the config.)
 
-`gbrain reindex --code` prints a recommendation when the configured
+`voltmind reindex --code` prints a recommendation when the configured
 embedding model isn't code-tuned. Suppress with
-`GBRAIN_NO_CODE_MODEL_NUDGE=1` if you've intentionally chosen another
+`VOLTMIND_NO_CODE_MODEL_NUDGE=1` if you've intentionally chosen another
 provider (single-vendor procurement, compliance, no Voyage key).
 
 ### CRITICAL: alias-level routing is manual
 
-Topology 3 has no smart per-tool routing inside gbrain. The agent picks
+Topology 3 has no smart per-tool routing inside voltmind. The agent picks
 which brain to query when it picks the alias. **A wrong alias writes (or
 queries) the wrong brain silently.** This is intentional (explicit beats
 magic) but real:
 
-- If the agent calls `mcp__gbrain_artifacts__put_page` with code-shaped
+- If the agent calls `mcp__voltmind_artifacts__put_page` with code-shaped
   content, that page lands in the artifact brain forever.
-- If the agent calls `mcp__gbrain_code__search` for a question that
+- If the agent calls `mcp__voltmind_code__search` for a question that
   actually wants artifact context, the search comes back empty.
 
 Mitigations:
 
-- Name aliases clearly. `gbrain_code` vs `gbrain_artifacts` is unambiguous;
-  `gbrain` vs `gbrain_local` is not.
+- Name aliases clearly. `voltmind_code` vs `voltmind_artifacts` is unambiguous;
+  `voltmind` vs `voltmind_local` is not.
 - Document in your agent's system prompt or rules which alias goes where.
-  Be explicit about "code questions → `gbrain_code`; everything else →
-  `gbrain_artifacts`."
+  Be explicit about "code questions → `voltmind_code`; everything else →
+  `voltmind_artifacts`."
 - Pair Topology 3 with `gstack`'s per-worktree wiring (which sets the
   alias names + agent rules consistently across worktrees).
 
 ### Setup (manual; gstack automates this side)
 
-The gbrain side requires zero new code — `GBRAIN_HOME` and `--port` already
+The voltmind side requires zero new code — `VOLTMIND_HOME` and `--port` already
 exist. Setup looks like:
 
 ```bash
-# Start the artifact brain (default ~/.gbrain) on port 3000
-gbrain serve --http --port 3000 &
+# Start the artifact brain (default ~/.voltmind) on port 3000
+voltmind serve --http --port 3000 &
 
 # Start a per-worktree code brain on port 3001
-export GBRAIN_HOME=/path/to/worktree-A/.conductor/gbrain
-gbrain init --pglite
-gbrain serve --http --port 3001 &
-unset GBRAIN_HOME
+export VOLTMIND_HOME=/path/to/worktree-A/.conductor/voltmind
+voltmind init --pglite
+voltmind serve --http --port 3001 &
+unset VOLTMIND_HOME
 ```
 
 Then configure the agent's MCP config with two entries (different aliases,
@@ -343,12 +343,12 @@ different ports). For Claude Desktop:
 ```jsonc
 {
   "mcpServers": {
-    "gbrain_artifacts": {
+    "voltmind_artifacts": {
       "type": "url",
       "url": "http://localhost:3000/mcp",
       "headers": { "Authorization": "Bearer <token-A>" }
     },
-    "gbrain_code": {
+    "voltmind_code": {
       "type": "url",
       "url": "http://localhost:3001/mcp",
       "headers": { "Authorization": "Bearer <token-B>" }
@@ -359,7 +359,7 @@ different ports). For Claude Desktop:
 
 The gstack-side wiring (per-worktree home setup, port allocation, automatic
 MCP config generation, gitignore for the per-worktree DB) is in the gstack
-repo's setup-gbrain skill — it composes these primitives, gbrain doesn't
+repo's setup-voltmind skill — it composes these primitives, voltmind doesn't
 have to know about Conductor.
 
 ## Combining topologies
@@ -368,28 +368,28 @@ The three shapes compose. A single machine can run:
 
 - A thin-client default config pointing at a remote artifact brain
   (Topology 2).
-- Plus per-worktree code brains under their own `GBRAIN_HOME` (Topology 3).
-- Each worktree's `gbrain serve` instance is local; the agent's MCP config
+- Plus per-worktree code brains under their own `VOLTMIND_HOME` (Topology 3).
+- Each worktree's `voltmind serve` instance is local; the agent's MCP config
   lists them alongside the remote artifact brain.
 
-`GBRAIN_HOME` controls which config file is active for any one CLI
-invocation. `gbrain serve --port` controls which port a server listens on.
+`VOLTMIND_HOME` controls which config file is active for any one CLI
+invocation. `voltmind serve --port` controls which port a server listens on.
 The agent's MCP client picks the alias and thus the destination per tool
-call. There's no global gbrain orchestrator that knows about all of them
+call. There's no global voltmind orchestrator that knows about all of them
 simultaneously — that's by design.
 
 ## When NOT to use these topologies
 
 - **Don't use Topology 2 if your agent only ever runs on the same machine
-  as the brain.** A local `gbrain` install + `gbrain serve` (stdio) is
+  as the brain.** A local `voltmind` install + `voltmind serve` (stdio) is
   simpler and faster.
 - **Don't use Topology 3 if you only have one Conductor worktree at a
   time.** Per-worktree engines exist to prevent contention; one-at-a-time
   use has no contention.
 - **Don't use a `remote_mcp` thin client AND a local engine on the same
-  machine in the same `GBRAIN_HOME`.** The dispatch guard refuses DB-bound
+  machine in the same `VOLTMIND_HOME`.** The dispatch guard refuses DB-bound
   commands when `remote_mcp` is set. If you genuinely want both modes on
-  one machine, use `GBRAIN_HOME` to separate them (one home for the thin
+  one machine, use `VOLTMIND_HOME` to separate them (one home for the thin
   client, another for the local engine).
 
 ## See also
@@ -397,7 +397,7 @@ simultaneously — that's by design.
 - `docs/architecture/brains-and-sources.md` — in-brain organization (brains
   vs sources axes).
 - `docs/mcp/CLAUDE_DESKTOP.md` and siblings — per-client MCP setup.
-- `gbrain init --help` and `gbrain auth --help` for command-level details.
+- `voltmind init --help` and `voltmind auth --help` for command-level details.
 - [`docs/tutorials/`](../tutorials/) — end-to-end walkthroughs that combine
   these topologies into working setups (company brain, personal brain,
   agent integration, etc.).

@@ -37,18 +37,35 @@ If you are writing or reviewing an operation, consult:
 
 ## Common tasks
 
-- **Initialize local brain:** `voltmind init`
-- **Capture content:** `voltmind capture "note text"` or
-  `voltmind capture --file ./note.md --slug inbox/example`
-- **Import markdown:** `voltmind import ./notes --no-embed`
-- **Migrate raw files:** `voltmind files mirror ./notes`,
-  `voltmind files redirect ./notes`, `voltmind files clean ./notes --yes`,
-  or `voltmind files upload-raw ./asset.pdf --page inbox/example`
-- **Embed content:** `voltmind embed --stale`
-- **Search:** `voltmind search "keyword"` or `voltmind query "question"`
-- **Serve MCP:** `voltmind serve` for stdio or `voltmind serve --http --port 7331`
-- **Inspect tools:** `voltmind --tools-json`
-- **Check health:** `voltmind status`, `voltmind doctor --fast`, `voltmind health`
+- **Configure:** [`docs/ENGINES.md`](./docs/ENGINES.md),
+  [`docs/guides/live-sync.md`](./docs/guides/live-sync.md),
+  [`docs/mcp/DEPLOY.md`](./docs/mcp/DEPLOY.md).
+- **Debug:** [`docs/VOLTMIND_VERIFY.md`](./docs/VOLTMIND_VERIFY.md),
+  [`docs/guides/minions-fix.md`](./docs/guides/minions-fix.md), `voltmind doctor --fix`.
+- **Migrate / upgrade:** `voltmind upgrade` (binary self-update + schema
+  migrations + post-upgrade prompts),
+  [`docs/UPGRADING_DOWNSTREAM_AGENTS.md`](./docs/UPGRADING_DOWNSTREAM_AGENTS.md),
+  [`skills/migrations/`](./skills/migrations/), `voltmind apply-migrations --yes`
+  (manual schema-only).
+- **Eval retrieval changes:** capture is off by default. To benchmark a
+  retrieval change against real captured queries, set
+  `VOLTMIND_CONTRIBUTOR_MODE=1`, then `voltmind eval export --since 7d > base.ndjson`
+  and `voltmind eval replay --against base.ndjson`. For public benchmark
+  coverage (LongMemEval, ground-truth scoring), `voltmind eval longmemeval
+  <dataset.jsonl>` (v0.28.8) runs against an isolated in-memory PGLite per
+  question — your `VOLTMIND_HOME` is never opened. Full guide:
+  [`docs/eval-bench.md`](./docs/eval-bench.md).
+- **Drive the brain to a target health score (v0.36.4.0):** the one-command loop.
+  `voltmind doctor --remediation-plan --json` previews what would be fixed;
+  `voltmind doctor --remediate --yes --target-score 90 --max-usd 5` walks a
+  dependency-ordered plan (sync before extract, embed after consolidate),
+  re-checking score between every step, refusing to spend past the cost cap.
+  Empty brains (no entity pages) or unconfigured embedding keys hit a
+  `max_reachable_score` ceiling and bail with what's missing. Three phase
+  handlers (synthesize / patterns / consolidate) are PROTECTED — only trusted
+  local callers can submit them; MCP cannot. Reference:
+  [`docs/architecture/topologies.md`](./docs/architecture/topologies.md) and
+  the CHANGELOG entry for v0.36.4.0.
 
 ## Phase D-E agent protocol
 
@@ -105,9 +122,10 @@ stderr, and follow the relevant VoltMind upgrade guide before taking action.
 
 ### Phase E: Production agent guide
 
-The inherited production guide is at `docs/GBRAIN_SKILLPACK.md`. Treat it as an
-architecture reference, not a literal command sheet: translate `gbrain` examples
-to the VoltMind MVP command surface and skip frozen automation.
+The inherited production patterns are retained as architecture context in the
+repository's skill and convention docs. Treat inherited examples as reference
+only, not as a literal command sheet: use the VoltMind MVP surface and skip
+frozen automation.
 
 Key patterns to carry into agent behavior:
 
@@ -119,13 +137,13 @@ Key patterns to carry into agent behavior:
 - Quality convention: follow `skills/conventions/quality.md` for citations,
   back-linking, and the notability gate.
 
-Ambient entity detection, unsourced background enrichment, and arbitrary
-Minion submit/worker control remain outside the MVP route. Autopilot is a
-public **host-local** capability only for Postgres/Supabase deployments, with
-the supervised worker topology documented in
-`docs/operations/windows-autopilot-reliability.md`. PGLite supports manual and
-inline maintenance but not the supervised Minions worker. Remote MCP never
-exposes scheduler installation, queue control, credentials, or host files.
+Ambient entity detection and unsourced background enrichment remain outside the
+MVP route. The Autopilot/Minions boundary is explicit: **PGLite does not
+support it; Postgres/Supabase supports it only as a host-local capability; MCP
+does not support or expose it.** PGLite remains suitable for manual and inline
+maintenance. The supervised worker topology is documented in
+`docs/operations/windows-autopilot-reliability.md`; remote MCP never exposes
+scheduler installation, queue control, credentials, or host files.
 Use explicit `capture`, `import`, `search`, `query`, `get`, `put`, `link`,
 `timeline-add`, `sync`, `embed`, and host-local `files` migration commands for
 the local-first path.
