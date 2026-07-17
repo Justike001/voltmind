@@ -136,6 +136,30 @@ page_types:
     aliases: [process, standard, sop]
     extractable: true
     expert_routing: false
+  - name: source_teams
+    primitive: media
+    path_prefixes: [sources/teams/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: source_meeting
+    primitive: media
+    path_prefixes: [sources/meetings/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: source_email
+    primitive: media
+    path_prefixes: [sources/emails/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: source_calendar
+    primitive: media
+    path_prefixes: [sources/calendar/]
+    aliases: []
+    extractable: false
+    expert_routing: false
   - name: source
     primitive: media
     path_prefixes: [sources/]
@@ -258,6 +282,18 @@ filing_rules:
   - kind: source
     directory: sources/
     examples: [sources/meeting-transcript-2026-06]
+  - kind: source_teams
+    directory: sources/teams/
+    examples: [sources/teams/chat-2026-07-17-topic]
+  - kind: source_meeting
+    directory: sources/meetings/
+    examples: [sources/meetings/2026-07-17-weekly-sync]
+  - kind: source_email
+    directory: sources/emails/
+    examples: [sources/emails/2026-07-17-subject]
+  - kind: source_calendar
+    directory: sources/calendar/
+    examples: [sources/calendar/2026-07-17-event]
   - kind: daily
     directory: daily/
     examples: [daily/2026-06-01]

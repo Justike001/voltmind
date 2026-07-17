@@ -29,7 +29,7 @@ Primary pages hold context. State pages hold structured operational status and b
 10. Stable reusable concept, method, framework, or model -> `concepts/`
 11. Raw possibility, product thought, thesis, bet, or observation not yet active -> `ideas/`
 13. Governance protocol, privacy rule, publish contract, source-of-truth rule, approval rule -> `policy/`
-14. Raw material or pointer to source material -> `sources/`
+14. Raw material or pointer to source material -> `sources/`; route Teams chat to `sources/teams/`, meeting transcripts to `sources/meetings/`, email to `sources/emails/`, and calendar records to `sources/calendar/`.
 15. Proposed publishable update from Personal Brain to Team/Company Brain -> `contribution/candidates/`
 16. Explicitly non-contributable private material -> `private/`
 17. Dead, obsolete, or historical page -> `archive/`

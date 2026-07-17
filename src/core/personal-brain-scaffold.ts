@@ -50,7 +50,7 @@ Never publish raw daily or private content. Create a reviewed, redacted contribu
 - concepts/ - reusable concepts
 - ideas/ - raw possibilities
 - policy/ - Phase 0 governance protocol
-- sources/ - raw materials or pointers
+- sources/ - raw materials or pointers (teams/, meetings/, emails/, calendar/)
 - contribution/ - candidate/review/published promotion records
 - private/ - never-contributable private material
 - archive/ - historical pages
@@ -263,6 +263,10 @@ const REQUIRED_DIRS = [
   'private',
   'projects',
   'sources',
+  'sources/teams',
+  'sources/meetings',
+  'sources/emails',
+  'sources/calendar',
   'state/actions',
   'state/commitments',
   'state/decisions',

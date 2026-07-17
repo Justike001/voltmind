@@ -13,7 +13,7 @@ related_entities: []
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 status: active
-source_type: meeting_transcript | email | teams_thread | crm_record | ticket | web | pdf | api_response | other
+source_type: meeting_transcript | email | teams_thread | calendar_event | crm_record | ticket | web | pdf | api_response | other
 source_url:
 captured_at: YYYY-MM-DDTHH:MM:SSZ
 related_pages: []
@@ -23,6 +23,10 @@ tags: []
 # Source Title
 
 > What this source is and what distilled pages reference it.
+
+> **Directory:** use `sources/teams/`, `sources/meetings/`,
+> `sources/emails/`, or `sources/calendar/` for those evidence channels;
+> otherwise keep the item directly under `sources/`.
 
 ## Summary
 

@@ -17,7 +17,6 @@ the VoltMind runtime checkout unless that checkout is itself the source vault:
 storage:
   # Durable, human-reviewed knowledge, governance, and audit records.
   db_tracked:
-    - archive/
     - artifacts/
     - companies/
     - concepts/
@@ -28,7 +27,6 @@ storage:
     - people/
     - policy/
     - projects/
-    - sources/teams/
     - state/actions/
     - state/commitments/
     - state/decisions/
@@ -39,10 +37,14 @@ storage:
   # Private, temporary, raw, or reproducibly derived material. This is a Git
   # visibility policy, not an access-control or encryption boundary.
   db_only:
+    - archive/
     - daily/
     - inbox/
     - private/
-    - sources/
+    - sources/teams/
+    - sources/meetings/
+    - sources/emails/
+    - sources/calendar/
     - state/indexes/
 ```
 
@@ -52,25 +54,39 @@ management, storage-status accounting, and `voltmind export --restore-only`.
 
 The Personal Brain schema makes the distinction explicit:
 
-- `sources/teams/` is a reviewed and redacted evidence/audit exception, so it
-  is `db_tracked`.
-- Other `sources/` material is raw input and can be high-volume, so it is
-  `db_only`; `daily/`, `inbox/`, `private/`, and `state/indexes/` are likewise
-  private, transient, or reproducibly derived.
+- `archive/` contains historical/dead pages and is retained in the database,
+  not Git history.
+- `sources/` is a raw-input namespace with precise child-directory rules:
+  `sources/teams/` holds Teams evidence, `sources/meetings/` is reserved for
+  independent meeting recording/transcription output, `sources/emails/` holds
+  email evidence, and `sources/calendar/` holds calendar evidence. All four
+  source tiers are `db_only`; `daily/`, `inbox/`, `private/`, and
+  `state/indexes/` are likewise private, transient, or reproducibly derived.
 - `state/actions/`, `state/commitments/`, `state/decisions/`, and
   `state/risks/` are small operational records with owners and evidence, not
   disposable generated indexes, so they are `db_tracked`.
 
-Because `sources/` is `db_only` while `sources/teams/` is an exception, retain
-the schema README files and the Teams subtree with explicit `.gitignore`
-negation rules after VoltMind's managed block:
+Because these schema directories are `db_only`, retain their README resolver
+files with explicit `.gitignore` negation rules after VoltMind's managed block:
 
 ```gitignore
+!archive/
+archive/*
+!archive/README.md
 !sources/
-sources/*
 !sources/README.md
 !sources/teams/
-!sources/teams/**
+sources/teams/*
+!sources/teams/README.md
+!sources/meetings/
+sources/meetings/*
+!sources/meetings/README.md
+!sources/emails/
+sources/emails/*
+!sources/emails/README.md
+!sources/calendar/
+sources/calendar/*
+!sources/calendar/README.md
 ```
 
 Add equivalent README exceptions for any `db_only` directory whose README is

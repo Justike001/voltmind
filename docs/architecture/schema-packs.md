@@ -15,7 +15,9 @@ an initialized vault:
 
 - Primary homes: `inbox/`, `daily/`, `people/`, `orgs/`, `companies/`,
   `workstreams/`, `projects/`, `meetings/`, `artifacts/`, `concepts/`,
-  `ideas/`, `policy/`, `sources/`, `private/`, and `archive/`.
+  `ideas/`, `policy/`, `sources/`, `private/`, and `archive/`. Raw Teams,
+  meeting, email, and calendar evidence uses `sources/teams/`,
+  `sources/meetings/`, `sources/emails/`, and `sources/calendar/`.
 - Derived state: `state/decisions/`, `state/commitments/`,
   `state/actions/`, `state/risks/`, and `state/indexes/`.
 - Contribution records: `contribution/candidates/`, `published/`,
