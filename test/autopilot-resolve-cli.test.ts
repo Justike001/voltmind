@@ -1,5 +1,5 @@
 /**
- * Tests for resolveGbrainCliPath() — picks the right executable to supervise
+ * Tests for resolveVoltMindCliPath() — picks the right executable to supervise
  * as the Minions worker child.
  *
  * Iron rule (regression guard for Bug 4, v0.14.0 upgrade night): the resolver
@@ -10,13 +10,13 @@
  */
 
 import { describe, test, expect } from 'bun:test';
-import { resolveGbrainCliPath } from '../src/commands/autopilot.ts';
+import { resolveVoltMindCliPath } from '../src/commands/autopilot.ts';
 
-describe('resolveGbrainCliPath', () => {
+describe('resolveVoltMindCliPath', () => {
   test('returns a non-empty string or throws with a clear install hint', () => {
     let path: string;
     try {
-      path = resolveGbrainCliPath();
+      path = resolveVoltMindCliPath();
     } catch (e) {
       // Machine without voltmind on PATH and no compiled binary: throw is
       // expected. The error message must point the user at the install step.
@@ -34,7 +34,7 @@ describe('resolveGbrainCliPath', () => {
     const origExec = (process as { execPath?: string }).execPath;
     process.argv[1] = '/some/project/src/cli.ts';
     try {
-      const path = resolveGbrainCliPath();
+      const path = resolveVoltMindCliPath();
       // Either we got a real executable (shim on PATH from the test machine)
       // or the throw path fires. Either way, the return value is never .ts.
       expect(path.endsWith('.ts')).toBe(false);
@@ -54,7 +54,7 @@ describe('resolveGbrainCliPath', () => {
     const origArg1 = process.argv[1];
     process.argv[1] = '/some/project/src/cli.ts';
     try {
-      const path = resolveGbrainCliPath();
+      const path = resolveVoltMindCliPath();
       // On a machine where `which voltmind` resolves, path ends in /voltmind.
       // On a machine without, we throw. Both outcomes prove the resolver
       // did not short-circuit on the .ts suffix.
@@ -72,7 +72,7 @@ describe('resolveGbrainCliPath', () => {
     const origArg1 = process.argv[1];
     process.argv[1] = '/usr/local/bin/voltmind';
     try {
-      const path = resolveGbrainCliPath();
+      const path = resolveVoltMindCliPath();
       // On a machine with `which voltmind`, we get the shim. On a machine
       // without, argv[1] fallback fires. Either way the result is valid.
       expect(path.endsWith('/voltmind') || path.endsWith('\\voltmind.exe')).toBe(true);

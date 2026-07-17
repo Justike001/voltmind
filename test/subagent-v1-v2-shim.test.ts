@@ -9,7 +9,7 @@ const { adaptContentBlocksToChatBlocks, loadPriorToolsV2 } = __testing as any;
  * v0.38 Slice 1 — D5 read-time content_blocks shim.
  *
  * The crash-replay reconciliation key in v0.38+ is a voltmind-owned UUID v7
- * (ordinal + gbrain_tool_use_id columns added in migration v81). Pre-v0.38
+ * (ordinal + voltmind_tool_use_id columns added in migration v81). Pre-v0.38
  * rows used Anthropic's provider-supplied tool_use_id as the key and stored
  * Anthropic-shaped content blocks ({type:'tool_use', id, ...}). The shim is
  * what lets crash-replay reconcile across the binary upgrade boundary —
@@ -18,7 +18,7 @@ const { adaptContentBlocksToChatBlocks, loadPriorToolsV2 } = __testing as any;
  *
  * Tests pin both shim functions:
  *   - adaptContentBlocksToChatBlocks: v1 Anthropic blocks → v2 ChatBlocks
- *   - loadPriorToolsV2: v1 rows (ordinal=NULL, gbrain_tool_use_id=NULL)
+ *   - loadPriorToolsV2: v1 rows (ordinal=NULL, voltmind_tool_use_id=NULL)
  *     synthesize a stable key from (jobId, msgIdx, tool_use_id, tool_name)
  *     so the gateway-loop reconciler sees them keyed alongside v2 rows.
  */
@@ -159,7 +159,7 @@ describe('loadPriorToolsV2 (D5 — synthesizes stable keys for v1 rows)', () => 
     expect(rows).toEqual([]);
   });
 
-  it('uses gbrain_tool_use_id as stable key for v2 rows', async () => {
+  it('uses voltmind_tool_use_id as stable key for v2 rows', async () => {
     // Seed a minion_jobs row + v2 tool execution.
     const job = await engine.executeRaw<{ id: number }>(
       `INSERT INTO minion_jobs (name, status, data, queue, priority, created_at)
@@ -171,7 +171,7 @@ describe('loadPriorToolsV2 (D5 — synthesizes stable keys for v1 rows)', () => 
     await engine.executeRaw(
       `INSERT INTO subagent_tool_executions
          (job_id, message_idx, tool_use_id, tool_name, input, status,
-          schema_version, ordinal, gbrain_tool_use_id, output)
+          schema_version, ordinal, voltmind_tool_use_id, output)
        VALUES ($1, 0, 'toolu_provider', 'search', '{}'::jsonb, 'complete',
                2, 0, $2::uuid, '"results"'::jsonb)`,
       [jobId, gbrainId],
@@ -183,7 +183,7 @@ describe('loadPriorToolsV2 (D5 — synthesizes stable keys for v1 rows)', () => 
     expect(rows[0].output).toBe('results');
   });
 
-  it('synthesizes a legacy-prefixed stable key for v1 rows (ordinal NULL, gbrain_tool_use_id NULL)', async () => {
+  it('synthesizes a legacy-prefixed stable key for v1 rows (ordinal NULL, voltmind_tool_use_id NULL)', async () => {
     const job = await engine.executeRaw<{ id: number }>(
       `INSERT INTO minion_jobs (name, status, data, queue, priority, created_at)
        VALUES ('subagent', 'active', '{}'::jsonb, 'default', 0, now())
@@ -231,19 +231,19 @@ describe('loadPriorToolsV2 (D5 — synthesizes stable keys for v1 rows)', () => 
        RETURNING id`,
     );
     const jobId = job[0].id;
-    // v1 row: ordinal NULL, gbrain_tool_use_id NULL
+    // v1 row: ordinal NULL, voltmind_tool_use_id NULL
     await engine.executeRaw(
       `INSERT INTO subagent_tool_executions
          (job_id, message_idx, tool_use_id, tool_name, input, status, schema_version, output)
        VALUES ($1, 0, 'toolu_v1', 'search', '{}'::jsonb, 'complete', 1, '"v1 result"'::jsonb)`,
       [jobId],
     );
-    // v2 row: ordinal + gbrain_tool_use_id populated
+    // v2 row: ordinal + voltmind_tool_use_id populated
     const gbrainId = '01987654-3210-7000-8000-000000000002';
     await engine.executeRaw(
       `INSERT INTO subagent_tool_executions
          (job_id, message_idx, tool_use_id, tool_name, input, status,
-          schema_version, ordinal, gbrain_tool_use_id, output)
+          schema_version, ordinal, voltmind_tool_use_id, output)
        VALUES ($1, 2, 'toolu_v2', 'get_page', '{}'::jsonb, 'complete',
                2, 0, $2::uuid, '"v2 result"'::jsonb)`,
       [jobId, gbrainId],

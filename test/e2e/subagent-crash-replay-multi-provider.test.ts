@@ -9,9 +9,9 @@
  *     1. Tool executions marked status='complete' (or 'failed') in the DB
  *        before the crash MUST NOT be re-executed.
  *     2. The reconciliation key MUST work across provider response shapes
- *        — the voltmind-owned stable key (ordinal + gbrain_tool_use_id from
+ *        — the voltmind-owned stable key (ordinal + voltmind_tool_use_id from
  *        migration v81) is the canonical key, not the provider tool_use_id.
- *     3. Legacy v1 rows (pre-v0.38, ordinal=NULL, gbrain_tool_use_id=NULL)
+ *     3. Legacy v1 rows (pre-v0.38, ordinal=NULL, voltmind_tool_use_id=NULL)
  *        get a synthesized stable key via the D5 read-time shim and replay
  *        the same way.
  *
@@ -197,8 +197,8 @@ function buildHandler(toolRegistry: ToolDef[]) {
  *     the crashed worker had ALREADY written before SIGKILL
  *
  * `shape` controls whether the rows are v1 (pre-v0.38: Anthropic content
- * blocks, ordinal=NULL, gbrain_tool_use_id=NULL) or v2 (post-v0.38:
- * ChatBlock content, ordinal+gbrain_tool_use_id populated).
+ * blocks, ordinal=NULL, voltmind_tool_use_id=NULL) or v2 (post-v0.38:
+ * ChatBlock content, ordinal+voltmind_tool_use_id populated).
  */
 async function seedCrashedState(
   prompt: string,
@@ -250,13 +250,13 @@ async function seedCrashedState(
     await engine.executeRaw(
       `INSERT INTO subagent_tool_executions
          (job_id, message_idx, tool_use_id, tool_name, input, status,
-          schema_version, ordinal, gbrain_tool_use_id, output)
+          schema_version, ordinal, voltmind_tool_use_id, output)
        VALUES ($1, 1, $2, 'search', '{}'::jsonb, 'complete',
                2, 0, $3::uuid, $4::jsonb)`,
       [jobId, toolUseId, gbrainId, priorOutput],
     );
   } else {
-    // v1 row: no ordinal, no gbrain_tool_use_id.
+    // v1 row: no ordinal, no voltmind_tool_use_id.
     await engine.executeRaw(
       `INSERT INTO subagent_tool_executions
          (job_id, message_idx, tool_use_id, tool_name, input, status,
@@ -292,7 +292,7 @@ async function makeCrashedCtx(jobId: number, prompt: string, modelId: string): P
 
 describe('SIGKILL crash-replay reconciliation across provider matrix (v0.38 LOAD-BEARING)', () => {
   describe.each(PROVIDER_MATRIX)('provider $providerId', (provider) => {
-    it('replay short-circuits the prior complete tool (v2 shape, gbrain_tool_use_id key)', async () => {
+    it('replay short-circuits the prior complete tool (v2 shape, voltmind_tool_use_id key)', async () => {
       // Stub the SECOND turn — replay should NOT call gateway.chat() for
       // turn 1 (the tool dispatch already happened pre-crash). It should
       // immediately re-feed the tool_result and ask the LLM for the final
@@ -338,7 +338,7 @@ describe('SIGKILL crash-replay reconciliation across provider matrix (v0.38 LOAD
 
       // LOAD-BEARING: v1 legacy rows reconcile via D5 synthesized stable
       // key — the prior tool MUST NOT re-execute even though it predates
-      // the gbrain_tool_use_id column.
+      // the voltmind_tool_use_id column.
       expect(executions.length).toBe(0);
 
       expect(result.result).toBe(provider.finalResponse.text);
@@ -399,7 +399,7 @@ describe('SIGKILL crash-replay reconciliation across provider matrix (v0.38 LOAD
       await engine.executeRaw(
         `INSERT INTO subagent_tool_executions
            (job_id, message_idx, tool_use_id, tool_name, input, status,
-            schema_version, ordinal, gbrain_tool_use_id)
+            schema_version, ordinal, voltmind_tool_use_id)
          VALUES ($1, 1, 'tc-pending', 'put_page', '{}'::jsonb, 'pending',
                  2, 0, $2::uuid)`,
         [jobId, gbrainId],
@@ -442,7 +442,7 @@ describe('SIGKILL crash-replay reconciliation across provider matrix (v0.38 LOAD
       await engine.executeRaw(
         `INSERT INTO subagent_tool_executions
            (job_id, message_idx, tool_use_id, tool_name, input, status, error,
-            schema_version, ordinal, gbrain_tool_use_id)
+            schema_version, ordinal, voltmind_tool_use_id)
          VALUES ($1, 1, 'tc-failed', 'search', '{}'::jsonb, 'failed', 'rate limited',
                  2, 0, $2::uuid)`,
         [jobId, gbrainId],

@@ -19,18 +19,53 @@ import {
 } from '../src/core/minions/child-worker-supervisor.ts';
 
 interface Harness {
-  workerScript: string;
+  workerExecutable: string;
+  workerArgs: string[];
   cleanup: () => void;
 }
 
 function makeHarness(name: string, body: string): Harness {
   const root = join(tmpdir(), `voltmind-cws-test-${name}-${process.pid}-${Date.now()}`);
   mkdirSync(root, { recursive: true });
-  const workerScript = join(root, 'worker.sh');
-  writeFileSync(workerScript, `#!/bin/sh\n${body}\n`, 'utf8');
-  chmodSync(workerScript, 0o755);
+  let workerExecutable: string;
+  let workerArgs: string[];
+  if (process.platform === 'win32') {
+    // Windows uses native Bun to execute JavaScript, never the POSIX shell fixture.
+    const workerScript = join(root, 'worker.js');
+    const mode = body.includes('case $NEXT in')
+      ? 'stable'
+      : body.includes('NEXT % 2')
+        ? 'alternating'
+        : body.trim() === 'exit 0'
+          ? 'clean'
+          : 'unsupported';
+    writeFileSync(workerScript, `
+const fs = require('node:fs');
+const path = require('node:path');
+const mode = ${JSON.stringify(mode)};
+if (mode === 'unsupported') process.exit(2);
+if (mode === 'clean') process.exit(0);
+const counterFile = path.join(__dirname, 'counter');
+let count = 0;
+try { count = Number(fs.readFileSync(counterFile, 'utf8').trim()) || 0; } catch {}
+const next = count + 1;
+fs.writeFileSync(counterFile, String(next));
+if (mode === 'alternating') process.exit(next % 2 === 1 ? 1 : 0);
+if (mode === 'stable') process.exit([1, 0, 1, 1][next - 1] ?? 0);
+process.exit(2);
+`, 'utf8');
+    workerExecutable = process.execPath;
+    workerArgs = [workerScript];
+  } else {
+    const workerScript = join(root, 'worker.sh');
+    writeFileSync(workerScript, `#!/bin/sh\n${body}\n`, 'utf8');
+    chmodSync(workerScript, 0o755);
+    workerExecutable = workerScript;
+    workerArgs = [];
+  }
   return {
-    workerScript,
+    workerExecutable,
+    workerArgs,
     cleanup: () => {
       try {
         rmSync(root, { recursive: true, force: true });
@@ -65,8 +100,8 @@ async function runUntilTerminal(
   const stopAfter = overrides.stopAfterEvents ?? 200;
 
   const sup = new ChildWorkerSupervisor({
-    cliPath: h.workerScript,
-    args: [],
+    cliPath: h.workerExecutable,
+    args: h.workerArgs,
     maxCrashes: overrides.maxCrashes ?? 3,
     _backoffFloorMs: overrides._backoffFloorMs ?? 5,
     cleanRestartBudget: overrides.cleanRestartBudget,
@@ -347,8 +382,8 @@ esac
         const events: ChildSupervisorEvent[] = [];
         let stopping = false;
         const sup = new ChildWorkerSupervisor({
-          cliPath: h.workerScript,
-          args: [],
+          cliPath: h.workerExecutable,
+          args: h.workerArgs,
           maxCrashes: 1,
           _backoffFloorMs: 1,
           isStopping: () => stopping,

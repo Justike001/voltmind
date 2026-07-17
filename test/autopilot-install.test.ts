@@ -58,20 +58,28 @@ describe('detectInstallTarget', () => {
 
   test('returns "ephemeral-container" when RENDER is set', () => {
     if (process.platform === 'darwin') return; // darwin shortcircuits first
+    if (process.platform === 'win32') return; // win32 routes to windows-task
     process.env.RENDER = 'true';
     expect(detectInstallTarget()).toBe('ephemeral-container');
   });
 
   test('returns "ephemeral-container" when RAILWAY_ENVIRONMENT is set', () => {
     if (process.platform === 'darwin') return;
+    if (process.platform === 'win32') return;
     process.env.RAILWAY_ENVIRONMENT = 'production';
     expect(detectInstallTarget()).toBe('ephemeral-container');
   });
 
   test('returns "ephemeral-container" when FLY_APP_NAME is set', () => {
     if (process.platform === 'darwin') return;
+    if (process.platform === 'win32') return;
     process.env.FLY_APP_NAME = 'myapp';
     expect(detectInstallTarget()).toBe('ephemeral-container');
+  });
+
+  test('win32 routes to windows-task and never linux-cron', () => {
+    if (process.platform !== 'win32') return;
+    expect(detectInstallTarget()).toBe('windows-task');
   });
 
   // Note: direct testing of linux-systemd / linux-cron requires mocking

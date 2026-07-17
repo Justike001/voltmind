@@ -20,6 +20,8 @@
 import { MinionSupervisor } from '../../src/core/minions/supervisor.ts';
 import { writeSupervisorEvent } from '../../src/core/minions/handlers/supervisor-audit.ts';
 import type { BrainEngine } from '../../src/core/engine.ts';
+import type { CliInvocation } from '../../src/core/autopilot/cli-invocation.ts';
+import { existsSync } from 'node:fs';
 
 // Mock engine: healthCheck() calls engine.executeRaw; return empty rows so
 // the query path exercises without needing Postgres.
@@ -35,6 +37,14 @@ if (!pidFile) {
 }
 
 const cliPath = process.env.SUP_CLI_PATH ?? '/bin/sh';
+let cliInvocation: CliInvocation | undefined;
+if (process.env.SUP_CLI_PREFIX) {
+  cliInvocation = {
+    executable: cliPath,
+    prefixArgs: JSON.parse(process.env.SUP_CLI_PREFIX) as string[],
+    source: 'native-exe',
+  };
+}
 const maxCrashes = parseInt(process.env.SUP_MAX_CRASHES ?? '3', 10);
 const backoffFloor = parseInt(process.env.SUP_BACKOFF_FLOOR_MS ?? '1', 10);
 const healthInterval = parseInt(process.env.SUP_HEALTH_INTERVAL_MS ?? '999999', 10);
@@ -54,10 +64,25 @@ const supervisor = new MinionSupervisor(mockEngine as BrainEngine, {
   maxCrashes,
   healthInterval,
   cliPath,
+  cliInvocation,
   allowShellJobs,
   json: true,
   _backoffFloorMs: backoffFloor,
   onEvent: (emission) => writeSupervisorEvent(emission, supervisorPid),
 });
+
+// Cross-platform test control: Windows process.kill(SIGTERM) terminates the
+// child instead of delivering the JS signal handler. A stop-file request
+// exercises the same supervisor shutdown path without relying on POSIX signal
+// delivery semantics.
+const stopFile = process.env.SUP_STOP_FILE;
+if (stopFile) {
+  const stopPoll = setInterval(() => {
+    if (!existsSync(stopFile)) return;
+    clearInterval(stopPoll);
+    void (supervisor as unknown as { shutdown(reason: string, exitCode: number): Promise<void> })
+      .shutdown('SIGTERM', 0);
+  }, 10);
+}
 
 await supervisor.start();

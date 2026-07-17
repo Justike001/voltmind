@@ -14,8 +14,14 @@
 
 import { describe, test, expect } from 'bun:test';
 import { classifyReconnectError, generateLaunchdPlist } from '../src/commands/autopilot.ts';
+import { readFileSync } from 'node:fs';
 
 describe('classifyReconnectError (#1162)', () => {
+  test('health recovery uses saved-config reconnect instead of no-argument connect', () => {
+    const src = readFileSync(new URL('../src/commands/autopilot.ts', import.meta.url), 'utf8');
+    expect(src).toContain('await reconnectEngine(engine as any)');
+    expect(src).not.toContain('await (engine as any).connect?.()');
+  });
   test('database_url undefined → unrecoverable (the #1162 fingerprint)', () => {
     const err = new Error('config.database_url undefined');
     expect(classifyReconnectError(err)).toBe('unrecoverable');

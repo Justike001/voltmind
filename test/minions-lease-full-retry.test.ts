@@ -135,6 +135,27 @@ describe('queue.releaseLeaseFullJob (Bug 2 load-bearing)', () => {
   });
 });
 
+describe('queue.releaseRecoverableConnectionJob', () => {
+  test('delays a connection failure without consuming the business retry budget', async () => {
+    await queue.add('connection-retry', {}, { max_attempts: 1 });
+    const { id, lockToken } = await claimJobReal('connection-retry');
+
+    const released = await queue.releaseRecoverableConnectionJob(
+      id,
+      lockToken,
+      'No database connection: connect() has not been called',
+      1500,
+    );
+    expect(released).not.toBeNull();
+
+    const after = await queue.getJob(id);
+    expect(after!.status).toBe('delayed');
+    expect(after!.attempts_made).toBe(0);
+    expect(after!.lock_token).toBeNull();
+    expect(after!.error_text).toContain('No database connection');
+  });
+});
+
 describe('logLeasePressure (Eng D8 audit writer)', () => {
   test('persists denormalized context inline', async () => {
     const job = await queue.add('test-name', {});

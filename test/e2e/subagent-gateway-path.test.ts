@@ -6,7 +6,7 @@
  *   - runSubagentViaGateway builds ChatToolDef[] + ToolHandler Map from ToolDef
  *   - Calls gateway.toolLoop() with persistence callbacks
  *   - Callbacks write subagent_messages (v2 ChatBlock shape) +
- *     subagent_tool_executions (with ordinal + gbrain_tool_use_id) under
+ *     subagent_tool_executions (with ordinal + voltmind_tool_use_id) under
  *     the write-ordering invariant
  *   - Returns SubagentResult mapped from gateway loop result
  *
@@ -237,10 +237,10 @@ describe('runSubagentViaGateway (v0.38 Slice 1 — full handler path through gat
     expect(executions[0].name).toBe('search');
     expect(executions[0].input).toEqual({ q: 'acme' });
 
-    // Verify v2 stable-ID persistence: ordinal + gbrain_tool_use_id populated.
+    // Verify v2 stable-ID persistence: ordinal + voltmind_tool_use_id populated.
     const toolRows = await engine.executeRaw<Record<string, unknown>>(
       `SELECT message_idx, tool_use_id, tool_name, status, ordinal,
-              gbrain_tool_use_id::text AS gbrain_tool_use_id, schema_version
+              voltmind_tool_use_id::text AS voltmind_tool_use_id, schema_version
          FROM subagent_tool_executions
         WHERE job_id = $1`,
       [jobId],
@@ -250,7 +250,7 @@ describe('runSubagentViaGateway (v0.38 Slice 1 — full handler path through gat
     expect(toolRows[0].status).toBe('complete');
     expect(toolRows[0].ordinal).toBe(0);
     expect(toolRows[0].schema_version).toBe(2); // v0.38 write
-    expect(String(toolRows[0].gbrain_tool_use_id)).toMatch(/^[0-9a-f-]{36}$/); // UUID v7
+    expect(String(toolRows[0].voltmind_tool_use_id)).toMatch(/^[0-9a-f-]{36}$/); // UUID v7
     expect(toolRows[0].tool_use_id).toBe('provider-tc-1'); // provider id preserved
 
     // Token accumulation across both turns.

@@ -31,7 +31,7 @@ const mockEngine: Partial<BrainEngine> = {
 
 describe('MinionSupervisor tini detection', () => {
   test('isTiniDetected = false when tini is not on PATH', async () => {
-    // Empty PATH so `which tini` cannot find anything.
+    // Empty PATH so the platform-native resolver cannot find anything.
     await withEnv({ PATH: '' }, async () => {
       const supervisor = new MinionSupervisor(mockEngine as BrainEngine, {
         cliPath: '/bin/echo',
@@ -46,13 +46,19 @@ describe('MinionSupervisor tini detection', () => {
       `voltmind-supervisor-tini-test-${process.pid}-${Date.now()}`,
     );
     mkdirSync(dir, { recursive: true });
-    const fakeTini = join(dir, 'tini');
-    writeFileSync(fakeTini, '#!/bin/sh\nexec "$@"\n', 'utf8');
-    chmodSync(fakeTini, 0o755);
+    const fakeTini = join(dir, process.platform === 'win32' ? 'tini.exe' : 'tini');
+    writeFileSync(
+      fakeTini,
+      process.platform === 'win32' ? 'not-a-real-binary' : '#!/bin/sh\nexec "$@"\n',
+      'utf8',
+    );
+    if (process.platform !== 'win32') chmodSync(fakeTini, 0o755);
     try {
-      // Prepend our fake-tini directory so `which tini` resolves to it.
-      // Keep `/usr/bin:/bin` so `which` itself is locatable on macOS/Linux.
-      await withEnv({ PATH: `${dir}:/usr/bin:/bin` }, async () => {
+      // Prepend our fake-tini directory. Keep the native resolver available.
+      const resolverPath = process.platform === 'win32'
+        ? `${dir};${process.env.SystemRoot ?? 'C:\\Windows'}\\System32`
+        : `${dir}:/usr/bin:/bin`;
+      await withEnv({ PATH: resolverPath }, async () => {
         const supervisor = new MinionSupervisor(mockEngine as BrainEngine, {
           cliPath: '/bin/echo',
         });

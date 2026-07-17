@@ -17,27 +17,63 @@ afterEach(() => {
 interface IntegrationHarness {
   pidFile: string;
   auditDir: string;
+  stopFile: string;
+  workerExecutable: string;
   workerScript: string;
+  workerPrefixArgs: string[];
   envOutFile: string;
   cleanup: () => void;
 }
 
-/** Create per-test temp files + a fake worker shell script. */
+/** Create per-test temp files + a platform-native fake worker. */
 function makeHarness(name: string, workerBody: string): IntegrationHarness {
   const tmpRoot = join(tmpdir(), `voltmind-sup-test-${name}-${process.pid}-${Date.now()}`);
   mkdirSync(tmpRoot, { recursive: true });
   const pidFile = join(tmpRoot, 'supervisor.pid');
   const auditDir = join(tmpRoot, 'audit');
-  const workerScript = join(tmpRoot, 'worker.sh');
+  const stopFile = join(tmpRoot, 'stop');
+  const workerScript = join(tmpRoot, process.platform === 'win32' ? 'worker.js' : 'worker.sh');
   const envOutFile = join(tmpRoot, 'env-out.txt');
 
-  writeFileSync(workerScript, `#!/bin/sh\n${workerBody}\n`, 'utf8');
-  chmodSync(workerScript, 0o755);
+  let workerPrefixArgs: string[] = [];
+  let workerExecutable = workerScript;
+  if (process.platform === 'win32') {
+    // Windows uses Bun to execute JavaScript. The worker accepts the same
+    // `jobs work ...` argv that MinionSupervisor appends to a real CLI.
+    const mode = workerBody.includes('VOLTMIND_ALLOW_SHELL_JOBS')
+      ? 'allow-shell'
+      : workerBody.includes('VOLTMIND_SUPERVISED')
+        ? 'supervised'
+        : workerBody.includes('"$*"')
+          ? 'argv'
+          : 'crash';
+    writeFileSync(workerScript, `
+const fs = require('node:fs');
+const mode = ${JSON.stringify(mode)};
+const outFile = process.env.OUT_FILE;
+if (outFile && (mode === 'allow-shell' || mode === 'supervised' || mode === 'argv')) {
+  let value = 'UNSET';
+  if (mode === 'allow-shell') value = process.env.VOLTMIND_ALLOW_SHELL_JOBS ?? 'UNSET';
+  if (mode === 'supervised') value = process.env.VOLTMIND_SUPERVISED ?? 'UNSET';
+  if (mode === 'argv') value = process.argv.slice(2).join(' ');
+  fs.writeFileSync(outFile, value + '\\n', 'utf8');
+}
+process.exit(1);
+    `, 'utf8');
+    workerExecutable = process.execPath;
+    workerPrefixArgs = [workerScript];
+  } else {
+    writeFileSync(workerScript, `#!/bin/sh\n${workerBody}\n`, 'utf8');
+    chmodSync(workerScript, 0o755);
+  }
 
   return {
     pidFile,
     auditDir,
+    stopFile,
+    workerExecutable,
     workerScript,
+    workerPrefixArgs,
     envOutFile,
     cleanup: () => { try { rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* noop */ } },
   };
@@ -51,11 +87,13 @@ function spawnSupervisor(h: IntegrationHarness, overrides: Record<string, string
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     SUP_PID_FILE: h.pidFile,
-    SUP_CLI_PATH: h.workerScript,
+    SUP_CLI_PATH: h.workerExecutable,
     SUP_AUDIT_DIR: h.auditDir,
+    SUP_STOP_FILE: h.stopFile,
     SUP_BACKOFF_FLOOR_MS: '5',
     SUP_MAX_CRASHES: '3',
     SUP_HEALTH_INTERVAL_MS: '999999',   // effectively off
+    SUP_CLI_PREFIX: JSON.stringify(h.workerPrefixArgs),
     ...overrides,
   };
 
@@ -227,7 +265,7 @@ describe('MinionSupervisor', () => {
   });
 
   describe('integration: graceful SIGTERM during backoff', () => {
-    it('receives SIGTERM while sleeping between crashes and exits 0 cleanly', async () => {
+    it('receives a platform-compatible stop request while sleeping between crashes and exits 0 cleanly', async () => {
       // Worker always exits with code 1; supervisor has a high max-crashes
       // and a long-enough backoff floor that we can reliably catch it mid-sleep.
       const h = makeHarness('sigterm-backoff', 'exit 1');
@@ -249,7 +287,8 @@ describe('MinionSupervisor', () => {
         // Now SIGTERM the supervisor. It must exit cleanly within 200ms
         // (short-circuits the 800ms backoff sleep via the stopping flag).
         const sigSentAt = Date.now();
-        sup.child.kill('SIGTERM');
+        if (process.platform === 'win32') writeFileSync(h.stopFile, 'stop\n');
+        else sup.child.kill('SIGTERM');
 
         const { code, signal } = await sup.exited;
         const elapsed = Date.now() - sigSentAt;
