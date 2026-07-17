@@ -499,10 +499,10 @@ function renderHuman(report: StatusReport): string {
       if (a.running) {
         lines.push(`  running (PID ${a.pid})`);
       } else if (a.lockfile_present) {
-        lines.push(`  stale lockfile (PID ${a.pid ?? '?'} not alive). Autopilot is outside the Windows/PGLite MVP route.`);
+        lines.push(`  stale lockfile (PID ${a.pid ?? '?'} not alive). Autopilot is not running.`);
         lines.push('  Use explicit `voltmind sync --no-pull --no-embed` and `voltmind embed --stale`.');
       } else {
-        lines.push('  not running. Autopilot install is outside the Windows/PGLite MVP route.');
+        lines.push('  not running. Install or start Autopilot to enable background maintenance.');
         lines.push('  Use explicit `voltmind sync --no-pull --no-embed` and `voltmind embed --stale`.');
       }
     }

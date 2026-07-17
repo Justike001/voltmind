@@ -14,7 +14,6 @@ import { configureGateway, reconfigureGatewayWithEngine } from './ai/gateway.ts'
 import type { AIGatewayConfig } from './ai/types.ts';
 import { getCliOptions } from './cli-options.ts';
 import { awaitPendingLastRetrievedWrites } from './last-retrieved.ts';
-import { isVoltMindMvpCliCommand, isVoltMindMvpOperationName } from './mvp-surface.ts';
 import {
   LOCAL_DAEMON_RPC_PROTOCOL_VERSION,
   daemonStatePath,
@@ -68,7 +67,7 @@ class ReadWriteScheduler {
 const daemonOps = new Map<string, Operation>();
 for (const op of operations) {
   const cliName = op.cliHints?.name;
-  if (cliName && !op.cliHints?.hidden && isVoltMindMvpCliCommand(cliName) && isVoltMindMvpOperationName(op.name)) {
+  if (cliName && !op.cliHints?.hidden) {
     daemonOps.set(cliName, op);
   }
 }

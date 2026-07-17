@@ -60,8 +60,8 @@ describe('WARN-5 — `voltmind capture --help` reaches the detailed HELP constan
   });
 });
 
-describe('VoltMind MVP main `voltmind --help` surface', () => {
-  test('output mentions core MVP commands by name', () => {
+describe('VoltMind main `voltmind --help` surface', () => {
+  test('output mentions core commands by name', () => {
     const { stdout, status } = runCli(['--help']);
     expect(status).toBe(0);
     // Must appear as command names (not just words in prose somewhere)
@@ -84,17 +84,25 @@ describe('VoltMind MVP main `voltmind --help` surface', () => {
  expect(stdout).toMatch(/^\s*graph-query\s/m);
   });
 
-  test('advanced inherited commands are hidden from MVP help', () => {
+  test('runtime routes are not rejected by a surface gate', () => {
+    const { stdout, status } = runCli(['takes', 'add', '--help']);
+    expect(status).toBe(0);
+    expect(stdout).toContain('takes <slug>');
+  });
+
+  test('P2.1 and P2.2 host-local commands are discoverable', () => {
     const { stdout } = runCli(['--help']);
-    expect(stdout).not.toMatch(/^\s*brainstorm\s/m);
-    expect(stdout).not.toMatch(/^\s*lsd\s/m);
-    expect(stdout).not.toMatch(/^\s*autopilot\s/m);
-    expect(stdout).not.toMatch(/^\s*think\s/m);
-    expect(stdout).not.toMatch(/^\s*schema\s/m);
-    expect(stdout).not.toMatch(/^\s*code-def\s/m);
-    expect(stdout).not.toMatch(/^\s*founder\s/m);
-    expect(stdout).not.toMatch(/^\s*takes add\s/m);
-    expect(stdout).not.toMatch(/^\s*takes supersede\s/m);
+    for (const command of ['report', 'export', 'features', 'models', 'pages purge-deleted', 'cache', 'lint', 'integrity', 'orphans', 'friction', 'brainstorm', 'lsd', 'book-mirror', 'onboard', 'code-def', 'code-refs', 'code-callers', 'code-callees', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal']) {
+      expect(stdout).toContain(command);
+    }
+  });
+
+  test('P3 supervised, federated, and external runtimes are discoverable', () => {
+    const { stdout } = runCli(['--help']);
+    for (const command of ['agent run', 'agent logs', 'dream', 'mounts', 'remote', 'auth', 'publish', 'integrations']) {
+      expect(stdout).toContain(command);
+    }
+    expect(stdout).toContain('Do not schedule jobs work directly');
   });
 
   test('regression: existing top-level commands still listed', () => {
@@ -119,6 +127,10 @@ describe('VoltMind MVP main `voltmind --help` surface', () => {
     expect(stdout).toContain('conversation-parser');
     expect(stdout).toContain('recall');
     expect(stdout).toContain('candidates');
+    expect(stdout).toContain('skillify');
+    expect(stdout).toContain('skillpack');
+    expect(stdout).toContain('check-resolvable');
+    expect(stdout).toContain('frontmatter');
   });
 
   test('files help reaches migration subcommands without a configured brain', () => {
@@ -131,13 +143,14 @@ describe('VoltMind MVP main `voltmind --help` surface', () => {
     expect(stdout).not.toContain('No brain configured');
   });
 
-  test('advanced inherited commands return a clear MVP message', () => {
-    const { stderr, status } = runCli(['think', '--help']);
-    expect(status).toBe(1);
-    expect(stderr).toContain('not included in the VoltMind MVP runtime yet');
+  test('synthesis / schema / eval commands are listed in help', () => {
+    const { stdout } = runCli(['--help']);
+    expect(stdout).toMatch(/^\s*think <question>/m);
+    expect(stdout).toMatch(/^\s*schema active\|list\|stats/m);
+    expect(stdout).toMatch(/^\s*eval --qrels/m);
   });
 
-  test('jobs help exposes only MVP job subcommands', () => {
+  test('jobs help exposes the available job subcommands including the worker daemon', () => {
     const { stdout, status } = runCli(['jobs', '--help']);
     expect(status).toBe(0);
     expect(stdout).toContain('jobs list');
@@ -149,9 +162,8 @@ describe('VoltMind MVP main `voltmind --help` surface', () => {
     expect(stdout).toContain('jobs undo-report');
     expect(stdout).toContain('jobs plan');
     expect(stdout).toContain('jobs stats');
-    expect(stdout).not.toContain('jobs submit');
-    expect(stdout).not.toContain('jobs work');
-    expect(stdout).not.toContain('jobs supervisor');
+    expect(stdout).toContain('jobs work');
+    expect(stdout).toContain('jobs submit');
   });
 
   test('insight command help reaches detailed help without a configured brain', () => {
@@ -195,11 +207,14 @@ describe('VoltMind MVP main `voltmind --help` surface', () => {
     }
   });
 
-  test('takes mutating subcommands stay outside the MVP public surface', () => {
+  test('takes mutating subcommands are available', () => {
     for (const sub of ['add', 'update', 'supersede', 'resolve', 'scorecard', 'calibration', 'revisit', 'extract']) {
-      const { stderr, status } = runCli(['takes', sub, '--help']);
-      expect(status).toBe(1);
-      expect(stderr).toContain('takes readouts only');
+      const { stdout, status } = runCli(['takes', sub, '--help']);
+      expect(status).toBe(0);
+      expect(stdout).not.toContain('not included in the VoltMind');
     }
-  }, 20000);
+  // This invokes eight separate CLI processes. WSL cold starts are several
+  // seconds each, so retain the assertion while matching the runner's 60s
+  // integration-test ceiling.
+  }, 60000);
 });

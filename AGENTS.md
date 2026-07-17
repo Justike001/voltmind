@@ -1,6 +1,6 @@
 # Agents working on VoltMind
 
-This is the install and operating protocol for the VoltMind MVP runtime.
+This is the install and operating protocol for the VoltMind runtime.
 Claude Code also reads `./CLAUDE.md`; other agents should start here.
 
 
@@ -11,13 +11,11 @@ Claude Code also reads `./CLAUDE.md`; other agents should start here.
    and test layout.
 3. [`./docs/architecture/brains-and-sources.md`](./docs/architecture/brains-and-sources.md)
    - the two-axis mental model (brain = which DB, source = which repo in the DB).
-   In the MVP, the supported brain is the local PGLite brain, but source routing
-   still matters.
+   Brain and source routing both matter.
 4. [`./skills/conventions/brain-routing.md`](./skills/conventions/brain-routing.md)
-   - agent-facing decision table for brain/source routing. Apply only the parts
-   compatible with the MVP public surface.
+   - agent-facing decision table for brain/source routing.
 5. [`./skills/RESOLVER.md`](./skills/RESOLVER.md) - skill dispatcher. Read before
-   any task; update it next so skills stop routing to frozen GBrain features.
+   any task so skills route to the current runtime surface.
 
 
 
@@ -31,7 +29,8 @@ filesystem confinement when `remote = true` and default to strict behavior when 
 If you are writing or reviewing an operation, consult:
 
 - `src/core/operations.ts` for the canonical BrainEngine operation contract.
-- `src/core/mvp-surface.ts` for the current public MVP allowlist.
+- `src/core/operations.ts` and the CLI/MCP dispatchers for the current runtime
+  surface.
 - `src/mcp/dispatch.ts`, `src/mcp/server.ts`, and `src/mcp/http-transport.ts`
   for MCP exposure and remote-call behavior.
 
@@ -69,10 +68,8 @@ If you are writing or reviewing an operation, consult:
 
 ## Phase D-E agent protocol
 
-This repository has been translated from inherited GBrain operator notes to the
-VoltMind MVP runtime. Use `voltmind`, `VOLTMIND_HOME`, `.voltmind-source`, and
-`voltmind.yml`; do not inject `gbrain`, `GBRAIN_*`, `.gbrain`, or `gbrain.yml`
-instructions into agent context.
+This repository uses the VoltMind runtime. Use `voltmind`,
+`VOLTMIND_HOME`, `.voltmind-source`, and `voltmind.yml` in agent context.
 
 
 ### Phase D: Brain-first lookup protocol
@@ -115,17 +112,16 @@ session decisions, and how the user wants the agent to behave. Check VoltMind
 for facts about the world; check agent memory for behavior and prior workflow
 decisions.
 
-No VoltMind self-upgrade marker is active in the MVP public surface. If a future
+No VoltMind self-upgrade marker is active. If a future
 `voltmind` command prints `UPGRADE_AVAILABLE <old> <new>` or
 `JUST_UPGRADED <old> <new>`, surface the marker, do not run commands parsed from
 stderr, and follow the relevant VoltMind upgrade guide before taking action.
 
 ### Phase E: Production agent guide
 
-The inherited production patterns are retained as architecture context in the
-repository's skill and convention docs. Treat inherited examples as reference
-only, not as a literal command sheet: use the VoltMind MVP surface and skip
-frozen automation.
+The production patterns are retained as architecture context in the repository's
+skill and convention docs. Use the full VoltMind runtime surface and its current
+operating guides.
 
 Key patterns to carry into agent behavior:
 
@@ -137,25 +133,19 @@ Key patterns to carry into agent behavior:
 - Quality convention: follow `skills/conventions/quality.md` for citations,
   back-linking, and the notability gate.
 
-Ambient entity detection and unsourced background enrichment remain outside the
-MVP route. The Autopilot/Minions boundary is explicit: **PGLite does not
-support it; Postgres/Supabase supports it only as a host-local capability; MCP
-does not support or expose it.** PGLite remains suitable for manual and inline
-maintenance. The supervised worker topology is documented in
-`docs/operations/windows-autopilot-reliability.md`; remote MCP never exposes
-scheduler installation, queue control, credentials, or host files.
-Use explicit `capture`, `import`, `search`, `query`, `get`, `put`, `link`,
-`timeline-add`, `sync`, `embed`, and host-local `files` migration commands for
-the local-first path.
+Ambient entity detection, enrichment, scheduling, workers, federation, and
+file operations are available through their configured local or remote runtime
+paths. Follow the relevant skill and operating guide for credentials,
+filesystem ownership, and trust-boundary requirements.
 
 ## Before shipping
 
-Use the focused MVP gate first:
+Use the focused runtime gate first:
 
 ```bash
 bun run typecheck
 bun run build
-bun test test/cli-help-discoverability.test.ts test/mvp-surface.test.ts test/mcp-tool-defs.test.ts test/operations-descriptions.test.ts
+bun test test/cli-help-discoverability.test.ts test/mcp-tool-defs.test.ts test/operations-descriptions.test.ts
 ```
 
 `bun run verify` is the broader inherited gate. On Windows, shell-script line endings

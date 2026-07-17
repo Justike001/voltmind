@@ -216,18 +216,13 @@ USAGE
   voltmind recall --supersessions [--since <time>]
   voltmind recall [flags] --json
 
-PUBLIC MVP BOUNDS
-  --watch and --since-last-run are not included in the VoltMind MVP runtime.
+Additional modes
+  --watch and --since-last-run are available for configured local runtimes.
 `);
     return;
   }
   const flags = parseFlags(args);
   validateAndNormalizeFlags(flags);
-  if (flags.watchSeconds !== null || flags.sinceLastRun) {
-    process.stderr.write('Error: recall --watch and --since-last-run are not included in the VoltMind MVP runtime yet.\n');
-    process.exit(1);
-  }
-
   const cfg = loadConfig();
   const thinClient = isThinClient(cfg);
 
@@ -571,7 +566,7 @@ USAGE
   voltmind forget preview <fact-id>
   voltmind forget apply <fact-id> --confirm --reason <text> --source-id <id> --citation <text>
 
-The direct legacy forget path is intentionally not public in the VoltMind MVP runtime.
+The direct legacy forget path remains available for compatibility.
 `);
     return;
   }

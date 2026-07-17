@@ -1007,7 +1007,7 @@ async function initPGLite(opts: {
         console.log('  4. voltmind search "project or meeting"');
       }
       console.log('');
-      console.log('Phase 1 stays local-first: Markdown + PGLite. Publish candidates remain local until reviewed.');
+      console.log('Default stays local-first: Markdown + PGLite. Publish candidates remain local until reviewed.');
       reportModStatus();
       const { printAdvisoryIfRecommended } = await import('../core/skillpack/post-install-advisory.ts');
       const { VERSION } = await import('../version.ts');

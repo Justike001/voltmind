@@ -10,7 +10,6 @@ import type { BrainEngine } from '../core/engine.ts';
 import { operations, OperationError } from '../core/operations.ts';
 import type { Operation, OperationContext, AuthInfo } from '../core/operations.ts';
 import { loadConfig } from '../core/config.ts';
-import { isVoltMindMvpOperationName } from '../core/mvp-surface.ts';
 
 export interface ToolResult {
   content: { type: 'text'; text: string }[];
@@ -226,19 +225,6 @@ export async function dispatchToolCall(
   params: Record<string, unknown> | undefined,
   opts: DispatchOpts = {},
 ): Promise<ToolResult> {
-  if (!isVoltMindMvpOperationName(name)) {
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          error: 'not_in_mvp',
-          message: `Tool not included in the VoltMind MVP runtime yet: ${name}`,
-        }, null, 2),
-      }],
-      isError: true,
-    };
-  }
-
   const op = operations.find(o => o.name === name);
   if (!op) {
     // Always return JSON-shaped error content. v0.31 e2e tests

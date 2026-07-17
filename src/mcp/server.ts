@@ -8,9 +8,6 @@ import { buildToolDefs } from './tool-defs.ts';
 import { dispatchToolCall, validateParams, buildOperationContext } from './dispatch.ts';
 import type { DispatchOpts, ToolResult } from './dispatch.ts';
 import { getBrainHotMemoryMeta } from '../core/facts/meta-hook.ts';
-import { filterVoltMindMvpOperations, isVoltMindMvpOperationName } from '../core/mvp-surface.ts';
-
-const mvpOperations = filterVoltMindMvpOperations(operations);
 
 export type McpToolDispatcher = (
   name: string,
@@ -28,10 +25,10 @@ export async function startMcpServer(
   );
 
   // Generate tool definitions from operations. Extracted to buildToolDefs so
-  // the subagent tool registry (v0.15+) can call the same mapper against a
-  // filtered OPERATIONS subset instead of duplicating this shape.
+  // The subagent tool registry (v0.15+) can call the same mapper against the
+  // complete operation registry instead of duplicating this shape.
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: buildToolDefs(mvpOperations),
+    tools: buildToolDefs(operations),
   }));
 
   // Dispatch tool calls via shared dispatch.ts (parity with HTTP transport).
@@ -103,9 +100,6 @@ export async function handleToolCall(
   params: Record<string, unknown>,
   opts?: { sourceId?: string },
 ): Promise<unknown> {
-  if (!isVoltMindMvpOperationName(tool)) {
-    throw new Error(`Tool not included in the VoltMind MVP runtime yet: ${tool}`);
-  }
   const op = operations.find(o => o.name === tool);
   if (!op) throw new Error(`Unknown tool: ${tool}`);
 

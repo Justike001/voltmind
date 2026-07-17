@@ -3,7 +3,6 @@ import * as db from '../core/db.ts';
 import { LATEST_VERSION, getIdleBlockers } from '../core/migrate.ts';
 import { checkResolvable } from '../core/check-resolvable.ts';
 import type { ResolvableIssue } from '../core/check-resolvable.ts';
-import { VOLTMIND_MVP_SKILL_NAMES } from '../core/mvp-surface.ts';
 import { autoFixDryViolations, type AutoFixReport, type FixOutcome } from '../core/dry-fix.ts';
 import { autoDetectSkillsDirReadOnly } from '../core/repo-root.ts';
 import { loadOrDeriveManifest } from '../core/skill-manifest.ts';
@@ -72,10 +71,6 @@ const DYNAMIC_ENGINE_HEALTH_CHECK_NAMES: Array<Pick<Check, 'name'>> = [
   { name: 'takes_count' },
 ];
 void DYNAMIC_ENGINE_HEALTH_CHECK_NAMES;
-
-function filterMvpResolverIssues(issues: ResolvableIssue[]): ResolvableIssue[] {
-  return issues.filter(issue => VOLTMIND_MVP_SKILL_NAMES.has(issue.skill));
-}
 
 /**
  * Structured doctor report. Stable shape consumed by:
@@ -2817,27 +2812,22 @@ export async function buildChecks(
     }
 
     const report = checkResolvable(skillsDir);
-    const mvpErrors = filterMvpResolverIssues(report.errors);
-    const mvpWarnings = filterMvpResolverIssues(report.warnings);
-    const frozenIssueCount =
-      report.errors.length + report.warnings.length - mvpErrors.length - mvpWarnings.length;
-    if (mvpErrors.length === 0 && mvpWarnings.length === 0) {
+    const resolverErrors = report.errors;
+    const resolverWarnings = report.warnings;
+    if (resolverErrors.length === 0 && resolverWarnings.length === 0) {
       checks.push({
         name: 'resolver_health',
         status: 'ok',
-        message: frozenIssueCount > 0
-          ? `${report.summary.total_skills} skills scanned; MVP-routed skills healthy (${frozenIssueCount} frozen/archive issue(s) ignored)`
-          : `${report.summary.total_skills} skills, all reachable`,
+        message: `${report.summary.total_skills} skills, all reachable`,
       });
     } else {
-      const status = mvpErrors.length > 0 ? 'fail' as const : 'warn' as const;
-      const total = mvpErrors.length + mvpWarnings.length;
+      const status = resolverErrors.length > 0 ? 'fail' as const : 'warn' as const;
+      const total = resolverErrors.length + resolverWarnings.length;
       const check: Check = {
         name: 'resolver_health',
         status,
-        message: `${total} MVP issue(s): ${mvpErrors.length} error(s), ${mvpWarnings.length} warning(s)` +
-          (frozenIssueCount > 0 ? `; ${frozenIssueCount} frozen/archive issue(s) ignored` : ''),
-        issues: [...mvpErrors, ...mvpWarnings].map(i => ({
+        message: `${total} resolver issue(s): ${resolverErrors.length} error(s), ${resolverWarnings.length} warning(s)`,
+        issues: [...resolverErrors, ...resolverWarnings].map(i => ({
           type: i.type,
           skill: i.skill,
           action: i.action,
@@ -4161,7 +4151,7 @@ export async function buildChecks(
   try {
     const health = await engine.getHealth();
     const entityCount = (await engine.executeRaw<{ count: number }>(
-      "SELECT COUNT(*)::int AS count FROM pages WHERE type IN ('entity', 'person', 'company', 'organization')",
+      "SELECT COUNT(*)::int AS count FROM pages WHERE type IN ('entity', 'person', 'company', 'organization') AND deleted_at IS NULL",
     ))[0]?.count ?? 0;
 
     const linkPct = ((health.link_coverage ?? 0) * 100).toFixed(0);
@@ -5733,8 +5723,8 @@ export function skillBrainFirstCheck(skillsDir: string): Check {
       message: `Could not load skills manifest from ${skillsDir} (${msg})`,
     };
   }
-  const mvpSkills = manifest.skills.filter(entry => VOLTMIND_MVP_SKILL_NAMES.has(entry.name));
-  if (mvpSkills.length === 0) {
+  const skills = manifest.skills;
+  if (skills.length === 0) {
     return {
       name: 'skill_brain_first',
       status: 'ok',
@@ -5745,7 +5735,7 @@ export function skillBrainFirstCheck(skillsDir: string): Check {
   const violators: BrainFirstAnalysis[] = [];
   const typoSkills: BrainFirstAnalysis[] = [];
 
-  for (const entry of mvpSkills) {
+  for (const entry of skills) {
     const skillPath = join(skillsDir, entry.path);
     if (!existsSync(skillPath)) continue; // resolver_health already reports
     let content: string;
@@ -5798,7 +5788,7 @@ export function skillBrainFirstCheck(skillsDir: string): Check {
     return {
       name: 'skill_brain_first',
       status: 'ok',
-      message: `${mvpSkills.length} MVP skill(s) compliant or exempt${typoNote}`,
+      message: `${skills.length} skill(s) compliant or exempt${typoNote}`,
     };
   }
 

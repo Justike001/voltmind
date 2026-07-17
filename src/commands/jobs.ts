@@ -10,8 +10,6 @@ import type { MinionJob, MinionJobStatus } from '../core/minions/types.ts';
 import { loadConfig, isThinClient } from '../core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../core/mcp-client.ts';
 
-const MVP_JOB_SUBCOMMANDS = new Set(['list', 'get', 'cancel', 'stats', 'smoke', 'progress', 'failures', 'checkpoints', 'undo-report', 'plan', 'work', 'watch']);
-
 function parseFlag(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);
   return idx >= 0 && idx + 1 < args.length ? args[idx + 1] : undefined;
@@ -134,6 +132,7 @@ export async function runJobs(engine: BrainEngine, args: string[]): Promise<void
     console.log(`voltmind jobs - background job queue
 
 USAGE
+  voltmind jobs submit <name> [--data JSON]
   voltmind jobs list [--status S] [--queue Q] [--limit N]
   voltmind jobs get <id>
   voltmind jobs cancel <id>
@@ -160,11 +159,6 @@ Usage:
   --json          Emit newline-delimited JSON snapshots instead of a TTY dashboard.
 `);
     return;
-  }
-
-  if (!MVP_JOB_SUBCOMMANDS.has(sub)) {
-    console.error(`voltmind jobs ${sub} is not included in the VoltMind MVP runtime yet.`);
-    process.exit(1);
   }
 
   const queue = new MinionQueue(engine);

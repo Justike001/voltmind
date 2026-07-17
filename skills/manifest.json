@@ -2,7 +2,7 @@
   "name": "voltmind",
   "version": "0.32.3.0",
   "conformance_version": "1.0.0",
-  "description": "VoltMind local-first Personal Brain skills for hybrid RAG search and human-reviewed workflow loops",
+  "description": "VoltMind Personal Brain skills for hybrid RAG search and workflow loops",
   "skills": [
     {
       "name": "ingest",
@@ -82,7 +82,7 @@
     {
       "name": "meeting",
       "path": "meeting/SKILL.md",
-      "description": "Human-reviewed VoltMind Meeting Loop for Personal Brain Phase 1."
+      "description": "Human-reviewed VoltMind Meeting Loop for the Personal Brain."
     },
     {
       "name": "daily",
@@ -132,7 +132,7 @@
     {
       "name": "cron-scheduler",
       "path": "cron-scheduler/SKILL.md",
-      "description": "VoltMind MVP scheduling guidance for Windows/PGLite: manual maintenance cadence, no host scheduler install."
+      "description": "Scheduling guidance for Windows, PGLite, Postgres, and host maintenance cadence."
     },
     {
       "name": "reports",
@@ -142,7 +142,7 @@
     {
       "name": "testing",
       "path": "testing/SKILL.md",
-      "description": "VoltMind MVP validation framework for skill conformance, focused runtime gates, project tests, and failure classification."
+      "description": "Validation framework for skill conformance, runtime gates, project tests, and failure classification."
     },
     {
       "name": "soul-audit",
@@ -162,17 +162,17 @@
     {
       "name": "minion-orchestrator",
       "path": "minion-orchestrator/SKILL.md",
-      "description": "VoltMind MVP job visibility for Windows/PGLite: list/get/cancel/stats only, with submit/worker/autopilot flows frozen."
+      "description": "Job orchestration, worker, queue, and autopilot workflows for VoltMind."
     },
     {
       "name": "schema-author",
       "path": "schema-author/SKILL.md",
-      "description": "Frozen inherited schema authoring skill for future schema-pack evolution. Not part of the VoltMind Phase 1 public route."
+      "description": "Author and evolve VoltMind schema packs and page types."
     },
     {
       "name": "skillify",
       "path": "skillify/SKILL.md",
-      "description": "Frozen inherited meta skill for skill creation and validation. Not part of the VoltMind Phase 1 public route."
+      "description": "Create, validate, and improve VoltMind skills."
     },
     {
       "name": "skillpack-check",
@@ -182,7 +182,7 @@
     {
       "name": "skillpack-harvest",
       "path": "skillpack-harvest/SKILL.md",
-      "description": "Frozen inherited editorial workflow for skill harvesting. Not part of the VoltMind Phase 1 public route."
+      "description": "Harvest, publish, and share skills across VoltMind clients."
     },
     {
       "name": "smoke-test",
@@ -210,6 +210,31 @@
       "description": "Deduplicate and synthesize raw concept stubs into a tiered intellectual map (T1 Canon to T4 Riff), tracing idea evolution across sources over time."
     },
     {
+      "name": "idea-lineage",
+      "path": "idea-lineage/SKILL.md",
+      "description": "Trace the origin, evolution, reversals, and current form of ideas across brain sources."
+    },
+    {
+      "name": "schema-unify",
+      "path": "schema-unify/SKILL.md",
+      "description": "Consolidate page types and migrate a brain to a canonical schema taxonomy."
+    },
+    {
+      "name": "skill-optimizer",
+      "path": "skill-optimizer/SKILL.md",
+      "description": "Optimize skill routing and behavior with benchmarked evaluation loops."
+    },
+    {
+      "name": "voltmind-advisor",
+      "path": "voltmind-advisor/SKILL.md",
+      "description": "Advise on VoltMind setup, health, maintenance, and workflow improvements."
+    },
+    {
+      "name": "voltmind-upgrade",
+      "path": "voltmind-upgrade/SKILL.md",
+      "description": "Guide VoltMind upgrades, migrations, and post-upgrade verification."
+    },
+    {
       "name": "perplexity-research",
       "path": "perplexity-research/SKILL.md",
       "description": "Brain-augmented web research via Perplexity plus Opus; surfaces what is NEW vs already-known about a topic by cross-referencing against the brain first."
@@ -217,7 +242,7 @@
     {
       "name": "archive-crawler",
       "path": "archive-crawler/SKILL.md",
-      "description": "Frozen inherited archivist for personal file archives. Not part of the VoltMind Phase 1 public route."
+      "description": "Crawl and organize personal file archives."
     },
     {
       "name": "academic-verify",
@@ -237,7 +262,7 @@
     {
       "name": "cold-start",
       "path": "cold-start/SKILL.md",
-      "description": "VoltMind MVP Microsoft cold start: bootstrap a new brain from approved Outlook Calendar, Outlook Email, and Microsoft Teams context, with smart sampling, citations, cross-source reconciliation, and sync-after-write."
+      "description": "Bootstrap a new brain from approved Outlook Calendar, Outlook Email, and Microsoft Teams context, with smart sampling, citations, cross-source reconciliation, and sync-after-write."
     },
     {
       "name": "ask-user",
@@ -257,7 +282,7 @@
     {
       "name": "eiirp",
       "path": "eiirp/SKILL.md",
-      "description": "Everything In Its Right Place — post-work organizer. 7-phase audit: inventory, taxonomy, schema check (via cathedral CLI), file, skill graph audit, verify, report."
+      "description": "Everything In Its Right Place — post-work organizer. 7-phase audit: inventory, taxonomy, schema check, file, skill graph audit, verify, report."
     }
   ],
   "dependencies": {

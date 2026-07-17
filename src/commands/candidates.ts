@@ -50,7 +50,7 @@ export async function runCandidates(engine: BrainEngine | null, args: string[]):
     const sourceId = flag(args, '--source-id');
     let result: unknown;
     if (thin) {
-      throw new Error('Remote candidates list is CLI-only in this MVP; use MCP preview/apply/reject by candidate id.');
+      throw new Error('Remote candidates list is host-local; use the local VoltMind CLI.');
     }
     if (!engine) throw new Error('A local brain is required for candidates list.');
     result = { candidates: await listCandidates(engine, { status, sourceId, limit }) };
@@ -70,7 +70,7 @@ export async function runCandidates(engine: BrainEngine | null, args: string[]):
   }
 
   if (sub === 'get') {
-    if (thin) throw new Error('Remote candidates get is CLI-only in this MVP; use preview by candidate id.');
+    if (thin) throw new Error('Remote candidates get is host-local; use the local VoltMind CLI.');
     if (!engine) throw new Error('A local brain is required for candidates get.');
     printHuman(await getCandidate(engine, id));
     return;

@@ -1,12 +1,12 @@
 /**
  * v0.28: `voltmind takes` CLI.
  *
- * Public MVP subcommands:
+ * Public subcommands:
  *   takes <slug>                          — list takes for a page
  *   takes search "<query>" [--who h]       — keyword search across all takes
  *
- * Mutating and aggregate judgment subcommands remain implemented below for
- * inherited/internal flows, but the public dispatcher gates them off.
+ * Mutating and aggregate judgment subcommands are available below alongside
+ * the readout flows.
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -527,9 +527,8 @@ Subcommands:
                                           List takes for a page
   takes search "<query>" [--limit N] [--json]
                                           Keyword search across all takes
-  Mutating and aggregate judgment subcommands are outside the VoltMind MVP
-  public runtime: add, update, supersede, resolve, scorecard, calibration,
-  revisit, extract.
+  Mutating and aggregate judgment subcommands are available when their
+  configured engine and source context are present.
 
 Common flags:
   --dir <path>    Override the brain directory (default: sync.repo_path config)
@@ -540,23 +539,6 @@ Common flags:
 
   const sub = args[0];
   const rest = args.slice(1);
-  const mutatingOrDeferred = new Set([
-    'add',
-    'update',
-    'supersede',
-    'resolve',
-    'scorecard',
-    'calibration',
-    'revisit',
-    'extract',
-  ]);
-  if (mutatingOrDeferred.has(sub)) {
-    console.error(
-      `voltmind takes ${sub} is not included in the VoltMind MVP runtime yet. ` +
-      'This public surface exposes takes readouts only.',
-    );
-    process.exit(1);
-  }
   if (sub.startsWith('-')) {
     console.error('Usage: voltmind takes <slug> [--json] or voltmind takes search "<query>" [--json]');
     process.exit(2);

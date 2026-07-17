@@ -35,11 +35,6 @@ import { maybePromptForUpgrade } from './core/thin-client-upgrade-prompt.ts';
 import { loadRuntimeEnvFile } from './core/autopilot/env-file.ts';
 import { installProcessLog } from './core/process-log.ts';
 import { VERSION } from './version.ts';
-import {
-  isVoltMindMvpCliCommand,
-  isVoltMindMvpOperationName,
-  voltMindMvpUnavailableMessage,
-} from './core/mvp-surface.ts';
 
 // Windows Task Scheduler launches the native executable directly, so there
 // is no shell available to redirect `stdout 2>&1`. The installer passes this
@@ -59,7 +54,7 @@ if (processLogPath) {
 const cliOps = new Map<string, Operation>();
 for (const op of operations) {
   const name = op.cliHints?.name;
-  if (name && !op.cliHints?.hidden && isVoltMindMvpCliCommand(name) && isVoltMindMvpOperationName(op.name)) {
+  if (name && !op.cliHints?.hidden) {
     cliOps.set(name, op);
   }
 }
@@ -229,17 +224,11 @@ async function main() {
     command = 'query';
   }
 
-  const allowInternalMigrationCli =
-    process.env.VOLTMIND_INTERNAL_MIGRATION === '1' &&
+  const commandExists = CLI_ONLY.has(command) || cliOps.has(command) ||
     INTERNAL_MIGRATION_CLI.has(command);
-
-  if (!isVoltMindMvpCliCommand(command) && !allowInternalMigrationCli) {
-    if (CLI_ONLY.has(command) || operations.some(op => op.cliHints?.name === command)) {
-      console.error(voltMindMvpUnavailableMessage(command));
-    } else {
-      console.error(`Unknown command: ${command}`);
-      console.error('Run voltmind --help for available commands.');
-    }
+  if (!commandExists) {
+    console.error(`Unknown command: ${command}`);
+    console.error('Run voltmind --help for available commands.');
     process.exit(1);
   }
 
@@ -946,7 +935,7 @@ const THIN_CLIENT_REFUSE_HINTS: Record<string, string> = {
   transcripts: 'transcripts is server-private (raw chat exports stay on the host). Read transcripts on the host machine.',
   storage: 'storage operates on the local repo on disk. Run on the host.',
   'source-audit': 'source-audit reads the local source directory. Run it on the host machine.',
-  takes: 'takes readouts are available on the host CLI; thin clients should use `takes_list` and `takes_search` MCP tools. Mutating/scorecard take flows remain outside the VoltMind MVP runtime.',
+  takes: 'takes commands are available on the host CLI; thin clients can use the corresponding MCP tools.',
   sources: 'sources commands manage local DB + config rows. Per-subcommand thin-client routing lands in v0.31.x. For now: use `sources_list` / `sources_status` MCP tools, or run on the host.',
   // v0.32 audit additions
   pages: '`pages purge-deleted` is admin+localOnly (hard-deletes from the local DB). Run on the host.',
@@ -1471,13 +1460,6 @@ async function handleCliOnly(command: string, args: string[]) {
   if (command === 'takes') {
     const takesArgs = args;
     const sub = takesArgs[0];
-    if (sub && ['add', 'update', 'supersede', 'resolve', 'scorecard', 'calibration', 'revisit', 'extract'].includes(sub)) {
-      console.error(
-        `voltmind takes ${sub} is not included in the VoltMind MVP runtime yet. ` +
-        'This public surface exposes takes readouts only.',
-      );
-      process.exit(1);
-    }
     if (args.includes('--help') || args.includes('-h')) {
       const { runTakes } = await import('./commands/takes.ts');
       await runTakes(null as any, takesArgs);
@@ -2398,7 +2380,7 @@ MCP
   serve --http [--port N]            HTTP MCP server
     --enable-dcr                     Enable DCR; defaults to authorization_code
     --enable-dcr-insecure            Also allow DCR client_credentials
-  call <tool> '<json>'               Raw MVP tool invocation
+  call <tool> '<json>'               Raw tool invocation
         tools: get_links, put_raw_data, get_raw_data
 
 ADMIN
@@ -2406,7 +2388,7 @@ ADMIN
   health                             Brain health dashboard
   history <slug>                     Page version history
   version                            Version info
-  --tools-json                       MVP tool discovery (JSON)
+  --tools-json                       Complete tool discovery (JSON)
 
 Run voltmind <command> --help for command-specific help.
 `);

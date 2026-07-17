@@ -219,7 +219,7 @@ describe("checkResolvable — real skills directory", () => {
     expect(missingFiles.length).toBe(0);
   });
 
-  test("no orphan triggers (in resolver but not manifest)", () => {
+  test("no orphan triggers", () => {
     const orphans = report.issues.filter(i => i.type === "orphan_trigger");
     expect(orphans.length).toBe(0);
   });

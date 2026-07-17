@@ -882,7 +882,7 @@ const put_page: Operation = {
       factsQueued = { skipped: 'backstop_error' };
     }
 
-    // MVP signal enrichment. Local/source-backed writes can create or update
+    // Signal enrichment. Local/source-backed writes can create or update
     // person/company pages as a deterministic post-hook. Remote MCP writes do
     // not trigger this extra mutation surface; trusted workspace subagents are
     // already bounded by allowedSlugPrefixes above.
@@ -2962,7 +2962,7 @@ const get_job_undo_report: Operation = {
       manual: [
         {
           kind: 'review_required',
-          note: 'No generic undo executor is public in the MVP runtime. Inspect job result and apply explicit compensating edits if needed.',
+          note: 'No generic undo executor is registered. Inspect the job result and apply explicit compensating edits if needed.',
         },
       ],
     };
@@ -4997,7 +4997,7 @@ export const operations: Operation[] = [
   sync_brain,
   // Raw data
   put_raw_data, get_raw_data,
-  // MVP signal enrichment
+  // Signal enrichment
   preview_signal_enrichment, apply_signal_enrichment,
   // Resolution & chunks
   resolve_slugs, get_chunks,
