@@ -152,6 +152,30 @@ export interface ContentSanitySummary {
   by_source: Record<string, number>;
   /** Top junk-pattern names by hit count (sorted desc). */
   top_patterns: Array<{ name: string; count: number }>;
+  /** Top matched rules counted once per distinct page-level finding. */
+  unique_top_patterns: Array<{ name: string; count: number }>;
+  /** Number of distinct page-level findings in the window. Repeated
+   * imports of the same page/reason remain in total_events so the raw
+   * audit stream still carries flow-rate information, but reports can
+   * avoid treating retries as new problems. */
+  unique_events: number;
+  repeated_events: number;
+  unique_by_type: { hard_block: number; soft_block: number; warn: number };
+  unique_by_source: Record<string, number>;
+}
+
+/** Stable page-level identity for report deduplication. Byte count is
+ * deliberately excluded: a growing page is still the same unresolved
+ * finding until its disposition, source, page, or matched rule changes. */
+function findingKey(event: ContentSanityAuditEvent): string {
+  return JSON.stringify([
+    event.event_type,
+    event.source_id,
+    event.slug,
+    [...event.junk_pattern_matches].sort(),
+    [...event.literal_substring_matches].sort(),
+    event.bypass_active === true,
+  ]);
 }
 
 export function summarizeContentSanityEvents(
@@ -160,6 +184,10 @@ export function summarizeContentSanityEvents(
   const by_type = { hard_block: 0, soft_block: 0, warn: 0 };
   const by_source: Record<string, number> = {};
   const patternCounts: Record<string, number> = {};
+  const uniquePatternCounts: Record<string, number> = {};
+  const unique_by_type = { hard_block: 0, soft_block: 0, warn: 0 };
+  const unique_by_source: Record<string, number> = {};
+  const seen = new Set<string>();
 
   for (const ev of events) {
     by_type[ev.event_type]++;
@@ -170,9 +198,21 @@ export function summarizeContentSanityEvents(
     for (const name of ev.literal_substring_matches) {
       patternCounts[name] = (patternCounts[name] ?? 0) + 1;
     }
+
+    const key = findingKey(ev);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique_by_type[ev.event_type]++;
+    unique_by_source[ev.source_id] = (unique_by_source[ev.source_id] ?? 0) + 1;
+    for (const name of [...ev.junk_pattern_matches, ...ev.literal_substring_matches]) {
+      uniquePatternCounts[name] = (uniquePatternCounts[name] ?? 0) + 1;
+    }
   }
 
   const top_patterns = Object.entries(patternCounts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+  const unique_top_patterns = Object.entries(uniquePatternCounts)
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count);
 
@@ -181,5 +221,10 @@ export function summarizeContentSanityEvents(
     by_type,
     by_source,
     top_patterns,
+    unique_top_patterns,
+    unique_events: seen.size,
+    repeated_events: events.length - seen.size,
+    unique_by_type,
+    unique_by_source,
   };
 }

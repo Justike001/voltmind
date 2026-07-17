@@ -10,6 +10,8 @@ import {
   isSyncable,
   unsyncableReason,
   resolveSlugForPath,
+  clearResolvedFailures,
+  DEFAULT_SOURCE_ID,
   recordSyncFailures,
   unacknowledgedSyncFailures,
   acknowledgeSyncFailures,
@@ -603,6 +605,20 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
   }
 }
 
+const SYNC_HEAD_FAILURE_PATH = '<head>';
+
+function clearConfirmedSyncFailures(paths: string[]): void {
+  if (paths.length === 0) return;
+  try {
+    clearResolvedFailures(DEFAULT_SOURCE_ID, [...new Set(paths)]);
+  } catch (error) {
+    serr(
+      `[sync] warning: could not clear resolved failure history: ` +
+      `${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 /** A transient Git process timeout must not poison an otherwise valid sync. */
 async function gitWithTransientRetry(
   repoPath: string,
@@ -1123,6 +1139,10 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
       detachedWorkingTreeManifest.renamed.length > 0);
 
   if (lastCommit === headCommit && !versionMismatch && !versionNeverSet && !hasDetachedWorkingTreeChanges) {
+    // rev-parse succeeded and the bookmark already matches HEAD, so a prior
+    // open HEAD-verification failure is now positively resolved. Do not touch
+    // file failures here: no file was re-read in this no-op path.
+    clearConfirmedSyncFailures([SYNC_HEAD_FAILURE_PATH]);
     return {
       status: 'up_to_date',
       fromCommit: lastCommit,
@@ -1234,6 +1254,10 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
     await writeSyncAnchor(engine, opts.sourceId, 'last_commit', headCommit);
     await engine.setConfig('sync.last_run', new Date().toISOString());
     await writeChunkerVersion(engine, opts.sourceId, String(CHUNKER_VERSION));
+    // The current HEAD was read successfully and there were no syncable
+    // changes, so a historical HEAD sentinel is safe to resolve. File-level
+    // failures remain untouched because no files were imported here.
+    clearConfirmedSyncFailures([SYNC_HEAD_FAILURE_PATH]);
     return {
       status: 'up_to_date',
       fromCommit: lastCommit,
@@ -1520,6 +1544,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
   // so the next sync re-walks against the new HEAD. The lock from CODEX-2
   // prevents *this* voltmind process from stepping on itself; this gate
   // catches drift caused by external `git` commands the lock cannot see.
+  let headVerified = false;
   try {
     const currentHead = await gitWithTransientRetry(repoPath, ['rev-parse', 'HEAD']);
     if (currentHead !== headCommit) {
@@ -1527,6 +1552,8 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
         path: '<head>',
         error: `git HEAD drifted during sync: captured ${headCommit.slice(0, 8)}, now ${currentHead.slice(0, 8)}`,
       });
+    } else {
+      headVerified = true;
     }
   } catch (e) {
     // rev-parse failure is itself a drift signal (worktree disappeared).
@@ -1591,6 +1618,18 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
   // finished with so the next sync's up_to_date gate respects it. Only
   // source-scoped syncs track this (see readChunkerVersion for rationale).
   await writeChunkerVersion(engine, opts.sourceId, String(CHUNKER_VERSION));
+
+  // Only clean rows after the bookmark/state writes succeed. The file paths
+  // below are explicit successes from this run; current failures are excluded
+  // so an unrelated open failure cannot be erased accidentally. A HEAD row is
+  // cleared only after the post-import rev-parse check passed.
+  const failedPathSet = new Set(failedFiles.map(failure => failure.path));
+  const resolvedPaths = [
+    ...filtered.deleted,
+    ...addsAndMods.filter(path => !failedPathSet.has(path)),
+  ];
+  if (headVerified) resolvedPaths.push(SYNC_HEAD_FAILURE_PATH);
+  clearConfirmedSyncFailures(resolvedPaths);
 
   // Log ingest
   await engine.logIngest({

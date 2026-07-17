@@ -269,7 +269,11 @@ function recordAndClear(
     let changed = false;
 
     for (const path of succeededPaths) {
-      if (byKey.delete(ledgerKey({ source_id: sourceId, path }))) changed = true;
+      const key = ledgerKey({ source_id: sourceId, path });
+      // A successful retry resolves an open failure. Keep acknowledged and
+      // auto-skipped rows as history; they were explicitly accepted by an
+      // operator and must not disappear as a side effect of a later sync.
+      if (byKey.get(key)?.state === 'open' && byKey.delete(key)) changed = true;
     }
 
     const now = new Date().toISOString();
@@ -327,6 +331,25 @@ export function clearFailures(sourceId: string, paths: string[]): void {
     const entries = loadSyncFailures();
     const kept = entries.filter(entry => !remove.has(ledgerKey(entry)));
     if (kept.length !== entries.length) writeAll(kept);
+  });
+}
+
+/**
+ * Remove only open rows whose paths were positively confirmed by a sync.
+ *
+ * This is deliberately narrower than clearFailures(): recovery cleanup must
+ * never erase an acknowledged/auto-skipped audit row, and callers must pass
+ * paths observed to succeed in the current run.
+ */
+export function clearResolvedFailures(sourceId: string, paths: string[]): number {
+  if (paths.length === 0) return 0;
+  return withLedgerLock(() => {
+    const remove = new Set(paths.map(path => ledgerKey({ source_id: sourceId, path })));
+    const entries = loadSyncFailures();
+    const kept = entries.filter(entry => entry.state !== 'open' || !remove.has(ledgerKey(entry)));
+    const removed = entries.length - kept.length;
+    if (removed > 0) writeAll(kept);
+    return removed;
   });
 }
 

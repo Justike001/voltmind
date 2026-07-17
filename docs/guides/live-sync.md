@@ -99,6 +99,15 @@ Sync only indexes "syncable" markdown files. These are excluded by design:
 Concurrent runs are safe. Two syncs on the same commit no-op because content
 hashes match. If both a cron and `--watch` fire simultaneously, no conflict.
 
+### Failure History Recovery
+
+Sync failures are stored in `~/.voltmind/sync-failures.jsonl`. A later clean
+sync removes an open entry only when the same file succeeded in that run. The
+`<head>` entry used for a git HEAD verification/timeout failure is removed only
+after a complete run re-validates the same HEAD (including a clean no-op run).
+Timeouts, blocked runs, and unrelated file failures do not clear it. Entries
+explicitly acknowledged or auto-skipped remain as history.
+
 ## Tricky Spots
 
 1. **Always chain sync + embed.** Running `voltmind sync` without

@@ -4568,7 +4568,8 @@ export async function buildChecks(
   //   opt-in for full scan (D10 mirrors --index-audit precedent). Applies
   //   the assessor per-page on title + 2KB head-slice + frontmatter.
   // - content_sanity_audit_recent: reads ~/.voltmind/audit/content-sanity-*.jsonl
-  //   over the last 7 days, aggregates by event type + source. Caveat
+  //   over the last 7 days, aggregates by event type + source and reports
+  //   distinct page-level findings separately from repeated imports. Caveat
   //   (Codex r1 #14): JSONL is local-only — multi-host operators should
   //   share VOLTMIND_AUDIT_DIR. Message names this so the limitation is
   //   visible at the doctor surface.
@@ -4701,18 +4702,22 @@ export async function buildChecks(
       });
     } else {
       const summary = summarizeContentSanityEvents(events);
-      const topPatterns = summary.top_patterns.slice(0, 3).map(p => `${p.name}=${p.count}`).join(', ');
-      const topSources = Object.entries(summary.by_source)
+      const topPatterns = summary.unique_top_patterns.slice(0, 3).map(p => `${p.name}=${p.count}`).join(', ');
+      const topSources = Object.entries(summary.unique_by_source)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)
         .map(([s, n]) => `${s}=${n}`)
         .join(', ');
+      // A retry loop can write the same finding many times. Use distinct
+      // findings for health severity so repeated imports do not turn a
+      // single unresolved page into a false fail; raw event volume remains
+      // visible in the message for operator investigation.
       const status: 'ok' | 'warn' | 'fail' =
-        events.length >= 100 ? 'fail' : events.length >= 10 ? 'warn' : 'ok';
+        summary.unique_events >= 100 ? 'fail' : summary.unique_events >= 10 ? 'warn' : 'ok';
       checks.push({
         name: 'content_sanity_audit_recent',
         status,
-        message: `${events.length} events (hard=${summary.by_type.hard_block} soft=${summary.by_type.soft_block} warn=${summary.by_type.warn})${topPatterns ? ', patterns: ' + topPatterns : ''}${topSources ? ', sources: ' + topSources : ''}. (Local audit only — multi-host operators set VOLTMIND_AUDIT_DIR.)`,
+        message: `${events.length} events / ${summary.unique_events} unique findings (hard=${summary.unique_by_type.hard_block} soft=${summary.unique_by_type.soft_block} warn=${summary.unique_by_type.warn}; repeated=${summary.repeated_events})${topPatterns ? ', patterns: ' + topPatterns : ''}${topSources ? ', sources: ' + topSources : ''}. (Local audit only — multi-host operators set VOLTMIND_AUDIT_DIR.)`,
       });
     }
   } catch (err) {

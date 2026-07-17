@@ -475,6 +475,7 @@ export function resolveSlugForPath(filePath: string, repoPrefix?: string): strin
 export {
   recordFailures,
   clearFailures,
+  clearResolvedFailures,
   acknowledgeFailures,
   autoSkipFailures,
   withLedgerLock,

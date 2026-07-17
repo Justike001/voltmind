@@ -50,6 +50,14 @@ sync 只索引可 sync 的 markdown。隐藏路径、`ops/`、`README.md`、`ind
 
 并发运行安全。同一 commit 上的两次 sync 因 content hash 相同而 no-op。
 
+### 失败历史的恢复清理
+
+同步失败记录保存在 `~/.voltmind/sync-failures.jsonl`。后续成功的 sync 只会
+清理本轮明确成功的同一路径对应的 open 记录。用于记录 git HEAD 校验/超时失败的
+`<head>` 记录，只有在完整同步重新确认 HEAD 稳定（包括干净的 no-op 同步）后才会
+清理。超时、被阻塞的同步和其他文件失败不会清理它；已明确确认或自动跳过的记录会
+继续保留为历史。
+
 ## 容易踩坑的地方
 
 1. **总是 sync + embed。** 只 sync 会让新 chunks 没有 embeddings，对 vector search 不可见。
