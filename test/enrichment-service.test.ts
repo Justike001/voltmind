@@ -3,11 +3,13 @@ import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { operations, type OperationContext } from '../src/core/operations.ts';
 import {
   slugifyEntity,
+  isLikelyPersonEntityName,
   entityPagePath,
   extractEntities,
   enrichEntity,
   previewSignalEnrichment,
   applySignalEnrichment,
+  applySignalEnrichmentForPages,
   buildSignalTextFromPage,
 } from '../src/core/enrichment-service.ts';
 
@@ -35,35 +37,47 @@ beforeEach(async () => {
 });
 
 describe('enrichment-service', () => {
+  describe('person namespace guard', () => {
+    test('accepts ordinary person names', () => {
+      expect(isLikelyPersonEntityName('Alice Example')).toBe(true);
+      expect(isLikelyPersonEntityName('李小明')).toBe(true);
+    });
+
+    test('rejects obvious tool/configuration phrases', () => {
+      expect(isLikelyPersonEntityName('Claude Code')).toBe(false);
+      expect(isLikelyPersonEntityName('Windows Update')).toBe(false);
+      expect(isLikelyPersonEntityName('Company Brain')).toBe(false);
+    });
+  });
   describe('slugifyEntity', () => {
     test('person names → people/ prefix', () => {
-      expect(slugifyEntity('Jane Doe', 'person')).toBe('people/jane-doe');
+      expect(slugifyEntity('Jane Doe', 'people/')).toBe('people/jane-doe');
     });
 
     test('company names → companies/ prefix', () => {
-      expect(slugifyEntity('Acme Corp', 'company')).toBe('companies/acme-corp');
+      expect(slugifyEntity('Acme Corp', 'companies/')).toBe('companies/acme-corp');
     });
 
     test('handles apostrophes', () => {
-      expect(slugifyEntity("O'Brien", 'person')).toBe('people/obrien');
+      expect(slugifyEntity("O'Brien", 'people/')).toBe('people/obrien');
     });
 
     test('handles special characters', () => {
-      expect(slugifyEntity('José García', 'person')).toBe('people/jos-garc-a');
+      expect(slugifyEntity('José García', 'people/')).toBe('people/jose-garcia');
     });
 
     test('trims leading/trailing hyphens', () => {
-      expect(slugifyEntity('  Test Name  ', 'person')).toBe('people/test-name');
+      expect(slugifyEntity('  Test Name  ', 'people/')).toBe('people/test-name');
     });
 
     test('collapses multiple hyphens', () => {
-      expect(slugifyEntity('Test--Name', 'person')).toBe('people/test-name');
+      expect(slugifyEntity('Test--Name', 'people/')).toBe('people/test-name');
     });
   });
 
   describe('entityPagePath', () => {
     test('returns same result as slugifyEntity', () => {
-      expect(entityPagePath('Jane Doe', 'person')).toBe(slugifyEntity('Jane Doe', 'person'));
+      expect(entityPagePath('Jane Doe', 'people/')).toBe(slugifyEntity('Jane Doe', 'people/'));
     });
   });
 
@@ -334,6 +348,25 @@ Agenda only.`,
       expect(result.signal_enrichment?.created).not.toContain('people/frontmatter-signal');
       expect(await engine.getPage('people/alice-example')).not.toBeNull();
       expect(await engine.getPage('companies/acme-labs')).not.toBeNull();
+    });
+
+    test('skips content-sanity isolated pages during post-sync enrichment', async () => {
+      await engine.putPage('notes/oversized', {
+        title: 'Oversized release notes',
+        type: 'note',
+        compiled_truth: 'Met Alice Example from Acme Labs about the release.',
+        timeline: '',
+        frontmatter: { embed_skip: { reason: 'oversized', bytes: 600_000 } },
+      });
+
+      const result = await applySignalEnrichmentForPages(engine, {
+        sourceId: 'default',
+        pageSlugs: ['notes/oversized'],
+      });
+
+      expect(result.created).toEqual([]);
+      expect(result.warnings).toContain('page_embed_skipped:notes/oversized');
+      expect(await engine.getPage('people/alice-example')).toBeNull();
     });
   });
 });

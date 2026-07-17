@@ -216,4 +216,20 @@ describe('summarizeContentSanityEvents', () => {
     expect(s.top_patterns).toContainEqual({ name: 'reddit_blocked', count: 2 });
     expect(s.top_patterns).toContainEqual({ name: 'linkedin_wall', count: 1 });
   });
+
+  test('deduplicates repeated page findings without losing raw event count', () => {
+    const s = summarizeContentSanityEvents([
+      event({ event_type: 'soft_block', slug: 'changelog', bytes: 600_000, junk_pattern_matches: ['large_page'] }),
+      // A retry with a changed byte count is still the same unresolved page finding.
+      event({ event_type: 'soft_block', slug: 'changelog', bytes: 700_000, junk_pattern_matches: ['large_page'] }),
+      event({ event_type: 'warn', slug: 'todos', bytes: 60_000 }),
+    ]);
+
+    expect(s.total_events).toBe(3);
+    expect(s.unique_events).toBe(2);
+    expect(s.repeated_events).toBe(1);
+    expect(s.unique_by_type).toEqual({ hard_block: 0, soft_block: 1, warn: 1 });
+    expect(s.unique_by_source.default).toBe(2);
+    expect(s.unique_top_patterns).toEqual([{ name: 'large_page', count: 1 }]);
+  });
 });

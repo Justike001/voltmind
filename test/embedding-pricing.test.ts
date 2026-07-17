@@ -20,6 +20,12 @@ describe('lookupEmbeddingPrice — first-class providers', () => {
     if (r.kind === 'known') expect(r.pricePerMTok).toBe(0.13);
   });
 
+  test('DashScope text-embedding-v4 has an enforceable price', () => {
+    const r = lookupEmbeddingPrice('dashscope:text-embedding-v4');
+    expect(r.kind).toBe('known');
+    if (r.kind === 'known') expect(r.pricePerMTok).toBe(0.075);
+  });
+
   test('Voyage voyage-3-large at $0.18/MTok', () => {
     const r = lookupEmbeddingPrice('voyage:voyage-3-large');
     expect(r.kind).toBe('known');

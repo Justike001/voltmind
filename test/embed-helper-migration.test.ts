@@ -68,14 +68,10 @@ describe('embed.ts → worker-pool migration (T3)', () => {
     expect(EMBED_SOURCE).not.toMatch(fanout);
   });
 
-  test('preserves VOLTMIND_EMBED_CONCURRENCY default of 20 (codex #13)', () => {
-    // The pre-migration default must survive: env override or 20.
-    // Routing through resolveWorkersWithClamp would change this behavior
-    // (autoConcurrency returns 1 for small file counts even on Postgres),
-    // breaking every existing brain that relies on the 20-worker default.
-    expect(EMBED_SOURCE).toMatch(
-      /parseInt\(process\.env\.VOLTMIND_EMBED_CONCURRENCY\s*\|\|\s*['"]20['"]/,
-    );
+  test('preserves provider-aware embedding concurrency defaults (codex #13)', () => {
+    expect(EMBED_SOURCE).toMatch(/process\.env\.VOLTMIND_EMBED_CONCURRENCY/);
+    expect(EMBED_SOURCE).toMatch(/startsWith\(['"]dashscope:/);
+    expect(EMBED_SOURCE).toMatch(/\? 4 : 20/);
   });
 
   test('runSlidingPool call sites pass `workers: CONCURRENCY`', () => {

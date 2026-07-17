@@ -170,13 +170,14 @@ describe('doctor command', () => {
     expect(rlsBlock).toContain('PGLite');
   });
 
-  test('RLS check reads pg_description and recognizes the GBRAIN:RLS_EXEMPT escape hatch', async () => {
+  test('RLS check reads pg_description and recognizes both current and legacy exemption markers', async () => {
     const source = await Bun.file(new URL('../src/commands/doctor.ts', import.meta.url)).text();
     const rlsBlock = source.slice(
       source.indexOf('// 5. RLS'),
       source.indexOf('// 6. Schema version'),
     );
     expect(rlsBlock).toContain('obj_description');
+    expect(rlsBlock).toContain('VOLTMIND:RLS_EXEMPT');
     expect(rlsBlock).toContain('GBRAIN:RLS_EXEMPT');
     // The regex must require a non-empty reason= segment. "Blood" is in the
     // requirement to write a real justification, not just the prefix.

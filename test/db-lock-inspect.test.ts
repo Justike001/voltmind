@@ -21,7 +21,9 @@ import {
   inspectLock,
   listStaleLocks,
   deleteLockRow,
+  recoverLocalDeadDbLock,
 } from '../src/core/db-lock.ts';
+import { hostname } from 'os';
 
 let engine: PGLiteEngine;
 
@@ -181,5 +183,46 @@ describe('deleteLockRow', () => {
     const r2 = await deleteLockRow(engine, 'voltmind-sync:atomic-test', process.pid);
     expect(r2.deleted).toBe(false);
     await handle!.release();
+  });
+});
+
+describe('recoverLocalDeadDbLock', () => {
+  test('reclaims only an old, local lock whose PID is confirmed absent', async () => {
+    const lockId = 'voltmind-sync:dead-local';
+    await (engine as any).db.query(
+      `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
+       VALUES ($1, $2, $3, NOW() - INTERVAL '2 minutes', NOW() + INTERVAL '28 minutes')`,
+      [lockId, 2147483647, hostname()],
+    );
+
+    const result = await recoverLocalDeadDbLock(engine, lockId);
+    expect(result.reason).toBe('reclaimed');
+    expect(await inspectLock(engine, lockId)).toBeNull();
+  });
+
+  test('refuses a dead local PID while the age guard is still active', async () => {
+    const lockId = 'voltmind-sync:young-dead-local';
+    await (engine as any).db.query(
+      `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
+       VALUES ($1, $2, $3, NOW(), NOW() + INTERVAL '30 minutes')`,
+      [lockId, 2147483647, hostname()],
+    );
+
+    const result = await recoverLocalDeadDbLock(engine, lockId);
+    expect(result.reason).toBe('too_young');
+    expect(await inspectLock(engine, lockId)).not.toBeNull();
+  });
+
+  test('never probes or reclaims a different host', async () => {
+    const lockId = 'voltmind-sync:remote-dead';
+    await (engine as any).db.query(
+      `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
+       VALUES ($1, $2, $3, NOW() - INTERVAL '2 minutes', NOW() + INTERVAL '28 minutes')`,
+      [lockId, 2147483647, 'different-host'],
+    );
+
+    const result = await recoverLocalDeadDbLock(engine, lockId);
+    expect(result.reason).toBe('cross_host');
+    expect(await inspectLock(engine, lockId)).not.toBeNull();
   });
 });

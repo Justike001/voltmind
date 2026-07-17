@@ -20,16 +20,16 @@ describe('recipe: dashscope', () => {
     expect(r!.auth_env?.required).toEqual(['DASHSCOPE_API_KEY']);
   });
 
-  test('embedding touchpoint declares text-embedding-v3 first + 1024 dims', () => {
+  test('embedding touchpoint declares text-embedding-v4 first + 1024 dims', () => {
     const r = getRecipe('dashscope')!;
     expect(r.touchpoints.embedding).toBeDefined();
-    expect(r.touchpoints.embedding!.models[0]).toBe('text-embedding-v3');
+    expect(r.touchpoints.embedding!.models[0]).toBe('text-embedding-v4');
     expect(r.touchpoints.embedding!.models).toContain('text-embedding-v2');
     expect(r.touchpoints.embedding!.default_dims).toBe(1024);
-    expect(r.touchpoints.embedding!.dims_options).toEqual([64, 128, 256, 512, 768, 1024]);
-    // Matryoshka: every dims option ≤ 2000 (HNSW-compatible).
+    expect(r.touchpoints.embedding!.dims_options).toEqual([64, 128, 256, 512, 768, 1024, 1536, 2048, 3072]);
+    // Matryoshka: every declared option is within the provider's supported range.
     for (const d of r.touchpoints.embedding!.dims_options ?? []) {
-      expect(d).toBeLessThanOrEqual(2000);
+      expect(d).toBeLessThanOrEqual(3072);
     }
   });
 
@@ -53,6 +53,7 @@ describe('recipe: dashscope', () => {
     const r = getRecipe('dashscope')!;
     expect(r.touchpoints.embedding!.max_batch_tokens).toBeGreaterThan(0);
     expect(r.touchpoints.embedding!.chars_per_token).toBeGreaterThan(0);
+    expect(r.touchpoints.embedding!.max_batch_items).toBe(10);
   });
 
   test('dimsProviderOptions threads dimensions for text-embedding-v3 (Matryoshka)', async () => {

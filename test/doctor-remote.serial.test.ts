@@ -349,7 +349,7 @@ describe('runUpgradeDriftCheck', () => {
         expect(result.message).toContain('major upgrade available');
         // Manual-install hint, NOT the auto-upgrade hint
         expect(result.message).toContain('Prior `voltmind upgrade` did not advance');
-        expect(result.message).toContain('https://github.com/garrytan/voltmind/releases');
+        expect(result.message).toContain('https://github.com/Justike001/voltmind/releases');
         expect(result.message).not.toContain('Run `voltmind upgrade`');
         expect(result.detail?.prior_failed).toBe(true);
       });

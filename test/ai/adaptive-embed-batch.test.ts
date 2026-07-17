@@ -84,6 +84,14 @@ function configureGoogle(): void {
   });
 }
 
+function configureDashScope(): void {
+  configureGateway({
+    embedding_model: 'dashscope:text-embedding-v3',
+    embedding_dimensions: 1024,
+    env: { DASHSCOPE_API_KEY: 'sk-fake' },
+  });
+}
+
 // --------- 1. Pure helpers ---------
 
 describe('splitByTokenBudget (pure helper)', () => {
@@ -293,6 +301,33 @@ describe('embed() OpenAI fast path (no max_batch_tokens)', () => {
     await embed(['x', 'y']);
     expect(openaiStub).toHaveBeenCalledTimes(1);
     expect(__getShrinkStateForTests('voyage')).toBeUndefined();
+  });
+});
+
+describe('provider item-count batch caps', () => {
+  beforeEach(() => resetGateway());
+  afterEach(() => __setEmbedTransportForTests(null));
+
+  test('splits by item cap even when the token budget fits', () => {
+    expect(splitByTokenBudget(['a', 'b', 'c'], 1000, 4, 2)).toEqual([
+      ['a', 'b'],
+      ['c'],
+    ]);
+  });
+
+  test('DashScope splits requests at its 10-input provider limit', async () => {
+    configureDashScope();
+    const callSizes: number[] = [];
+    const stub = mock(async ({ values }: { values: string[] }) => {
+      callSizes.push(values.length);
+      return fakeEmbeddings(values, 1024);
+    });
+    __setEmbedTransportForTests(stub as any);
+
+    const result = await embed(Array.from({ length: 25 }, (_, i) => `text-${i}`));
+
+    expect(callSizes).toEqual([10, 10, 5]);
+    expect(result).toHaveLength(25);
   });
 });
 

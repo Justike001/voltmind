@@ -145,6 +145,17 @@ describe('importFromContent — soft-block (D9 transition + embed_skip)', () => 
       expect(chunks.length).toBe(0);
     });
   });
+
+  test('soft-block skips derived code-reference links to keep oversized imports bounded', async () => {
+    await withIsolatedHome(async () => {
+      // Make the referenced code page resolvable: a normal-sized import
+      // would create a documents edge for this path.
+      await importFromContent(engine, 'src-core-foo-ts', FRONTMATTER + 'Code page.', { noEmbed: true });
+      const body = 'src/core/foo.ts\n'.repeat(50_000);
+      await importFromContent(engine, 'test/big-refs', FRONTMATTER + body, { noEmbed: true });
+      expect(await engine.getLinks('test/big-refs')).toEqual([]);
+    });
+  });
 });
 
 describe('importFromContent — kill-switch bypass', () => {

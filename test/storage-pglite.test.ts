@@ -10,7 +10,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
@@ -98,6 +98,24 @@ describe('Storage tiering on PGLite — full lifecycle (D8 + D4)', () => {
       expect(result.pagesByTier.db_only).toBe(2);
       expect(result.pagesByTier.unspecified).toBe(1);
       expect(result.config!.db_only).toEqual(['media/x/']);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('matches lowercase database slugs to README.md on Windows', async () => {
+    try {
+      writeFileSync(join(tmp, 'voltmind.yml'), `storage:
+  db_tracked: []
+  db_only:
+    - daily/
+`);
+      mkdirSync(join(tmp, 'daily'));
+      writeFileSync(join(tmp, 'daily', 'README.md'), '# Daily');
+      await engine.putPage('daily/readme', { type: 'note', title: 'Daily', compiled_truth: '', timeline: '' });
+
+      const result = await getStorageStatus(engine, tmp);
+      expect(result.missingFiles).toHaveLength(process.platform === 'win32' ? 0 : 1);
     } finally {
       cleanup();
     }

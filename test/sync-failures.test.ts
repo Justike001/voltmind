@@ -124,6 +124,40 @@ describe('Bug 9 — sync-failures JSONL helpers', () => {
     expect(out.length).toBe(1);
     expect(out[0].path).toBe('a.md');
   });
+
+  test('clean recovery removes a confirmed git HEAD failure, not another open failure', async () => {
+    const {
+      recordSyncFailures,
+      clearResolvedFailures,
+      loadSyncFailures,
+    } = await import('../src/core/sync.ts');
+
+    recordSyncFailures([
+      { path: '<head>', error: 'git HEAD verification failed: timed out' },
+      { path: 'people/still-broken.md', error: 'YAML parse failed: bad mapping' },
+    ], 'commit-2026-07-14');
+
+    expect(clearResolvedFailures('default', ['<head>'])).toBe(1);
+    expect(loadSyncFailures().map(entry => entry.path)).toEqual(['people/still-broken.md']);
+  });
+
+  test('resolved cleanup preserves explicitly acknowledged history', async () => {
+    const {
+      recordSyncFailures,
+      acknowledgeSyncFailures,
+      clearResolvedFailures,
+      loadSyncFailures,
+    } = await import('../src/core/sync.ts');
+
+    recordSyncFailures([{ path: 'people/skipped.md', error: 'YAML parse failed: accepted' }], 'commit-1');
+    expect(acknowledgeSyncFailures().count).toBe(1);
+
+    expect(clearResolvedFailures('default', ['people/skipped.md'])).toBe(0);
+    expect(loadSyncFailures()[0]).toMatchObject({
+      path: 'people/skipped.md',
+      state: 'acknowledged',
+    });
+  });
 });
 
 describe('Bug 9 — doctor surfaces sync failures', () => {
@@ -155,6 +189,14 @@ describe('Bug 9 — sync.ts CLI flag wiring', () => {
     // Ensure the up-front check exists before the syncAll / performSync
     // dispatch, gated on skipFailed.
     expect(source).toMatch(/if \(skipFailed\) \{[\s\S]*?unacknowledgedSyncFailures\(\)[\s\S]*?acknowledgeSyncFailures\(\)/);
+  });
+
+  test('clean sync wires history cleanup to confirmed HEAD recovery', async () => {
+    const source = await Bun.file(new URL('../src/commands/sync.ts', import.meta.url)).text();
+    expect(source).toContain('let headVerified = false');
+    expect(source).toContain('if (headVerified) resolvedPaths.push(SYNC_HEAD_FAILURE_PATH)');
+    expect(source).toContain('clearConfirmedSyncFailures(resolvedPaths)');
+    expect(source).toMatch(/await writeChunkerVersion\(engine, opts\.sourceId, String\(CHUNKER_VERSION\)\);[\s\S]*?clearConfirmedSyncFailures\(resolvedPaths\)/);
   });
 
   test('acknowledgeSyncFailures clears stale failures end-to-end', async () => {
