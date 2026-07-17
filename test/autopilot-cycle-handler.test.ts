@@ -9,6 +9,8 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:tes
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { MinionWorker } from '../src/core/minions/worker.ts';
 import { registerBuiltinHandlers } from '../src/commands/jobs.ts';
+import { tryAcquireDbLock } from '../src/core/db-lock.ts';
+import { cycleLockIdFor } from '../src/core/cycle.ts';
 import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -108,5 +110,16 @@ describe('autopilot-cycle handler source_id validation + archive recheck', () =>
     await seedSource('echo');
     const result = await runHandlerOnce({ repoPath: brainDir, source_id: 'echo', pull: false, phases: ['lint'] });
     expect(['ok', 'clean']).toContain(result.status);
+  });
+
+  test('cycle lock contention throws so Minions retries instead of completing a skipped job', async () => {
+    const handle = await tryAcquireDbLock(engine, cycleLockIdFor(), 30);
+    expect(handle).not.toBeNull();
+    try {
+      await expect(runHandlerOnce({ repoPath: brainDir, phases: ['lint'] }))
+        .rejects.toThrow('cycle_already_running');
+    } finally {
+      await handle!.release();
+    }
   });
 });

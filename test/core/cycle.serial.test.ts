@@ -21,12 +21,15 @@ let syncCalls: Array<{ dryRun: boolean | undefined; noPull: boolean | undefined;
 let extractCalls: Array<{ mode: string; dir: string; slugs: string[] | undefined }> = [];
 let embedCalls: Array<{ stale: boolean | undefined; dryRun: boolean | undefined }> = [];
 let orphansCalls: number = 0;
+let syncResultStatus: 'synced' | 'blocked_by_failures' = 'synced';
+let lintIssues = 2;
+let lintFixed = 2;
 
 // Mock lint
 mock.module('../../src/commands/lint.ts', () => ({
   runLintCore: async (opts: any) => {
     lintCalls.push({ target: opts.target, fix: opts.fix, dryRun: opts.dryRun });
-    return { total_issues: 2, total_fixed: opts.dryRun ? 0 : 2, pages_scanned: 5 };
+    return { total_issues: lintIssues, total_fixed: opts.dryRun ? 0 : lintFixed, pages_scanned: 5 };
   },
 }));
 
@@ -51,7 +54,7 @@ mock.module('../../src/commands/sync.ts', () => ({
   performSync: async (_engine: any, opts: any) => {
     syncCalls.push({ dryRun: opts.dryRun, noPull: opts.noPull, noExtract: opts.noExtract, sourceId: opts.sourceId });
     return {
-      status: opts.dryRun ? 'dry_run' : 'synced',
+      status: opts.dryRun ? 'dry_run' : syncResultStatus,
       fromCommit: 'abcd',
       toCommit: 'efgh',
       added: opts.dryRun ? 0 : 4,
@@ -148,6 +151,9 @@ beforeEach(() => {
   extractCalls = [];
   embedCalls = [];
   orphansCalls = 0;
+  syncResultStatus = 'synced';
+  lintIssues = 2;
+  lintFixed = 2;
 });
 
 // ─── dryRun propagation (regression guards) ────────────────────────
@@ -313,15 +319,18 @@ describe('runCycle — engine = null (filesystem-only mode)', () => {
   });
 
   test('file lock blocks concurrent engine=null cycles', async () => {
-    // Seed a lock file pointing at PID 1 (init/launchd — always alive on
-    // unix, and never equals our test PID). Fresh mtime means "live holder".
+    // Use the test runner's live parent PID. PID 1 is only reliably a live
+    // init process on Unix; on Windows it is not a portable test fixture.
+    // Fresh mtime means "live holder".
     // With engine=null + the default phases selection, lint + backlinks
     // trigger NEEDS_LOCK_PHASES → acquireFileLock sees the live holder and
     // returns null → runCycle returns skipped/cycle_already_running.
     const { writeFileSync, mkdirSync } = require('fs');
     const path = require('path');
+    expect(process.ppid).toBeGreaterThan(0);
+    expect(process.ppid).not.toBe(process.pid);
     mkdirSync(path.dirname(lockFile), { recursive: true });
-    writeFileSync(lockFile, `1\n${new Date().toISOString()}\n`);
+    writeFileSync(lockFile, `${process.ppid}\n${new Date().toISOString()}\n`);
 
     const report = await runCycle(null, { brainDir: '/tmp/brain' });
     expect(report.status).toBe('skipped');
@@ -349,6 +358,27 @@ describe('runCycle — status derivation', () => {
     expect(report.totals.pages_synced).toBe(6); // added + modified from sync mock
     expect(report.totals.pages_embedded).toBe(8);
     expect(report.totals.orphans_found).toBe(1);
+  });
+
+  test('blocks embed when sync is blocked by invalid source files', async () => {
+    syncResultStatus = 'blocked_by_failures';
+    const report = await runCycle(sharedEngine, { brainDir: '/tmp/brain', phases: ['sync', 'embed'] });
+
+    const sync = report.phases.find((phase) => phase.phase === 'sync');
+    const embed = report.phases.find((phase) => phase.phase === 'embed');
+    expect(sync?.status).toBe('warn');
+    expect(embed).toMatchObject({ status: 'blocked', details: { reason: 'upstream_sync_failed' } });
+    expect(embedCalls).toHaveLength(0);
+    expect(report.status).toBe('partial');
+  });
+
+  test('keeps non-blocking lint warnings visible without falsifying a completed cycle', async () => {
+    lintIssues = 3;
+    lintFixed = 0;
+    const report = await runCycle(sharedEngine, { brainDir: '/tmp/brain', phases: ['lint'] });
+
+    expect(report.phases).toMatchObject([{ phase: 'lint', status: 'warn' }]);
+    expect(report.status).toBe('clean');
   });
 
   test('schema_version is stable at "1"', async () => {

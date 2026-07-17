@@ -19,7 +19,7 @@
  *   3. Content-type allowlist: image/png → 415 with paste-ready
  *      processor-skillpack hint
  *   4. Happy path: text/markdown → 200/202 with job_id in response
- *   5. Header overrides: X-Gbrain-Slug is forwarded; X-Gbrain-Source-Id
+ *   5. Header overrides: X-Voltmind-Slug is forwarded; X-Voltmind-Source-Id
  *      tags the event
  *   6. Idempotency: same content + same client → job_id returned twice
  *      should match (queue dedup on (client_id, content_hash))
@@ -27,7 +27,7 @@
  * Mirrors the spawn + mint pattern from test/e2e/serve-http-oauth.test.ts
  * exactly so future maintainers see one pattern, not two.
  *
- * Run: VOLTMIND_DATABASE_URL=... bun test test/e2e/serve-http-ingest-webhook.test.ts
+ * Run: DATABASE_URL=... bun test test/e2e/serve-http-ingest-webhook.test.ts
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
@@ -300,14 +300,14 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
     expect([200, 202]).toContain(res.status);
   });
 
-  test('X-Gbrain-Content-Type header overrides request Content-Type', async () => {
+  test('X-Voltmind-Content-Type header overrides request Content-Type', async () => {
     const token = await mintToken('read write');
     // Send as application/octet-stream (would 415) but override to text/markdown.
     const res = await postIngest(
       token,
       'application/octet-stream',
       '# override via header',
-      { 'X-Gbrain-Content-Type': 'text/markdown' },
+      { 'X-Voltmind-Content-Type': 'text/markdown' },
     );
     // With override: route should accept as markdown.
     expect([200, 202]).toContain(res.status);
@@ -317,14 +317,14 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
   // Header overrides
   // =========================================================================
 
-  test('X-Gbrain-Slug header is accepted (job receives the slug hint)', async () => {
+  test('X-Voltmind-Slug header is accepted (job receives the slug hint)', async () => {
     const token = await mintToken('read write');
     const slug = `webhook/test/header-${Date.now()}`;
     const res = await postIngest(
       token,
       'text/markdown',
       '# slug header test',
-      { 'X-Gbrain-Slug': slug },
+      { 'X-Voltmind-Slug': slug },
     );
     expect([200, 202]).toContain(res.status);
     // The route should accept the header without rejecting — actual slug
@@ -332,26 +332,39 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
     // test/ingestion/ingest-capture.test.ts).
   });
 
-  test('X-Gbrain-Source-Id header is accepted', async () => {
+  test('X-Voltmind-Source-Id header is accepted', async () => {
     const token = await mintToken('read write');
     const res = await postIngest(
       token,
       'text/markdown',
       '# source-id header test',
-      { 'X-Gbrain-Source-Id': 'zapier-webhook' },
+      { 'X-Voltmind-Source-Id': 'zapier-webhook' },
     );
     expect([200, 202]).toContain(res.status);
   });
 
-  test('X-Gbrain-Source-Uri header is accepted', async () => {
+  test('X-Voltmind-Source-Uri header is accepted', async () => {
     const token = await mintToken('read write');
     const res = await postIngest(
       token,
       'text/markdown',
       '# source-uri header test',
-      { 'X-Gbrain-Source-Uri': 'https://example.com/issue/123' },
+      { 'X-Voltmind-Source-Uri': 'https://example.com/issue/123' },
     );
     expect([200, 202]).toContain(res.status);
+  });
+
+  test('X-Gbrain-* headers remain compatible with a deprecation warning', async () => {
+    const token = await mintToken('read write');
+    const res = await postIngest(
+      token,
+      'application/octet-stream',
+      '# legacy header compatibility',
+      { 'X-Gbrain-Content-Type': 'text/markdown' },
+    );
+    expect([200, 202]).toContain(res.status);
+    expect(res.headers.get('deprecation')).toBe('true');
+    expect(res.headers.get('warning')).toContain('X-Gbrain-*');
   });
 
   // =========================================================================
