@@ -1,0 +1,6848 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-16T04:25:16.661Z",
+  "dry_run": true,
+  "mutation_performed": false,
+  "source": {
+    "id": "default",
+    "directory": "E:\\gbrain\\VoltMind-PersonalBrain\\brain",
+    "markdown_files": 82,
+    "syncable_files": 52,
+    "sync_skipped_files": 30,
+    "parse_error_files": 10
+  },
+  "database": {
+    "active_pages": 361,
+    "pages_with_source_path": 26,
+    "pages_without_source_path": 335
+  },
+  "summary": {
+    "current_source_keep": 26,
+    "historical_entity": 46,
+    "high_confidence_noise": 0,
+    "manual_review": 289
+  },
+  "pages": [
+    {
+      "id": 852,
+      "slug": "2026-06-02-04-work-brain-approval-and-roadmap",
+      "title": "2026-06-02/04 Work Brain Approval And Roadmap",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 2878
+    },
+    {
+      "id": 851,
+      "slug": "2026-06-04-05-local-ai-tooling-and-windows-policy",
+      "title": "2026-06-04/05 Local AI Tooling And Windows Policy",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 3170
+    },
+    {
+      "id": 849,
+      "slug": "2026-06-08-11-ai-tools-and-api-access",
+      "title": "2026 06 08 11 Ai Tools And Api Access",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 3301
+    },
+    {
+      "id": 848,
+      "slug": "2026-06-11-oa-attendance-remediation",
+      "title": "2026 06 11 Oa Attendance Remediation",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 2654
+    },
+    {
+      "id": 847,
+      "slug": "2026-06-12-16-dibiao-ai-discussion",
+      "title": "2026 06 12 16 Dibiao Ai Discussion",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 2255
+    },
+    {
+      "id": 39,
+      "slug": "access_policy",
+      "title": "ACCESS_POLICY.md",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1415,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 40,
+      "slug": "archive/readme",
+      "title": "Archive",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 237,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 41,
+      "slug": "artifacts/readme",
+      "title": "Artifacts",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 404,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 679,
+      "slug": "companies/acme-corp",
+      "title": "Acme Corp",
+      "type": "company",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 812,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 694,
+      "slug": "companies/acme-corp-series",
+      "title": "Acme Corp Series",
+      "type": "company",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 836,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 532,
+      "slug": "companies/example-co",
+      "title": "Example Co",
+      "type": "company",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 882,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 582,
+      "slug": "companies/many-labs",
+      "title": "Many Labs",
+      "type": "company",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 884,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 699,
+      "slug": "companies/marco-smith",
+      "title": "Marco Smith",
+      "type": "company",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 820,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 521,
+      "slug": "companies/people-data-labs",
+      "title": "People Data Labs",
+      "type": "company",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 878,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 657,
+      "slug": "companies/ramp-labs",
+      "title": "Ramp Labs",
+      "type": "company",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 650,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 42,
+      "slug": "companies/readme",
+      "title": "Companies",
+      "type": "note",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "people/zhiqiang-zhou.md"
+      ],
+      "body_length": 375
+    },
+    {
+      "id": 693,
+      "slug": "companies/san-francisco",
+      "title": "San Francisco",
+      "type": "company",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 812,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 43,
+      "slug": "concepts/readme",
+      "title": "Concepts",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 355,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 44,
+      "slug": "contribution/candidates/readme",
+      "title": "Contribution Candidates",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 463,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 45,
+      "slug": "contribution/published/readme",
+      "title": "Published Contributions",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 230,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 46,
+      "slug": "contribution/readme",
+      "title": "Contribution",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 573,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 47,
+      "slug": "contribution/redacted/readme",
+      "title": "Redacted Contributions",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 219,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 48,
+      "slug": "contribution/rejected/readme",
+      "title": "Rejected Contributions",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 210,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 49,
+      "slug": "contribution/reviews/readme",
+      "title": "Contribution Reviews",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 181,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 50,
+      "slug": "contribution/rules",
+      "title": "Contribution Rules",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 388,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 21,
+      "slug": "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap",
+      "title": "2026-06-02/04 Work Brain Approval And Roadmap",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "people/joki-hong.md"
+      ],
+      "body_length": 3082
+    },
+    {
+      "id": 22,
+      "slug": "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy",
+      "title": "2026-06-04/05 Local AI Tooling And Windows Policy",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "people/diana-mengdie-zhang.md",
+        "people/lida-zheng.md"
+      ],
+      "body_length": 3429
+    },
+    {
+      "id": 31,
+      "slug": "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+      "title": "2026 06 08 11 Ai Tools And Api Access",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "projects/ai-tooling-runtime.md",
+        "state/actions/follow-up-jenny-api-key.md"
+      ],
+      "body_length": 3509
+    },
+    {
+      "id": 32,
+      "slug": "conversations/teams/2026-06-11-oa-attendance-remediation",
+      "title": "2026 06 11 Oa Attendance Remediation",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "state/actions/check-oa-attendance-correction-flow.md"
+      ],
+      "body_length": 2827
+    },
+    {
+      "id": 826,
+      "slug": "conversations/teams/2026-06-12-16-dibiao-ai-discussion",
+      "title": "2026 06 12 16 Dibiao Ai Discussion",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "people/lida-zheng.md"
+      ],
+      "body_length": 2468
+    },
+    {
+      "id": 1,
+      "slug": "daily/2026/2026-06-08",
+      "title": "2026 06 08",
+      "type": "daily",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 763,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 2,
+      "slug": "daily/2026/2026-06-11",
+      "title": "2026 06 11",
+      "type": "daily",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1581,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 825,
+      "slug": "daily/2026/2026-06-12",
+      "title": "2026 06 12",
+      "type": "daily",
+      "source_path": "daily\\2026\\2026-06-12.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 620
+    },
+    {
+      "id": 824,
+      "slug": "daily/2026/2026-06-15",
+      "title": "2026 06 15",
+      "type": "daily",
+      "source_path": "daily\\2026\\2026-06-15.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 1058
+    },
+    {
+      "id": 51,
+      "slug": "daily/readme",
+      "title": "Daily",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 439,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 52,
+      "slug": "heartbeat",
+      "title": "HEARTBEAT.md",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1867,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 53,
+      "slug": "ideas/readme",
+      "title": "Ideas",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 387,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 54,
+      "slug": "inbox/readme",
+      "title": "Inbox",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 512,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 55,
+      "slug": "index",
+      "title": "VoltMind Personal Brain Index",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 2863,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 3,
+      "slug": "meetings/2026-06-08-3d-department-weekly",
+      "title": "3D部门周会",
+      "type": "meeting",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "people/zhiqiang-zhou.md"
+      ],
+      "body_length": 2273
+    },
+    {
+      "id": 56,
+      "slug": "meetings/readme",
+      "title": "Meetings",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 575,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 57,
+      "slug": "orgs/readme",
+      "title": "Orgs",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 356,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 4,
+      "slug": "orgs/team-slug",
+      "title": "Team Slug",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 0,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 606,
+      "slug": "people/accepts-twilio",
+      "title": "Accepts Twilio",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 899,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 604,
+      "slug": "people/add-new",
+      "title": "Add New",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 877,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 617,
+      "slug": "people/add-remote",
+      "title": "Add Remote",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 851,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 696,
+      "slug": "people/adjusted-phase",
+      "title": "Adjusted Phase",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 822,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 726,
+      "slug": "people/adjusted-rand-index",
+      "title": "Adjusted Rand Index",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 848,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 755,
+      "slug": "people/admin-react",
+      "title": "Admin React",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 812,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 542,
+      "slug": "people/adversarial-challenge",
+      "title": "Adversarial Challenge",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 936,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 595,
+      "slug": "people/after-step",
+      "title": "After Step",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 895,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 763,
+      "slug": "people/agent-detail",
+      "title": "Agent Detail",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 820,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 639,
+      "slug": "people/agent-token",
+      "title": "Agent Token",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 889,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 832,
+      "slug": "people/albert-liang",
+      "title": "Albert Liang",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-12.md",
+        "state/actions/attend-information-security-it-training-2026-06-24.md"
+      ],
+      "body_length": 1091
+    },
+    {
+      "id": 622,
+      "slug": "people/alice-chen",
+      "title": "Alice Chen",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 865,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 680,
+      "slug": "people/alice-example",
+      "title": "Alice Example",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 822,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 751,
+      "slug": "people/allowed-postgres",
+      "title": "Allowed Postgres",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 830,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 740,
+      "slug": "people/anthropic-agent-skills",
+      "title": "Anthropic Agent Skills",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 856,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 665,
+      "slug": "people/anthropic-haiku",
+      "title": "Anthropic Haiku",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 865,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 742,
+      "slug": "people/anthropic-messages",
+      "title": "Anthropic Messages",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 842,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 730,
+      "slug": "people/apple-notes",
+      "title": "Apple Notes",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 816,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 655,
+      "slug": "people/apple-shortcuts",
+      "title": "Apple Shortcuts",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 803,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 720,
+      "slug": "people/apple-silicon",
+      "title": "Apple Silicon",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 818,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 752,
+      "slug": "people/apple-silicon-mac",
+      "title": "Apple Silicon Mac",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 834,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 578,
+      "slug": "people/archive-name",
+      "title": "Archive Name",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 911,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 714,
+      "slug": "people/arthur-koestler",
+      "title": "Arthur Koestler",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 830,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 831,
+      "slug": "people/ask-charlotte-an",
+      "title": "Ask Charlotte An",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "state/actions/follow-up-jenny-api-key.md"
+      ],
+      "body_length": 970
+    },
+    {
+      "id": 710,
+      "slug": "people/asserts-authorization",
+      "title": "Asserts Authorization",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 854,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 838,
+      "slug": "people/associate-design-engineer",
+      "title": "Associate Design Engineer",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-15.md"
+      ],
+      "body_length": 922
+    },
+    {
+      "id": 598,
+      "slug": "people/auth-token",
+      "title": "Auth Token",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 891,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 570,
+      "slug": "people/author-name",
+      "title": "Author Name",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 869,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 809,
+      "slug": "people/autopilot-task",
+      "title": "Autopilot Task",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1000,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 702,
+      "slug": "people/bad-request",
+      "title": "Bad Request",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 812,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 585,
+      "slug": "people/bearer-token",
+      "title": "Bearer Token",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 863,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 586,
+      "slug": "people/bearer-tokens",
+      "title": "Bearer Tokens",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 867,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 663,
+      "slug": "people/bid-system",
+      "title": "Bid System",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 862,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 553,
+      "slug": "people/birthday-announcement",
+      "title": "Birthday Announcement",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 922,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 5,
+      "slug": "people/bo-qin",
+      "title": "Bo Qin",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "state/actions/attend-information-security-it-training-2026-06-24.md"
+      ],
+      "body_length": 1114
+    },
+    {
+      "id": 623,
+      "slug": "people/bob-park",
+      "title": "Bob Park",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 857,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 569,
+      "slug": "people/book-title-goes-here",
+      "title": "Book Title Goes Here",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 901,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 723,
+      "slug": "people/both-postgres",
+      "title": "Both Postgres",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 824,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 610,
+      "slug": "people/brain-name",
+      "title": "Brain Name",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 895,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 518,
+      "slug": "people/brave-search",
+      "title": "Brave Search",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 864,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 527,
+      "slug": "people/bulk-enrichment-rules",
+      "title": "Bulk Enrichment Rules",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 890,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 711,
+      "slug": "people/but-codex",
+      "title": "But Codex",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 808,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 712,
+      "slug": "people/but-garry",
+      "title": "But Garry",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 808,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 641,
+      "slug": "people/calendar-sync-script",
+      "title": "Calendar Sync Script",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 912,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 683,
+      "slug": "people/canonical-node",
+      "title": "Canonical Node",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 828,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 624,
+      "slug": "people/carol-wu",
+      "title": "Carol Wu",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 855,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 20,
+      "slug": "people/charlotte-an",
+      "title": "Charlotte An",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "daily/2026/2026-06-15.md",
+        "state/actions/follow-up-jenny-api-key.md"
+      ],
+      "body_length": 1047
+    },
+    {
+      "id": 608,
+      "slug": "people/check-twilio",
+      "title": "Check Twilio",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 905,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 642,
+      "slug": "people/chez-panisse",
+      "title": "Chez Panisse",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 898,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 627,
+      "slug": "people/circleback-free",
+      "title": "Circleback Free",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 879,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 628,
+      "slug": "people/circleback-pro",
+      "title": "Circleback Pro",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 877,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 565,
+      "slug": "people/citation-audit-report",
+      "title": "Citation Audit Report",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 898,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 591,
+      "slug": "people/claude-code",
+      "title": "Claude Code",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md"
+      ],
+      "body_length": 805
+    },
+    {
+      "id": 653,
+      "slug": "people/claude-cowork",
+      "title": "Claude Cowork",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 797,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 599,
+      "slug": "people/claude-desktop",
+      "title": "Claude Desktop",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 909,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 695,
+      "slug": "people/claude-haiku",
+      "title": "Claude Haiku",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 816,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 691,
+      "slug": "people/claude-opus",
+      "title": "Claude Opus",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 812,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 587,
+      "slug": "people/claude-sonnet",
+      "title": "Claude Sonnet",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 867,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 756,
+      "slug": "people/click-revoke",
+      "title": "Click Revoke",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 818,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 757,
+      "slug": "people/click-sign-out-everywhere",
+      "title": "Click Sign Out Everywhere",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 862,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 637,
+      "slug": "people/client-secret",
+      "title": "Client Secret",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 871,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 739,
+      "slug": "people/closes-codex",
+      "title": "Closes Codex",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 816,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 660,
+      "slug": "people/cloudflare-tunnel",
+      "title": "Cloudflare Tunnel",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 888,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 541,
+      "slug": "people/codex-review",
+      "title": "Codex Review",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 894,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 803,
+      "slug": "people/company-brain",
+      "title": "Company Brain",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "daily/2026/2026-06-15.md",
+        "people/joki-hong.md",
+        "projects/voltmind-work-brain.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 873
+    },
+    {
+      "id": 525,
+      "slug": "people/company-name",
+      "title": "Company Name",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 830,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 625,
+      "slug": "people/conference-room",
+      "title": "Conference Room",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 883,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 754,
+      "slug": "people/config-export",
+      "title": "Config Export",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 820,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 827,
+      "slug": "people/contribution-layer",
+      "title": "Contribution Layer",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "people/joki-hong.md",
+        "projects/voltmind-work-brain.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 1030
+    },
+    {
+      "id": 612,
+      "slug": "people/conversation-flow",
+      "title": "Conversation Flow",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 921,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 611,
+      "slug": "people/conversation-timing",
+      "title": "Conversation Timing",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 931,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 524,
+      "slug": "people/current-company",
+      "title": "Current Company",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 878,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 561,
+      "slug": "people/current-work",
+      "title": "Current Work",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "people/diana-mengdie-zhang.md",
+        "people/hao-zhang.md",
+        "people/joki-hong.md",
+        "people/lida-zheng.md",
+        "people/yiyang-zhang.md",
+        "people/zhiqiang-zhou.md"
+      ],
+      "body_length": 890
+    },
+    {
+      "id": 568,
+      "slug": "people/custom-author",
+      "title": "Custom Author",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 883,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 719,
+      "slug": "people/custom-connector",
+      "title": "Custom Connector",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 832,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 567,
+      "slug": "people/custom-title",
+      "title": "Custom Title",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 879,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 745,
+      "slug": "people/daniel-kahneman",
+      "title": "Daniel Kahneman",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 830,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 562,
+      "slug": "people/data-controls",
+      "title": "Data Controls",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 890,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 519,
+      "slug": "people/data-need",
+      "title": "Data Need",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 856,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 686,
+      "slug": "people/default-anthropic",
+      "title": "Default Anthropic",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 822,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 703,
+      "slug": "people/detects-postgres",
+      "title": "Detects Postgres",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 834,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 615,
+      "slug": "people/detects-telegram",
+      "title": "Detects Telegram",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 886,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 837,
+      "slug": "people/development-team",
+      "title": "Development Team",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-15.md"
+      ],
+      "body_length": 832
+    },
+    {
+      "id": 6,
+      "slug": "people/diana-mengdie-zhang",
+      "title": "Diana Mengdie Zhang",
+      "type": "person",
+      "source_path": "people\\diana-mengdie-zhang.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "daily/2026/2026-06-15.md",
+        "people/diana-mengdie-zhang.md"
+      ],
+      "body_length": 1409
+    },
+    {
+      "id": 645,
+      "slug": "people/does-venus",
+      "title": "Does Venus",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 955,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 829,
+      "slug": "people/drafted-teams",
+      "title": "Drafted Teams",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "state/actions/draft-zi-ye-message.md"
+      ],
+      "body_length": 938
+    },
+    {
+      "id": 632,
+      "slug": "people/dropbox-sign",
+      "title": "Dropbox Sign",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 883,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 684,
+      "slug": "people/dynamic-client-registration",
+      "title": "Dynamic Client Registration",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 866,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 631,
+      "slug": "people/email-collector",
+      "title": "Email Collector",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 869,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 555,
+      "slug": "people/employee-spotlight",
+      "title": "Employee Spotlight",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 910,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 764,
+      "slug": "people/eng-review",
+      "title": "Eng Review",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 810,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 839,
+      "slug": "people/engineering-department",
+      "title": "Engineering Department",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-15.md"
+      ],
+      "body_length": 908
+    },
+    {
+      "id": 761,
+      "slug": "people/every-perplexity",
+      "title": "Every Perplexity",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 836,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 559,
+      "slug": "people/example-department",
+      "title": "Example Department",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 912,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 557,
+      "slug": "people/example-office",
+      "title": "Example Office",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 896,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 558,
+      "slug": "people/example-role",
+      "title": "Example Role",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 886,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 520,
+      "slug": "people/example-sources",
+      "title": "Example Sources",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 880,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 574,
+      "slug": "people/executive-summary",
+      "title": "Executive Summary",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 948,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 549,
+      "slug": "people/existing-markdown",
+      "title": "Existing Markdown",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 908,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 701,
+      "slug": "people/existing-title",
+      "title": "Existing Title",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 820,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 697,
+      "slug": "people/failure-modes",
+      "title": "Failure Modes",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 824,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 537,
+      "slug": "people/fashion-guide",
+      "title": "Fashion Guide",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 917,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 692,
+      "slug": "people/federated-sync",
+      "title": "Federated Sync",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 822,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 589,
+      "slug": "people/filtered-stream",
+      "title": "Filtered Stream",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 869,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 668,
+      "slug": "people/first-content-resolution",
+      "title": "First Content Resolution",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1120,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 647,
+      "slug": "people/for-linux",
+      "title": "For Linux",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1014,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 650,
+      "slug": "people/for-mars",
+      "title": "For Mars",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1061,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 564,
+      "slug": "people/for-teams",
+      "title": "For Teams",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 866,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 651,
+      "slug": "people/for-venus",
+      "title": "For Venus",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1065,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 836,
+      "slug": "people/forward-deployed-engineer",
+      "title": "Forward Deployed Engineer",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-15.md",
+        "people/lida-zheng.md"
+      ],
+      "body_length": 902
+    },
+    {
+      "id": 523,
+      "slug": "people/full-name",
+      "title": "Full Name",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 854,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 652,
+      "slug": "people/garry-tan",
+      "title": "Garry Tan",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 791,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 661,
+      "slug": "people/gemini-live",
+      "title": "Gemini Live",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 862,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 646,
+      "slug": "people/gemini-pro",
+      "title": "Gemini Pro",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 955,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 630,
+      "slug": "people/gmail-account",
+      "title": "Gmail Account",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 871,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 638,
+      "slug": "people/google-calendar",
+      "title": "Google Calendar",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 771,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 635,
+      "slug": "people/google-cloud",
+      "title": "Google Cloud",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 877,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 571,
+      "slug": "people/google-contacts",
+      "title": "Google Contacts",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 886,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 656,
+      "slug": "people/google-gemini",
+      "title": "Google Gemini",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 807,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 619,
+      "slug": "people/google-meet",
+      "title": "Google Meet",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 857,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 572,
+      "slug": "people/google-takeout",
+      "title": "Google Takeout",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 884,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 636,
+      "slug": "people/google-workspace",
+      "title": "Google Workspace",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 877,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 666,
+      "slug": "people/group-chat-context",
+      "title": "Group Chat Context",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1100,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 735,
+      "slug": "people/han-extensions",
+      "title": "Han Extensions",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 826,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 733,
+      "slug": "people/hangul-jamo",
+      "title": "Hangul Jamo",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 814,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 732,
+      "slug": "people/hangul-syllables",
+      "title": "Hangul Syllables",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 836,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 7,
+      "slug": "people/hao-zhang",
+      "title": "Hao Zhang",
+      "type": "person",
+      "source_path": "people\\hao-zhang.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "daily/2026/2026-06-12.md",
+        "people/hao-zhang.md",
+        "people/joki-hong.md"
+      ],
+      "body_length": 1037
+    },
+    {
+      "id": 634,
+      "slug": "people/hermes-agent",
+      "title": "Hermes Agent",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 881,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 633,
+      "slug": "people/hermes-gateway",
+      "title": "Hermes Gateway",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 875,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 516,
+      "slug": "people/hobby-horses",
+      "title": "Hobby Horses",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 870,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 667,
+      "slug": "people/inbound-context",
+      "title": "Inbound Context",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1090,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 602,
+      "slug": "people/incoming-webhook",
+      "title": "Incoming Webhook",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 911,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 603,
+      "slug": "people/incoming-webhooks",
+      "title": "Incoming Webhooks",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 917,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 579,
+      "slug": "people/ingestion-status",
+      "title": "Ingestion Status",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 927,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 748,
+      "slug": "people/inline-anthropic",
+      "title": "Inline Anthropic",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 830,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 511,
+      "slug": "people/iron-law",
+      "title": "Iron Law",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 850,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 573,
+      "slug": "people/jane-smith",
+      "title": "Jane Smith",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 862,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 8,
+      "slug": "people/jiaxing-he",
+      "title": "Jiaxing He",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "daily/2026/2026-06-15.md"
+      ],
+      "body_length": 829
+    },
+    {
+      "id": 685,
+      "slug": "people/jobs-watch",
+      "title": "Jobs Watch",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 810,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 9,
+      "slug": "people/joki-hong",
+      "title": "Joki Hong",
+      "type": "person",
+      "source_path": "people\\joki-hong.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "daily/2026/2026-06-12.md",
+        "daily/2026/2026-06-15.md",
+        "people/joki-hong.md",
+        "people/zhiqiang-zhou.md",
+        "projects/voltmind-work-brain.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 1683
+    },
+    {
+      "id": 643,
+      "slug": "people/jordan-lee",
+      "title": "Jordan Lee",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 890,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 830,
+      "slug": "people/justike-liu",
+      "title": "Justike Liu",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "daily/2026/2026-06-12.md",
+        "daily/2026/2026-06-15.md",
+        "people/diana-mengdie-zhang.md",
+        "people/hao-zhang.md",
+        "people/joki-hong.md",
+        "people/lida-zheng.md",
+        "people/yiyang-zhang.md",
+        "people/zhiqiang-zhou.md",
+        "projects/ai-tooling-runtime.md",
+        "projects/voltmind-work-brain.md",
+        "state/actions/attend-information-security-it-training-2026-06-24.md",
+        "state/actions/check-oa-attendance-correction-flow.md",
+        "state/actions/follow-up-jenny-api-key.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 792
+    },
+    {
+      "id": 708,
+      "slug": "people/key-files",
+      "title": "Key Files",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 800,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 577,
+      "slug": "people/key-insights",
+      "title": "Key Insights",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 930,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 734,
+      "slug": "people/korean-hangul",
+      "title": "Korean Hangul",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 820,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 713,
+      "slug": "people/lateral-synaptic-drift",
+      "title": "Lateral Synaptic Drift",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 856,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 728,
+      "slug": "people/length-layer",
+      "title": "Length Layer",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 820,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 648,
+      "slug": "people/letting-path",
+      "title": "Letting Path",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1011,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 10,
+      "slug": "people/lida-zheng",
+      "title": "Lida Zheng",
+      "type": "person",
+      "source_path": "people\\lida-zheng.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "daily/2026/2026-06-15.md",
+        "people/lida-zheng.md",
+        "projects/ai-tooling-runtime.md"
+      ],
+      "body_length": 1833
+    },
+    {
+      "id": 11,
+      "slug": "people/lirui-zhang",
+      "title": "Lirui Zhang",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md"
+      ],
+      "body_length": 858
+    },
+    {
+      "id": 738,
+      "slug": "people/live-context",
+      "title": "Live Context",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 820,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 760,
+      "slug": "people/make-me-think",
+      "title": "Make Me Think",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 824,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 601,
+      "slug": "people/messaging-platform",
+      "title": "Messaging Platform",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 923,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 833,
+      "slug": "people/microsoft-copilot",
+      "title": "Microsoft Copilot",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "projects/voltmind-work-brain.md"
+      ],
+      "body_length": 931
+    },
+    {
+      "id": 544,
+      "slug": "people/microsoft-graph",
+      "title": "Microsoft Graph",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 890,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 547,
+      "slug": "people/microsoft-teams",
+      "title": "Microsoft Teams",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "people/diana-mengdie-zhang.md",
+        "people/hao-zhang.md",
+        "people/joki-hong.md",
+        "people/lida-zheng.md",
+        "people/yiyang-zhang.md",
+        "projects/ai-tooling-runtime.md",
+        "projects/voltmind-work-brain.md",
+        "state/actions/attend-information-security-it-training-2026-06-24.md",
+        "state/actions/check-oa-attendance-correction-flow.md",
+        "state/actions/follow-up-jenny-api-key.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 894
+    },
+    {
+      "id": 540,
+      "slug": "people/modal-review",
+      "title": "Modal Review",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 914,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 737,
+      "slug": "people/mon-may",
+      "title": "Mon May",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 790,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 590,
+      "slug": "people/monthly-cost",
+      "title": "Monthly Cost",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 861,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 721,
+      "slug": "people/monthly-recurring-revenue",
+      "title": "Monthly Recurring Revenue",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 862,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 536,
+      "slug": "people/morning-prep",
+      "title": "Morning Prep",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 909,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 662,
+      "slug": "people/multilingual-mars",
+      "title": "Multilingual Mars",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 890,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 640,
+      "slug": "people/multiple-google",
+      "title": "Multiple Google",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 909,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 700,
+      "slug": "people/my-pre",
+      "title": "My Pre",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 786,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 600,
+      "slug": "people/new-domain",
+      "title": "New Domain",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 891,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 551,
+      "slug": "people/new-hire-announcement",
+      "title": "New Hire Announcement",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-15.md"
+      ],
+      "body_length": 922
+    },
+    {
+      "id": 678,
+      "slug": "people/new-minion",
+      "title": "New Minion",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 810,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 605,
+      "slug": "people/new-webhook",
+      "title": "New Webhook",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 891,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 746,
+      "slug": "people/no-postgres",
+      "title": "No Postgres",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 816,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 859,
+      "slug": "people/no-teams",
+      "title": "No Teams",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md"
+      ],
+      "body_length": 1034
+    },
+    {
+      "id": 840,
+      "slug": "people/norah-mitchell",
+      "title": "Norah Mitchell",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-15.md"
+      ],
+      "body_length": 808
+    },
+    {
+      "id": 725,
+      "slug": "people/on-linux",
+      "title": "On Linux",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 804,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 750,
+      "slug": "people/on-supabase",
+      "title": "On Supabase",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 816,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 807,
+      "slug": "people/on-windows",
+      "title": "On Windows",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 828,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 539,
+      "slug": "people/only-claude",
+      "title": "Only Claude",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 886,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 538,
+      "slug": "people/only-codex",
+      "title": "Only Codex",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 880,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 526,
+      "slug": "people/open-threads",
+      "title": "Open Threads",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "people/diana-mengdie-zhang.md",
+        "people/hao-zhang.md",
+        "people/joki-hong.md",
+        "people/lida-zheng.md",
+        "people/yiyang-zhang.md",
+        "people/zhiqiang-zhou.md",
+        "projects/ai-tooling-runtime.md",
+        "projects/voltmind-work-brain.md"
+      ],
+      "body_length": 844
+    },
+    {
+      "id": 659,
+      "slug": "people/optional-twilio",
+      "title": "Optional Twilio",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 880,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 654,
+      "slug": "people/organization-settings",
+      "title": "Organization Settings",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 839,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 545,
+      "slug": "people/outlook-calendar",
+      "title": "Outlook Calendar",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-12.md",
+        "daily/2026/2026-06-15.md",
+        "people/hao-zhang.md",
+        "people/joki-hong.md",
+        "people/zhiqiang-zhou.md"
+      ],
+      "body_length": 898
+    },
+    {
+      "id": 546,
+      "slug": "people/outlook-email",
+      "title": "Outlook Email",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "state/actions/attend-information-security-it-training-2026-06-24.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 884
+    },
+    {
+      "id": 530,
+      "slug": "people/output-format",
+      "title": "Output Format",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 856,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 560,
+      "slug": "people/ownership-and-expertise",
+      "title": "Ownership And Expertise",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "people/diana-mengdie-zhang.md",
+        "people/hao-zhang.md",
+        "people/joki-hong.md",
+        "people/lida-zheng.md",
+        "people/yiyang-zhang.md",
+        "people/zhiqiang-zhou.md"
+      ],
+      "body_length": 928
+    },
+    {
+      "id": 834,
+      "slug": "people/owns-teams",
+      "title": "Owns Teams",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "people/zi-ye.md"
+      ],
+      "body_length": 637
+    },
+    {
+      "id": 736,
+      "slug": "people/pacific-time",
+      "title": "Pacific Time",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 820,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 548,
+      "slug": "people/pages-created",
+      "title": "Pages Created",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 892,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 594,
+      "slug": "people/payload-too-large",
+      "title": "Payload Too Large",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 823,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 583,
+      "slug": "people/pedro-franceschi",
+      "title": "Pedro Franceschi",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 691,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 616,
+      "slug": "people/perplexity-computer",
+      "title": "Perplexity Computer",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 891,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 584,
+      "slug": "people/person-page",
+      "title": "Person Page",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 635,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 535,
+      "slug": "people/personal-brain",
+      "title": "Personal Brain",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "daily/2026/2026-06-15.md",
+        "people/joki-hong.md",
+        "projects/ai-tooling-runtime.md",
+        "projects/voltmind-work-brain.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 863
+    },
+    {
+      "id": 705,
+      "slug": "people/poll-granola",
+      "title": "Poll Granola",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 732,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 731,
+      "slug": "people/press-ctrl",
+      "title": "Press Ctrl",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 810,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 743,
+      "slug": "people/press-enter",
+      "title": "Press Enter",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 816,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 716,
+      "slug": "people/printing-press",
+      "title": "Printing Press",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 826,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 554,
+      "slug": "people/promotion-announcement",
+      "title": "Promotion Announcement",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 924,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 19,
+      "slug": "people/qian-ye",
+      "title": "Qian Ye",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-15.md"
+      ],
+      "body_length": 1405
+    },
+    {
+      "id": 576,
+      "slug": "people/quotable-lines",
+      "title": "Quotable Lines",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 934,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 860,
+      "slug": "people/raw-teams-transcript",
+      "title": "Raw Teams Transcript",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md"
+      ],
+      "body_length": 1140
+    },
+    {
+      "id": 58,
+      "slug": "people/readme",
+      "title": "People",
+      "type": "note",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "daily/2026/2026-06-12.md",
+        "daily/2026/2026-06-15.md",
+        "projects/voltmind-work-brain.md",
+        "state/actions/attend-information-security-it-training-2026-06-24.md",
+        "state/actions/check-oa-attendance-correction-flow.md",
+        "state/actions/draft-zi-ye-message.md",
+        "state/actions/follow-up-jenny-api-key.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 529
+    },
+    {
+      "id": 688,
+      "slug": "people/recent-releases",
+      "title": "Recent Releases",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 832,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 850,
+      "slug": "people/recent-teams",
+      "title": "Recent Teams",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md"
+      ],
+      "body_length": 1036
+    },
+    {
+      "id": 747,
+      "slug": "people/register-client",
+      "title": "Register Client",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 830,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 613,
+      "slug": "people/report-loaded",
+      "title": "Report Loaded",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 907,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 528,
+      "slug": "people/report-storage",
+      "title": "Report Storage",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 862,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 762,
+      "slug": "people/request-log",
+      "title": "Request Log",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 816,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 614,
+      "slug": "people/restart-message-sweep-script",
+      "title": "Restart Message Sweep Script",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 928,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 580,
+      "slug": "people/retraction-watch",
+      "title": "Retraction Watch",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 905,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 749,
+      "slug": "people/row-level-security",
+      "title": "Row Level Security",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 844,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 727,
+      "slug": "people/run-voyage",
+      "title": "Run Voyage",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 808,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 566,
+      "slug": "people/sarah-chen",
+      "title": "Sarah Chen",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 868,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 689,
+      "slug": "people/schema-cathedral",
+      "title": "Schema Cathedral",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 830,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 533,
+      "slug": "people/see-also",
+      "title": "See Also",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 847,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 581,
+      "slug": "people/semantic-scholar",
+      "title": "Semantic Scholar",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 931,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 626,
+      "slug": "people/sent-events",
+      "title": "Sent Events",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 843,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 512,
+      "slug": "people/signal-type",
+      "title": "Signal Type",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 860,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 698,
+      "slug": "people/single-haiku",
+      "title": "Single Haiku",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 820,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 534,
+      "slug": "people/skipping-phase",
+      "title": "Skipping Phase",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 865,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 759,
+      "slug": "people/steve-krug",
+      "title": "Steve Krug",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 810,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 744,
+      "slug": "people/supabase-postgres",
+      "title": "Supabase Postgres",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 836,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 729,
+      "slug": "people/surfaces-voyage",
+      "title": "Surfaces Voyage",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 832,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 620,
+      "slug": "people/sync-script",
+      "title": "Sync Script",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 847,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 593,
+      "slug": "people/tailscale-funnel",
+      "title": "Tailscale Funnel",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 829,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 808,
+      "slug": "people/task-scheduler",
+      "title": "Task Scheduler",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 846,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 802,
+      "slug": "people/team-brain",
+      "title": "Team Brain",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "daily/2026/2026-06-15.md",
+        "projects/voltmind-work-brain.md"
+      ],
+      "body_length": 861
+    },
+    {
+      "id": 677,
+      "slug": "people/telegram-desktop",
+      "title": "Telegram Desktop",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 836,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 690,
+      "slug": "people/tell-wintermute",
+      "title": "Tell Wintermute",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 832,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 629,
+      "slug": "people/the-circleback",
+      "title": "The Circleback",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 881,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 556,
+      "slug": "people/the-microsoft-teams",
+      "title": "The Microsoft Teams",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 910,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 724,
+      "slug": "people/the-minions",
+      "title": "The Minions",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 814,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 715,
+      "slug": "people/the-open-collider",
+      "title": "The Open Collider",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 838,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 649,
+      "slug": "people/the-output-format",
+      "title": "The Output Format",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 1049,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 704,
+      "slug": "people/the-postgres",
+      "title": "The Postgres",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 812,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 718,
+      "slug": "people/the-react",
+      "title": "The React",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 808,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 687,
+      "slug": "people/the-step",
+      "title": "The Step",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 804,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 681,
+      "slug": "people/the-test",
+      "title": "The Test",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 800,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 707,
+      "slug": "people/the-topology",
+      "title": "The Topology",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 820,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 722,
+      "slug": "people/the-wilson",
+      "title": "The Wilson",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 810,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 717,
+      "slug": "people/time-machine",
+      "title": "Time Machine",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 816,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 753,
+      "slug": "people/token-lifetime",
+      "title": "Token Lifetime",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 826,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 592,
+      "slug": "people/too-many-requests",
+      "title": "Too Many Requests",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 831,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 531,
+      "slug": "people/tools-used",
+      "title": "Tools Used",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 846,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 563,
+      "slug": "people/treating-calendar",
+      "title": "Treating Calendar",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 902,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 597,
+      "slug": "people/twilio-account",
+      "title": "Twilio Account",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 905,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 522,
+      "slug": "people/update-state",
+      "title": "Update State",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 868,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 550,
+      "slug": "people/use-outlook-calendar",
+      "title": "Use Outlook Calendar",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 910,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 517,
+      "slug": "people/use-perplexity",
+      "title": "Use Perplexity",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 874,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 588,
+      "slug": "people/use-twitter",
+      "title": "Use Twitter",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 859,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 529,
+      "slug": "people/validation-rules",
+      "title": "Validation Rules",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 866,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 543,
+      "slug": "people/various-topics",
+      "title": "Various Topics",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 923,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 609,
+      "slug": "people/verify-realtime",
+      "title": "Verify Realtime",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 913,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 618,
+      "slug": "people/video-call",
+      "title": "Video Call",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 853,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 607,
+      "slug": "people/voice-configuration",
+      "title": "Voice Configuration",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 933,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 596,
+      "slug": "people/voice-server",
+      "title": "Voice Server",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 891,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 658,
+      "slug": "people/web-audio",
+      "title": "Web Audio",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 858,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 621,
+      "slug": "people/weekly-team-sync",
+      "title": "Weekly Team Sync",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 891,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 515,
+      "slug": "people/what-motivates-them",
+      "title": "What Motivates Them",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 896,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 514,
+      "slug": "people/what-they",
+      "title": "What They",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 858,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 513,
+      "slug": "people/what-they-believe",
+      "title": "What They Believe",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 890,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 644,
+      "slug": "people/which-google-calendar",
+      "title": "Which Google Calendar",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 930,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 575,
+      "slug": "people/why-it-matters",
+      "title": "Why It Matters",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 930,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 788,
+      "slug": "people/windows-task-scheduler",
+      "title": "Windows Task Scheduler",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 886,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 853,
+      "slug": "people/windows-update",
+      "title": "Windows Update",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md"
+      ],
+      "body_length": 1124
+    },
+    {
+      "id": 835,
+      "slug": "people/windy-lane",
+      "title": "Windy Lane",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 858,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 664,
+      "slug": "people/without-anthropic",
+      "title": "Without Anthropic",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 829,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 552,
+      "slug": "people/work-anniversary",
+      "title": "Work Anniversary",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 902,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 828,
+      "slug": "people/work-brain",
+      "title": "Work Brain",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "projects/voltmind-work-brain.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 1000
+    },
+    {
+      "id": 758,
+      "slug": "people/working-revoke-agent",
+      "title": "Working Revoke Agent",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 852,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 706,
+      "slug": "people/writing-valid-frontmatter",
+      "title": "Writing Valid Frontmatter",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 862,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 819,
+      "slug": "people/yiyang-zhang",
+      "title": "Yiyang Zhang",
+      "type": "person",
+      "source_path": "people\\yiyang-zhang.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "people/yiyang-zhang.md"
+      ],
+      "body_length": 1076
+    },
+    {
+      "id": 709,
+      "slug": "people/your-app",
+      "title": "Your App",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 800,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 682,
+      "slug": "people/your-supabase",
+      "title": "Your Supabase",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0.3,
+      "referenced_by": [],
+      "body_length": 824,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type",
+        "title_or_slug_contains_tool_or_config_marker"
+      ]
+    },
+    {
+      "id": 18,
+      "slug": "people/yue-liu",
+      "title": "Yue Liu",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "state/actions/check-oa-attendance-correction-flow.md"
+      ],
+      "body_length": 1028
+    },
+    {
+      "id": 17,
+      "slug": "people/yue-wang",
+      "title": "Yue Wang",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "state/actions/check-oa-attendance-correction-flow.md"
+      ],
+      "body_length": 984
+    },
+    {
+      "id": 841,
+      "slug": "people/yuwei-huang",
+      "title": "Yuwei Huang",
+      "type": "person",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-15.md"
+      ],
+      "body_length": 662
+    },
+    {
+      "id": 741,
+      "slug": "people/zhipu-matryoshka",
+      "title": "Zhipu Matryoshka",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 832,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 16,
+      "slug": "people/zhiqiang-zhou",
+      "title": "Zhiqiang Zhou",
+      "type": "person",
+      "source_path": "people\\zhiqiang-zhou.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-12.md",
+        "daily/2026/2026-06-15.md",
+        "people/joki-hong.md",
+        "people/zhiqiang-zhou.md"
+      ],
+      "body_length": 1515
+    },
+    {
+      "id": 817,
+      "slug": "people/zi-ye",
+      "title": "Zi Ye",
+      "type": "person",
+      "source_path": "people\\zi-ye.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-12.md",
+        "people/joki-hong.md",
+        "people/zi-ye.md",
+        "state/actions/draft-zi-ye-message.md"
+      ],
+      "body_length": 126
+    },
+    {
+      "id": 59,
+      "slug": "policy/action-risk-policy",
+      "title": "Action Risk Policy",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 744,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 60,
+      "slug": "policy/privacy-policy",
+      "title": "Privacy Policy",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 444,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 61,
+      "slug": "policy/publish-contract",
+      "title": "Publish Contract",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 836,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 62,
+      "slug": "policy/readme",
+      "title": "Policy",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 873,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 63,
+      "slug": "policy/retention-policy",
+      "title": "Retention Policy",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 559,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 64,
+      "slug": "policy/role-scope-map",
+      "title": "Role Scope Map",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 349,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 65,
+      "slug": "policy/sensitivity-taxonomy",
+      "title": "Sensitivity Taxonomy",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 388,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 66,
+      "slug": "policy/source-of-truth-map",
+      "title": "Source Of Truth Map",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 596,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 67,
+      "slug": "private/readme",
+      "title": "Private",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 358,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 33,
+      "slug": "projects/ai-tooling-runtime",
+      "title": "Ai Tooling Runtime",
+      "type": "project",
+      "source_path": "projects\\ai-tooling-runtime.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "people/diana-mengdie-zhang.md",
+        "people/lida-zheng.md",
+        "projects/ai-tooling-runtime.md"
+      ],
+      "body_length": 1464
+    },
+    {
+      "id": 68,
+      "slug": "projects/readme",
+      "title": "Projects",
+      "type": "note",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "people/diana-mengdie-zhang.md",
+        "people/hao-zhang.md",
+        "people/joki-hong.md",
+        "people/lida-zheng.md",
+        "people/yiyang-zhang.md",
+        "people/zhiqiang-zhou.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 507
+    },
+    {
+      "id": 23,
+      "slug": "projects/voltmind-work-brain",
+      "title": "VoltMind Work Brain",
+      "type": "project",
+      "source_path": "projects\\voltmind-work-brain.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "people/joki-hong.md",
+        "projects/voltmind-work-brain.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 1346
+    },
+    {
+      "id": 69,
+      "slug": "resolver",
+      "title": "VoltMind Personal Brain Resolver",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 3486,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 34,
+      "slug": "schema",
+      "title": "VoltMind Personal Brain Schema",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.5,
+      "referenced_by": [],
+      "body_length": 1453,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "title_or_slug_contains_phrase_marker"
+      ]
+    },
+    {
+      "id": 70,
+      "slug": "soul",
+      "title": "SOUL.md",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 2230,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 12,
+      "slug": "sources/outlook-calendar-week-2026-06-08",
+      "title": "Outlook Calendar Week 2026-06-08 To 2026-06-15",
+      "type": "source",
+      "source_path": null,
+      "confidence": 0.2,
+      "referenced_by": [],
+      "body_length": 1361,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "title_looks_like_template_or_instruction"
+      ]
+    },
+    {
+      "id": 13,
+      "slug": "sources/outlook-email-cold-start-phase2-2026-06-12",
+      "title": "Outlook Email Cold Start Phase 2 - 2026-06-12",
+      "type": "source",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "state/actions/attend-information-security-it-training-2026-06-24.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 1282
+    },
+    {
+      "id": 71,
+      "slug": "sources/readme",
+      "title": "Sources",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 379,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 14,
+      "slug": "state/actions/attend-information-security-it-training-2026-06-24",
+      "title": "Attend Information Security And IT Systems Training",
+      "type": "action",
+      "source_path": "state\\actions\\attend-information-security-it-training-2026-06-24.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "state/actions/attend-information-security-it-training-2026-06-24.md"
+      ],
+      "body_length": 1721
+    },
+    {
+      "id": 35,
+      "slug": "state/actions/check-oa-attendance-correction-flow",
+      "title": "Check Oa Attendance Correction Flow",
+      "type": "action",
+      "source_path": "state\\actions\\check-oa-attendance-correction-flow.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md"
+      ],
+      "body_length": 1493
+    },
+    {
+      "id": 811,
+      "slug": "state/actions/draft-zi-ye-message",
+      "title": "Draft message to Zi Ye via Teams and Email",
+      "type": "action",
+      "source_path": "state\\actions\\draft-zi-ye-message.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 339
+    },
+    {
+      "id": 36,
+      "slug": "state/actions/follow-up-jenny-api-key",
+      "title": "Follow Up Jenny Api Key",
+      "type": "action",
+      "source_path": "state\\actions\\follow-up-jenny-api-key.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "projects/ai-tooling-runtime.md"
+      ],
+      "body_length": 723
+    },
+    {
+      "id": 72,
+      "slug": "state/actions/readme",
+      "title": "Actions",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 630,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 24,
+      "slug": "state/actions/review-windows-update-policy-check",
+      "title": "Review Windows Update Policy Check",
+      "type": "action",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md"
+      ],
+      "body_length": 348
+    },
+    {
+      "id": 15,
+      "slug": "state/actions/revise-oa-approval-for-work-brain",
+      "title": "Revise OA Approval For Work Brain",
+      "type": "action",
+      "source_path": "state\\actions\\revise-oa-approval-for-work-brain.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "people/joki-hong.md",
+        "projects/voltmind-work-brain.md"
+      ],
+      "body_length": 880
+    },
+    {
+      "id": 73,
+      "slug": "state/commitments/readme",
+      "title": "Commitments",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 408,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 74,
+      "slug": "state/decisions/readme",
+      "title": "Decisions",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 362,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 25,
+      "slug": "state/decisions/work-brain-start-from-personal-brain",
+      "title": "Work Brain Starts From Personal Brain",
+      "type": "decision",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "people/joki-hong.md",
+        "projects/voltmind-work-brain.md"
+      ],
+      "body_length": 382
+    },
+    {
+      "id": 75,
+      "slug": "state/indexes/readme",
+      "title": "Indexes",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 314,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 76,
+      "slug": "state/readme",
+      "title": "State",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 414,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 37,
+      "slug": "state/risks/ai-tooling-access-friction",
+      "title": "Ai Tooling Access Friction",
+      "type": "risk",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "projects/ai-tooling-runtime.md"
+      ],
+      "body_length": 762
+    },
+    {
+      "id": 38,
+      "slug": "state/risks/api-key-shared-in-teams-chat",
+      "title": "Api Key Shared In Teams Chat",
+      "type": "risk",
+      "source_path": null,
+      "confidence": 0.7,
+      "referenced_by": [],
+      "body_length": 862,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "title_or_slug_contains_phrase_marker",
+        "title_looks_like_template_or_instruction"
+      ]
+    },
+    {
+      "id": 26,
+      "slug": "state/risks/local-ai-tooling-environment-friction",
+      "title": "Local AI Tooling Environment Friction",
+      "type": "risk",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "people/diana-mengdie-zhang.md",
+        "people/lida-zheng.md"
+      ],
+      "body_length": 314
+    },
+    {
+      "id": 77,
+      "slug": "state/risks/readme",
+      "title": "Risks",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 447,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    },
+    {
+      "id": 27,
+      "slug": "state/risks/work-brain-privacy-and-permission-risk",
+      "title": "Work Brain Privacy And Permission Risk",
+      "type": "risk",
+      "source_path": null,
+      "bucket": "historical_entity",
+      "action": "hold",
+      "confidence": 0.95,
+      "reasons": [
+        "explicitly_referenced_by_current_source"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "people/joki-hong.md",
+        "projects/voltmind-work-brain.md"
+      ],
+      "body_length": 340
+    },
+    {
+      "id": 28,
+      "slug": "templates/companies",
+      "title": "Company Name",
+      "type": "company",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 699,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 29,
+      "slug": "templates/meetings",
+      "title": "Meeting Title",
+      "type": "meeting",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 695,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 30,
+      "slug": "templates/people",
+      "title": "Full Name",
+      "type": "person",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 1113,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "entity_shaped_title_or_type"
+      ]
+    },
+    {
+      "id": 78,
+      "slug": "user",
+      "title": "USER.md",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0,
+      "referenced_by": [],
+      "body_length": 564,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise"
+      ]
+    },
+    {
+      "id": 79,
+      "slug": "workstreams/readme",
+      "title": "Workstreams",
+      "type": "note",
+      "source_path": null,
+      "confidence": 0.15,
+      "referenced_by": [],
+      "body_length": 458,
+      "bucket": "manual_review",
+      "action": "manual_review",
+      "reasons": [
+        "missing_source_path",
+        "not_high_confidence_noise",
+        "short_historical_body"
+      ]
+    }
+  ],
+  "source_files": [
+    {
+      "relative_path": ".system/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "archive/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "artifacts/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "companies/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "concepts/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/candidates/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/published/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/redacted/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/rejected/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/reviews/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/rules.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/joki-hong",
+        "projects/voltmind-work-brain",
+        "state/actions/revise-oa-approval-for-work-brain",
+        "state/decisions/work-brain-start-from-personal-brain",
+        "state/risks/work-brain-privacy-and-permission-risk"
+      ]
+    },
+    {
+      "relative_path": "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/bo-qin",
+        "people/diana-mengdie-zhang",
+        "people/hao-zhang",
+        "people/jiaxing-he",
+        "people/lida-zheng",
+        "projects/ai-tooling-runtime",
+        "state/actions/review-windows-update-policy-check",
+        "state/risks/local-ai-tooling-environment-friction"
+      ]
+    },
+    {
+      "relative_path": "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/charlotte-an",
+        "people/diana-mengdie-zhang",
+        "people/justike-liu",
+        "projects/ai-tooling-runtime",
+        "state/actions/follow-up-jenny-api-key",
+        "state/risks/ai-tooling-access-friction"
+      ]
+    },
+    {
+      "relative_path": "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/justike-liu",
+        "people/yue-liu",
+        "people/yue-wang",
+        "state/actions/check-oa-attendance-correction-flow"
+      ]
+    },
+    {
+      "relative_path": "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/diana-mengdie-zhang",
+        "people/lida-zheng",
+        "people/lirui-zhang",
+        "projects/ai-tooling-runtime"
+      ]
+    },
+    {
+      "relative_path": "daily/2026/2026-06-08.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "meetings/2026-06-08-3d-department-weekly",
+        "people/charlotte-an",
+        "people/jiaxing-he",
+        "people/joki-hong",
+        "people/qian-ye",
+        "people/zhiqiang-zhou",
+        "sources/outlook-calendar-week-2026-06-08"
+      ]
+    },
+    {
+      "relative_path": "daily/2026/2026-06-11.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+        "conversations/teams/2026-06-11-oa-attendance-remediation",
+        "people/charlotte-an",
+        "people/joki-hong",
+        "people/qian-ye",
+        "sources/outlook-calendar-week-2026-06-08",
+        "state/actions/check-oa-attendance-correction-flow",
+        "state/actions/follow-up-jenny-api-key"
+      ]
+    },
+    {
+      "relative_path": "daily/2026/2026-06-12.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/hao-zhang",
+        "people/joki-hong",
+        "people/zhiqiang-zhou",
+        "people/zi-ye"
+      ]
+    },
+    {
+      "relative_path": "daily/2026/2026-06-15.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/charlotte-an",
+        "people/jiaxing-he",
+        "people/joki-hong",
+        "people/qian-ye",
+        "people/zhiqiang-zhou"
+      ]
+    },
+    {
+      "relative_path": "daily/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "ideas/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "inbox/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "index.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "meetings/2026-06-08-3d-department-weekly.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/charlotte-an",
+        "people/jiaxing-he",
+        "people/joki-hong",
+        "people/qian-ye",
+        "people/zhiqiang-zhou",
+        "sources/outlook-calendar-week-2026-06-08",
+        "state/actions/README"
+      ]
+    },
+    {
+      "relative_path": "meetings/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "orgs/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "orgs/team-slug.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: File is empty or whitespace-only; expected frontmatter starting with ---"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "people/bo-qin.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy",
+        "projects/ai-tooling-runtime",
+        "state/actions/review-windows-update-policy-check"
+      ]
+    },
+    {
+      "relative_path": "people/charlotte-an.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "projects/ai-tooling-runtime",
+        "state/actions/follow-up-jenny-api-key",
+        "state/risks/ai-tooling-access-friction"
+      ]
+    },
+    {
+      "relative_path": "people/diana-mengdie-zhang.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy",
+        "projects/ai-tooling-runtime",
+        "state/risks/local-ai-tooling-environment-friction"
+      ]
+    },
+    {
+      "relative_path": "people/hao-zhang.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "people/jiaxing-he.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy"
+      ]
+    },
+    {
+      "relative_path": "people/joki-hong.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap",
+        "projects/voltmind-work-brain",
+        "state/actions/revise-oa-approval-for-work-brain",
+        "state/decisions/work-brain-start-from-personal-brain",
+        "state/risks/work-brain-privacy-and-permission-risk"
+      ]
+    },
+    {
+      "relative_path": "people/lida-zheng.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion",
+        "projects/ai-tooling-runtime",
+        "state/risks/local-ai-tooling-environment-friction"
+      ]
+    },
+    {
+      "relative_path": "people/lirui-zhang.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy"
+      ]
+    },
+    {
+      "relative_path": "people/qian-ye.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "daily/2026/2026-06-11",
+        "meetings/2026-06-08-3d-department-weekly"
+      ]
+    },
+    {
+      "relative_path": "people/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "people/yiyang-zhang.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "people/yue-liu.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "state/actions/check-oa-attendance-correction-flow"
+      ]
+    },
+    {
+      "relative_path": "people/yue-wang.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "state/actions/check-oa-attendance-correction-flow"
+      ]
+    },
+    {
+      "relative_path": "people/zhiqiang-zhou.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "meetings/2026-06-08-3d-department-weekly"
+      ]
+    },
+    {
+      "relative_path": "people/zi-ye.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/action-risk-policy.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/privacy-policy.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/publish-contract.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/retention-policy.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/role-scope-map.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/sensitivity-taxonomy.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/source-of-truth-map.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "private/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "projects/ai-tooling-runtime.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+        "state/actions/follow-up-jenny-api-key",
+        "state/risks/ai-tooling-access-friction"
+      ]
+    },
+    {
+      "relative_path": "projects/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "projects/voltmind-work-brain.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/joki-hong",
+        "people/justike-liu",
+        "state/actions/revise-oa-approval-for-work-brain",
+        "state/decisions/work-brain-start-from-personal-brain",
+        "state/risks/work-brain-privacy-and-permission-risk"
+      ]
+    },
+    {
+      "relative_path": "RESOLVER.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "schema.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "sources/outlook-calendar-week-2026-06-08.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "daily/2026/2026-06-08",
+        "daily/2026/2026-06-11",
+        "meetings/2026-06-08-3d-department-weekly",
+        "people/charlotte-an",
+        "people/jiaxing-he",
+        "people/joki-hong",
+        "people/qian-ye",
+        "people/zhiqiang-zhou"
+      ]
+    },
+    {
+      "relative_path": "sources/outlook-email-cold-start-phase2-2026-06-12.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/justike-liu",
+        "projects/voltmind-work-brain",
+        "state/actions/attend-information-security-it-training-2026-06-24",
+        "state/actions/revise-oa-approval-for-work-brain"
+      ]
+    },
+    {
+      "relative_path": "sources/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/actions/attend-information-security-it-training-2026-06-24.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/bo-qin",
+        "people/justike-liu",
+        "sources/outlook-email-cold-start-phase2-2026-06-12",
+        "state/actions/attend-information-security-it-training-2026-06-24"
+      ]
+    },
+    {
+      "relative_path": "state/actions/check-oa-attendance-correction-flow.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-11-oa-attendance-remediation",
+        "people/yue-liu",
+        "people/yue-wang"
+      ]
+    },
+    {
+      "relative_path": "state/actions/draft-zi-ye-message.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/zi-ye"
+      ]
+    },
+    {
+      "relative_path": "state/actions/follow-up-jenny-api-key.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+        "people/charlotte-an"
+      ]
+    },
+    {
+      "relative_path": "state/actions/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/actions/review-windows-update-policy-check.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/bo-qin",
+        "people/justike-liu"
+      ]
+    },
+    {
+      "relative_path": "state/actions/revise-oa-approval-for-work-brain.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/joki-hong",
+        "people/justike-liu",
+        "projects/voltmind-work-brain",
+        "sources/outlook-email-cold-start-phase2-2026-06-12"
+      ]
+    },
+    {
+      "relative_path": "state/commitments/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/decisions/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/decisions/work-brain-start-from-personal-brain.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/justike-liu",
+        "projects/voltmind-work-brain"
+      ]
+    },
+    {
+      "relative_path": "state/indexes/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/risks/ai-tooling-access-friction.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+        "projects/ai-tooling-runtime",
+        "state/actions/follow-up-jenny-api-key"
+      ]
+    },
+    {
+      "relative_path": "state/risks/api-key-shared-in-teams-chat.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+        "projects/ai-tooling-runtime"
+      ]
+    },
+    {
+      "relative_path": "state/risks/local-ai-tooling-environment-friction.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/diana-mengdie-zhang",
+        "people/justike-liu",
+        "people/lida-zheng",
+        "projects/ai-tooling-runtime"
+      ]
+    },
+    {
+      "relative_path": "state/risks/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/risks/work-brain-privacy-and-permission-risk.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/justike-liu",
+        "projects/voltmind-work-brain"
+      ]
+    },
+    {
+      "relative_path": "templates/companies.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/internal-owner-slug",
+        "state/actions/slug",
+        "state/commitments/slug",
+        "state/decisions/slug",
+        "state/risks/slug"
+      ]
+    },
+    {
+      "relative_path": "templates/meetings.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "orgs/slug",
+        "people/person-slug",
+        "projects/slug",
+        "sources/source-slug",
+        "state/actions/slug",
+        "state/commitments/slug",
+        "state/decisions/slug",
+        "state/risks/slug"
+      ]
+    },
+    {
+      "relative_path": "templates/people.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "companies/company-slug",
+        "meetings/YYYY-MM-DD-topic",
+        "orgs/team-slug",
+        "people/manager-slug",
+        "people/person-slug",
+        "projects/slug",
+        "state/actions/slug",
+        "state/commitments/slug",
+        "state/decisions/slug",
+        "state/risks/slug"
+      ]
+    },
+    {
+      "relative_path": "workstreams/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    }
+  ]
+}

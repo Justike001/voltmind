@@ -1,0 +1,2369 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-16T07:34:46.552Z",
+  "dry_run": true,
+  "mutation_performed": false,
+  "source": {
+    "id": "default",
+    "directory": "E:\\gbrain\\VoltMind-PersonalBrain\\brain",
+    "markdown_files": 82,
+    "syncable_files": 52,
+    "sync_skipped_files": 30,
+    "sync_exclusion_note": "Current sync excludes README.md, index.md, schema.md, and log.md by basename.",
+    "parse_error_files": 10
+  },
+  "database": {
+    "active_pages": 85,
+    "pages_with_source_path": 33,
+    "pages_without_source_path": 52
+  },
+  "summary": {
+    "current_source_keep": 85,
+    "historical_entity": 0,
+    "high_confidence_noise": 0,
+    "manual_review": 0
+  },
+  "pages": [
+    {
+      "id": 852,
+      "slug": "2026-06-02-04-work-brain-approval-and-roadmap",
+      "title": "2026-06-02/04 Work Brain Approval And Roadmap",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 2878
+    },
+    {
+      "id": 851,
+      "slug": "2026-06-04-05-local-ai-tooling-and-windows-policy",
+      "title": "2026-06-04/05 Local AI Tooling And Windows Policy",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 3170
+    },
+    {
+      "id": 849,
+      "slug": "2026-06-08-11-ai-tools-and-api-access",
+      "title": "2026 06 08 11 Ai Tools And Api Access",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 3301
+    },
+    {
+      "id": 848,
+      "slug": "2026-06-11-oa-attendance-remediation",
+      "title": "2026 06 11 Oa Attendance Remediation",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 2654
+    },
+    {
+      "id": 847,
+      "slug": "2026-06-12-16-dibiao-ai-discussion",
+      "title": "2026 06 12 16 Dibiao Ai Discussion",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 2255
+    },
+    {
+      "id": 40,
+      "slug": "archive/readme",
+      "title": "Archive",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 237
+    },
+    {
+      "id": 41,
+      "slug": "artifacts/readme",
+      "title": "Artifacts",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 404
+    },
+    {
+      "id": 42,
+      "slug": "companies/readme",
+      "title": "Companies",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "RESOLVER.md",
+        "companies/README.md",
+        "index.md",
+        "people/charlotte-an.md",
+        "people/qian-ye.md",
+        "people/yue-liu.md",
+        "people/yue-wang.md",
+        "people/zhiqiang-zhou.md",
+        "projects/README.md",
+        "schema.md",
+        "templates/people.md"
+      ],
+      "body_length": 375
+    },
+    {
+      "id": 43,
+      "slug": "concepts/readme",
+      "title": "Concepts",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 355
+    },
+    {
+      "id": 44,
+      "slug": "contribution/candidates/readme",
+      "title": "Contribution Candidates",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 463
+    },
+    {
+      "id": 45,
+      "slug": "contribution/published/readme",
+      "title": "Published Contributions",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 230
+    },
+    {
+      "id": 46,
+      "slug": "contribution/readme",
+      "title": "Contribution",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 573
+    },
+    {
+      "id": 47,
+      "slug": "contribution/redacted/readme",
+      "title": "Redacted Contributions",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 219
+    },
+    {
+      "id": 48,
+      "slug": "contribution/rejected/readme",
+      "title": "Rejected Contributions",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 210
+    },
+    {
+      "id": 49,
+      "slug": "contribution/reviews/readme",
+      "title": "Contribution Reviews",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 181
+    },
+    {
+      "id": 50,
+      "slug": "contribution/rules",
+      "title": "Contribution Rules",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 388
+    },
+    {
+      "id": 21,
+      "slug": "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap",
+      "title": "2026-06-02/04 Work Brain Approval And Roadmap",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "people/joki-hong.md"
+      ],
+      "body_length": 3082
+    },
+    {
+      "id": 22,
+      "slug": "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy",
+      "title": "2026-06-04/05 Local AI Tooling And Windows Policy",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "people/bo-qin.md",
+        "people/diana-mengdie-zhang.md",
+        "people/jiaxing-he.md",
+        "people/lida-zheng.md",
+        "people/lirui-zhang.md"
+      ],
+      "body_length": 3429
+    },
+    {
+      "id": 31,
+      "slug": "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+      "title": "2026 06 08 11 Ai Tools And Api Access",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-11.md",
+        "projects/ai-tooling-runtime.md",
+        "state/actions/follow-up-jenny-api-key.md",
+        "state/risks/ai-tooling-access-friction.md",
+        "state/risks/api-key-shared-in-teams-chat.md"
+      ],
+      "body_length": 3509
+    },
+    {
+      "id": 32,
+      "slug": "conversations/teams/2026-06-11-oa-attendance-remediation",
+      "title": "2026 06 11 Oa Attendance Remediation",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-11.md",
+        "state/actions/check-oa-attendance-correction-flow.md"
+      ],
+      "body_length": 2827
+    },
+    {
+      "id": 826,
+      "slug": "conversations/teams/2026-06-12-16-dibiao-ai-discussion",
+      "title": "2026 06 12 16 Dibiao Ai Discussion",
+      "type": "conversation",
+      "source_path": "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "people/lida-zheng.md"
+      ],
+      "body_length": 2468
+    },
+    {
+      "id": 1,
+      "slug": "daily/2026/2026-06-08",
+      "title": "2026 06 08",
+      "type": "daily",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "sources/outlook-calendar-week-2026-06-08.md"
+      ],
+      "body_length": 763
+    },
+    {
+      "id": 2,
+      "slug": "daily/2026/2026-06-11",
+      "title": "2026 06 11",
+      "type": "daily",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "people/qian-ye.md",
+        "sources/outlook-calendar-week-2026-06-08.md"
+      ],
+      "body_length": 1581
+    },
+    {
+      "id": 825,
+      "slug": "daily/2026/2026-06-12",
+      "title": "2026 06 12",
+      "type": "daily",
+      "source_path": "daily\\2026\\2026-06-12.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 620
+    },
+    {
+      "id": 824,
+      "slug": "daily/2026/2026-06-15",
+      "title": "2026 06 15",
+      "type": "daily",
+      "source_path": "daily\\2026\\2026-06-15.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 1058
+    },
+    {
+      "id": 51,
+      "slug": "daily/readme",
+      "title": "Daily",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 439
+    },
+    {
+      "id": 53,
+      "slug": "ideas/readme",
+      "title": "Ideas",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 387
+    },
+    {
+      "id": 54,
+      "slug": "inbox/readme",
+      "title": "Inbox",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 512
+    },
+    {
+      "id": 55,
+      "slug": "index",
+      "title": "VoltMind Personal Brain Index",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 2863
+    },
+    {
+      "id": 3,
+      "slug": "meetings/2026-06-08-3d-department-weekly",
+      "title": "3D部门周会",
+      "type": "meeting",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-08.md",
+        "people/qian-ye.md",
+        "people/zhiqiang-zhou.md",
+        "sources/outlook-calendar-week-2026-06-08.md"
+      ],
+      "body_length": 2273
+    },
+    {
+      "id": 56,
+      "slug": "meetings/readme",
+      "title": "Meetings",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 575
+    },
+    {
+      "id": 57,
+      "slug": "orgs/readme",
+      "title": "Orgs",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 356
+    },
+    {
+      "id": 5,
+      "slug": "people/bo-qin",
+      "title": "Bo Qin",
+      "type": "person",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "people/bo-qin.md",
+        "state/actions/attend-information-security-it-training-2026-06-24.md",
+        "state/actions/review-windows-update-policy-check.md"
+      ],
+      "body_length": 1114
+    },
+    {
+      "id": 20,
+      "slug": "people/charlotte-an",
+      "title": "Charlotte An",
+      "type": "person",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "daily/2026/2026-06-08.md",
+        "daily/2026/2026-06-11.md",
+        "daily/2026/2026-06-15.md",
+        "meetings/2026-06-08-3d-department-weekly.md",
+        "people/charlotte-an.md",
+        "sources/outlook-calendar-week-2026-06-08.md",
+        "state/actions/follow-up-jenny-api-key.md"
+      ],
+      "body_length": 1047
+    },
+    {
+      "id": 6,
+      "slug": "people/diana-mengdie-zhang",
+      "title": "Diana Mengdie Zhang",
+      "type": "person",
+      "source_path": "people\\diana-mengdie-zhang.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "daily/2026/2026-06-15.md",
+        "people/diana-mengdie-zhang.md",
+        "state/risks/local-ai-tooling-environment-friction.md"
+      ],
+      "body_length": 1409
+    },
+    {
+      "id": 7,
+      "slug": "people/hao-zhang",
+      "title": "Hao Zhang",
+      "type": "person",
+      "source_path": "people\\hao-zhang.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "daily/2026/2026-06-12.md",
+        "people/hao-zhang.md",
+        "people/joki-hong.md"
+      ],
+      "body_length": 1037
+    },
+    {
+      "id": 8,
+      "slug": "people/jiaxing-he",
+      "title": "Jiaxing He",
+      "type": "person",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "daily/2026/2026-06-08.md",
+        "daily/2026/2026-06-15.md",
+        "meetings/2026-06-08-3d-department-weekly.md",
+        "people/jiaxing-he.md",
+        "sources/outlook-calendar-week-2026-06-08.md"
+      ],
+      "body_length": 829
+    },
+    {
+      "id": 9,
+      "slug": "people/joki-hong",
+      "title": "Joki Hong",
+      "type": "person",
+      "source_path": "people\\joki-hong.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "daily/2026/2026-06-08.md",
+        "daily/2026/2026-06-11.md",
+        "daily/2026/2026-06-12.md",
+        "daily/2026/2026-06-15.md",
+        "meetings/2026-06-08-3d-department-weekly.md",
+        "people/joki-hong.md",
+        "people/zhiqiang-zhou.md",
+        "projects/voltmind-work-brain.md",
+        "sources/outlook-calendar-week-2026-06-08.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 1683
+    },
+    {
+      "id": 10,
+      "slug": "people/lida-zheng",
+      "title": "Lida Zheng",
+      "type": "person",
+      "source_path": "people\\lida-zheng.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "daily/2026/2026-06-15.md",
+        "people/lida-zheng.md",
+        "projects/ai-tooling-runtime.md",
+        "state/risks/local-ai-tooling-environment-friction.md"
+      ],
+      "body_length": 1833
+    },
+    {
+      "id": 11,
+      "slug": "people/lirui-zhang",
+      "title": "Lirui Zhang",
+      "type": "person",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "people/lirui-zhang.md"
+      ],
+      "body_length": 858
+    },
+    {
+      "id": 19,
+      "slug": "people/qian-ye",
+      "title": "Qian Ye",
+      "type": "person",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-08.md",
+        "daily/2026/2026-06-11.md",
+        "daily/2026/2026-06-15.md",
+        "meetings/2026-06-08-3d-department-weekly.md",
+        "people/qian-ye.md",
+        "sources/outlook-calendar-week-2026-06-08.md"
+      ],
+      "body_length": 1405
+    },
+    {
+      "id": 58,
+      "slug": "people/readme",
+      "title": "People",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "RESOLVER.md",
+        "companies/README.md",
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "daily/2026/2026-06-08.md",
+        "daily/2026/2026-06-11.md",
+        "daily/2026/2026-06-12.md",
+        "daily/2026/2026-06-15.md",
+        "index.md",
+        "meetings/2026-06-08-3d-department-weekly.md",
+        "orgs/README.md",
+        "people/README.md",
+        "projects/README.md",
+        "projects/voltmind-work-brain.md",
+        "schema.md",
+        "sources/outlook-calendar-week-2026-06-08.md",
+        "sources/outlook-email-cold-start-phase2-2026-06-12.md",
+        "state/actions/attend-information-security-it-training-2026-06-24.md",
+        "state/actions/check-oa-attendance-correction-flow.md",
+        "state/actions/draft-zi-ye-message.md",
+        "state/actions/follow-up-jenny-api-key.md",
+        "state/actions/review-windows-update-policy-check.md",
+        "state/actions/revise-oa-approval-for-work-brain.md",
+        "state/decisions/work-brain-start-from-personal-brain.md",
+        "state/risks/local-ai-tooling-environment-friction.md",
+        "state/risks/work-brain-privacy-and-permission-risk.md",
+        "templates/companies.md",
+        "templates/meetings.md",
+        "templates/people.md"
+      ],
+      "body_length": 529
+    },
+    {
+      "id": 819,
+      "slug": "people/yiyang-zhang",
+      "title": "Yiyang Zhang",
+      "type": "person",
+      "source_path": "people\\yiyang-zhang.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "people/yiyang-zhang.md"
+      ],
+      "body_length": 1076
+    },
+    {
+      "id": 18,
+      "slug": "people/yue-liu",
+      "title": "Yue Liu",
+      "type": "person",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "people/yue-liu.md",
+        "state/actions/check-oa-attendance-correction-flow.md"
+      ],
+      "body_length": 1028
+    },
+    {
+      "id": 17,
+      "slug": "people/yue-wang",
+      "title": "Yue Wang",
+      "type": "person",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "people/yue-wang.md",
+        "state/actions/check-oa-attendance-correction-flow.md"
+      ],
+      "body_length": 984
+    },
+    {
+      "id": 16,
+      "slug": "people/zhiqiang-zhou",
+      "title": "Zhiqiang Zhou",
+      "type": "person",
+      "source_path": "people\\zhiqiang-zhou.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-08.md",
+        "daily/2026/2026-06-12.md",
+        "daily/2026/2026-06-15.md",
+        "meetings/2026-06-08-3d-department-weekly.md",
+        "people/joki-hong.md",
+        "people/zhiqiang-zhou.md",
+        "sources/outlook-calendar-week-2026-06-08.md"
+      ],
+      "body_length": 1515
+    },
+    {
+      "id": 817,
+      "slug": "people/zi-ye",
+      "title": "Zi Ye",
+      "type": "person",
+      "source_path": "people\\zi-ye.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-12.md",
+        "people/joki-hong.md",
+        "people/zi-ye.md",
+        "state/actions/draft-zi-ye-message.md"
+      ],
+      "body_length": 126
+    },
+    {
+      "id": 59,
+      "slug": "policy/action-risk-policy",
+      "title": "Action Risk Policy",
+      "type": "policy",
+      "source_path": "policy/action-risk-policy.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 744
+    },
+    {
+      "id": 60,
+      "slug": "policy/privacy-policy",
+      "title": "Privacy Policy",
+      "type": "policy",
+      "source_path": "policy/privacy-policy.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 444
+    },
+    {
+      "id": 61,
+      "slug": "policy/publish-contract",
+      "title": "Publish Contract",
+      "type": "policy",
+      "source_path": "policy/publish-contract.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 836
+    },
+    {
+      "id": 62,
+      "slug": "policy/readme",
+      "title": "Policy",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 873
+    },
+    {
+      "id": 63,
+      "slug": "policy/retention-policy",
+      "title": "Retention Policy",
+      "type": "policy",
+      "source_path": "policy/retention-policy.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 559
+    },
+    {
+      "id": 64,
+      "slug": "policy/role-scope-map",
+      "title": "Role Scope Map",
+      "type": "policy",
+      "source_path": "policy/role-scope-map.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 349
+    },
+    {
+      "id": 65,
+      "slug": "policy/sensitivity-taxonomy",
+      "title": "Sensitivity Taxonomy",
+      "type": "policy",
+      "source_path": "policy/sensitivity-taxonomy.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 388
+    },
+    {
+      "id": 66,
+      "slug": "policy/source-of-truth-map",
+      "title": "Source Of Truth Map",
+      "type": "policy",
+      "source_path": "policy/source-of-truth-map.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 596
+    },
+    {
+      "id": 67,
+      "slug": "private/readme",
+      "title": "Private",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 358
+    },
+    {
+      "id": 33,
+      "slug": "projects/ai-tooling-runtime",
+      "title": "Ai Tooling Runtime",
+      "type": "project",
+      "source_path": "projects\\ai-tooling-runtime.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "people/bo-qin.md",
+        "people/charlotte-an.md",
+        "people/diana-mengdie-zhang.md",
+        "people/lida-zheng.md",
+        "projects/ai-tooling-runtime.md",
+        "state/risks/ai-tooling-access-friction.md",
+        "state/risks/api-key-shared-in-teams-chat.md",
+        "state/risks/local-ai-tooling-environment-friction.md"
+      ],
+      "body_length": 1464
+    },
+    {
+      "id": 68,
+      "slug": "projects/readme",
+      "title": "Projects",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "RESOLVER.md",
+        "archive/README.md",
+        "artifacts/README.md",
+        "companies/README.md",
+        "concepts/README.md",
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+        "ideas/README.md",
+        "index.md",
+        "meetings/2026-06-08-3d-department-weekly.md",
+        "meetings/README.md",
+        "people/bo-qin.md",
+        "people/charlotte-an.md",
+        "people/diana-mengdie-zhang.md",
+        "people/hao-zhang.md",
+        "people/jiaxing-he.md",
+        "people/joki-hong.md",
+        "people/lida-zheng.md",
+        "people/lirui-zhang.md",
+        "people/qian-ye.md",
+        "people/yiyang-zhang.md",
+        "people/yue-liu.md",
+        "people/yue-wang.md",
+        "people/zhiqiang-zhou.md",
+        "projects/README.md",
+        "sources/outlook-email-cold-start-phase2-2026-06-12.md",
+        "state/actions/revise-oa-approval-for-work-brain.md",
+        "state/decisions/README.md",
+        "state/decisions/work-brain-start-from-personal-brain.md",
+        "state/risks/ai-tooling-access-friction.md",
+        "state/risks/api-key-shared-in-teams-chat.md",
+        "state/risks/local-ai-tooling-environment-friction.md",
+        "state/risks/work-brain-privacy-and-permission-risk.md",
+        "templates/meetings.md",
+        "templates/people.md",
+        "workstreams/README.md"
+      ],
+      "body_length": 507
+    },
+    {
+      "id": 23,
+      "slug": "projects/voltmind-work-brain",
+      "title": "VoltMind Work Brain",
+      "type": "project",
+      "source_path": "projects\\voltmind-work-brain.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "people/joki-hong.md",
+        "projects/voltmind-work-brain.md",
+        "sources/outlook-email-cold-start-phase2-2026-06-12.md",
+        "state/actions/revise-oa-approval-for-work-brain.md",
+        "state/decisions/work-brain-start-from-personal-brain.md",
+        "state/risks/work-brain-privacy-and-permission-risk.md"
+      ],
+      "body_length": 1346
+    },
+    {
+      "id": 69,
+      "slug": "resolver",
+      "title": "VoltMind Personal Brain Resolver",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 3486
+    },
+    {
+      "id": 34,
+      "slug": "schema",
+      "title": "VoltMind Personal Brain Schema",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 1453
+    },
+    {
+      "id": 12,
+      "slug": "sources/outlook-calendar-week-2026-06-08",
+      "title": "Outlook Calendar Week 2026-06-08 To 2026-06-15",
+      "type": "source",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "daily/2026/2026-06-08.md",
+        "daily/2026/2026-06-11.md",
+        "meetings/2026-06-08-3d-department-weekly.md"
+      ],
+      "body_length": 1361
+    },
+    {
+      "id": 13,
+      "slug": "sources/outlook-email-cold-start-phase2-2026-06-12",
+      "title": "Outlook Email Cold Start Phase 2 - 2026-06-12",
+      "type": "source",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "state/actions/attend-information-security-it-training-2026-06-24.md",
+        "state/actions/revise-oa-approval-for-work-brain.md"
+      ],
+      "body_length": 1282
+    },
+    {
+      "id": 71,
+      "slug": "sources/readme",
+      "title": "Sources",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 379
+    },
+    {
+      "id": 14,
+      "slug": "state/actions/attend-information-security-it-training-2026-06-24",
+      "title": "Attend Information Security And IT Systems Training",
+      "type": "action",
+      "source_path": "state\\actions\\attend-information-security-it-training-2026-06-24.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "sources/outlook-email-cold-start-phase2-2026-06-12.md",
+        "state/actions/attend-information-security-it-training-2026-06-24.md"
+      ],
+      "body_length": 1721
+    },
+    {
+      "id": 35,
+      "slug": "state/actions/check-oa-attendance-correction-flow",
+      "title": "Check Oa Attendance Correction Flow",
+      "type": "action",
+      "source_path": "state\\actions\\check-oa-attendance-correction-flow.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+        "daily/2026/2026-06-11.md",
+        "people/yue-liu.md",
+        "people/yue-wang.md"
+      ],
+      "body_length": 1493
+    },
+    {
+      "id": 811,
+      "slug": "state/actions/draft-zi-ye-message",
+      "title": "Draft message to Zi Ye via Teams and Email",
+      "type": "action",
+      "source_path": "state\\actions\\draft-zi-ye-message.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 339
+    },
+    {
+      "id": 36,
+      "slug": "state/actions/follow-up-jenny-api-key",
+      "title": "Follow Up Jenny Api Key",
+      "type": "action",
+      "source_path": "state\\actions\\follow-up-jenny-api-key.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "daily/2026/2026-06-11.md",
+        "people/charlotte-an.md",
+        "projects/ai-tooling-runtime.md",
+        "state/risks/ai-tooling-access-friction.md"
+      ],
+      "body_length": 723
+    },
+    {
+      "id": 72,
+      "slug": "state/actions/readme",
+      "title": "Actions",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "meetings/2026-06-08-3d-department-weekly.md"
+      ],
+      "body_length": 630
+    },
+    {
+      "id": 24,
+      "slug": "state/actions/review-windows-update-policy-check",
+      "title": "Review Windows Update Policy Check",
+      "type": "action",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "people/bo-qin.md"
+      ],
+      "body_length": 348
+    },
+    {
+      "id": 15,
+      "slug": "state/actions/revise-oa-approval-for-work-brain",
+      "title": "Revise OA Approval For Work Brain",
+      "type": "action",
+      "source_path": "state\\actions\\revise-oa-approval-for-work-brain.md",
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "source_path_matches_current_markdown_file",
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "people/joki-hong.md",
+        "projects/voltmind-work-brain.md",
+        "sources/outlook-email-cold-start-phase2-2026-06-12.md"
+      ],
+      "body_length": 880
+    },
+    {
+      "id": 73,
+      "slug": "state/commitments/readme",
+      "title": "Commitments",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 408
+    },
+    {
+      "id": 74,
+      "slug": "state/decisions/readme",
+      "title": "Decisions",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 362
+    },
+    {
+      "id": 25,
+      "slug": "state/decisions/work-brain-start-from-personal-brain",
+      "title": "Work Brain Starts From Personal Brain",
+      "type": "decision",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "people/joki-hong.md",
+        "projects/voltmind-work-brain.md"
+      ],
+      "body_length": 382
+    },
+    {
+      "id": 75,
+      "slug": "state/indexes/readme",
+      "title": "Indexes",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 314
+    },
+    {
+      "id": 76,
+      "slug": "state/readme",
+      "title": "State",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 414
+    },
+    {
+      "id": 37,
+      "slug": "state/risks/ai-tooling-access-friction",
+      "title": "Ai Tooling Access Friction",
+      "type": "risk",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+        "people/charlotte-an.md",
+        "projects/ai-tooling-runtime.md"
+      ],
+      "body_length": 762
+    },
+    {
+      "id": 38,
+      "slug": "state/risks/api-key-shared-in-teams-chat",
+      "title": "Api Key Shared In Teams Chat",
+      "type": "risk",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 862
+    },
+    {
+      "id": 26,
+      "slug": "state/risks/local-ai-tooling-environment-friction",
+      "title": "Local AI Tooling Environment Friction",
+      "type": "risk",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+        "people/diana-mengdie-zhang.md",
+        "people/lida-zheng.md"
+      ],
+      "body_length": 314
+    },
+    {
+      "id": 77,
+      "slug": "state/risks/readme",
+      "title": "Risks",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 447
+    },
+    {
+      "id": 27,
+      "slug": "state/risks/work-brain-privacy-and-permission-risk",
+      "title": "Work Brain Privacy And Permission Risk",
+      "type": "risk",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+        "people/joki-hong.md",
+        "projects/voltmind-work-brain.md"
+      ],
+      "body_length": 340
+    },
+    {
+      "id": 28,
+      "slug": "templates/companies",
+      "title": "Company Name",
+      "type": "company",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "templates/companies.md"
+      ],
+      "body_length": 699
+    },
+    {
+      "id": 29,
+      "slug": "templates/meetings",
+      "title": "Meeting Title",
+      "type": "meeting",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 695
+    },
+    {
+      "id": 30,
+      "slug": "templates/people",
+      "title": "Full Name",
+      "type": "person",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [
+        "templates/people.md"
+      ],
+      "body_length": 1113
+    },
+    {
+      "id": 79,
+      "slug": "workstreams/readme",
+      "title": "Workstreams",
+      "type": "note",
+      "source_path": null,
+      "bucket": "current_source_keep",
+      "action": "keep",
+      "confidence": 1,
+      "reasons": [
+        "slug_matches_current_markdown_file"
+      ],
+      "referenced_by": [],
+      "body_length": 458
+    }
+  ],
+  "source_files": [
+    {
+      "relative_path": ".system/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "archive/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "artifacts/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "companies/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "concepts/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/candidates/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/published/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/redacted/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/rejected/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/reviews/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "contribution/rules.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/joki-hong",
+        "projects/voltmind-work-brain",
+        "state/actions/revise-oa-approval-for-work-brain",
+        "state/decisions/work-brain-start-from-personal-brain",
+        "state/risks/work-brain-privacy-and-permission-risk"
+      ]
+    },
+    {
+      "relative_path": "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/bo-qin",
+        "people/diana-mengdie-zhang",
+        "people/hao-zhang",
+        "people/jiaxing-he",
+        "people/lida-zheng",
+        "projects/ai-tooling-runtime",
+        "state/actions/review-windows-update-policy-check",
+        "state/risks/local-ai-tooling-environment-friction"
+      ]
+    },
+    {
+      "relative_path": "conversations/teams/2026-06-08-11-ai-tools-and-api-access.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/charlotte-an",
+        "people/diana-mengdie-zhang",
+        "people/justike-liu",
+        "projects/ai-tooling-runtime",
+        "state/actions/follow-up-jenny-api-key",
+        "state/risks/ai-tooling-access-friction"
+      ]
+    },
+    {
+      "relative_path": "conversations/teams/2026-06-11-oa-attendance-remediation.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/justike-liu",
+        "people/yue-liu",
+        "people/yue-wang",
+        "state/actions/check-oa-attendance-correction-flow"
+      ]
+    },
+    {
+      "relative_path": "conversations/teams/2026-06-12-16-dibiao-ai-discussion.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/diana-mengdie-zhang",
+        "people/lida-zheng",
+        "people/lirui-zhang",
+        "projects/ai-tooling-runtime"
+      ]
+    },
+    {
+      "relative_path": "daily/2026/2026-06-08.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "meetings/2026-06-08-3d-department-weekly",
+        "people/charlotte-an",
+        "people/jiaxing-he",
+        "people/joki-hong",
+        "people/qian-ye",
+        "people/zhiqiang-zhou",
+        "sources/outlook-calendar-week-2026-06-08"
+      ]
+    },
+    {
+      "relative_path": "daily/2026/2026-06-11.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+        "conversations/teams/2026-06-11-oa-attendance-remediation",
+        "people/charlotte-an",
+        "people/joki-hong",
+        "people/qian-ye",
+        "sources/outlook-calendar-week-2026-06-08",
+        "state/actions/check-oa-attendance-correction-flow",
+        "state/actions/follow-up-jenny-api-key"
+      ]
+    },
+    {
+      "relative_path": "daily/2026/2026-06-12.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/hao-zhang",
+        "people/joki-hong",
+        "people/zhiqiang-zhou",
+        "people/zi-ye"
+      ]
+    },
+    {
+      "relative_path": "daily/2026/2026-06-15.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/charlotte-an",
+        "people/jiaxing-he",
+        "people/joki-hong",
+        "people/qian-ye",
+        "people/zhiqiang-zhou"
+      ]
+    },
+    {
+      "relative_path": "daily/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "ideas/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "inbox/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "index.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "meetings/2026-06-08-3d-department-weekly.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/charlotte-an",
+        "people/jiaxing-he",
+        "people/joki-hong",
+        "people/qian-ye",
+        "people/zhiqiang-zhou",
+        "sources/outlook-calendar-week-2026-06-08",
+        "state/actions/README"
+      ]
+    },
+    {
+      "relative_path": "meetings/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "orgs/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "orgs/team-slug.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: File is empty or whitespace-only; expected frontmatter starting with ---"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "people/bo-qin.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy",
+        "projects/ai-tooling-runtime",
+        "state/actions/review-windows-update-policy-check"
+      ]
+    },
+    {
+      "relative_path": "people/charlotte-an.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "projects/ai-tooling-runtime",
+        "state/actions/follow-up-jenny-api-key",
+        "state/risks/ai-tooling-access-friction"
+      ]
+    },
+    {
+      "relative_path": "people/diana-mengdie-zhang.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy",
+        "projects/ai-tooling-runtime",
+        "state/risks/local-ai-tooling-environment-friction"
+      ]
+    },
+    {
+      "relative_path": "people/hao-zhang.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "people/jiaxing-he.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy"
+      ]
+    },
+    {
+      "relative_path": "people/joki-hong.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-02-04-work-brain-approval-and-roadmap",
+        "projects/voltmind-work-brain",
+        "state/actions/revise-oa-approval-for-work-brain",
+        "state/decisions/work-brain-start-from-personal-brain",
+        "state/risks/work-brain-privacy-and-permission-risk"
+      ]
+    },
+    {
+      "relative_path": "people/lida-zheng.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy",
+        "conversations/teams/2026-06-12-16-dibiao-ai-discussion",
+        "projects/ai-tooling-runtime",
+        "state/risks/local-ai-tooling-environment-friction"
+      ]
+    },
+    {
+      "relative_path": "people/lirui-zhang.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-04-05-local-ai-tooling-and-windows-policy"
+      ]
+    },
+    {
+      "relative_path": "people/qian-ye.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "daily/2026/2026-06-11",
+        "meetings/2026-06-08-3d-department-weekly"
+      ]
+    },
+    {
+      "relative_path": "people/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "people/yiyang-zhang.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "people/yue-liu.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "state/actions/check-oa-attendance-correction-flow"
+      ]
+    },
+    {
+      "relative_path": "people/yue-wang.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "state/actions/check-oa-attendance-correction-flow"
+      ]
+    },
+    {
+      "relative_path": "people/zhiqiang-zhou.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "meetings/2026-06-08-3d-department-weekly"
+      ]
+    },
+    {
+      "relative_path": "people/zi-ye.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/action-risk-policy.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/privacy-policy.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/publish-contract.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/retention-policy.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/role-scope-map.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/sensitivity-taxonomy.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "policy/source-of-truth-map.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "private/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "projects/ai-tooling-runtime.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+        "state/actions/follow-up-jenny-api-key",
+        "state/risks/ai-tooling-access-friction"
+      ]
+    },
+    {
+      "relative_path": "projects/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "projects/voltmind-work-brain.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/joki-hong",
+        "people/justike-liu",
+        "state/actions/revise-oa-approval-for-work-brain",
+        "state/decisions/work-brain-start-from-personal-brain",
+        "state/risks/work-brain-privacy-and-permission-risk"
+      ]
+    },
+    {
+      "relative_path": "RESOLVER.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "schema.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "sources/outlook-calendar-week-2026-06-08.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "daily/2026/2026-06-08",
+        "daily/2026/2026-06-11",
+        "meetings/2026-06-08-3d-department-weekly",
+        "people/charlotte-an",
+        "people/jiaxing-he",
+        "people/joki-hong",
+        "people/qian-ye",
+        "people/zhiqiang-zhou"
+      ]
+    },
+    {
+      "relative_path": "sources/outlook-email-cold-start-phase2-2026-06-12.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/justike-liu",
+        "projects/voltmind-work-brain",
+        "state/actions/attend-information-security-it-training-2026-06-24",
+        "state/actions/revise-oa-approval-for-work-brain"
+      ]
+    },
+    {
+      "relative_path": "sources/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/actions/attend-information-security-it-training-2026-06-24.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/bo-qin",
+        "people/justike-liu",
+        "sources/outlook-email-cold-start-phase2-2026-06-12",
+        "state/actions/attend-information-security-it-training-2026-06-24"
+      ]
+    },
+    {
+      "relative_path": "state/actions/check-oa-attendance-correction-flow.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-11-oa-attendance-remediation",
+        "people/yue-liu",
+        "people/yue-wang"
+      ]
+    },
+    {
+      "relative_path": "state/actions/draft-zi-ye-message.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/zi-ye"
+      ]
+    },
+    {
+      "relative_path": "state/actions/follow-up-jenny-api-key.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+        "people/charlotte-an"
+      ]
+    },
+    {
+      "relative_path": "state/actions/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/actions/review-windows-update-policy-check.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/bo-qin",
+        "people/justike-liu"
+      ]
+    },
+    {
+      "relative_path": "state/actions/revise-oa-approval-for-work-brain.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/joki-hong",
+        "people/justike-liu",
+        "projects/voltmind-work-brain",
+        "sources/outlook-email-cold-start-phase2-2026-06-12"
+      ]
+    },
+    {
+      "relative_path": "state/commitments/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/decisions/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/decisions/work-brain-start-from-personal-brain.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/justike-liu",
+        "projects/voltmind-work-brain"
+      ]
+    },
+    {
+      "relative_path": "state/indexes/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/risks/ai-tooling-access-friction.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+        "projects/ai-tooling-runtime",
+        "state/actions/follow-up-jenny-api-key"
+      ]
+    },
+    {
+      "relative_path": "state/risks/api-key-shared-in-teams-chat.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "conversations/teams/2026-06-08-11-ai-tools-and-api-access",
+        "projects/ai-tooling-runtime"
+      ]
+    },
+    {
+      "relative_path": "state/risks/local-ai-tooling-environment-friction.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/diana-mengdie-zhang",
+        "people/justike-liu",
+        "people/lida-zheng",
+        "projects/ai-tooling-runtime"
+      ]
+    },
+    {
+      "relative_path": "state/risks/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    },
+    {
+      "relative_path": "state/risks/work-brain-privacy-and-permission-risk.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/justike-liu",
+        "projects/voltmind-work-brain"
+      ]
+    },
+    {
+      "relative_path": "templates/companies.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "people/internal-owner-slug",
+        "state/actions/slug",
+        "state/commitments/slug",
+        "state/decisions/slug",
+        "state/risks/slug"
+      ]
+    },
+    {
+      "relative_path": "templates/meetings.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "orgs/slug",
+        "people/person-slug",
+        "projects/slug",
+        "sources/source-slug",
+        "state/actions/slug",
+        "state/commitments/slug",
+        "state/decisions/slug",
+        "state/risks/slug"
+      ]
+    },
+    {
+      "relative_path": "templates/people.md",
+      "parse_ok": true,
+      "parse_errors": [],
+      "referenced_slugs": [
+        "companies/company-slug",
+        "meetings/YYYY-MM-DD-topic",
+        "orgs/team-slug",
+        "people/manager-slug",
+        "people/person-slug",
+        "projects/slug",
+        "state/actions/slug",
+        "state/commitments/slug",
+        "state/decisions/slug",
+        "state/risks/slug"
+      ]
+    },
+    {
+      "relative_path": "workstreams/README.md",
+      "parse_ok": false,
+      "parse_errors": [
+        "MISSING_OPEN: Frontmatter must start with --- on the first non-empty line"
+      ],
+      "referenced_slugs": []
+    }
+  ]
+}
