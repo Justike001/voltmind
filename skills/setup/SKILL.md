@@ -24,6 +24,11 @@ Set up VoltMind from scratch. Target: working brain in under 5 minutes.
 - Live sync is configured and verified (a test change pushed and found via search).
 - Schema state is tracked in `~/.voltmind/update-state.json` so future upgrades know what the user adopted or declined.
 - No Supabase anon key is requested; VoltMind uses only the database connection string.
+- For a company environment that requires embedding/reranking data to stay
+  internal, use [`docs/ai-providers/qwen-vllm.md`](../../docs/ai-providers/qwen-vllm.md)
+  before initialization. It defines the required Qwen `halfvec(2048)` schema
+  and internal endpoint configuration; do not substitute a public embedding
+  provider for that workflow.
 
 ## How VoltMind connects
 

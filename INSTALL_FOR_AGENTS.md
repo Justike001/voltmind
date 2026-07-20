@@ -116,9 +116,18 @@ restart the shell or add the PATH export to the shell profile.
 
 ## Step 2: API Keys
 
-Ask the user for these. voltmind defaults to the ZeroEntropy embedding + reranker stack
-(as of v0.36.2.0); OpenAI/Voyage are still supported as fallbacks via `voltmind config
-set embedding_model <provider:model>`.
+### Company-internal Qwen deployment
+
+When the operator requires embeddings and reranking to stay inside the company
+network, do not request public embedding or reranker API keys. Follow
+[`docs/ai-providers/qwen-vllm.md`](docs/ai-providers/qwen-vllm.md) instead.
+It configures the internal Qwen text/image embedding and reranking services,
+creates a new `halfvec(2048)` Supabase brain, and verifies the routes before
+any sensitive data is imported.
+
+For non-company deployments, ask the user which public provider they want to
+use. OpenAI, Voyage, and ZeroEntropy remain supported through
+`voltmind config set embedding_model <provider:model>`.
 
 ```bash
 export ZEROENTROPY_API_KEY=ze-...     # default embedding + reranker (v0.36.2.0+)

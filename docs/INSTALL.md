@@ -4,6 +4,11 @@ Three install paths. Pick one. Mix later if needed.
 
 For the complete agent-led setup flow, see [`INSTALL_FOR_AGENTS.md`](../INSTALL_FOR_AGENTS.md).
 
+For the company-internal Qwen embedding + reranking stack (text, image, and
+mixed embedding in a single 2048d Supabase schema), follow
+[`ai-providers/qwen-vllm.md`](ai-providers/qwen-vllm.md). It is the required
+path when embeddings or reranking must not leave the company network.
+
 ## 1. Run with an agent platform (recommended)
 
 Already running [OpenClaw](https://github.com/openclawagents/openclaw) or [Hermes](https://github.com/openclawagents/hermes)?
