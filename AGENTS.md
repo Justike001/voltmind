@@ -71,6 +71,29 @@ If you are writing or reviewing an operation, consult:
 This repository uses the VoltMind runtime. Use `voltmind`,
 `VOLTMIND_HOME`, `.voltmind-source`, and `voltmind.yml` in agent context.
 
+### Always-on VoltMind skill loading
+
+These two skills are always-on and must be loaded from the workspace before
+handling the applicable part of every inbound message:
+
+- **Every inbound message:** read and follow
+  `skills/signal-detector/SKILL.md`. Run its ambient signal scan on every
+  message, including messages that do not look like a brain task. Detect
+  notable people, companies, projects, concepts, original ideas, links, and
+  time-sensitive tasks, then follow the skill's capture and routing rules.
+- **Any brain read, write, lookup, or citation:** read and follow
+  `skills/brain-ops/SKILL.md` before calling VoltMind or deciding how to use
+  brain context. This includes `search`, `query`, `get`, `graph`,
+  `find_experts`, `put_page`, page updates, sync-after-write, and citing brain
+  content. Apply its brain-first, routing, source-attribution, and trust-boundary
+  rules to the operation.
+
+Do not skip either skill because the message appears simple. The signal detector
+is the ambient pass; brain-ops is the mandatory guardrail for every brain
+operation. After loading these always-on skills, use `skills/RESOLVER.md` to
+route any additional task-specific skill, and read that skill before executing
+its workflow.
+
 
 ### Phase D: Brain-first lookup protocol
 

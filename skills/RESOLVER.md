@@ -39,17 +39,6 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | Meeting transcript received | `skills/meeting-ingestion/SKILL.md` |
 | Generic "ingest this" (auto-routes to above) | `skills/ingest/SKILL.md` |
 
-## Thinking skills (from GStack)
-
-| Trigger | Skill |
-|---------|-------|
-| "Brainstorm", "I have an idea", "office hours" | GStack: office-hours |
-| "Review this plan", "CEO review", "poke holes" | GStack: ceo-review |
-| "Debug", "fix", "broken", "investigate" | GStack: investigate |
-| "Retro", "what shipped", "retrospective" | GStack: retro |
-
-> These skills come from GStack. If GStack is installed, the agent reads them directly.
-> If not, brain-only mode still works (brain skills function without thinking skills).
 
 ## Operational
 
@@ -91,6 +80,14 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | "Populate links", "extract links", "backfill graph" | `skills/maintain/SKILL.md` (graph population phase) |
 | "Populate timeline", "extract timeline entries" | `skills/maintain/SKILL.md` (graph population phase) |
 
+## Identity & access (always-on)
+
+| Trigger | Skill |
+|---------|-------|
+| Non-owner sends a message | Check `ACCESS_POLICY.md` before responding |
+| Agent needs to know its identity/vibe | Read `SOUL.md` |
+| Agent needs user context | Read `USER.md` |
+| Operational cadence (what to check and when) | Read `HEARTBEAT.md` |
 
 ## Disambiguation rules
 
