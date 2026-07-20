@@ -98,6 +98,7 @@ export class SemanticQueryCache {
   private similarityThreshold: number;
   private ttlSeconds: number;
   private enabled: boolean;
+  private embeddingCast: string | null = null;
 
   constructor(
     private engine: BrainEngine,
@@ -110,6 +111,21 @@ export class SemanticQueryCache {
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  /** Match the actual cache column so upgrades and test fixtures never rely on
+   * pgvector's implicit vector↔halfvec coercion. */
+  private async resolveEmbeddingCast(): Promise<string> {
+    if (this.embeddingCast) return this.embeddingCast;
+    const rows = await this.engine.executeRaw<{ formatted: string | null }>(
+      `SELECT format_type(a.atttypid, a.atttypmod) AS formatted
+         FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+        WHERE c.relname = 'query_cache' AND a.attname = 'embedding' AND NOT a.attisdropped`,
+    );
+    const formatted = rows[0]?.formatted ?? '';
+    const halfvec = /^halfvec\((\d+)\)$/i.exec(formatted);
+    this.embeddingCast = halfvec ? `::halfvec(${halfvec[1]})` : '::vector';
+    return this.embeddingCast;
   }
 
   /**
@@ -137,6 +153,7 @@ export class SemanticQueryCache {
     const vec = embeddingToPgVector(queryEmbedding);
 
     try {
+      const cast = await this.resolveEmbeddingCast();
       // Find the closest cached query within the distance threshold and
       // freshness window. The TTL check is done in-query (created_at +
       // ttl_seconds > now) so we never return a stale row.
@@ -156,16 +173,16 @@ export class SemanticQueryCache {
         age_seconds: number;
       }>(
         `SELECT qc.id, qc.results, qc.meta,
-                qc.embedding <=> $1::vector AS distance,
+                qc.embedding <=> $1${cast} AS distance,
                 EXTRACT(EPOCH FROM (now() - qc.created_at))::int AS age_seconds
          FROM query_cache qc
          WHERE qc.source_id = $2
            AND qc.knobs_hash = $4
            AND qc.embedding IS NOT NULL
-           AND qc.embedding <=> $1::vector < $3
+           AND qc.embedding <=> $1${cast} < $3
            AND qc.created_at + (qc.ttl_seconds || ' seconds')::interval > now()
            AND ${CACHE_GATE_WHERE_CLAUSE}
-         ORDER BY qc.embedding <=> $1::vector
+         ORDER BY qc.embedding <=> $1${cast}
          LIMIT 1`,
         [vec, sourceId, distanceThreshold, knobsHash],
       );
@@ -257,6 +274,7 @@ export class SemanticQueryCache {
     const snapshot = await buildPageGenerationsSnapshot(this.engine, pageIds);
 
     try {
+      const cast = await this.resolveEmbeddingCast();
       // v0.32.3 [CDX-4]: knobs_hash threaded into the row so concurrent
       // tokenmax + conservative writes for the same query+source live as
       // distinct rows. The PK is `id` (which already encodes the hash),
@@ -269,7 +287,7 @@ export class SemanticQueryCache {
       // the v0.40.3.0 IRON-RULE).
       await this.engine.executeRaw(
         `INSERT INTO query_cache (id, query_text, source_id, knobs_hash, embedding, results, meta, ttl_seconds, page_generations, max_generation_at_store, created_at)
-         VALUES ($1, $2, $3, $4, $5::vector, $6::jsonb, $7::jsonb, $8, $9::jsonb, $10, now())
+         VALUES ($1, $2, $3, $4, $5${cast}, $6::jsonb, $7::jsonb, $8, $9::jsonb, $10, now())
          ON CONFLICT (id) DO UPDATE SET
            query_text = EXCLUDED.query_text,
            knobs_hash = EXCLUDED.knobs_hash,

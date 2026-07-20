@@ -1221,6 +1221,9 @@ export interface BrainEngine {
   /** Look up embeddings by take id (mirrors getEmbeddingsByChunkIds). */
   getTakeEmbeddings(ids: number[]): Promise<Map<number, Float32Array>>;
 
+  /** Persist native-space embeddings for takes. Used by the full rebuild path. */
+  setTakeEmbeddings(rows: Array<{ takeId: number; embedding: Float32Array }>): Promise<void>;
+
   /** Pre-flight count for `voltmind embed --stale`. WHERE active AND embedding IS NULL. */
   countStaleTakes(): Promise<number>;
 

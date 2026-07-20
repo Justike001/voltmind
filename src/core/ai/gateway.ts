@@ -72,7 +72,7 @@ const DEFAULT_CHAT_MODEL = 'anthropic:claude-sonnet-4-6';
 // v0.35.0.0+: reranker default. Used only when search.reranker.enabled is set
 // AND no explicit reranker_model is configured. Mode bundles' per-mode
 // `reranker_model` default to this same value but can be overridden.
-const DEFAULT_RERANKER_MODEL = 'zeroentropyai:zerank-2';
+const DEFAULT_RERANKER_MODEL = 'qwen-vllm-reranker:Qwen3-VL-Reranker-2B';
 
 let _config: AIGatewayConfig | null = null;
 const _modelCache = new Map<string, any>();
@@ -1583,6 +1583,9 @@ export async function embedMultimodal(
   // recipe is `openai-compat` per tier but uses its own /multimodalembeddings
   // path, so we still branch on recipe.id for that one.
   if (recipe.id !== 'voyage' && recipe.implementation === 'openai-compatible') {
+    if (touchpoint.multimodal_protocol === 'vllm-cohere-v2') {
+      return embedMultimodalVllmCohereV2(inputs, recipe, parsed.modelId, cfg);
+    }
     return embedMultimodalOpenAICompat(inputs, recipe, parsed.modelId, cfg, opts);
   }
   if (recipe.id !== 'voyage') {
@@ -1697,6 +1700,89 @@ export async function embedMultimodal(
   }
 
   return allEmbeddings;
+}
+
+/**
+ * vLLM's Cohere-compatible `/v2/embed` endpoint for Qwen3-VL embeddings.
+ *
+ * The company model rejects `input_type` and output-dimension overrides, so
+ * this adapter intentionally sends neither. Every input becomes one Cohere
+ * `inputs[].content[]` item and the `embeddings.float` response preserves
+ * request order.
+ */
+async function embedMultimodalVllmCohereV2(
+  inputs: MultimodalInput[],
+  recipe: Recipe,
+  modelId: string,
+  cfg: AIGatewayConfig,
+): Promise<Float32Array[]> {
+  const authResult = recipe.resolveAuth
+    ? recipe.resolveAuth(cfg.env)
+    : defaultResolveAuth(recipe, cfg.env, 'embedding');
+  const baseUrl = cfg.base_urls?.[recipe.id] ?? recipe.base_url_default;
+  const path = recipe.touchpoints.embedding?.multimodal_path ?? '/v2/embed';
+  if (!baseUrl) {
+    throw new AIConfigError(`${recipe.name} requires a base URL for multimodal embedding.`, recipe.setup_hint);
+  }
+
+  // The configured OpenAI-compatible base URL ends in `/v1`; `/v2/embed`
+  // lives at the vLLM server root.
+  const rootUrl = baseUrl.replace(/\/v1\/?$/, '');
+  const endpoint = `${rootUrl}${path}`;
+  const expectedDims = recipe.touchpoints.embedding?.default_dims
+    ?? cfg.embedding_dimensions
+    ?? 0;
+  const body = {
+    model: modelId,
+    inputs: inputs.map(input => ({
+      content: [input.kind === 'text'
+        ? { type: 'text', text: input.text }
+        : { type: 'image_url', image_url: { url: `data:${input.mime};base64,${input.data}` } },
+      ],
+    })),
+    embedding_types: ['float'],
+  };
+
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', [authResult.headerName]: authResult.token },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    throw normalizeAIError(err, `embedMultimodal(${recipe.id}:${modelId})`);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    if (res.status === 401 || res.status === 403) {
+      throw new AIConfigError(`${recipe.name} multimodal returned ${res.status}: ${text || 'auth failed'}.`, recipe.setup_hint);
+    }
+    throw new AITransientError(`${recipe.name} multimodal returned ${res.status}: ${text || 'transient error'}.`);
+  }
+
+  let parsedBody: { embeddings?: { float?: number[][] } };
+  try {
+    parsedBody = (await res.json()) as { embeddings?: { float?: number[][] } };
+  } catch (err) {
+    throw new AITransientError(`${recipe.name} multimodal returned malformed JSON: ${err instanceof Error ? err.message : String(err)}.`);
+  }
+  const rows = parsedBody.embeddings?.float;
+  if (!Array.isArray(rows) || rows.length !== inputs.length) {
+    throw new AITransientError(`${recipe.name} multimodal returned unexpected payload shape (expected ${inputs.length} embeddings).`);
+  }
+  return rows.map((row, index) => {
+    if (!Array.isArray(row)) {
+      throw new AITransientError(`${recipe.name} multimodal returned a non-array embedding at index ${index}.`);
+    }
+    if (expectedDims > 0 && row.length !== expectedDims) {
+      throw new AIConfigError(
+        `${recipe.id}:${modelId} returned ${row.length}-dim vector; expected ${expectedDims}.`,
+        `The internal Qwen model must use its native ${expectedDims}-dim output; do not configure output dimensions.`,
+      );
+    }
+    return new Float32Array(row);
+  });
 }
 
 // Documentation pointer: callers must size-check before calling. Voyage caps

@@ -523,6 +523,8 @@ async function initMigrateOnly(opts: { jsonOutput: boolean }) {
   const engine = await createEngine(toEngineConfig(config));
   try {
     await engine.connect(toEngineConfig(config));
+    const { assertPgvectorHalfvecSupport } = await import('../core/pgvector-support.ts');
+    await assertPgvectorHalfvecSupport(engine);
     await engine.initSchema();
   } finally {
     try { await engine.disconnect(); } catch { /* best-effort */ }
@@ -1177,6 +1179,8 @@ async function initPostgres(opts: {
     }
 
     console.log('Running schema migration...');
+    const { assertPgvectorHalfvecSupport } = await import('../core/pgvector-support.ts');
+    await assertPgvectorHalfvecSupport(engine);
     await engine.initSchema();
 
     // v0.37.10.0 T6 (D11): post-initSchema invariant assertion guardrail.

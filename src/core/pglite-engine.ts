@@ -634,7 +634,7 @@ export class PGLiteEngine implements BrainEngine {
       // not to crash. v39 runs later via runMigrations and is idempotent.
       await this.db.exec(`
         ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS modality TEXT NOT NULL DEFAULT 'text';
-        ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS embedding_image vector(1024);
+        ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS embedding_image halfvec(2048);
       `);
     }
 
@@ -1955,10 +1955,10 @@ export class PGLiteEngine implements BrainEngine {
         : null;
       const modality = chunk.modality ?? 'text';
 
-      // Inline ::vector NULL literals to avoid a per-branch placeholder.
-      const embeddingPh = embeddingStr ? `$${paramIdx++}::vector` : 'NULL';
+      // Inline halfvec literals to preserve the native 2048d Qwen space.
+      const embeddingPh = embeddingStr ? `$${paramIdx++}::halfvec` : 'NULL';
       const embeddedAtPh = embeddingStr ? 'now()' : 'NULL';
-      const embeddingImagePh = embeddingImageStr ? `$${paramIdx++}::vector` : 'NULL';
+      const embeddingImagePh = embeddingImageStr ? `$${paramIdx++}::halfvec` : 'NULL';
 
       rowParts.push(
         `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, ` +
@@ -3117,7 +3117,7 @@ export class PGLiteEngine implements BrainEngine {
                  claim_metric, claim_value, claim_unit, claim_period
                ) VALUES (
                  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-                 $13::vector, $14,
+                 $13::halfvec, $14,
                  $15, $16, $17, $18
                ) RETURNING id`,
           embedStr === null
@@ -3154,7 +3154,7 @@ export class PGLiteEngine implements BrainEngine {
              claim_metric, claim_value, claim_unit, claim_period
            ) VALUES (
              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-             $13::vector, $14,
+             $13::halfvec, $14,
              $15, $16, $17, $18
            ) RETURNING id`,
       embedStr === null
@@ -3237,7 +3237,7 @@ export class PGLiteEngine implements BrainEngine {
                  event_type
                ) VALUES (
                  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-                 $13::vector, $14,
+                 $13::halfvec, $14,
                  $15, $16,
                  $17, $18, $19, $20,
                  $21
@@ -3350,7 +3350,7 @@ export class PGLiteEngine implements BrainEngine {
            AND entity_slug = $2
            AND expired_at IS NULL
            AND embedding IS NOT NULL
-         ORDER BY embedding <=> $3::vector
+         ORDER BY embedding <=> $3::halfvec
          LIMIT $4`,
         [source_id, entitySlug, vec, k],
       );
@@ -3852,13 +3852,13 @@ export class PGLiteEngine implements BrainEngine {
     const { rows } = await this.db.query(
       `SELECT t.id AS take_id, t.page_id, p.slug AS page_slug, t.row_num,
               t.claim, t.kind, t.holder, t.weight,
-              (1 - (t.embedding <=> $1::vector))::real AS score
+              (1 - (t.embedding <=> $1::halfvec(2048)))::real AS score
        FROM takes t
        JOIN pages p ON p.id = t.page_id
        WHERE t.active
          AND t.embedding IS NOT NULL
          AND ($2::text[] IS NULL OR t.holder = ANY($2::text[]))
-       ORDER BY t.embedding <=> $1::vector
+       ORDER BY t.embedding <=> $1::halfvec(2048)
        LIMIT $3`,
       [vec, opts.takesHoldersAllowList ?? null, limit]
     );
@@ -3883,6 +3883,16 @@ export class PGLiteEngine implements BrainEngine {
       }
     }
     return out;
+  }
+
+  async setTakeEmbeddings(rows: Array<{ takeId: number; embedding: Float32Array }>): Promise<void> {
+    for (const row of rows) {
+      const vector = toPgVectorLiteral(row.embedding);
+      await this.db.query(
+        `UPDATE takes SET embedding = $1::halfvec(2048), embedded_at = now(), updated_at = now() WHERE id = $2`,
+        [vector, row.takeId],
+      );
+    }
   }
 
   async countStaleTakes(): Promise<number> {

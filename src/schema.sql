@@ -218,8 +218,10 @@ CREATE TABLE IF NOT EXISTS content_chunks (
   chunk_index           INTEGER NOT NULL,
   chunk_text            TEXT    NOT NULL,
   chunk_source          TEXT    NOT NULL DEFAULT 'compiled_truth',
-  embedding             vector(1536),
-  model                 TEXT    NOT NULL DEFAULT 'text-embedding-3-large',
+  -- Company-internal Qwen3-VL embeddings are native 2048d. `halfvec` keeps
+  -- that width while still permitting HNSW (plain vector HNSW stops at 2000d).
+  embedding             halfvec(2048),
+  model                 TEXT    NOT NULL DEFAULT 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
   token_count           INTEGER,
   embedded_at           TIMESTAMPTZ,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -236,28 +238,27 @@ CREATE TABLE IF NOT EXISTS content_chunks (
   doc_comment           TEXT,
   symbol_name_qualified TEXT,
   search_vector         TSVECTOR,
-  -- v0.27.1 multimodal. modality discriminates text vs image rows for search
-  -- filtering. embedding_image holds 1024-dim Voyage multimodal vectors;
-  -- mixed-provider brains (e.g. OpenAI 1536 text + Voyage 1024 images) keep
-  -- both columns populated with distinct dim spaces.
+  -- Unified Qwen3-VL retrieval space. Text, images, and mixed content all
+  -- use native 2048d vectors so cross-modal similarity is meaningful.
   modality              TEXT NOT NULL DEFAULT 'text',
-  embedding_image       vector(1024),
-  -- v0.36 Phase 3 cross-modal: unified column populated by reindex.
-  -- Migration v75 also adds it for upgrade paths.
-  embedding_multimodal  vector(1024)
+  embedding_image       halfvec(2048),
+  embedding_multimodal  halfvec(2048)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chunks_page_index ON content_chunks(page_id, chunk_index);
 CREATE INDEX IF NOT EXISTS idx_chunks_page ON content_chunks(page_id);
-CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON content_chunks USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON content_chunks USING hnsw (embedding halfvec_cosine_ops);
 -- v0.19.0: partial indexes — only code chunks populate these columns.
 CREATE INDEX IF NOT EXISTS idx_chunks_symbol_name ON content_chunks(symbol_name) WHERE symbol_name IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_chunks_language ON content_chunks(language) WHERE language IS NOT NULL;
 -- v0.27.1: partial HNSW for multimodal images. Footprint stays proportional
 -- to image-chunk count, not table size.
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding_image
-  ON content_chunks USING hnsw (embedding_image vector_cosine_ops)
+  ON content_chunks USING hnsw (embedding_image halfvec_cosine_ops)
   WHERE embedding_image IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding_multimodal
+  ON content_chunks USING hnsw (embedding_multimodal halfvec_cosine_ops)
+  WHERE embedding_multimodal IS NOT NULL;
 -- v0.20.0 Cathedral II: GIN index on the new chunk-grain FTS vector.
 CREATE INDEX IF NOT EXISTS idx_chunks_search_vector ON content_chunks USING GIN(search_vector);
 CREATE INDEX IF NOT EXISTS idx_chunks_symbol_qualified
@@ -481,8 +482,8 @@ CREATE TABLE IF NOT EXISTS config (
 
 INSERT INTO config (key, value) VALUES
   ('version', '1'),
-  ('embedding_model', 'text-embedding-3-large'),
-  ('embedding_dimensions', '1536'),
+  ('embedding_model', 'qwen-vllm:./models/Qwen3-VL-Embedding-2B'),
+  ('embedding_dimensions', '2048'),
   ('chunk_strategy', 'semantic')
 ON CONFLICT (key) DO NOTHING;
 

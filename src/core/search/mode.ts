@@ -253,7 +253,7 @@ export const MODE_BUNDLES: Readonly<Record<SearchMode, Readonly<ModeBundle>>> = 
     // v0.35.0.0+: reranker off — conservative is cost-sensitive; reranker
     // spend doesn't fit the tier's value prop.
     reranker_enabled: false,
-    reranker_model: 'zeroentropyai:zerank-2',
+    reranker_model: 'qwen-vllm-reranker:Qwen3-VL-Reranker-2B',
     reranker_top_n_in: 30,
     reranker_top_n_out: null,
     reranker_timeout_ms: 5000,
@@ -293,7 +293,7 @@ export const MODE_BUNDLES: Readonly<Record<SearchMode, Readonly<ModeBundle>>> = 
     // return input order unchanged. Opt out with
     // `voltmind config set search.reranker.enabled false`.
     reranker_enabled: true,
-    reranker_model: 'zeroentropyai:zerank-2',
+    reranker_model: 'qwen-vllm-reranker:Qwen3-VL-Reranker-2B',
     reranker_top_n_in: 30,
     reranker_top_n_out: null,
     reranker_timeout_ms: 5000,
@@ -335,7 +335,7 @@ export const MODE_BUNDLES: Readonly<Record<SearchMode, Readonly<ModeBundle>>> = 
     // their fee. ~$0.0003/query at this shape; rounding error vs the
     // tier's $700/mo @ Opus pairing per CLAUDE.md cost matrix.
     reranker_enabled: true,
-    reranker_model: 'zeroentropyai:zerank-2',
+    reranker_model: 'qwen-vllm-reranker:Qwen3-VL-Reranker-2B',
     reranker_top_n_in: 30,
     reranker_top_n_out: null,
     reranker_timeout_ms: 5000,

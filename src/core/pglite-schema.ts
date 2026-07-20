@@ -168,7 +168,9 @@ CREATE TABLE IF NOT EXISTS content_chunks (
   chunk_index     INTEGER NOT NULL,
   chunk_text      TEXT    NOT NULL,
   chunk_source    TEXT    NOT NULL DEFAULT 'compiled_truth',
-  embedding       vector(__EMBEDDING_DIMS__),
+  -- Qwen3-VL native 2048d vectors. halfvec supports HNSW above the
+  -- 2000d plain-vector limit while preserving a single retrieval space.
+  embedding       halfvec(__EMBEDDING_DIMS__),
   model           TEXT    NOT NULL DEFAULT '__EMBEDDING_MODEL__',
   token_count     INTEGER,
   embedded_at     TIMESTAMPTZ,
@@ -179,25 +181,23 @@ CREATE TABLE IF NOT EXISTS content_chunks (
   symbol_type     TEXT,
   start_line      INTEGER,
   end_line        INTEGER,
-  -- v0.27.1 multimodal. modality discriminates text vs image rows; image
-  -- chunks carry their 1024-dim Voyage multimodal vector in embedding_image
-  -- (independent of the brain primary embedding column dim).
+  -- Unified Qwen3-VL retrieval space for text, image, and mixed chunks.
   modality        TEXT NOT NULL DEFAULT 'text',
-  embedding_image vector(1024),
-  -- v0.36 Phase 3 cross-modal: unified column populated by reindex
-  -- (search.unified_multimodal=true routes here). Migration v75 adds it
-  -- on upgrade; fresh installs land at head with the column present.
-  embedding_multimodal vector(1024)
+  embedding_image halfvec(__EMBEDDING_DIMS__),
+  embedding_multimodal halfvec(__EMBEDDING_DIMS__)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chunks_page_index ON content_chunks(page_id, chunk_index);
 CREATE INDEX IF NOT EXISTS idx_chunks_page ON content_chunks(page_id);
-CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON content_chunks USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON content_chunks USING hnsw (embedding halfvec_cosine_ops);
 -- v0.27.1: partial HNSW for multimodal images. Footprint stays proportional
 -- to image-chunk count, not table size.
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding_image
-  ON content_chunks USING hnsw (embedding_image vector_cosine_ops)
+  ON content_chunks USING hnsw (embedding_image halfvec_cosine_ops)
   WHERE embedding_image IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding_multimodal
+  ON content_chunks USING hnsw (embedding_multimodal halfvec_cosine_ops)
+  WHERE embedding_multimodal IS NOT NULL;
 -- v0.19.0: partial indexes for code chunk lookups.
 CREATE INDEX IF NOT EXISTS idx_chunks_symbol_name ON content_chunks(symbol_name) WHERE symbol_name IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_chunks_language ON content_chunks(language) WHERE language IS NOT NULL;

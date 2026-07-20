@@ -30,11 +30,12 @@ import { tryAcquireDbLock } from '../core/db-lock.ts';
 import type { DbLockHandle } from '../core/db-lock.ts';
 import { sqlQueryForEngine } from '../core/sql-query.ts';
 import { embedMultimodalSafe } from '../core/ai/gateway.ts';
+import type { MultimodalInput } from '../core/ai/types.ts';
 import { createProgress } from '../core/progress.ts';
 import { getCliOptions, cliOptsToProgressOptions } from '../core/cli-options.ts';
 import { voltmindPath } from '../core/config.ts';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 // v0.41.15.0 (T9, D9): per-chunk UPDATE workers within each batch.
 import { runSlidingPool } from '../core/worker-pool.ts';
 import { resolveWorkersWithClamp } from '../core/sync-concurrency.ts';
@@ -228,10 +229,13 @@ export async function runReindexMultimodal(
         ? Math.min(BATCH_SIZE, opts.limit - processed)
         : BATCH_SIZE;
       const rows = await sql`
-        SELECT id::text AS id, chunk_text
-        FROM content_chunks
-        WHERE embedding_multimodal IS NULL
-          AND id > ${lastId}
+        SELECT cc.id::text AS id, cc.chunk_text, cc.modality,
+               f.storage_path, f.mime_type
+        FROM content_chunks cc
+        JOIN pages p ON p.id = cc.page_id
+        LEFT JOIN files f ON f.page_id = p.id
+        WHERE cc.embedding_multimodal IS NULL
+          AND cc.id > ${lastId}
         ORDER BY id
         LIMIT ${batchSize}
       `;
@@ -240,6 +244,9 @@ export async function runReindexMultimodal(
       const items = rows.map(r => ({
         id: parseInt(String(r.id), 10),
         text: String(r.chunk_text ?? ''),
+        modality: String(r.modality ?? 'text'),
+        storagePath: r.storage_path == null ? null : String(r.storage_path),
+        mime: r.mime_type == null ? 'application/octet-stream' : String(r.mime_type),
       })).filter(r => !completedIds.has(r.id));
 
       if (items.length === 0) {
@@ -251,8 +258,9 @@ export async function runReindexMultimodal(
       // failed_indices surfaced. We persist what succeeded and log what
       // failed for the next run to retry.
       if (!opts.noEmbed) {
+        const inputs: MultimodalInput[] = items.map(item => multimodalInputForReindex(item));
         const result = await embedMultimodalSafe(
-          items.map(it => ({ kind: 'text' as const, text: it.text })),
+          inputs,
           { inputType: 'document' },
         );
         // v0.41.15.0 (T9): per-chunk UPDATE loop wrapped in the sliding
@@ -276,7 +284,7 @@ export async function runReindexMultimodal(
               const vecLiteral = `[${Array.from(vec).join(',')}]`;
               await sql`
                 UPDATE content_chunks
-                SET embedding_multimodal = ${vecLiteral}::vector
+                SET embedding_multimodal = ${vecLiteral}::halfvec
                 WHERE id = ${item.id}
               `;
               reembedded++;
@@ -363,4 +371,24 @@ function saveCheckpoint(path: string, completedIds: Set<number>): void {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[reindex-multimodal] checkpoint save failed: ${msg}\n`);
   }
+}
+
+/**
+ * Image rows are re-embedded from the original bytes. Falling back to OCR or
+ * a filename would silently make image-to-text retrieval a text-only index,
+ * so a missing or unsafe path is an explicit failure instead.
+ */
+function multimodalInputForReindex(item: {
+  text: string;
+  modality: string;
+  storagePath: string | null;
+  mime: string;
+}): MultimodalInput {
+  if (item.modality !== 'image') return { kind: 'text', text: item.text };
+  if (!item.storagePath) throw new Error('Image chunk has no files.storage_path; re-import the image before unified reindex.');
+  const root = process.cwd();
+  const path = resolve(root, item.storagePath);
+  const outsideRoot = isAbsolute(relative(root, path)) || relative(root, path).startsWith('..');
+  if (outsideRoot) throw new Error(`Refusing image path outside source root: ${item.storagePath}`);
+  return { kind: 'image_base64', data: readFileSync(path).toString('base64'), mime: item.mime };
 }

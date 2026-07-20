@@ -1449,6 +1449,21 @@ export async function importImageFile(
     },
   });
 
+  // Qwen's image and text outputs share one 2048d semantic space. Keep the
+  // unified column current at ingestion time as well as in the backfill job;
+  // the vector below was produced from the actual image bytes above, never
+  // from OCR text or the filename.
+  if (embedding) {
+    const vector = `[${Array.from(embedding).join(',')}]`;
+    await engine.executeRaw(
+      `UPDATE content_chunks AS cc
+          SET embedding_multimodal = $1::halfvec(2048)
+        FROM pages AS p
+       WHERE cc.page_id = p.id AND p.slug = $2 AND p.source_id = $3 AND cc.modality = 'image'`,
+      [vector, imageSlug, opts.sourceId ?? 'default'],
+    );
+  }
+
   return { slug: imageSlug, status: 'imported', chunks: 1 };
 }
 

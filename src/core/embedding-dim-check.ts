@@ -14,7 +14,7 @@
  */
 
 import type { BrainEngine } from './engine.ts';
-import { PGVECTOR_HNSW_VECTOR_MAX_DIMS } from './vector-index.ts';
+import { PGVECTOR_HNSW_HALFVEC_MAX_DIMS } from './vector-index.ts';
 import { voltmindPath } from './config.ts';
 import { resolveRecipe } from './ai/model-resolver.ts';
 import type { Recipe } from './ai/types.ts';
@@ -32,9 +32,8 @@ import {
 } from './ai/dims.ts';
 
 /**
- * pgvector supports vector(N) columns up to 16000 dimensions. HNSW indexing
- * is capped at PGVECTOR_HNSW_VECTOR_MAX_DIMS (2000); above that, exact scan
- * still works but searches are slower.
+ * pgvector supports halfvec(N) columns up to 4000 dimensions for HNSW. Fresh
+ * company brains use halfvec so Qwen3-VL's native 2048d vectors stay indexed.
  *
  * The preflight resolver below uses this as the hard upper bound so anything
  * pgvector itself would reject (e.g. an accidental `embedding_dimensions: 99999`)
@@ -78,7 +77,7 @@ export function assertEmbeddingEnabled(cfg: { embedding_disabled?: boolean } | n
 export interface ColumnDimResult {
   /** Whether the `content_chunks.embedding` column exists. False on a fresh brain. */
   exists: boolean;
-  /** Parsed `vector(N)` dimension if known. null when the column doesn't exist or the type isn't vector. */
+  /** Parsed `vector(N)` or `halfvec(N)` dimension if known. */
   dims: number | null;
 }
 
@@ -104,7 +103,7 @@ export async function readContentChunksEmbeddingDim(engine: BrainEngine): Promis
   if (!exists) return { exists: false, dims: null };
 
   // pgvector stores dim in pg_type.typmod when atttypmod is set; format_type
-  // returns the human-readable `vector(N)`. We parse N out of that.
+  // returns the human-readable `vector(N)` or `halfvec(N)`.
   const formatRows = await engine.executeRaw<{ formatted: string | null }>(
     `SELECT format_type(a.atttypid, a.atttypmod) AS formatted
        FROM pg_attribute a
@@ -118,7 +117,7 @@ export async function readContentChunksEmbeddingDim(engine: BrainEngine): Promis
   const formatted = formatRows?.[0]?.formatted ?? null;
   if (!formatted) return { exists: true, dims: null };
 
-  const m = formatted.match(/vector\((\d+)\)/i);
+  const m = formatted.match(/(?:halfvec|vector)\((\d+)\)/i);
   return { exists: true, dims: m ? parseInt(m[1], 10) : null };
 }
 
@@ -174,8 +173,8 @@ export function embeddingMismatchMessage(opts: EmbeddingMismatchOpts): string {
     const lines = [
       header,
       ``,
-      `  Existing column: vector(${currentDims})`,
-      `  Requested:       vector(${requestedDims})${requestedModel ? `  (${requestedModel})` : ''}`,
+      `  Existing column: halfvec(${currentDims})`,
+      `  Requested:       halfvec(${requestedDims})${requestedModel ? `  (${requestedModel})` : ''}`,
       ``,
       `Switching dims is destructive: it drops every embedding in your brain.`,
       `PGLite cannot ALTER vector column types (pgvector ships as embedded WASM,`,
@@ -198,17 +197,17 @@ export function embeddingMismatchMessage(opts: EmbeddingMismatchOpts): string {
   }
 
   // Postgres branch — preserve the existing SQL recipe.
-  const supportsHnsw = requestedDims <= PGVECTOR_HNSW_VECTOR_MAX_DIMS;
+  const supportsHnsw = requestedDims <= PGVECTOR_HNSW_HALFVEC_MAX_DIMS;
   const reindexLine = supportsHnsw
-    ? `CREATE INDEX IF NOT EXISTS idx_chunks_embedding\n  ON content_chunks USING hnsw (embedding vector_cosine_ops);`
-    : `-- Skip reindex. dims=${requestedDims} exceeds pgvector's HNSW cap of ${PGVECTOR_HNSW_VECTOR_MAX_DIMS};\n-- searchVector falls back to exact scan.`;
+    ? `CREATE INDEX IF NOT EXISTS idx_chunks_embedding\n  ON content_chunks USING hnsw (embedding halfvec_cosine_ops);`
+    : `-- Skip reindex. dims=${requestedDims} exceeds pgvector's halfvec HNSW cap of ${PGVECTOR_HNSW_HALFVEC_MAX_DIMS};\n-- searchVector falls back to exact scan.`;
 
   const modelArg = requestedModel ? ` --embedding-model ${requestedModel}` : '';
   const lines = [
     header,
     ``,
-    `  Existing column: vector(${currentDims})`,
-    `  Requested:       vector(${requestedDims})${requestedModel ? `  (${requestedModel})` : ''}`,
+    `  Existing column: halfvec(${currentDims})`,
+    `  Requested:       halfvec(${requestedDims})${requestedModel ? `  (${requestedModel})` : ''}`,
     ``,
     `Switching dims is destructive: it drops every embedding in your brain and`,
     `requires a full re-embed (potentially hours and $1-100 in API calls).`,
@@ -217,7 +216,7 @@ export function embeddingMismatchMessage(opts: EmbeddingMismatchOpts): string {
     ``,
     `  BEGIN;`,
     `  DROP INDEX IF EXISTS idx_chunks_embedding;`,
-    `  ALTER TABLE content_chunks ALTER COLUMN embedding TYPE vector(${requestedDims});`,
+    `  ALTER TABLE content_chunks ALTER COLUMN embedding TYPE halfvec(${requestedDims});`,
     `  UPDATE content_chunks SET embedding = NULL, embedded_at = NULL;`,
     `  ${reindexLine.split('\n').join('\n  ')}`,
     `  COMMIT;`,

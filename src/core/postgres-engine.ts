@@ -72,9 +72,9 @@ export function getPostgresSchema(
   }
   const sanitizedModel = escapeSqlStringLiteral(String(model));
   return applyChunkEmbeddingIndexPolicy(SCHEMA_SQL, parsedDims)
-    .replace(/vector\(1536\)/g, `vector(${parsedDims})`)
-    .replace(/'text-embedding-3-large'/g, `'${sanitizedModel}'`)
-    .replace(/\('embedding_dimensions', '1536'\)/g, `('embedding_dimensions', '${parsedDims}')`);
+    .replace(/halfvec\(2048\)/g, `halfvec(${parsedDims})`)
+    .replace(/'qwen-vllm:\.\/models\/Qwen3-VL-Embedding-2B'/g, `'${sanitizedModel}'`)
+    .replace(/\('embedding_dimensions', '2048'\)/g, `('embedding_dimensions', '${parsedDims}')`);
 }
 
 // CONNECTION_ERROR_PATTERNS / isConnectionError were used by the per-call
@@ -639,7 +639,7 @@ export class PostgresEngine implements BrainEngine {
       // not to crash. v39 runs later via runMigrations and is idempotent.
       await conn.unsafe(`
         ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS modality TEXT NOT NULL DEFAULT 'text';
-        ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS embedding_image vector(1024);
+        ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS embedding_image halfvec(2048);
       `);
     }
 
@@ -1934,9 +1934,9 @@ export class PostgresEngine implements BrainEngine {
         : null;
       const modality = chunk.modality ?? 'text';
 
-      const embeddingPh = embeddingStr ? `$${paramIdx++}::vector` : 'NULL';
+      const embeddingPh = embeddingStr ? `$${paramIdx++}::halfvec` : 'NULL';
       const embeddedAtPh = embeddingStr ? 'now()' : 'NULL';
-      const embeddingImagePh = embeddingImageStr ? `$${paramIdx++}::vector` : 'NULL';
+      const embeddingImagePh = embeddingImageStr ? `$${paramIdx++}::halfvec` : 'NULL';
 
       rows.push(
         `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, ` +
@@ -3444,7 +3444,7 @@ export class PostgresEngine implements BrainEngine {
           AND entity_slug = ${entitySlug}
           AND expired_at IS NULL
           AND embedding IS NOT NULL
-        ORDER BY embedding <=> ${sql.unsafe(`'${lit}'::vector`)}
+        ORDER BY embedding <=> ${sql.unsafe(`'${lit}'${await this.resolveFactsEmbeddingCast()}`)}
         LIMIT ${k}
       `;
       return rows.map(rowToFactPg);
@@ -3872,7 +3872,7 @@ export class PostgresEngine implements BrainEngine {
     const rows = await sql`
       SELECT t.id AS take_id, t.page_id, p.slug AS page_slug, t.row_num,
              t.claim, t.kind, t.holder, t.weight,
-             (1 - (t.embedding <=> ${vec}::vector))::real AS score
+             (1 - (t.embedding <=> ${vec}::halfvec(2048)))::real AS score
       FROM takes t
       JOIN pages p ON p.id = t.page_id
       WHERE t.active
@@ -3881,7 +3881,7 @@ export class PostgresEngine implements BrainEngine {
           ${opts.takesHoldersAllowList ?? null}::text[] IS NULL
           OR t.holder = ANY(${opts.takesHoldersAllowList ?? null}::text[])
         )
-      ORDER BY t.embedding <=> ${vec}::vector
+      ORDER BY t.embedding <=> ${vec}::halfvec(2048)
       LIMIT ${limit}
     `;
     return rows as unknown as TakeHit[];
@@ -3899,6 +3899,16 @@ export class PostgresEngine implements BrainEngine {
       if (parsed) out.set(Number(r.id), parsed);
     }
     return out;
+  }
+
+  async setTakeEmbeddings(rows: Array<{ takeId: number; embedding: Float32Array }>): Promise<void> {
+    if (rows.length === 0) return;
+    const sql = this.sql;
+    for (const row of rows) {
+      const vector = toPgVectorLiteral(row.embedding);
+      await sql`UPDATE takes SET embedding = ${vector}::halfvec(2048), embedded_at = now(), updated_at = now()
+        WHERE id = ${row.takeId}`;
+    }
   }
 
   async countStaleTakes(): Promise<number> {

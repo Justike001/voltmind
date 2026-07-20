@@ -76,6 +76,14 @@ export interface EmbeddingTouchpoint {
    */
   multimodal_models?: string[];
   /**
+   * Wire format for multimodal embedding requests. Most OpenAI-compatible
+   * services accept `/embeddings`; vLLM's Cohere-compatible endpoint instead
+   * exposes `/v2/embed` and returns `embeddings.float`.
+   */
+  multimodal_protocol?: 'openai-embeddings' | 'vllm-cohere-v2';
+  /** Absolute path used with `multimodal_protocol: 'vllm-cohere-v2'`. */
+  multimodal_path?: string;
+  /**
    * v0.32: when true, the recipe ships without a fixed model list and users
    * MUST provide `--embedding-model provider:model` and
    * `--embedding-dimensions N` explicitly. Used by litellm-proxy and

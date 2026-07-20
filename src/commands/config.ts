@@ -154,11 +154,11 @@ export async function runConfig(engine: BrainEngine, args: string[]) {
     // write preserves the split-brain footgun the wave exists to close.
     // Switching providers requires wipe-and-reinit; the recipe below is
     // paste-ready and uses the actual command path that works after Lane B.
-    if (key === 'embedding_model' || key === 'embedding_dimensions') {
+    if (key === 'embedding_model' || key === 'embedding_dimensions' || key === 'embedding_multimodal_model') {
       const { voltmindPath } = await import('../core/config.ts');
       const isPgliteEngine = (await import('../core/config.ts')).loadConfig()?.engine === 'pglite';
       const dbPath = voltmindPath('brain.pglite');
-      console.error(`[config] ${key} is a file-plane field that sizes the schema.`);
+      console.error(`[config] ${key} is a file-plane field bound to the embedding schema contract.`);
       console.error(`[config] Setting it in the DB has no effect on the embed pipeline (silent no-op).`);
       console.error(`[config]`);
       if (isPgliteEngine) {
@@ -166,12 +166,14 @@ export async function runConfig(engine: BrainEngine, args: string[]) {
         console.error(`[config]   mv ${dbPath} ${dbPath}.bak`);
         if (key === 'embedding_model') {
           console.error(`[config]   voltmind init --pglite --embedding-model ${value}`);
-        } else {
+        } else if (key === 'embedding_dimensions') {
           console.error(`[config]   voltmind init --pglite --embedding-dimensions ${value}`);
+        } else {
+          console.error(`[config]   voltmind init --pglite --embedding-multimodal-model ${value}`);
         }
         console.error(`[config]   voltmind sync   # re-imports your brain repo`);
       } else {
-        console.error(`[config] To switch embedding models/dimensions on Postgres, see:`);
+        console.error(`[config] To switch embedding models/dimensions on Postgres, use a new database or a full reindex; see:`);
         console.error(`[config]   docs/embedding-migrations.md`);
       }
       console.error(`[config]`);

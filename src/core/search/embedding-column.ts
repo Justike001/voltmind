@@ -326,18 +326,16 @@ export function getEmbeddingColumnRegistry(
   out['embedding'] = {
     provider: embedModel,
     dimensions: embedDims,
-    type: 'vector',
+    type: 'halfvec',
   };
 
-  // Builtin: 'embedding_image' — derived from multimodal config keys.
-  // Hardcoded 1024d / vector because that's the committed schema shape
-  // (see src/schema.sql:158). If the user runs a different multimodal
-  // model they can override via the user registry.
-  const mmModel = cfg.embedding_multimodal_model ?? 'voyage:voyage-multimodal-3';
+  // Builtin: 'embedding_image' — same native Qwen3-VL space and dimensions
+  // as the text column, so cross-modal retrieval never mixes vector spaces.
+  const mmModel = cfg.embedding_multimodal_model ?? embedModel;
   out['embedding_image'] = {
     provider: mmModel,
-    dimensions: 1024,
-    type: 'vector',
+    dimensions: embedDims,
+    type: 'halfvec',
   };
 
   // User-declared columns. Validate every key + entry at merge time.
@@ -513,18 +511,16 @@ export function isBuiltinColumn(name: string): name is BuiltinKey {
  *
  * Behavior:
  *   - ResolvedColumn → returned as-is.
- *   - undefined → builtin 'embedding' descriptor (vector, dims=1536).
+ *   - undefined → builtin 'embedding' descriptor (halfvec, dims=2048).
  *   - 'embedding' literal → same as undefined.
  *   - 'embedding_image' literal → builtin 'embedding_image' descriptor.
  *   - Any other string → throws EmbeddingColumnNotRegisteredError. The
  *     resolver lives at hybrid/op boundary; bare string names are NOT
  *     accepted at the engine layer (per D11 — engine purity).
  *
- * `dims` for the 'embedding' builtin is hardcoded 1536 here purely as
- * a no-op placeholder; the engine's SQL cast is `$1::vector` (no
- * parenthesized N) when type='vector', so the dims field is unused by
- * `buildVectorCastFragment` and never touches the wire. Tests that
- * care about dims should pass a real descriptor.
+ * Builtin descriptors match the company default fresh schema. Production
+ * call paths resolve configuration before reaching engines, so custom
+ * columns still carry their exact dimensions and type.
  */
 export function normalizeEngineColumn(
   embeddingColumn: SearchOpts['embeddingColumn'] | undefined,
@@ -543,31 +539,29 @@ export function normalizeEngineColumn(
   if (embeddingColumn === undefined || embeddingColumn === 'embedding') {
     return {
       name: 'embedding',
-      type: 'vector',
-      dimensions: 1536, // placeholder — not used by $1::vector cast
+      type: 'halfvec',
+      dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
       embeddingModel: '', // engine doesn't embed; left blank
     };
   }
 
-  // Legacy multimodal literal — committed schema shape per
-  // src/schema.sql:158 (vector(1024)).
+  // Legacy multimodal literal — committed Qwen schema shape.
   if (embeddingColumn === 'embedding_image') {
     return {
       name: 'embedding_image',
-      type: 'vector',
-      dimensions: 1024,
+      type: 'halfvec',
+      dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
       embeddingModel: '',
     };
   }
 
-  // v0.36 Phase 3 unified multimodal column — populated by
-  // `voltmind reindex --multimodal`. Voyage multimodal-3, vector(1024).
+  // Unified Qwen3-VL column — populated by `voltmind reindex --multimodal`.
   if (embeddingColumn === 'embedding_multimodal') {
     return {
       name: 'embedding_multimodal',
-      type: 'vector',
-      dimensions: 1024,
-      embeddingModel: 'voyage:voyage-multimodal-3',
+      type: 'halfvec',
+      dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
+      embeddingModel: DEFAULT_EMBEDDING_MODEL,
     };
   }
 

@@ -213,6 +213,7 @@ export async function runEmbedCore(engine: BrainEngine, opts: EmbedOpts): Promis
       priority: opts.priority,
       catchUp: opts.catchUp,
     });
+    await embedStaleTakes(engine, !!opts.dryRun);
     return result;
   }
   if (opts.slug) {
@@ -220,6 +221,32 @@ export async function runEmbedCore(engine: BrainEngine, opts: EmbedOpts): Promis
     return result;
   }
   throw new Error('No embed target specified. Pass { slug }, { slugs }, { all }, or { stale }.');
+}
+
+/**
+ * Takes live in the same native Qwen vector space as content chunks.  They
+ * deliberately rebuild through the normal text embed gateway so a Qwen schema
+ * migration can clear old vectors and `embed --stale` restores them end-to-end.
+ */
+async function embedStaleTakes(engine: BrainEngine, dryRun: boolean): Promise<void> {
+  const stale = await engine.listStaleTakes();
+  if (stale.length === 0) return;
+  if (dryRun) {
+    slog(`takes: ${stale.length} stale embedding(s) would be rebuilt`);
+    return;
+  }
+  const batchSize = 64;
+  let embedded = 0;
+  for (let i = 0; i < stale.length; i += batchSize) {
+    const batch = stale.slice(i, i + batchSize);
+    const vectors = await embedBatch(batch.map(t => t.claim));
+    await engine.setTakeEmbeddings(batch.map((take, index) => ({
+      takeId: take.take_id,
+      embedding: vectors[index]!,
+    })));
+    embedded += batch.length;
+  }
+  slog(`takes: embedded ${embedded} claim(s)`);
 }
 
 export async function runEmbed(engine: BrainEngine, args: string[]): Promise<EmbedResult | undefined> {

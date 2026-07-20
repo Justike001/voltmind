@@ -12,10 +12,10 @@
  * install AND every doctor consistency check.
  */
 
-// v0.36.0 chose ZeroEntropy as the system default after evals showed
-// 11/20 wins vs OpenAI (6) and Voyage (4) on real-corpus benchmarks.
-// 1280 is the closest analog to legacy OpenAI 1536d while staying on
-// the high-recall section of ZE's Matryoshka curve. Valid ZE Matryoshka
-// steps: {2560, 1280, 640, 320, 160, 80, 40} — see ai/dims.ts.
-export const DEFAULT_EMBEDDING_MODEL = 'zeroentropyai:zembed-1';
-export const DEFAULT_EMBEDDING_DIMENSIONS = 1280;
+// Company-default, privacy-preserving retrieval stack. The internally hosted
+// Qwen3-VL embedding service returns a fixed native 2048d vector for text,
+// images, and mixed inputs. Fresh databases use halfvec(2048), which keeps
+// the native width while allowing pgvector HNSW indexing (halfvec supports
+// up to 4000 dimensions).
+export const DEFAULT_EMBEDDING_MODEL = 'qwen-vllm:./models/Qwen3-VL-Embedding-2B';
+export const DEFAULT_EMBEDDING_DIMENSIONS = 2048;

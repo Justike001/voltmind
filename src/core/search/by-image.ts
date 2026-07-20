@@ -62,11 +62,11 @@ export async function searchByImage(
 
   const limit = opts.limit ?? resolvedMode.searchLimit;
   const offset = opts.offset ?? 0;
-  // Phase 2 always targets embedding_image. Phase 3's unified column
-  // routing slots in here once src/core/types.ts widens
-  // SearchOpts.embeddingColumn to include 'embedding_multimodal' (Commit 3
-  // schema migration + type widening).
-  const imageColumn: 'embedding_image' = 'embedding_image';
+  // In unified mode image queries must use the same image+text column as
+  // hybrid text queries. Otherwise an image can never retrieve text chunks.
+  const imageColumn: 'embedding_image' | 'embedding_multimodal' = resolvedMode.unified_multimodal
+    ? 'embedding_multimodal'
+    : 'embedding_image';
 
   const baseSearchOpts: SearchOpts = {
     limit: Math.min(limit * 2, 100),

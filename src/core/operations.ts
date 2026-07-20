@@ -1408,11 +1408,13 @@ const query: Operation = {
           : { sourceId: sourceIdParam }
         : sourceScopeOpts(ctx);
 
-    // v0.27.1: image-similarity branch. Bypasses hybridSearch (which is
-    // text-only); embeds the image via embedMultimodal and runs a direct
-    // vector search against the embedding_image column.
+    // Direct image path bypasses hybridSearch, so resolve the same unified
+    // routing flag explicitly before choosing its vector column.
     if (imageData) {
       const { embedMultimodal } = await import('./ai/gateway.ts');
+      const { loadSearchModeConfig, resolveSearchMode } = await import('./search/mode.ts');
+      const modeInput = await loadSearchModeConfig(ctx.engine);
+      const mode = resolveSearchMode({ mode: modeInput.mode, overrides: modeInput.overrides });
       const [vec] = await embedMultimodal([
         { kind: 'image_base64', data: imageData, mime: imageMime },
       ]);
@@ -1423,7 +1425,7 @@ const query: Operation = {
       const results = await ctx.engine.searchVector(vec, {
         limit: (p.limit as number) || 20,
         offset: (p.offset as number) || 0,
-        embeddingColumn: 'embedding_image',
+        embeddingColumn: mode.unified_multimodal ? 'embedding_multimodal' : 'embedding_image',
         ...querySourceScope,
       });
       return results;

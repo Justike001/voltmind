@@ -1791,7 +1791,7 @@ export const MIGRATIONS: Migration[] = [
     //    chunks declare themselves at the row level. Search filters use it to
     //    keep image OCR text out of text-page keyword search by default.
     //
-    // 2. content_chunks gains `embedding_image vector(1024)` for Voyage
+    // 2. content_chunks gains the native 2048d Qwen3-VL image space.
     //    multimodal embeddings. NULL on every text row; sparse on the column.
     //    Partial HNSW index ignores NULL rows so the index footprint stays
     //    proportional to image chunk count, not table size. Mixed-provider
@@ -1849,10 +1849,10 @@ export const MIGRATIONS: Migration[] = [
       await engine.runMigration(39, `
         ALTER TABLE content_chunks
           ADD COLUMN IF NOT EXISTS modality TEXT NOT NULL DEFAULT 'text',
-          ADD COLUMN IF NOT EXISTS embedding_image vector(1024);
+          ADD COLUMN IF NOT EXISTS embedding_image halfvec(2048);
 
         CREATE INDEX IF NOT EXISTS idx_chunks_embedding_image
-          ON content_chunks USING hnsw (embedding_image vector_cosine_ops)
+          ON content_chunks USING hnsw (embedding_image halfvec_cosine_ops)
           WHERE embedding_image IS NOT NULL;
 
         -- Widen pages.page_kind CHECK to admit 'image'. The constraint name
@@ -3170,11 +3170,11 @@ export const MIGRATIONS: Migration[] = [
     // doctor check (D20 model+dim pin).
     idempotent: true,
     sql: `
-      ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS embedding_multimodal vector(1024);
+      ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS embedding_multimodal halfvec(2048);
     `,
     sqlFor: {
       pglite: `
-        ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS embedding_multimodal vector(1024);
+        ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS embedding_multimodal halfvec(2048);
       `,
     },
   },
@@ -5003,6 +5003,39 @@ export const MIGRATIONS: Migration[] = [
       return oldObjects.length === 0 && oldColumns.length === 0
         && newObjects.length === 1 && newObjects[0].relkind === 'r'
         && newColumns.length === 1;
+    },
+  },
+  {
+    version: 108,
+    name: 'takes_native_halfvec_embeddings',
+    // Takes used to be fixed vector(1536), while the Qwen runtime stores
+    // native 2048d halfvec. Clear legacy take vectors intentionally: vectors
+    // from another model/dimension are not comparable and `embed --stale`
+    // rebuilds them through the active gateway after migration.
+    sql: '',
+    idempotent: true,
+    handler: async (engine) => {
+      const configured = Number.parseInt((await engine.getConfig('embedding_dimensions')) ?? '2048', 10);
+      const dimensions = Number.isInteger(configured) && configured > 0 && configured <= 4000
+        ? configured
+        : 2048;
+      await engine.executeRaw(`DROP INDEX IF EXISTS idx_takes_embedding_hnsw`);
+      await engine.executeRaw(`UPDATE takes SET embedding = NULL, embedded_at = NULL`);
+      await engine.executeRaw(
+        `ALTER TABLE takes ALTER COLUMN embedding TYPE halfvec(${dimensions}) USING NULL::halfvec(${dimensions})`,
+      );
+      await engine.executeRaw(
+        `CREATE INDEX IF NOT EXISTS idx_takes_embedding_hnsw ON takes
+           USING hnsw (embedding halfvec_cosine_ops) WHERE active AND embedding IS NOT NULL`,
+      );
+    },
+    verify: async (engine) => {
+      const rows = await engine.executeRaw<{ formatted: string | null }>(
+        `SELECT format_type(a.atttypid, a.atttypmod) AS formatted
+           FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+          WHERE c.relname = 'takes' AND a.attname = 'embedding' AND NOT a.attisdropped`,
+      );
+      return /^halfvec\(/i.test(rows[0]?.formatted ?? '');
     },
   },
 ];

@@ -17,20 +17,31 @@
 import type { BrainEngine } from './engine.ts';
 
 export const PGVECTOR_HNSW_VECTOR_MAX_DIMS = 2000;
+export const PGVECTOR_HNSW_HALFVEC_MAX_DIMS = 4000;
 
 const CHUNK_EMBEDDING_HNSW_INDEX =
   'CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON content_chunks USING hnsw (embedding vector_cosine_ops);';
+const CHUNK_EMBEDDING_HALFVEC_HNSW_INDEX =
+  'CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON content_chunks USING hnsw (embedding halfvec_cosine_ops);';
 
-export function chunkEmbeddingIndexSql(dims: number): string {
-  if (dims <= PGVECTOR_HNSW_VECTOR_MAX_DIMS) return CHUNK_EMBEDDING_HNSW_INDEX;
+export function chunkEmbeddingIndexSql(dims: number, type: 'vector' | 'halfvec' = 'vector'): string {
+  const cap = type === 'halfvec'
+    ? PGVECTOR_HNSW_HALFVEC_MAX_DIMS
+    : PGVECTOR_HNSW_VECTOR_MAX_DIMS;
+  const indexSql = type === 'halfvec'
+    ? CHUNK_EMBEDDING_HALFVEC_HNSW_INDEX
+    : CHUNK_EMBEDDING_HNSW_INDEX;
+  if (dims <= cap) return indexSql;
   return [
-    '-- idx_chunks_embedding skipped: pgvector HNSW vector indexes support',
-    `-- at most ${PGVECTOR_HNSW_VECTOR_MAX_DIMS} dimensions; exact vector scans remain available.`,
+    `-- idx_chunks_embedding skipped: pgvector HNSW ${type} indexes support`,
+    `-- at most ${cap} dimensions; exact vector scans remain available.`,
   ].join('\n');
 }
 
 export function applyChunkEmbeddingIndexPolicy(sql: string, dims: number): string {
-  return sql.replaceAll(CHUNK_EMBEDDING_HNSW_INDEX, chunkEmbeddingIndexSql(dims));
+  return sql
+    .replaceAll(CHUNK_EMBEDDING_HNSW_INDEX, chunkEmbeddingIndexSql(dims, 'vector'))
+    .replaceAll(CHUNK_EMBEDDING_HALFVEC_HNSW_INDEX, chunkEmbeddingIndexSql(dims, 'halfvec'));
 }
 
 // ---------------------------------------------------------------------------
