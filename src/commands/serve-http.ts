@@ -31,7 +31,7 @@ import { operations, OperationError } from '../core/operations.ts';
 import type { OperationContext, AuthInfo } from '../core/operations.ts';
 import { VoltMindOAuthProvider, validateTokenEndpointAuthMethod } from '../core/oauth-provider.ts';
 import type { SqlQuery } from '../core/oauth-provider.ts';
-import { hasScope, ALLOWED_SCOPES_LIST, normalizeScopesInput } from '../core/scope.ts';
+import { hasScope, filterOperationsForScopes, ALLOWED_SCOPES_LIST, normalizeScopesInput } from '../core/scope.ts';
 import { summarizeMcpParams, dispatchToolCall } from '../mcp/dispatch.ts';
 import type { DispatchOpts, ToolResult } from '../mcp/dispatch.ts';
 import { paramDefToSchema } from '../mcp/tool-defs.ts';
@@ -2231,8 +2231,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         status: 'success',
         timestamp: new Date().toISOString(),
       });
+      const visibleOperations = filterOperationsForScopes(mcpOperations, authInfo.scopes);
       return {
-        tools: mcpOperations.map(op => ({
+        tools: visibleOperations.map(op => ({
           name: op.name,
           description: op.description,
           inputSchema: {

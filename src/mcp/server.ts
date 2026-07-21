@@ -15,10 +15,16 @@ export type McpToolDispatcher = (
   opts: DispatchOpts,
 ) => Promise<ToolResult>;
 
+/** Operations safe for untrusted agent-facing stdio MCP callers. */
+export function getStdioMcpOperations() {
+  return operations.filter(op => !op.localOnly);
+}
+
 export async function startMcpServer(
   engine: BrainEngine,
   opts: { toolDispatcher?: McpToolDispatcher } = {},
 ) {
+  const mcpOperations = getStdioMcpOperations();
   const server = new Server(
     { name: 'voltmind', version: VERSION },
     { capabilities: { tools: {} } },
@@ -28,7 +34,7 @@ export async function startMcpServer(
   // The subagent tool registry (v0.15+) can call the same mapper against the
   // complete operation registry instead of duplicating this shape.
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: buildToolDefs(operations),
+    tools: buildToolDefs(mcpOperations),
   }));
 
   // Dispatch tool calls via shared dispatch.ts (parity with HTTP transport).
@@ -38,6 +44,15 @@ export async function startMcpServer(
   // shape and cast through `any` (the SDK accepts it via the ServerResult union).
   server.setRequestHandler(CallToolRequestSchema, async (request: any): Promise<any> => {
     const { name, arguments: params } = request.params;
+    if (!mcpOperations.some(op => op.name === name)) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ error: 'unknown_tool', message: `Unknown tool: ${name}` }, null, 2),
+        }],
+        isError: true,
+      };
+    }
     // v0.28: stdio MCP has no per-token auth (local pipe). Default the
     // takes-holder allow-list to ['world'] so agent-facing callers don't
     // see private hunches via takes_list / takes_search / query. Operators

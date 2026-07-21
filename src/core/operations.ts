@@ -434,6 +434,50 @@ export function sourceScopeOpts(ctx: OperationContext): { sourceId?: string; sou
   return {};
 }
 
+/**
+ * Resolve an optional per-call read-source selector without allowing an
+ * untrusted caller to expand its OAuth-derived source scope.
+ *
+ * Local CLI callers may explicitly select any configured source (including
+ * `__all__`). Remote callers may narrow to one of their allowed sources; an
+ * `__all__` request means the caller's authorized federated set, never every
+ * source in the brain.
+ */
+export function resolveReadSourceScope(
+  ctx: OperationContext,
+  requestedSourceId?: string,
+): { sourceId?: string; sourceIds?: string[] } {
+  if (requestedSourceId === undefined) return sourceScopeOpts(ctx);
+
+  if (ctx.remote === false) {
+    return requestedSourceId === '__all__' ? {} : { sourceId: requestedSourceId };
+  }
+
+  const allowed = ctx.auth?.allowedSources;
+  const permittedSources = allowed && allowed.length > 0
+    ? allowed
+    : ctx.sourceId
+      ? [ctx.sourceId]
+      : [];
+
+  if (requestedSourceId === '__all__') {
+    return allowed && allowed.length > 0
+      ? { sourceIds: allowed }
+      : ctx.sourceId
+        ? { sourceId: ctx.sourceId }
+        : {};
+  }
+
+  if (!permittedSources.includes(requestedSourceId)) {
+    throw new OperationError(
+      'permission_denied',
+      `source '${requestedSourceId}' is outside your granted sources.`,
+    );
+  }
+
+  return { sourceId: requestedSourceId };
+}
+
 export interface Operation {
   name: string;
   description: string;
@@ -1369,7 +1413,7 @@ const query: Operation = {
     source_id: {
       type: 'string',
       description:
-        "v0.34: scope search to a single source. Defaults to OperationContext.sourceId (set from CLI --source / VOLTMIND_SOURCE / .voltmind-source dotfile). Pass '__all__' to force cross-source search in multi-source brains.",
+        "v0.34: scope search to a single source. Defaults to OperationContext.sourceId (set from CLI --source / VOLTMIND_SOURCE / .voltmind-source dotfile). Local callers may pass '__all__' for cross-source search; remote callers are limited to their authorized sources.",
     },
     cross_modal: {
       type: 'string',
@@ -1398,15 +1442,11 @@ const query: Operation = {
       typeof p.embedding_column === 'string' && p.embedding_column.length > 0
         ? (p.embedding_column as string)
         : undefined;
-    // Explicit per-call source_id must win over ctx.sourceId. The special
-    // __all__ value opts out of source filtering for local cross-source search.
+    // A local caller may explicitly select any source. Remote callers may
+    // only narrow to their OAuth-authorized sources; `__all__` remains scoped
+    // to that authorized federation rather than disabling source isolation.
     const sourceIdParam = typeof p.source_id === 'string' ? p.source_id : undefined;
-    const querySourceScope =
-      sourceIdParam !== undefined
-        ? sourceIdParam === '__all__'
-          ? {}
-          : { sourceId: sourceIdParam }
-        : sourceScopeOpts(ctx);
+    const querySourceScope = resolveReadSourceScope(ctx, sourceIdParam);
 
     // Direct image path bypasses hybridSearch, so resolve the same unified
     // routing flag explicitly before choosing its vector column.
@@ -1439,11 +1479,8 @@ const query: Operation = {
     // stays SearchResult[] (Cathedral II callers depend on that); meta
     // arrives via callback so eval capture can record what actually ran.
     //
-    // v0.34 (Codex finding #2): thread ctx.sourceId so multi-source brains
-    // get source-scoped retrieval. Explicit `source_id` param wins over
-    // ctx.sourceId for callers that want to override (per-call multi-source
-    // search). When the param is the literal '__all__', force-allow
-    // cross-source mode (matches SearchOpts.sourceId contract).
+    // v0.34: source scope is resolved above. Local callers can override it;
+    // remote callers are constrained to their token's source authorization.
     let capturedMeta: HybridSearchMeta | null = null;
     // v0.32.x search-lite: route the query op through hybridSearchCached so
     // semantic cache + token budget + intent weighting fire automatically.

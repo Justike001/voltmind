@@ -85,6 +85,14 @@ export function hasScope(grantedScopes: readonly string[], requiredScope: string
   return false;
 }
 
+/** Return only operations the caller is authorized to invoke. */
+export function filterOperationsForScopes<T extends { scope?: string }>(
+  operations: readonly T[],
+  grantedScopes: readonly string[],
+): T[] {
+  return operations.filter((op) => hasScope(grantedScopes, op.scope || 'read'));
+}
+
 export function isScope(s: string): s is Scope {
   return ALLOWED_SCOPES.has(s as Scope);
 }

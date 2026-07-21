@@ -905,8 +905,9 @@ const THIN_CLIENT_REFUSED_COMMANDS = new Set([
   // - `pages` purge-deleted is admin+localOnly (operations.ts:856-864)
   // - `files` list / file_url MCP ops are localOnly (operations.ts:1769-1879)
   // - `eval` export/prune/replay have no MCP equivalents
-  // - `code-def`/`code-refs`/`code-callers`/`code-callees` have NO MCP ops
-  //   in operations.ts:2630-2671; cannot be "fixed by routing" yet
+  // - code-intelligence MCP operations exist, but these legacy CLI command
+  //   wrappers do not yet route their hyphenated syntax through the generic
+  //   operation dispatcher on thin clients.
   'pages', 'files', 'eval', 'code-def', 'code-refs', 'code-callers', 'code-callees',
 ]);
 
@@ -941,10 +942,10 @@ const THIN_CLIENT_REFUSE_HINTS: Record<string, string> = {
   pages: '`pages purge-deleted` is admin+localOnly (hard-deletes from the local DB). Run on the host.',
   files: '`files list` and `files url` MCP ops are localOnly (paths live on the host filesystem). Use `voltmind files` on the host machine.',
   eval: '`eval` export/prune/replay touch the local engine and have no MCP equivalents. Run `voltmind eval` on the host.',
-  'code-def': '`code-def` needs symbol-aware lookup that has no MCP op yet. Run on the host or use `search` from your agent with a symbol-shaped query.',
-  'code-refs': '`code-refs` has no MCP op yet. Run on the host.',
-  'code-callers': '`code-callers` has no MCP op yet. Run on the host.',
-  'code-callees': '`code-callees` has no MCP op yet. Run on the host.',
+  'code-def': '`code-def` is not yet routed by this thin CLI wrapper. Use the remote MCP `code_def` tool, or run the command on the host.',
+  'code-refs': '`code-refs` is not yet routed by this thin CLI wrapper. Use the remote MCP `code_refs` tool, or run the command on the host.',
+  'code-callers': '`code-callers` is not yet routed by this thin CLI wrapper. Use the remote MCP `code_callers` tool, or run the command on the host.',
+  'code-callees': '`code-callees` is not yet routed by this thin CLI wrapper. Use the remote MCP `code_callees` tool, or run the command on the host.',
 };
 
 /**

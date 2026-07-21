@@ -175,10 +175,12 @@ router exposes the spec-compliant discovery endpoint at
 
 ### 4. Scopes and localOnly
 
-Every operation is tagged `read | write | admin`. Four operations are
-`localOnly` and rejected over HTTP regardless of scope: `sync_brain`,
-`file_upload`, `file_list`, `file_url`. Remote agents cannot reach local
-filesystem surface area.
+Every operation is tagged `read | write | admin` (or a specialized admin
+scope). HTTP MCP lists only operations allowed by the caller's OAuth scopes.
+Six operations are `localOnly` and rejected over HTTP regardless of scope:
+`purge_deleted_pages`, `sync_brain`, `file_list`, `file_upload`, `file_url`,
+and `code_traversal_cache_clear`. Remote agents cannot reach local filesystem
+or host-maintenance surface area.
 
 | Scope | What it allows |
 |-------|---------------|
@@ -236,15 +238,10 @@ voltmind auth test \
 
 ## Operations
 
-All 30 VoltMind operations are available remotely, including `sync_brain` and
-`file_upload` (no timeout limits with self-hosted server).
-
-**Security note on `file_upload`:** remote MCP callers are confined to the working
-directory where `voltmind serve` was launched. Symlinks, `..` traversal, and absolute
-paths outside cwd are rejected. Page slugs and filenames are allowlist-validated
-(alphanumeric + hyphens; no control chars, RTL overrides, or backslashes). Local
-CLI callers (`voltmind file upload ...`) keep unrestricted filesystem access since
-the user owns the machine.
+HTTP MCP exposes every non-`localOnly` operation for which the OAuth client has
+the required scope. Retrieval (`search`, `query`, graph traversal), page writes,
+and other database-backed operations run on the server; host filesystem and
+maintenance operations remain on the server's local CLI.
 
 ## Deployment Options
 
