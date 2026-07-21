@@ -123,8 +123,10 @@ export class SemanticQueryCache {
         WHERE c.relname = 'query_cache' AND a.attname = 'embedding' AND NOT a.attisdropped`,
     );
     const formatted = rows[0]?.formatted ?? '';
-    const halfvec = /^halfvec\((\d+)\)$/i.exec(formatted);
-    this.embeddingCast = halfvec ? `::halfvec(${halfvec[1]})` : '::vector';
+    const descriptor = /^(halfvec|vector)\((\d+)\)$/i.exec(formatted);
+    this.embeddingCast = descriptor
+      ? `::${descriptor[1].toLowerCase()}(${descriptor[2]})`
+      : '::halfvec(2048)';
     return this.embeddingCast;
   }
 

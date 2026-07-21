@@ -265,7 +265,7 @@ export function buildVectorCastFragment(resolved: ResolvedColumn): {
   const castSql =
     resolved.type === 'halfvec'
       ? `$1::halfvec(${resolved.dimensions})`
-      : `$1::vector`;
+      : `$1::vector(${resolved.dimensions})`;
   return { col, castSql };
 }
 

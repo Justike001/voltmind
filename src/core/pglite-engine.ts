@@ -3072,6 +3072,26 @@ export class PGLiteEngine implements BrainEngine {
   // v0.31: Hot memory — facts table operations
   // ============================================================
 
+  private _factsEmbeddingCastSuffix: string | null = null;
+
+  private async resolveFactsEmbeddingCast(): Promise<string> {
+    if (this._factsEmbeddingCastSuffix) return this._factsEmbeddingCastSuffix;
+    try {
+      const { rows } = await this.db.query<{ formatted: string | null }>(
+        `SELECT format_type(a.atttypid, a.atttypmod) AS formatted
+           FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+          WHERE c.relname = 'facts' AND a.attname = 'embedding' AND NOT a.attisdropped`,
+      );
+      const descriptor = /^(halfvec|vector)\((\d+)\)$/i.exec(rows[0]?.formatted ?? '');
+      this._factsEmbeddingCastSuffix = descriptor
+        ? `::${descriptor[1].toLowerCase()}(${descriptor[2]})`
+        : '::halfvec(2048)';
+    } catch {
+      this._factsEmbeddingCastSuffix = '::halfvec(2048)';
+    }
+    return this._factsEmbeddingCastSuffix;
+  }
+
   async insertFact(
     input: NewFact,
     ctx: { source_id: string; supersedeId?: number },
@@ -3088,6 +3108,7 @@ export class PGLiteEngine implements BrainEngine {
     const embedding = input.embedding ?? null;
     const embeddedAt = embedding ? new Date() : null;
     const embedStr = embedding ? toPgVectorLiteral(embedding) : null;
+    const factsEmbeddingCast = await this.resolveFactsEmbeddingCast();
     // v0.35.4 (D-CDX-5) — typed-claim columns. All four nullable.
     const claimMetric = input.claim_metric ?? null;
     const claimValue  = input.claim_value  ?? null;
@@ -3117,7 +3138,7 @@ export class PGLiteEngine implements BrainEngine {
                  claim_metric, claim_value, claim_unit, claim_period
                ) VALUES (
                  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-                 $13::halfvec, $14,
+                 $13${factsEmbeddingCast}, $14,
                  $15, $16, $17, $18
                ) RETURNING id`,
           embedStr === null
@@ -3154,7 +3175,7 @@ export class PGLiteEngine implements BrainEngine {
              claim_metric, claim_value, claim_unit, claim_period
            ) VALUES (
              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-             $13::halfvec, $14,
+             $13${factsEmbeddingCast}, $14,
              $15, $16, $17, $18
            ) RETURNING id`,
       embedStr === null
@@ -3179,6 +3200,8 @@ export class PGLiteEngine implements BrainEngine {
     ctx: { source_id: string },
   ): Promise<{ inserted: number; ids: number[] }> {
     if (rows.length === 0) return { inserted: 0, ids: [] };
+
+    const factsEmbeddingCast = await this.resolveFactsEmbeddingCast();
 
     // Single transaction so the v51 partial UNIQUE index can roll back the
     // whole batch on constraint violation. Per-row INSERTs (not multi-row
@@ -3237,7 +3260,7 @@ export class PGLiteEngine implements BrainEngine {
                  event_type
                ) VALUES (
                  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-                 $13::halfvec, $14,
+                 $13${factsEmbeddingCast}, $14,
                  $15, $16,
                  $17, $18, $19, $20,
                  $21
@@ -3341,6 +3364,7 @@ export class PGLiteEngine implements BrainEngine {
     opts?: { k?: number; embedding?: Float32Array },
   ): Promise<FactRow[]> {
     const k = Math.min(Math.max(opts?.k ?? 5, 1), 20);
+    const factsEmbeddingCast = await this.resolveFactsEmbeddingCast();
     if (opts?.embedding) {
       // Embedding-cosine ordered candidates within the entity bucket.
       const vec = toPgVectorLiteral(opts.embedding);
@@ -3350,7 +3374,7 @@ export class PGLiteEngine implements BrainEngine {
            AND entity_slug = $2
            AND expired_at IS NULL
            AND embedding IS NOT NULL
-         ORDER BY embedding <=> $3::halfvec
+         ORDER BY embedding <=> $3${factsEmbeddingCast}
          LIMIT $4`,
         [source_id, entitySlug, vec, k],
       );

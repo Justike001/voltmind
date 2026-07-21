@@ -144,7 +144,20 @@ export type ApplyResult =
   | { status: 'declined'; plan: RetrievalUpgradeState }
   | { status: 'planned'; plan: RetrievalUpgradeState }
   | { status: 'refused'; plan: RetrievalUpgradeState; reason: 'env_override'; warning: EnvOverrideWarning }
+  | { status: 'refused'; plan: RetrievalUpgradeState; reason: 'qwen_schema_contract'; warning: EnvOverrideWarning }
   | { status: 'failed'; plan: RetrievalUpgradeState; reason: string };
+
+function isQwenSchemaContract(model: string): boolean {
+  return model.trim().toLowerCase().startsWith('qwen-vllm:');
+}
+
+function qwenSchemaContractWarning(): EnvOverrideWarning {
+  return { triggered: false, vars: [] };
+}
+
+function qwenSchemaContractMessage(): string {
+  return 'Qwen embedding dimensions are an immutable schema contract; create a new database or run a full rebuild instead of using ze-switch.';
+}
 
 /**
  * v0.41.2.1 — env-override safety gate.
@@ -265,10 +278,12 @@ export async function planRetrievalUpgrade(engine: BrainEngine): Promise<Retriev
   const totalPages = Number(pageCountRows[0]?.count ?? 0);
 
   const isOnZE = currentEmbeddingModel.startsWith('zeroentropyai:');
+  const isQwen = isQwenSchemaContract(currentEmbeddingModel);
   const isLegacyDefault = currentEmbeddingModel === 'openai:text-embedding-3-large';
 
   const zeSwitchOffered =
     !isOnZE
+    && !isQwen
     && !alreadyDeclined
     && !applied
     && (isLegacyDefault || totalPages > ZE_MIN_PAGES_FOR_OFFER);
@@ -369,6 +384,15 @@ export async function applyRetrievalUpgrade(
     return { status: 'skipped_no_work', plan };
   }
 
+  if (isQwenSchemaContract(plan.current_embedding_model)) {
+    return {
+      status: 'refused',
+      plan,
+      reason: 'qwen_schema_contract',
+      warning: qwenSchemaContractWarning(),
+    };
+  }
+
   // v0.41.2.1 D9 #7 — env-override gate fires FIRST, before any mutation.
   // Schema transition (line ~304) AND the snapshot/intent writes below
   // (lines ~294 and ~297) are all skipped if env override would defeat the
@@ -454,6 +478,15 @@ export async function resumeRetrievalUpgrade(
     return { status: 'skipped_no_work', plan };
   }
 
+  if (isQwenSchemaContract(plan.current_embedding_model)) {
+    return {
+      status: 'refused',
+      plan,
+      reason: 'qwen_schema_contract',
+      warning: qwenSchemaContractWarning(),
+    };
+  }
+
   // v0.41.2.1 D9 #6 — env-override gate fires FIRST on resume too.
   // Pre-fix, resume was a bypass path: it called runSchemaTransition at
   // line ~360 with no env check, so a user could refuse apply (env triggered)
@@ -497,6 +530,14 @@ export async function undoRetrievalUpgrade(engine: BrainEngine): Promise<
   | { status: 'no_snapshot' }
   | { status: 'failed'; reason: string }
 > {
+  const currentModel = (await engine.getConfig('embedding_model')) ?? '';
+  if (isQwenSchemaContract(currentModel)) {
+    return {
+      status: 'failed',
+      reason: qwenSchemaContractMessage(),
+    };
+  }
+
   const snapshotStr = await engine.getConfig(KEY_PREVIOUS_SNAPSHOT);
   if (!snapshotStr) {
     return { status: 'no_snapshot' };
@@ -509,6 +550,13 @@ export async function undoRetrievalUpgrade(engine: BrainEngine): Promise<
     return {
       status: 'failed',
       reason: `corrupt ze_switch_previous_snapshot: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  if (isQwenSchemaContract(snapshot.embedding_model)) {
+    return {
+      status: 'failed',
+      reason: qwenSchemaContractMessage(),
     };
   }
 
@@ -569,9 +617,9 @@ async function runSchemaTransition(engine: BrainEngine, targetDim: number): Prom
     // Text embedding column — transition to target dim.
     await tx.executeRaw(`DROP INDEX IF EXISTS idx_chunks_embedding`);
     await tx.executeRaw(`ALTER TABLE content_chunks DROP COLUMN IF EXISTS embedding`);
-    await tx.executeRaw(`ALTER TABLE content_chunks ADD COLUMN embedding vector(${targetDim})`);
+    await tx.executeRaw(`ALTER TABLE content_chunks ADD COLUMN embedding halfvec(${targetDim})`);
     await tx.executeRaw(
-      `CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON content_chunks USING hnsw (embedding vector_cosine_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON content_chunks USING hnsw (embedding halfvec_cosine_ops)`,
     );
 
     // Image/multimodal embedding column — rebuild index but preserve
@@ -591,7 +639,7 @@ async function runSchemaTransition(engine: BrainEngine, targetDim: number): Prom
       await tx.executeRaw(`DROP INDEX IF EXISTS idx_chunks_embedding_image`);
       await tx.executeRaw(
         `CREATE INDEX IF NOT EXISTS idx_chunks_embedding_image
-           ON content_chunks USING hnsw (embedding_image vector_cosine_ops)
+           ON content_chunks USING hnsw (embedding_image halfvec_cosine_ops)
            WHERE embedding_image IS NOT NULL`,
       );
     }

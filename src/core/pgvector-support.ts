@@ -17,13 +17,30 @@ export function pgvectorSupportsHalfvec(version: string | null | undefined): boo
  */
 export async function assertPgvectorHalfvecSupport(engine: BrainEngine): Promise<void> {
   if (engine.kind !== 'postgres') return;
-  const rows = await engine.executeRaw<{ extversion: string | null }>(
-    `SELECT extversion FROM pg_extension WHERE extname = 'vector'`,
+  const rows = await engine.executeRaw<{ extversion: string | null; halfvec_type: string | null }>(
+    `SELECT e.extversion, to_regtype('halfvec')::text AS halfvec_type
+       FROM pg_extension e
+      WHERE e.extname = 'vector'`,
   );
   const version = rows[0]?.extversion ?? null;
-  if (pgvectorSupportsHalfvec(version)) return;
-  throw new Error(
-    `Supabase pgvector ${version ?? 'is not installed'} is incompatible with VoltMind's Qwen 2048d halfvec schema. ` +
-    `Install/upgrade extension "vector" to >= 0.7.0, then run init again.`,
-  );
+  const halfvecType = rows[0]?.halfvec_type ?? null;
+  if (!pgvectorSupportsHalfvec(version) || halfvecType === null) {
+    throw new Error(
+      `Supabase pgvector ${version ?? 'is not installed'} is incompatible with VoltMind's Qwen 2048d halfvec schema. ` +
+      `Install/upgrade extension "vector" to >= 0.7.0 so to_regtype('halfvec') is available, then run init again.`,
+    );
+  }
+  try {
+    await engine.executeRaw(`
+      CREATE TEMP TABLE voltmind_halfvec_probe (embedding halfvec(2048));
+      CREATE INDEX voltmind_halfvec_probe_hnsw
+        ON voltmind_halfvec_probe USING hnsw (embedding halfvec_cosine_ops);
+      DROP TABLE voltmind_halfvec_probe;
+    `);
+  } catch (error) {
+    throw new Error(
+      `Supabase pgvector ${version} exposes halfvec but cannot create halfvec(2048) ` +
+      `with halfvec_cosine_ops HNSW: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }

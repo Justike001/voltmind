@@ -86,12 +86,15 @@ Flags:
  * stays in the JSON envelope; the box is for human readers.
  */
 function renderApplyResult(result: ApplyResult, json: boolean): void {
-  if (result.status === 'refused' && result.reason === 'env_override') {
+  if (result.status === 'refused') {
     if (json) {
       console.log(JSON.stringify(result, null, 2));
-    } else {
+    } else if (result.reason === 'env_override') {
       console.error(formatEnvOverrideWarning(result.warning));
       console.error(`\nSwitch status: refused (env_override)`);
+    } else {
+      console.error(`\nSwitch status: refused (qwen_schema_contract)`);
+      console.error('Qwen embedding dimensions are an immutable schema contract; create a new database or run a full rebuild instead of using ze-switch.');
     }
     process.exit(1);
   }
@@ -139,7 +142,7 @@ export async function runZeSwitch(args: string[], engine: BrainEngine): Promise<
       });
       // v0.41.2.1: route through the env-override-aware renderer so
       // refused-status emits the ASCII warning box + exits non-zero.
-      if (result.status === 'refused' && result.reason === 'env_override') {
+      if (result.status === 'refused') {
         renderApplyResult(result, flags.json); // exits non-zero
       }
       if (flags.json) {
@@ -190,7 +193,7 @@ export async function runZeSwitch(args: string[], engine: BrainEngine): Promise<
         ignoreEnvOverride: flags.ignoreEnvOverride,
       });
       // v0.41.2.1: render env-override refusal with ASCII box + exit non-zero.
-      if (result.status === 'refused' && result.reason === 'env_override') {
+      if (result.status === 'refused') {
         renderApplyResult(result, flags.json); // exits non-zero
       }
       if (flags.json) {

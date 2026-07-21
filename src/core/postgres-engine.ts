@@ -25,6 +25,7 @@ import { runMigrations } from './migrate.ts';
 import { SCHEMA_SQL } from './schema-embedded.ts';
 import { verifySchema } from './schema-verify.ts';
 import { applyChunkEmbeddingIndexPolicy, dropZombieIndexes } from './vector-index.ts';
+import { assertPgvectorHalfvecSupport } from './pgvector-support.ts';
 import {
   normalizeEngineColumn,
   buildVectorCastFragment,
@@ -223,6 +224,11 @@ export class PostgresEngine implements BrainEngine {
     const conn = this.connectionManager
       ? await this.connectionManager.ddl()
       : this.sql;
+
+    // The canonical Postgres schema is Qwen/halfvec(2048). Refuse before any
+    // bootstrap or migration DDL if the managed pgvector extension cannot
+    // create that type and its HNSW operator class.
+    await assertPgvectorHalfvecSupport(this);
 
     // Resolve the embedding dim/model from the gateway. v0.37 fix wave:
     // fallbacks track the canonical defaults in `ai/defaults.ts` instead of
@@ -3209,14 +3215,14 @@ export class PostgresEngine implements BrainEngine {
    * per process + caching the suffix lets the insert match the column
    * type exactly. Initialized lazily in `insertFacts`.
    */
-  private _factsEmbeddingCastSuffix: '::vector' | '::halfvec' | null = null;
+  private _factsEmbeddingCastSuffix: string | null = null;
 
   /** Test seam: clear the cached cast suffix so tests can re-probe. */
   __resetFactsEmbeddingCastCacheForTest(): void {
     this._factsEmbeddingCastSuffix = null;
   }
 
-  private async resolveFactsEmbeddingCast(): Promise<'::vector' | '::halfvec'> {
+  private async resolveFactsEmbeddingCast(): Promise<string> {
     if (this._factsEmbeddingCastSuffix !== null) return this._factsEmbeddingCastSuffix;
     const sql = this.sql;
     try {
@@ -3234,20 +3240,14 @@ export class PostgresEngine implements BrainEngine {
       // halfvec match first — halfvec contains "vec" so a /vector/i
       // regex would shadow it. See readFactsEmbeddingDim's identical
       // ordering note.
-      if (formatted && /halfvec\(\d+\)/i.test(formatted)) {
-        this._factsEmbeddingCastSuffix = '::halfvec';
-      } else {
-        // Default to '::vector' (the pre-v0.41.15 behavior). On a brain
-        // without the facts.embedding column yet (pre-v40), the cast
-        // suffix is irrelevant — the INSERT would fail elsewhere
-        // anyway. Caching the default still saves the SELECT on
-        // subsequent inserts.
-        this._factsEmbeddingCastSuffix = '::vector';
-      }
+      const descriptor = /^(halfvec|vector)\((\d+)\)$/i.exec(formatted ?? '');
+      this._factsEmbeddingCastSuffix = descriptor
+        ? `::${descriptor[1].toLowerCase()}(${descriptor[2]})`
+        : '::halfvec(2048)';
     } catch {
-      // Probe failed — fall back to '::vector' default. Cache so we
-      // don't re-probe on every insert.
-      this._factsEmbeddingCastSuffix = '::vector';
+      // A pre-v40 brain cannot successfully insert an embedding anyway;
+      // default to the current Qwen contract rather than reviving vector SQL.
+      this._factsEmbeddingCastSuffix = '::halfvec(2048)';
     }
     return this._factsEmbeddingCastSuffix;
   }

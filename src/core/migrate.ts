@@ -5015,10 +5015,11 @@ export const MIGRATIONS: Migration[] = [
     sql: '',
     idempotent: true,
     handler: async (engine) => {
-      const configured = Number.parseInt((await engine.getConfig('embedding_dimensions')) ?? '2048', 10);
-      const dimensions = Number.isInteger(configured) && configured > 0 && configured <= 4000
-        ? configured
-        : 2048;
+      const model = (await engine.getConfig('embedding_model')) ?? '';
+      const configured = Number.parseInt((await engine.getConfig('embedding_dimensions')) ?? '1536', 10);
+      const dimensions = model.toLowerCase().startsWith('qwen-vllm:')
+        ? 2048
+        : (Number.isInteger(configured) && configured > 0 && configured <= 4000 ? configured : 1536);
       await engine.executeRaw(`DROP INDEX IF EXISTS idx_takes_embedding_hnsw`);
       await engine.executeRaw(`UPDATE takes SET embedding = NULL, embedded_at = NULL`);
       await engine.executeRaw(
@@ -5036,6 +5037,52 @@ export const MIGRATIONS: Migration[] = [
           WHERE c.relname = 'takes' AND a.attname = 'embedding' AND NOT a.attisdropped`,
       );
       return /^halfvec\(/i.test(rows[0]?.formatted ?? '');
+    },
+  },
+  {
+    version: 109,
+    name: 'qwen_vector_contract_facts_cache',
+    // Finalize the Qwen contract for the two tables that historically sized
+    // themselves from config or fell back to vector(1536). Existing values are
+    // intentionally discarded; they belong to an incompatible embedding
+    // space and must be rebuilt by the normal embed pipeline.
+    sql: '',
+    idempotent: true,
+    handler: async (engine) => {
+      const model = (await engine.getConfig('embedding_model')) ?? '';
+      if (!model.toLowerCase().startsWith('qwen-vllm:')) return;
+      await engine.executeRaw(`DROP INDEX IF EXISTS idx_facts_embedding_hnsw`);
+      await engine.executeRaw(`DROP INDEX IF EXISTS idx_query_cache_embedding_hnsw`);
+      await engine.executeRaw(`UPDATE facts SET embedding = NULL, embedded_at = NULL`);
+      await engine.executeRaw(`UPDATE query_cache SET embedding = NULL`);
+      await engine.executeRaw(
+        `ALTER TABLE facts ALTER COLUMN embedding TYPE halfvec(2048) USING NULL::halfvec(2048)`,
+      );
+      await engine.executeRaw(
+        `ALTER TABLE query_cache ALTER COLUMN embedding TYPE halfvec(2048) USING NULL::halfvec(2048)`,
+      );
+      await engine.executeRaw(`
+        CREATE INDEX IF NOT EXISTS idx_facts_embedding_hnsw
+          ON facts USING hnsw (embedding halfvec_cosine_ops)
+          WHERE embedding IS NOT NULL AND expired_at IS NULL
+      `);
+      await engine.executeRaw(`
+        CREATE INDEX IF NOT EXISTS idx_query_cache_embedding_hnsw
+          ON query_cache USING hnsw (embedding halfvec_cosine_ops)
+          WHERE embedding IS NOT NULL
+      `);
+    },
+    verify: async (engine) => {
+      const model = (await engine.getConfig('embedding_model')) ?? '';
+      if (!model.toLowerCase().startsWith('qwen-vllm:')) return true;
+      const rows = await engine.executeRaw<{ table_name: string; formatted: string | null }>(
+        `SELECT c.relname AS table_name, format_type(a.atttypid, a.atttypmod) AS formatted
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+          WHERE c.relname IN ('facts', 'query_cache')
+            AND a.attname = 'embedding' AND NOT a.attisdropped`,
+      );
+      return rows.length === 2 && rows.every((row) => row.formatted?.toLowerCase() === 'halfvec(2048)');
     },
   },
 ];
