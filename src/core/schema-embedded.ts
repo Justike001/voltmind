@@ -2,7 +2,7 @@
 // Source: src/schema.sql
 
 export const SCHEMA_SQL = `
--- VoltMind Postgres + pgvector schema
+-- GBrain Postgres + pgvector schema
 
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -17,7 +17,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 --
 -- id:         immutable citation key. [a-z0-9-]{1,32} enforced at app layer.
 --             Used in [source:slug] citations, --source flag, wikilink syntax.
--- name:       mutable display label. Rename via \`voltmind sources rename\`.
+-- name:       mutable display label. Rename via \`gbrain sources rename\`.
 -- local_path: optional git checkout root for filesystem-backed sources.
 -- config:     forward-compat JSONB. Currently used for federation + ACL slot.
 --             { "federated": bool, "access_policy": {...} }
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS pages (
   effective_date_source TEXT,
   import_filename       TEXT,
   salience_touched_at   TIMESTAMPTZ,
-  -- v0.37.0 (migration v79): real stale-page signal for \`voltmind lsd\`. Bumped
+  -- v0.37.0 (migration v79): real stale-page signal for \`gbrain lsd\`. Bumped
   -- by op-layer write-back inside \`search\`/\`query\`/\`get_page\` op handlers
   -- (NOT inside engine methods — internal callers must not pollute the
   -- signal). NULL = never retrieved (LSD prioritizes these first).
@@ -267,6 +267,13 @@ CREATE INDEX IF NOT EXISTS idx_chunks_embedding_multimodal
 CREATE INDEX IF NOT EXISTS idx_chunks_search_vector ON content_chunks USING GIN(search_vector);
 CREATE INDEX IF NOT EXISTS idx_chunks_symbol_qualified
   ON content_chunks(symbol_name_qualified) WHERE symbol_name_qualified IS NOT NULL;
+-- v0.41.18.0 (codex finding #9): partial index for \`gbrain embed --stale\`
+-- + \`--priority recent\`. content_chunks has no updated_at column (chunks
+-- are re-INSERTed on page change, not UPDATEd), so the "recent-first"
+-- ORDER BY happens at the JOIN site: outer ORDER BY p.updated_at DESC
+-- uses idx_pages_updated_at_desc; inner partial uses this index.
+CREATE INDEX IF NOT EXISTS content_chunks_stale_idx
+  ON content_chunks(page_id, chunk_index) WHERE embedding IS NULL;
 
 -- v0.20.0 Cathedral II: chunk-grain FTS trigger.
 -- Weight 'A' on doc_comment + symbol_name_qualified; weight 'B' on chunk_text.
@@ -358,10 +365,16 @@ CREATE TABLE IF NOT EXISTS links (
   to_page_id     INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
   link_type      TEXT    NOT NULL DEFAULT '',
   context        TEXT    NOT NULL DEFAULT '',
-  -- v0.42.0.0: 'mentions' added for auto-linked body-text mentions
-  -- (voltmind extract links --by-mention). Filtered OUT of backlink-count
+  -- v0.41.18.0: 'mentions' added for auto-linked body-text mentions
+  -- (gbrain extract links --by-mention). Filtered OUT of backlink-count
   -- for search ranking; only counts toward orphan-ratio + graph traversal.
   link_source    TEXT    CHECK (link_source IS NULL OR link_source IN ('markdown', 'frontmatter', 'manual', 'mentions')),
+  -- v0.41.18.0: nullable link_kind distinguishes "plain body mention" from
+  -- "verb-pattern-derived typed link" within link_source='mentions'.
+  -- Codex finding #12 design: keep link_source stable; add link_kind
+  -- so callers can distinguish without breaking existing mentions queries.
+  -- NULL = legacy / unknown / pre-v98 row (semantically 'plain').
+  link_kind      TEXT    CHECK (link_kind IS NULL OR link_kind IN ('plain', 'typed_ner')),
   origin_page_id INTEGER REFERENCES pages(id) ON DELETE SET NULL,
   origin_field   TEXT,
   -- v0.18.0 Step 4: 'qualified' when the link was written as
@@ -424,8 +437,10 @@ CREATE TABLE IF NOT EXISTS timeline_entries (
 
 CREATE INDEX IF NOT EXISTS idx_timeline_page ON timeline_entries(page_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_date ON timeline_entries(date);
--- Dedup constraint: same (page, date, summary) treated as same event
-CREATE UNIQUE INDEX IF NOT EXISTS idx_timeline_dedup ON timeline_entries(page_id, date, summary);
+-- v0.41.18.0 (codex finding #11): widened from (page_id, date, summary) to
+-- include \`source\` so distinct meeting provenance survives. Legacy rows
+-- have source='' (schema default) so legacy dedup behavior is preserved.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_timeline_dedup ON timeline_entries(page_id, date, summary, source);
 
 -- ============================================================
 -- page_versions: snapshot history for compiled_truth
@@ -591,6 +606,39 @@ CREATE INDEX IF NOT EXISTS op_checkpoints_updated_at_idx
   ON op_checkpoints (updated_at);
 
 -- ============================================================
+-- migration_impact_log: before/after metric stats per onboard remediation
+-- ============================================================
+-- v0.41.18.0 (gbrain onboard wave). Every completion captured by the
+-- onboard remediation pipeline records before/after metric stats so
+-- \`gbrain onboard --history --json\` can show "you reduced orphans 47%".
+-- delta computed at read time (NOT a stored GENERATED column —
+-- zero PGLite parity risk per eng-review D2).
+--
+-- Attribution columns (job_id, source_id, brain_id, started_at,
+-- idempotency_key) per codex finding #10 so concurrent onboard /
+-- autopilot / manual runs can't misattribute deltas to the wrong
+-- migration when overlapping runs change the same metric.
+CREATE TABLE IF NOT EXISTS migration_impact_log (
+  id              BIGSERIAL PRIMARY KEY,
+  remediation_id  TEXT      NOT NULL,
+  metric_name     TEXT      NOT NULL,
+  metric_before   NUMERIC,
+  metric_after    NUMERIC,
+  job_id          BIGINT    REFERENCES minion_jobs(id) ON DELETE SET NULL,
+  source_id       TEXT,
+  brain_id        TEXT,
+  started_at      TIMESTAMPTZ,
+  idempotency_key TEXT,
+  applied_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  applied_by      TEXT,
+  details         JSONB     DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS migration_impact_log_remediation_idx
+  ON migration_impact_log(remediation_id, applied_at DESC);
+CREATE INDEX IF NOT EXISTS migration_impact_log_attribution_idx
+  ON migration_impact_log(job_id, source_id) WHERE job_id IS NOT NULL;
+
+-- ============================================================
 -- files: binary attachments stored in Supabase Storage
 -- ============================================================
 -- v0.18.0 Step 7: files gains source_id + page_id alongside the
@@ -748,6 +796,66 @@ CREATE INDEX IF NOT EXISTS idx_minion_jobs_timeout ON minion_jobs (timeout_at) W
 CREATE INDEX IF NOT EXISTS idx_minion_jobs_parent_status ON minion_jobs (parent_job_id, status) WHERE parent_job_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_minion_jobs_idempotency ON minion_jobs (idempotency_key) WHERE idempotency_key IS NOT NULL;
 
+-- ============================================================
+-- VoltMind Actions: FS-canonical task index + DB-only run ledger
+-- ============================================================
+CREATE TABLE IF NOT EXISTS action_index (
+  source_id TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  priority TEXT,
+  due_at TIMESTAMPTZ,
+  eligible BOOLEAN NOT NULL DEFAULT false,
+  mode TEXT NOT NULL DEFAULT 'manual',
+  runtime TEXT,
+  trigger TEXT,
+  risk_level TEXT NOT NULL DEFAULT 'medium',
+  requires_confirmation BOOLEAN NOT NULL DEFAULT true,
+  requires_approval BOOLEAN NOT NULL DEFAULT false,
+  max_autonomy TEXT,
+  outcome TEXT,
+  next_step TEXT,
+  agent_contract JSONB NOT NULL DEFAULT '{}'::jsonb,
+  automation JSONB NOT NULL DEFAULT '{}'::jsonb,
+  allowed_tools JSONB NOT NULL DEFAULT '[]'::jsonb,
+  blocked_tools JSONB NOT NULL DEFAULT '[]'::jsonb,
+  user_prompt TEXT,
+  file_path TEXT,
+  content_hash TEXT NOT NULL DEFAULT '',
+  approved_at TIMESTAMPTZ,
+  approved_by TEXT,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  archived_at TIMESTAMPTZ,
+  last_run_at TIMESTAMPTZ,
+  last_run_status TEXT,
+  plan_json JSONB,
+  tool_route_json JSONB,
+  last_scanned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source_id, slug)
+);
+CREATE INDEX IF NOT EXISTS idx_action_index_due ON action_index (due_at) WHERE eligible = true;
+CREATE INDEX IF NOT EXISTS idx_action_index_status ON action_index(status);
+
+CREATE TABLE IF NOT EXISTS action_runs (
+  id SERIAL PRIMARY KEY,
+  source_id TEXT NOT NULL,
+  action_slug TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  status TEXT NOT NULL,
+  dry_run BOOLEAN NOT NULL DEFAULT false,
+  prompt TEXT NOT NULL,
+  user_prompt TEXT,
+  result JSONB,
+  error_text TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at TIMESTAMPTZ,
+  UNIQUE (source_id, action_slug, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_action_runs_action ON action_runs (source_id, action_slug, created_at DESC);
+
 -- Inbox table for sidechannel messaging
 CREATE TABLE IF NOT EXISTS minion_inbox (
   id          SERIAL PRIMARY KEY,
@@ -823,12 +931,8 @@ CREATE TABLE IF NOT EXISTS subagent_tool_executions (
   error               TEXT,
   schema_version      INTEGER     NOT NULL DEFAULT 1,
   provider_id         TEXT,
-  -- v0.38 D11: voltmind-owned stable IDs (ordinal assigned at first
-  -- observation of a tool call; voltmind_tool_use_id is uuid v7). Reconciliation
-  -- on crash-replay uses (job_id, message_idx, ordinal) as the unique key.
-  -- Legacy rows (pre-v82) have ordinal=NULL + voltmind_tool_use_id=NULL and
-  -- are resolved by the read-time D5 shim that recomputes the key from
-  -- (job_id, message_idx, content_blocks index, tool_name).
+  -- v0.38 D11: VoltMind-owned stable IDs (ordinal assigned at first
+  -- observation of a tool call; voltmind_tool_use_id is uuid v7).
   ordinal             INTEGER,
   voltmind_tool_use_id UUID,
   started_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -872,7 +976,7 @@ CREATE TABLE IF NOT EXISTS dream_verdicts (
 -- Cycle coordination lock — v0.17 runCycle primitive
 -- ============================================================
 -- One row per active cycle. Any caller (autopilot daemon, Minions
--- autopilot-cycle handler, voltmind dream CLI) tries to acquire this
+-- autopilot-cycle handler, gbrain dream CLI) tries to acquire this
 -- row before running a DB-write phase. Holders refresh ttl_expires_at
 -- between phases; crashed holders auto-release once TTL expires.
 -- Works through PgBouncer transaction pooling, unlike session-scoped
@@ -884,7 +988,7 @@ CREATE TABLE IF NOT EXISTS voltmind_cycle_locks (
   acquired_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   ttl_expires_at     TIMESTAMPTZ NOT NULL,
   -- v0.41.13.0 (migration v97 + D-V3-4): bumped on every withRefreshingLock
-  -- refresh tick. Used by \`voltmind sync --break-lock --max-age <s>\` to
+  -- refresh tick. Used by \`gbrain sync --break-lock --max-age <s>\` to
   -- identify wedged-but-alive holders without stealing healthy long-running
   -- holders that are actively refreshing.
   last_refreshed_at  TIMESTAMPTZ
@@ -898,7 +1002,7 @@ CREATE INDEX IF NOT EXISTS idx_voltmind_cycle_locks_ttl ON voltmind_cycle_locks(
 -- in src/core/operations.ts. PII is scrubbed before insert by
 -- src/core/eval-capture-scrub.ts. query is CHECK-capped at 50KB.
 -- eval_capture_failures: cross-process audit of insert failures, surfaced
--- by \`voltmind doctor\` (in-process counters can't bridge MCP server + doctor
+-- by \`gbrain doctor\` (in-process counters can't bridge MCP server + doctor
 -- CLI process boundaries).
 CREATE TABLE IF NOT EXISTS eval_candidates (
   id                    SERIAL PRIMARY KEY,
@@ -927,7 +1031,7 @@ CREATE TABLE IF NOT EXISTS eval_candidates (
   salience_source       TEXT,
   recency_source        TEXT,
   -- v0.36.3.0 (D16 / CDX-10) — embedding column resolved at capture time so
-  -- \`voltmind eval replay\` reproduces the same column the capture ran against.
+  -- \`gbrain eval replay\` reproduces the same column the capture ran against.
   -- Nullable; pre-v0.36 rows have NULL and replay falls back to current
   -- default. Migration v68 (src/core/migrate.ts) adds the same column on
   -- upgrade brains.
@@ -1129,7 +1233,7 @@ CREATE INDEX IF NOT EXISTS take_nudge_log_wave_idx
   ON take_nudge_log (wave_version, fired_at DESC);
 
 -- think_ab_results (v0.36.1.0 T18 / D19): A/B harness data for
--- \`voltmind think --ab\`. One row per side-by-side comparison.
+-- \`gbrain think --ab\`. One row per side-by-side comparison.
 CREATE TABLE IF NOT EXISTS think_ab_results (
   id              BIGSERIAL PRIMARY KEY,
   source_id       TEXT         NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
@@ -1163,7 +1267,7 @@ CREATE TRIGGER minion_job_notify AFTER INSERT OR UPDATE OF status ON minion_jobs
 -- ============================================================
 -- Row Level Security: block anon access, postgres role bypasses
 -- ============================================================
--- The postgres role (used by voltmind via pooler) has BYPASSRLS.
+-- The postgres role (used by gbrain via pooler) has BYPASSRLS.
 -- Enabling RLS with no policies means the anon key can't read anything.
 -- Only enable if the current role actually has BYPASSRLS privilege,
 -- otherwise we'd lock ourselves out.
