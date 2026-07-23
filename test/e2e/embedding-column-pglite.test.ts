@@ -35,12 +35,20 @@ let engine: PGLiteEngine;
 let chunkIdA: number;
 let chunkIdB: number;
 
-const VEC1536_A = new Array(1536).fill(0).map((_, i) => 0.001 * (i % 10));
-const VEC1536_B = new Array(1536).fill(0).map((_, i) => 0.002 * (i % 10));
+const VEC2048_A = new Array(2048).fill(0).map((_, i) => 0.001 * (i % 10));
+const VEC2048_B = new Array(2048).fill(0).map((_, i) => 0.002 * (i % 10));
 const VEC1024_A = new Array(1024).fill(0).map((_, i) => 0.5 - 0.001 * (i % 10));
 const VEC1024_B = new Array(1024).fill(0).map((_, i) => 0.4 + 0.001 * (i % 10));
 
 beforeAll(async () => {
+  // This file exercises the canonical Qwen halfvec contract. The global test
+  // preload intentionally keeps older fixtures on OpenAI/1536, so opt into
+  // the 2048d schema before initializing this PGLite instance.
+  configureGateway({
+    embedding_model: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
+    embedding_dimensions: 2048,
+    env: { ...process.env },
+  });
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
@@ -84,12 +92,12 @@ beforeAll(async () => {
   // search orderings depend on which column the engine actually reads.
   const vecLit = (arr: number[]) => `[${arr.join(',')}]`;
   await (engine as any).db.query(
-    `UPDATE content_chunks SET embedding = $1::vector WHERE id = $2`,
-    [vecLit(VEC1536_A), chunkIdA],
+    `UPDATE content_chunks SET embedding = $1::halfvec(2048) WHERE id = $2`,
+    [vecLit(VEC2048_A), chunkIdA],
   );
   await (engine as any).db.query(
-    `UPDATE content_chunks SET embedding = $1::vector WHERE id = $2`,
-    [vecLit(VEC1536_B), chunkIdB],
+    `UPDATE content_chunks SET embedding = $1::halfvec(2048) WHERE id = $2`,
+    [vecLit(VEC2048_B), chunkIdB],
   );
   await (engine as any).db.query(
     `UPDATE content_chunks SET embedding_voyage = $1::vector WHERE id = $2`,
@@ -159,7 +167,7 @@ describe('PGLite engine: searchVector accepts ResolvedColumn descriptor (D11)', 
     // We never seeded embedding_image so we expect zero results, but the
     // query MUST NOT throw — the legacy-literal path must still work
     // (no regression on the existing image branch).
-    const v = new Float32Array(1024).fill(0.1);
+    const v = new Float32Array(2048).fill(0.1);
     const results = await engine.searchVector(v, {
       embeddingColumn: 'embedding_image',
       limit: 5,
@@ -171,7 +179,7 @@ describe('PGLite engine: searchVector accepts ResolvedColumn descriptor (D11)', 
 describe('PGLite engine: getEmbeddingsByChunkIds column param (D9)', () => {
   test('default fetches from embedding (back-compat)', async () => {
     const map = await engine.getEmbeddingsByChunkIds([chunkIdA, chunkIdB]);
-    expect(map.get(chunkIdA)!.length).toBe(1536);
+    expect(map.get(chunkIdA)!.length).toBe(2048);
   });
 
   test('column="embedding_voyage" fetches from voyage column', async () => {
@@ -217,7 +225,7 @@ describe('hybridSearch + resolver — unknown column at entry (D11)', () => {
 });
 
 describe('buildVectorCastFragment — engine SQL composer (D3)', () => {
-  test('vector descriptor emits $1::vector', () => {
+  test('vector descriptor emits its exact dimension cast', () => {
     const r: ResolvedColumn = {
       name: 'embedding',
       type: 'vector',
@@ -226,7 +234,7 @@ describe('buildVectorCastFragment — engine SQL composer (D3)', () => {
     };
     const { col, castSql } = buildVectorCastFragment(r);
     expect(col).toBe('"embedding"');
-    expect(castSql).toBe('$1::vector');
+    expect(castSql).toBe('$1::vector(1536)');
   });
 
   test('halfvec descriptor emits $1::halfvec(N) with parenthesized N', () => {

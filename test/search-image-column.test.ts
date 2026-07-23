@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { resetPgliteState } from './helpers/reset-pglite.ts';
 import { readContentChunksEmbeddingDim } from '../src/core/embedding-dim-check.ts';
+import { configureGateway, resetGateway } from '../src/core/ai/gateway.ts';
 
 let engine: PGLiteEngine;
 /**
@@ -15,11 +16,19 @@ let engine: PGLiteEngine;
  * `~/.voltmind/config.json` (locally) or `DEFAULT_EMBEDDING_DIMENSIONS`
  * (CI fresh-install). Hardcoding 1536 or 1280 makes the test green
  * on one and red on the other; the default model has flipped twice
- * already (OpenAI 3-large=1536 → ZE zembed-1=1280 in v0.36+).
+ * already (OpenAI 3-large=1536 → ZE zembed-1=1280 → Qwen3-VL=2048).
  */
 let TEXT_DIM = 0;
 
 beforeAll(async () => {
+  // The image column is part of the canonical Qwen 2048d multimodal space.
+  // The global preload keeps legacy tests on OpenAI/1536, so configure the
+  // schema contract explicitly before this file initializes its engine.
+  configureGateway({
+    embedding_model: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
+    embedding_dimensions: 2048,
+    env: { ...process.env },
+  });
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
@@ -32,6 +41,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await engine.disconnect();
+  resetGateway();
 });
 
 beforeEach(async () => {
@@ -41,7 +51,7 @@ beforeEach(async () => {
 /**
  * Build a fake text-column vector at the column's runtime dim. Reads
  * `TEXT_DIM` populated in `beforeAll` from the actual column. Works
- * on any default — 1280 (CI fresh-install) and 1536 (local dev with
+ * on any default — 2048 for the company Qwen stack and 1536 for legacy
  * voltmind config from older default) both pass.
  */
 function fakeTextDefault(seed: number): Float32Array {
@@ -51,9 +61,9 @@ function fakeTextDefault(seed: number): Float32Array {
   return out;
 }
 
-function fakeImage1024(seed: number): Float32Array {
-  const out = new Float32Array(1024);
-  for (let i = 0; i < 1024; i++) out[i] = (i + seed) / 1024;
+function fakeImageNative(seed: number): Float32Array {
+  const out = new Float32Array(TEXT_DIM);
+  for (let i = 0; i < TEXT_DIM; i++) out[i] = (i + seed) / TEXT_DIM;
   return out;
 }
 
@@ -97,7 +107,7 @@ async function seedImagePage(slug: string, vec: Float32Array) {
 describe('searchVector column routing (v0.27.1)', () => {
   test('default path searches embedding column and returns text rows only', async () => {
     await seedTextPage('notes/text-only', fakeTextDefault(1));
-    await seedImagePage('photos/img-only', fakeImage1024(1));
+    await seedImagePage('photos/img-only', fakeImageNative(1));
 
     const out = await engine.searchVector(fakeTextDefault(1), { limit: 10 });
     const slugs = out.map(r => r.slug);
@@ -107,9 +117,9 @@ describe('searchVector column routing (v0.27.1)', () => {
 
   test('embeddingColumn=embedding_image searches image column and returns image rows only', async () => {
     await seedTextPage('notes/text-only', fakeTextDefault(2));
-    await seedImagePage('photos/img-only', fakeImage1024(2));
+    await seedImagePage('photos/img-only', fakeImageNative(2));
 
-    const out = await engine.searchVector(fakeImage1024(2), {
+    const out = await engine.searchVector(fakeImageNative(2), {
       limit: 10,
       embeddingColumn: 'embedding_image',
     });
@@ -120,9 +130,9 @@ describe('searchVector column routing (v0.27.1)', () => {
 
   test('image-column path scores by cosine and orders nearest first', async () => {
     // Two image pages with different vectors; query nearest the second.
-    const vecA = fakeImage1024(0);
-    const vecB = new Float32Array(1024);
-    for (let i = 0; i < 1024; i++) vecB[i] = (i + 100) / 1024;
+    const vecA = fakeImageNative(0);
+    const vecB = new Float32Array(TEXT_DIM);
+    for (let i = 0; i < TEXT_DIM; i++) vecB[i] = (i + 100) / TEXT_DIM;
 
     await seedImagePage('photos/a', vecA);
     await seedImagePage('photos/b', vecB);
@@ -137,7 +147,7 @@ describe('searchVector column routing (v0.27.1)', () => {
 
   test('searchKeyword hides image rows by default (modality filter)', async () => {
     await seedTextPage('notes/keyword', fakeTextDefault(3));
-    await seedImagePage('photos/keyword', fakeImage1024(3));
+    await seedImagePage('photos/keyword', fakeImageNative(3));
     // Force image chunk_text to overlap with the text chunk's words so the
     // FTS would otherwise match both rows.
     await engine.upsertChunks('photos/keyword', [
@@ -145,7 +155,7 @@ describe('searchVector column routing (v0.27.1)', () => {
         chunk_index: 0,
         chunk_text: 'body for notes/keyword',
         chunk_source: 'image_asset',
-        embedding_image: fakeImage1024(3),
+        embedding_image: fakeImageNative(3),
         modality: 'image',
       },
     ]);

@@ -6,7 +6,7 @@
  *   1. readContentChunksEmbeddingDim correctly reports null on a fresh brain.
  *   2. After initSchema, it returns the actual templated dim (1536 default).
  *   3. embeddingMismatchMessage produces a recipe that explicitly drops the
- *      HNSW index, alters the column, wipes embeddings, and conditionally
+ *      HNSW index, alters the halfvec column, wipes embeddings, and conditionally
  *      reindexes — codex's #8 finding from plan review.
  */
 
@@ -38,16 +38,15 @@ afterAll(async () => {
 
 describe('readContentChunksEmbeddingDim', () => {
   test('returns dims from a migrated brain (1536d via legacy-embedding preload)', async () => {
-    // v0.37 fix wave: the canonical gateway default is now 1280 (ZE).
+    // The test preload configures the gateway to OpenAI/1536 before any test
+    // runs to preserve legacy Float32Array fixtures.
     // However, `bunfig.toml` preloads `test/helpers/legacy-embedding-preload.ts`
     // which configures the gateway to OpenAI/1536 BEFORE any test runs.
     // This preserves the 20+ test files with hardcoded 1536-d
     // Float32Array fixtures. So initSchema() under tests produces a
     // 1536-d column.
     //
-    // New v0.37 tests that need to assert the ZE/1280 default can call
-    // configureGateway() explicitly in their own beforeAll, which
-    // overrides the preload.
+    // Tests that need the Qwen/2048 default configure the gateway explicitly.
     const result = await readContentChunksEmbeddingDim(engine);
     expect(result.exists).toBe(true);
     expect(result.dims).toBe(1536);
@@ -77,29 +76,27 @@ describe('embeddingMismatchMessage', () => {
       source: 'init',
       engineKind: 'postgres',
     });
-    expect(msg).toContain('vector(1536)');
-    expect(msg).toContain('vector(768)');
+    expect(msg).toContain('halfvec(1536)');
+    expect(msg).toContain('halfvec(768)');
     expect(msg).toContain('DROP INDEX IF EXISTS idx_chunks_embedding');
-    expect(msg).toContain('ALTER TABLE content_chunks ALTER COLUMN embedding TYPE vector(768)');
+    expect(msg).toContain('ALTER TABLE content_chunks ALTER COLUMN embedding TYPE halfvec(768)');
     expect(msg).toContain('UPDATE content_chunks SET embedding = NULL');
     expect(msg).toContain('CREATE INDEX IF NOT EXISTS idx_chunks_embedding');
     expect(msg).toContain('docs/embedding-migrations.md');
   });
 
-  test('Postgres branch skips HNSW recreate when requested dims exceed pgvector cap', () => {
-    // Codex finding #8: 2048d (Voyage 4 Large) cannot be HNSW-indexed in pgvector.
+  test('Postgres branch skips HNSW recreate when requested dims exceed the halfvec HNSW cap', () => {
     // The recipe must NOT instruct a CREATE INDEX HNSW for that dim.
     const msg = embeddingMismatchMessage({
       currentDims: 1536,
-      requestedDims: 2048,
-      requestedModel: 'voyage-4-large',
+      requestedDims: 4096,
+      requestedModel: 'oversized-test-model',
       source: 'init',
       engineKind: 'postgres',
     });
-    expect(msg).toContain('vector(2048)');
-    expect(msg).toContain('Skip reindex');
-    expect(msg).toContain("exceeds pgvector's HNSW cap");
-    // The HNSW CREATE INDEX line must NOT appear in the 2048d recipe.
+    expect(msg).toContain('halfvec(4096)');
+    expect(msg).toContain('exceeds pgvector\'s halfvec HNSW cap');
+    // The HNSW CREATE INDEX line must NOT appear in the oversized recipe.
     expect(msg).not.toContain('CREATE INDEX IF NOT EXISTS idx_chunks_embedding\n  ON content_chunks USING hnsw');
   });
 
@@ -115,16 +112,16 @@ describe('embeddingMismatchMessage', () => {
   test('PGLite branch uses wipe-and-reinit, not ALTER COLUMN', () => {
     const msg = embeddingMismatchMessage({
       currentDims: 1536,
-      requestedDims: 1280,
-      requestedModel: 'zeroentropyai:zembed-1',
+      requestedDims: 2048,
+      requestedModel: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
       source: 'init',
       engineKind: 'pglite',
       databasePath: '/tmp/test-brain.pglite',
     });
-    expect(msg).toContain('vector(1536)');
-    expect(msg).toContain('vector(1280)');
+    expect(msg).toContain('halfvec(1536)');
+    expect(msg).toContain('halfvec(2048)');
     expect(msg).toContain('mv /tmp/test-brain.pglite /tmp/test-brain.pglite.bak');
-    expect(msg).toContain('voltmind init --pglite --embedding-model zeroentropyai:zembed-1 --embedding-dimensions 1280');
+    expect(msg).toContain('voltmind init --pglite --embedding-model qwen-vllm:./models/Qwen3-VL-Embedding-2B --embedding-dimensions 2048');
     expect(msg).toContain('PGLite cannot ALTER vector column types');
     // Must NOT contain the Postgres-only SQL recipe.
     expect(msg).not.toContain('ALTER TABLE content_chunks ALTER COLUMN');

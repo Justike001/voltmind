@@ -43,7 +43,7 @@ describe('resolveEmbeddingColumn — resolution chain', () => {
   test('default fallback returns "embedding"', () => {
     const r = resolveEmbeddingColumn(undefined, cfg());
     expect(r.name).toBe('embedding');
-    expect(r.type).toBe('vector');
+    expect(r.type).toBe('halfvec');
   });
 
   test('cfg.search_embedding_column wins over default', () => {
@@ -117,16 +117,16 @@ describe('getEmbeddingColumnRegistry — builtins + merge', () => {
     // that want the pure-DEFAULT behavior call `resetGateway()` first.
     const reg = getEmbeddingColumnRegistry(cfg());
     expect(reg.embedding).toBeDefined();
-    expect(reg.embedding!.type).toBe('vector');
+    expect(reg.embedding!.type).toBe('halfvec');
     expect(reg.embedding!.dimensions).toBe(1536);
     expect(reg.embedding!.provider).toBe('openai:text-embedding-3-large');
   });
 
-  test('builtin embedding_image always present with 1024d vector', () => {
+  test('builtin embedding_image shares the configured native dimensions', () => {
     const reg = getEmbeddingColumnRegistry(cfg());
     expect(reg.embedding_image).toBeDefined();
-    expect(reg.embedding_image!.type).toBe('vector');
-    expect(reg.embedding_image!.dimensions).toBe(1024);
+    expect(reg.embedding_image!.type).toBe('halfvec');
+    expect(reg.embedding_image!.dimensions).toBe(1536);
   });
 
   test('builtin embedding derives provider from cfg.embedding_model', () => {
@@ -273,11 +273,11 @@ describe('D12 — defense-in-depth validation', () => {
 });
 
 describe('D3 — buildVectorCastFragment + quoteIdentifier', () => {
-  test('vector type emits $1::vector cast', () => {
+  test('vector type emits its exact dimension cast', () => {
     const r: ResolvedColumn = { name: 'embedding', type: 'vector', dimensions: 1536, embeddingModel: '' };
     const { col, castSql } = buildVectorCastFragment(r);
     expect(col).toBe('"embedding"');
-    expect(castSql).toBe('$1::vector');
+    expect(castSql).toBe('$1::vector(1536)');
   });
 
   test('halfvec type emits $1::halfvec(N) cast', () => {
@@ -303,20 +303,20 @@ describe('normalizeEngineColumn — engine-side legacy converter', () => {
   test('undefined returns builtin embedding descriptor', () => {
     const r = normalizeEngineColumn(undefined);
     expect(r.name).toBe('embedding');
-    expect(r.type).toBe('vector');
+    expect(r.type).toBe('halfvec');
   });
 
   test("'embedding' literal returns builtin descriptor", () => {
     const r = normalizeEngineColumn('embedding');
     expect(r.name).toBe('embedding');
-    expect(r.type).toBe('vector');
+    expect(r.type).toBe('halfvec');
   });
 
-  test("'embedding_image' literal returns 1024d vector descriptor", () => {
+  test("'embedding_image' literal returns the native halfvec descriptor", () => {
     const r = normalizeEngineColumn('embedding_image');
     expect(r.name).toBe('embedding_image');
-    expect(r.type).toBe('vector');
-    expect(r.dimensions).toBe(1024);
+    expect(r.type).toBe('halfvec');
+    expect(r.dimensions).toBe(2048);
   });
 
   test('ResolvedColumn descriptor passes through', () => {

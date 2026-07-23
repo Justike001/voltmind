@@ -108,6 +108,16 @@ describe('planRetrievalUpgrade — C3 eligibility', () => {
     expect(plan.target_embedding_model).toBeNull();
   });
 
+  test('Qwen contract is not offered to the model-switch planner', async () => {
+    await engine.setConfig('embedding_model', 'qwen-vllm:./models/Qwen3-VL-Embedding-2B');
+    await engine.setConfig('embedding_dimensions', '2048');
+    await seedPages(200);
+
+    const plan = await planRetrievalUpgrade(engine);
+    expect(plan.ze_switch_offered).toBe(false);
+    expect(plan.target_embedding_model).toBeNull();
+  });
+
   test('applied = true previously: offered = false even with eligible state', async () => {
     await setLegacyDefaultConfig();
     await seedPages(200);
@@ -162,6 +172,25 @@ describe('planRetrievalUpgrade — cost math (C4 MAX-not-SUM)', () => {
 });
 
 describe('applyRetrievalUpgrade — state machine + atomicity (D12, D18)', () => {
+  test('direct apply refuses a Qwen schema-contract switch without side effects', async () => {
+    await engine.setConfig('embedding_model', 'qwen-vllm:./models/Qwen3-VL-Embedding-2B');
+    await engine.setConfig('embedding_dimensions', '2048');
+    const planned = await planRetrievalUpgrade(engine);
+    const result = await applyRetrievalUpgrade(engine, {
+      ...planned,
+      ze_switch_offered: true,
+      target_embedding_model: ZE_TARGET_EMBEDDING_MODEL,
+      target_dim: ZE_TARGET_EMBEDDING_DIM,
+    });
+
+    expect(result.status).toBe('refused');
+    if (result.status === 'refused') {
+      expect(result.reason).toBe('qwen_schema_contract');
+    }
+    expect(await engine.getConfig('embedding_model')).toBe('qwen-vllm:./models/Qwen3-VL-Embedding-2B');
+    expect(await engine.getConfig(KEY_REQUESTED)).toBeNull();
+  });
+
   test('happy path: schema swaps, config writes, applied=true', async () => {
     await setLegacyDefaultConfig();
     await seedPages(150);
@@ -220,7 +249,7 @@ describe('applyRetrievalUpgrade — state machine + atomicity (D12, D18)', () =>
     expect(result.status).toBe('skipped_no_work');
   });
 
-  test('schema width is 1024d on content_chunks.embedding after apply', async () => {
+  test('schema width uses halfvec on content_chunks.embedding after apply', async () => {
     await setLegacyDefaultConfig();
     await seedPages(150);
     const plan = await planRetrievalUpgrade(engine);
@@ -232,10 +261,7 @@ describe('applyRetrievalUpgrade — state machine + atomicity (D12, D18)', () =>
        WHERE table_name = 'content_chunks' AND column_name = 'embedding'`,
     );
     expect(rows.length).toBe(1);
-    // pgvector reports as 'vector' udt; the dimension is encoded as a typmod
-    // we can't introspect cleanly, but the absence of an error on the next
-    // INSERT-at-1024 is the contract test.
-    expect(rows[0].udt_name).toBe('vector');
+    expect(rows[0].udt_name).toBe('halfvec');
   });
 
   test('HNSW indexes recreated in same transaction (D18)', async () => {
@@ -253,13 +279,10 @@ describe('applyRetrievalUpgrade — state machine + atomicity (D12, D18)', () =>
     expect(names).toContain('idx_chunks_embedding_image');
   });
 
-  // v0.41 regression — PR #1443. runSchemaTransition must NOT widen the
-  // embedding_image or embedding_multimodal columns to targetDim. Both use
-  // separate multimodal models whose dimensions are independent of the text
-  // embedding model. The pre-fix code dropped + recreated embedding_image
-  // at targetDim, silently breaking voyage-multimodal-3 (1024d). The same
-  // bug class applies to embedding_multimodal — pin both.
-  test('runSchemaTransition preserves embedding_image dimension (1024) post-switch', async () => {
+  // The canonical Qwen schema keeps all three retrieval columns in the same
+  // native 2048d multimodal space. The transition must preserve that shape
+  // while changing only the legacy provider's primary text column.
+  test('runSchemaTransition preserves Qwen embedding_image dimension (2048) post-switch', async () => {
     await setLegacyDefaultConfig();
     await seedPages(150);
     const plan = await planRetrievalUpgrade(engine);
@@ -282,10 +305,10 @@ describe('applyRetrievalUpgrade — state machine + atomicity (D12, D18)', () =>
     const byName = new Map(rows.map(r => [r.column_name, r.col_type]));
 
     // Primary text column transitioned to target dim.
-    expect(byName.get('embedding')).toBe(`vector(${ZE_TARGET_EMBEDDING_DIM})`);
-    // Multimodal columns preserved at their original 1024d shape.
-    expect(byName.get('embedding_image')).toBe('vector(1024)');
-    expect(byName.get('embedding_multimodal')).toBe('vector(1024)');
+    expect(byName.get('embedding')).toBe(`halfvec(${ZE_TARGET_EMBEDDING_DIM})`);
+    // Multimodal columns preserve the canonical Qwen 2048d shape.
+    expect(byName.get('embedding_image')).toBe('halfvec(2048)');
+    expect(byName.get('embedding_multimodal')).toBe('halfvec(2048)');
   });
 
   test('runSchemaTransition restores partial WHERE on idx_chunks_embedding_image', async () => {
@@ -343,7 +366,7 @@ describe('applyRetrievalUpgrade — state machine + atomicity (D12, D18)', () =>
           AND c.relname = 'content_chunks'
           AND a.attname = 'embedding'`,
     );
-    expect(rows[0]?.col_type).toBe(`vector(${ZE_TARGET_EMBEDDING_DIM})`);
+    expect(rows[0]?.col_type).toBe(`halfvec(${ZE_TARGET_EMBEDDING_DIM})`);
 
     // Image index should NOT exist — the EXISTS guard correctly skipped it.
     const idxRows = await engine.executeRaw<{ indexname: string }>(
