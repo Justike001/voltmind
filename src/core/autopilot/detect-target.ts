@@ -29,6 +29,17 @@ export function detectInstallTarget(ctx: AdapterDetectionContext = { platform: p
         message: `Unknown install target "${forced}". Allowed: ${ALL_INSTALL_TARGETS.join(', ')}.`,
       });
     }
+    // The Windows adapter is host-specific. Never allow an environment
+    // override or CLI test flag to make a Unix host enter the Task Scheduler
+    // path. This keeps Linux/macOS agents on their native supervisors even
+    // when a stale VOLTMIND_AUTOPILOT_TARGET is inherited from another host.
+    if (forced === 'windows-task' && ctx.platform !== 'win32') {
+      throw new AutopilotError({
+        code: AUTOPILOT_ERRORS.CLI_INVOCATION_INVALID,
+        stage: 'target-detection',
+        message: `Install target "windows-task" is only valid on win32 (current platform: ${ctx.platform}).`,
+      });
+    }
     return { target: forced };
   }
   const warnings: string[] = [];

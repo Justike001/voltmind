@@ -296,6 +296,12 @@ If skipped, minimal defaults are installed automatically.
 Set up using your platform's scheduler (OpenClaw cron, Railway cron, crontab), or skip the
 platform glue entirely with `voltmind autopilot --install` (built-in self-maintaining daemon):
 
+`voltmind autopilot --install` is platform-aware. On Ubuntu/Linux it selects
+`linux-systemd`, `ephemeral-container`, or `linux-cron`; it never installs the
+Windows Task Scheduler adapter. Do not pass `--target windows-task` or set
+`VOLTMIND_AUTOPILOT_TARGET=windows-task` on a Linux host. The runtime rejects
+that cross-platform target.
+
 - **Live sync** (every 15 min): `voltmind sync --repo ~/brain && voltmind embed --stale`
   — or `voltmind sync --watch` for a continuous loop.
 - **Auto-update** (daily): `voltmind check-update --json` (tell user, never auto-install).

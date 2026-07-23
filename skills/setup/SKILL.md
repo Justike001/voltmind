@@ -337,6 +337,11 @@ node -e "console.log(process.platform)"   # darwin -> macOS, linux -> Linux, win
   host uses the same `runAutopilot()` and `ChildWorkerSupervisor` and
   consumes the same Supabase/Postgres queue — no Windows-specific manifest,
   Task XML, or local paths enter the shared database.
+- On Ubuntu/Linux, run only `voltmind autopilot --install` and let runtime
+  detection choose `linux-systemd`, `ephemeral-container`, or `linux-cron`.
+  Never pass `--target windows-task` and never set
+  `VOLTMIND_AUTOPILOT_TARGET=windows-task`; the runtime rejects that target on
+  non-Windows hosts.
 
 ### Install
 

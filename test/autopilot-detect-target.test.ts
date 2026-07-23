@@ -27,9 +27,9 @@ describe('detectInstallTarget (unified)', () => {
     expect(r.target).toBe('ephemeral-container');
   });
 
-  test('explicit --target windows-task override works for testing', () => {
-    const r = detectInstallTarget({ platform: 'linux' as NodeJS.Platform, env: {}, forcedTarget: 'windows-task' });
-    expect(r.target).toBe('windows-task');
+  test('rejects windows-task override on Linux', () => {
+    expect(() => detectInstallTarget({ platform: 'linux' as NodeJS.Platform, env: {}, forcedTarget: 'windows-task' }))
+      .toThrow(/only valid on win32/);
   });
 
   test('explicit invalid target throws', () => {
