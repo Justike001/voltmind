@@ -52,6 +52,15 @@ tmptxt/
 # VoltMind interactive action runner temp dirs.
 .voltmind-codex-interactive-*
 .voltmind-action-runs/
+
+# Per-user agent identity/access state — generated locally, never publish.
+/ACCESS_POLICY.md
+/HEARTBEAT.md
+/SOUL.md
+/USER.md
+
+# Private brain review report containing real entity names and relationships.
+/docs/drafts/2026-07-17-soft-deleted-relation-review.md
 Codex
 
 # Auto-managed by voltmind (db_only directories)
