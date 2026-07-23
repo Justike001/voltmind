@@ -5,6 +5,7 @@ import {
   ALLOWED_SCOPES,
   ALLOWED_SCOPES_LIST,
   assertAllowedScopes,
+  filterOperationsForScopes,
   InvalidScopeError,
   parseScopeString,
   type Scope,
@@ -87,6 +88,24 @@ describe('hasScope — multi-grant', () => {
     expect(hasScope(['write', 'sources_admin'], 'write')).toBe(true);
     expect(hasScope(['write', 'sources_admin'], 'sources_admin')).toBe(true);
     expect(hasScope(['write', 'sources_admin'], 'users_admin')).toBe(false);
+  });
+});
+
+describe('filterOperationsForScopes', () => {
+  const operations = [
+    { name: 'search', scope: 'read' },
+    { name: 'put_page', scope: 'write' },
+    { name: 'run_doctor', scope: 'admin' },
+    { name: 'submit_agent', scope: 'agent' },
+  ];
+
+  test('lists only tools usable by a read client', () => {
+    expect(filterOperationsForScopes(operations, ['read']).map(op => op.name)).toEqual(['search']);
+  });
+
+  test('honors hierarchy without granting sibling agent scope', () => {
+    expect(filterOperationsForScopes(operations, ['admin']).map(op => op.name))
+      .toEqual(['search', 'put_page', 'run_doctor']);
   });
 });
 
