@@ -238,6 +238,9 @@ export async function dispatchToolCall(
     };
   }
 
+  if (op.localOnly && (opts.remote ?? true) !== false) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: 'operation_not_available', message: 'Operation ' + name + ' is local-only.' }, null, 2) }], isError: true };
+  }
   const safeParams = params || {};
   const validationError = validateParams(op, safeParams);
   if (validationError) {

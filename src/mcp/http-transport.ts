@@ -135,7 +135,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
   const limiters = opts.limiters || buildDefaultLimiters();
   const bodyCap = envInt('VOLTMIND_HTTP_MAX_BODY_BYTES', DEFAULT_BODY_CAP);
   const corsAllowlist = parseCorsAllowlist();
-  const tools = buildToolDefs(operations);
+  const tools = buildToolDefs(operations.filter(op => !op.localOnly));
 
   /**
    * v0.41.3 (T6): single consolidated CORS header builder. Pre-fix there were

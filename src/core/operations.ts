@@ -478,6 +478,18 @@ export function resolveReadSourceScope(
   return { sourceId: requestedSourceId };
 }
 
+/**
+ * Resolve a source for a write-side operation. Remote callers may write only
+ * to the OAuth client sourceId; federated read scope is never write authority.
+ */
+export function resolveWriteSourceId(ctx: OperationContext, requestedSourceId?: string): string {
+  const sourceId = requestedSourceId ?? ctx.sourceId;
+  if (ctx.remote !== false && sourceId !== ctx.sourceId) {
+    throw new OperationError('permission_denied', 'source ' + sourceId + ' is outside your write authority (authorized source: ' + ctx.sourceId + ').');
+  }
+  return sourceId;
+}
+
 export interface Operation {
   name: string;
   description: string;
@@ -494,7 +506,7 @@ export interface Operation {
    * Local CLI callers (ctx.remote === false) bypass scope enforcement
    * because the trust boundary there is the OS, not OAuth scopes.
    */
-  scope?: 'read' | 'write' | 'admin' | 'sources_admin' | 'users_admin';
+  scope?: 'read' | 'write' | 'admin' | 'sources_admin' | 'users_admin' | 'agent';
   localOnly?: boolean;
   cliHints?: {
     name?: string;
@@ -2247,8 +2259,9 @@ const preview_signal_enrichment: Operation = {
   scope: 'read',
   handler: async (ctx, p) => {
     const { previewSignalEnrichment } = await import('./enrichment-service.ts');
+    const sourceId = resolveWriteSourceId(ctx, p.source_id as string);
     return previewSignalEnrichment(ctx.engine, {
-      sourceId: p.source_id as string,
+      sourceId,
       pageSlug: p.page_slug as string | undefined,
       text: p.text as string | undefined,
       limit: p.limit as number | undefined,
@@ -2274,8 +2287,9 @@ const apply_signal_enrichment: Operation = {
   handler: async (ctx, p) => {
     if (p.confirm !== true) throw new OperationError('permission_denied', 'apply_signal_enrichment requires confirm=true.');
     const { applySignalEnrichment } = await import('./enrichment-service.ts');
+    const sourceId = resolveWriteSourceId(ctx, p.source_id as string);
     return applySignalEnrichment(ctx.engine, {
-      sourceId: p.source_id as string,
+      sourceId,
       pageSlug: p.page_slug as string | undefined,
       text: p.text as string | undefined,
       limit: p.limit as number | undefined,
@@ -2294,7 +2308,7 @@ const resolve_slugs: Operation = {
     partial: { type: 'string', required: true },
   },
   handler: async (ctx, p) => {
-    return ctx.engine.resolveSlugs(p.partial as string);
+    return ctx.engine.resolveSlugs(p.partial as string, sourceScopeOpts(ctx));
   },
   scope: 'read',
 };
@@ -2347,7 +2361,7 @@ const get_ingest_log: Operation = {
   handler: async (ctx, p) => {
     return ctx.engine.getIngestLog({ limit: clampSearchLimit(p.limit as number | undefined, 20, 50) });
   },
-  scope: 'read',
+  scope: 'admin',
 };
 
 // --- File Operations ---
@@ -3116,7 +3130,7 @@ const find_orphans: Operation = {
       description: 'Include auto-generated and pseudo pages (default: false)',
     },
   },
-  scope: 'read',
+  scope: 'admin',
   handler: async (ctx, p) => {
     const { findOrphans } = await import('../commands/orphans.ts');
     return findOrphans(ctx.engine, { includePseudo: (p.include_pseudo as boolean) || false });
@@ -3168,7 +3182,7 @@ const get_calibration_profile: Operation = {
 const get_recent_salience: Operation = {
   name: 'get_recent_salience',
   description: GET_RECENT_SALIENCE_DESCRIPTION,
-  scope: 'read',
+  scope: 'admin',
   params: {
     days: { type: 'number', description: 'Window in days. Default 14.' },
     limit: { type: 'number', description: 'Max results (default 20, capped at 100).' },
@@ -3206,7 +3220,7 @@ const get_recent_salience: Operation = {
 const find_anomalies: Operation = {
   name: 'find_anomalies',
   description: FIND_ANOMALIES_DESCRIPTION,
-  scope: 'read',
+  scope: 'admin',
   params: {
     since: {
       type: 'string',
@@ -3282,7 +3296,7 @@ const find_experts: Operation = {
 const find_contradictions: Operation = {
   name: 'find_contradictions',
   description: FIND_CONTRADICTIONS_DESCRIPTION,
-  scope: 'read',
+  scope: 'admin',
   // Reads eval_contradictions_runs.report_json for the latest run, then
   // filters in-memory by slug and severity. No new probe is triggered;
   // the agent surfaces what's already on disk.
@@ -3309,7 +3323,7 @@ const find_contradictions: Operation = {
       : null;
     const rows = await ctx.engine.loadContradictionsTrend(30);
     if (rows.length === 0) {
-      return { contradictions: [], note: 'No cached contradiction probe runs in the last 30 days.' };
+      return { contradictions: [], note: 'No probe runs in the last 30 days (no cached contradiction probe runs in the last 30 days).' };
     }
     const latest = rows[0];
     const report = latest.report_json as Record<string, unknown> | null;
@@ -3453,7 +3467,7 @@ const find_trajectory: Operation = {
 const get_recent_transcripts: Operation = {
   name: 'get_recent_transcripts',
   description: GET_RECENT_TRANSCRIPTS_DESCRIPTION,
-  scope: 'read',
+  scope: 'admin',
   // Retrieval-enrichment readout. Public MCP surface is read-only and capped
   // by listRecentTranscripts; transcript mutation/import remains CLI-only.
   params: {
@@ -3999,8 +4013,9 @@ const propose_extraction_candidates: Operation = {
   mutating: true,
   handler: async (ctx, p) => {
     const { proposeExtractionCandidate } = await import('./candidates.ts');
+    const sourceId = resolveWriteSourceId(ctx, p.source_id as string);
     return proposeExtractionCandidate(ctx.engine, {
-      sourceId: p.source_id as string,
+      sourceId,
       pageSlug: p.page_slug as string,
       claim: p.claim as string,
       citation: p.citation as string,
@@ -4021,7 +4036,7 @@ const preview_candidate_apply: Operation = {
   scope: 'read',
   handler: async (ctx, p) => {
     const { previewCandidateApply } = await import('./candidates.ts');
-    return previewCandidateApply(ctx.engine, p.candidate_id as number);
+    return previewCandidateApply(ctx.engine, p.candidate_id as number, sourceScopeOpts(ctx));
   },
 };
 
@@ -4038,12 +4053,13 @@ const apply_candidate: Operation = {
   mutating: true,
   handler: async (ctx, p) => {
     const { applyCandidate } = await import('./candidates.ts');
+    const sourceId = resolveWriteSourceId(ctx, p.source_id as string);
     return applyCandidate(ctx.engine, {
       candidateId: p.candidate_id as number,
-      sourceId: p.source_id as string,
+      sourceId,
       citation: p.citation as string,
       confirm: p.confirm === true,
-    });
+    }, sourceScopeOpts(ctx));
   },
 };
 
@@ -4057,7 +4073,7 @@ const reject_candidate: Operation = {
   mutating: true,
   handler: async (ctx, p) => {
     const { rejectCandidate } = await import('./candidates.ts');
-    return rejectCandidate(ctx.engine, p.candidate_id as number);
+    return rejectCandidate(ctx.engine, p.candidate_id as number, sourceScopeOpts(ctx));
   },
 };
 
@@ -4115,7 +4131,7 @@ const code_callers: Operation = {
     source_id: { type: 'string', description: "Scope to a single source. Defaults to ctx.sourceId; pass '__all__' to force cross-source." },
     all_sources: { type: 'boolean', description: 'Force cross-source search (equivalent to source_id=__all__).' },
   },
-  scope: 'read',
+  scope: 'admin',
   handler: async (ctx, p) => {
     const symbol = p.symbol as string;
     const limit = (p.limit as number) ?? 100;
@@ -4146,7 +4162,7 @@ const code_callees: Operation = {
     source_id: { type: 'string', description: "Scope to a single source. Defaults to ctx.sourceId; pass '__all__' to force cross-source." },
     all_sources: { type: 'boolean', description: 'Force cross-source search.' },
   },
-  scope: 'read',
+  scope: 'admin',
   handler: async (ctx, p) => {
     const symbol = p.symbol as string;
     const limit = (p.limit as number) ?? 100;
@@ -4176,7 +4192,7 @@ const code_def: Operation = {
     limit: { type: 'number', description: 'Max definition sites returned. Default 20.' },
     lang: { type: 'string', description: "Filter by content_chunks.language (e.g. 'typescript', 'python')." },
   },
-  scope: 'read',
+  scope: 'admin',
   handler: async (ctx, p) => {
     const { findCodeDef } = await import('../commands/code-def.ts');
     const defs = await findCodeDef(ctx.engine, p.symbol as string, {
@@ -4196,7 +4212,7 @@ const code_refs: Operation = {
     limit: { type: 'number', description: 'Max references returned. Default 50.' },
     lang: { type: 'string', description: "Filter by content_chunks.language." },
   },
-  scope: 'read',
+  scope: 'admin',
   handler: async (ctx, p) => {
     const { findCodeRefs } = await import('../commands/code-refs.ts');
     const refs = await findCodeRefs(ctx.engine, p.symbol as string, {
