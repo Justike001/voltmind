@@ -16,7 +16,7 @@ import { withEnv } from './helpers/with-env.ts';
 
 describe('loadActivePack boundary helper', () => {
   beforeAll(() => {
-    // Tests use the real bundled voltmind-base for tier-7 default; per-test
+    // Tests use the real bundled voltmind-personal-brain for tier-7 default; per-test
     // overrides via __setPackLocatorForTests when injecting synthetic packs.
   });
   afterAll(() => {
@@ -24,10 +24,10 @@ describe('loadActivePack boundary helper', () => {
     _resetPackCacheForTests();
   });
 
-  test('default resolution loads voltmind-base from bundled path', async () => {
+  test('default resolution loads voltmind-personal-brain from bundled path', async () => {
     _resetPackCacheForTests();
     const pack = await loadActivePack({ cfg: null, remote: false });
-    expect(pack.manifest.name).toBe('voltmind-base');
+    expect(pack.manifest.name).toBe('voltmind-personal-brain');
     expect(pack.manifest.extends).toBeNull();
     expect(pack.manifest.page_types.length).toBeGreaterThan(0);
   });
@@ -76,9 +76,9 @@ describe('loadActivePack boundary helper', () => {
     expect(result.source).toBe('per-source-db');
   });
 
-  test('tier-7 default falls back to voltmind-base when nothing set', () => {
+  test('tier-7 default falls back to voltmind-personal-brain when nothing set', () => {
     const result = resolveActivePackNameOnly({ cfg: null, remote: false });
-    expect(result.pack_name).toBe('voltmind-base');
+    expect(result.pack_name).toBe('voltmind-personal-brain');
     expect(result.source).toBe('default');
   });
 

@@ -129,10 +129,10 @@ describe('operation declarations', () => {
 // ── get_active_schema_pack ──────────────────────────────────────────────
 
 describe('get_active_schema_pack', () => {
-  it('returns identity packet for the bundled voltmind-base pack', async () => {
+  it('returns identity packet for the bundled voltmind-personal-brain pack', async () => {
     await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       const result = await operationsByName.get_active_schema_pack!.handler(ctxOf(), {}) as Record<string, unknown>;
-      expect(result.pack_name).toBe('voltmind-base');
+      expect(result.pack_name).toBe('voltmind-personal-brain');
       expect(result.page_types_count).toBeGreaterThan(0);
       expect(typeof result.sha8).toBe('string');
       expect(typeof result.source_tier).toBe('string');
