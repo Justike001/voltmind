@@ -73,6 +73,28 @@ describe('checkSourceRoutingHealth (#1167)', () => {
   });
 });
 
+describe('checkSourceRoutingHealth archived/deleted filters', () => {
+  beforeEach(truncate);
+
+  test('archived sources do not participate in routing health', async () => {
+    await engine.executeRaw(`INSERT INTO sources (id, name, archived) VALUES ('archived-empty', 'archived-empty', true)`);
+    const r = await checkSourceRoutingHealth(engine);
+    expect(r.status).toBe('ok');
+    expect(r.message).toMatch(/single-source/i);
+  });
+
+  test('soft-deleted pages do not satisfy routing health', async () => {
+    await engine.executeRaw(`INSERT INTO sources (id, name) VALUES ('deleted-only', 'deleted-only')`);
+    await engine.executeRaw(
+      `INSERT INTO pages (slug, source_id, type, title, compiled_truth, timeline, deleted_at)
+       VALUES ('deleted-only/page', 'deleted-only', 'note', 'deleted', '', '', now())`,
+    );
+    const r = await checkSourceRoutingHealth(engine);
+    expect(r.status).toBe('warn');
+    expect(r.message).toContain('deleted-only');
+  });
+});
+
 describe('checkOauthConfidentialHealth (#1166)', () => {
   beforeEach(truncate);
 

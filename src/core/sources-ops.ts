@@ -212,7 +212,10 @@ async function fetchSourceRow(engine: BrainEngine, id: string): Promise<SourceRo
 
 async function countPages(engine: BrainEngine, id: string): Promise<number> {
   const rows = await engine.executeRaw<{ n: number }>(
-    `SELECT COUNT(*)::int AS n FROM pages WHERE source_id = $1`,
+    `SELECT COUNT(*)::int AS n
+       FROM pages
+      WHERE source_id = $1
+        AND deleted_at IS NULL`,
     [id],
   );
   return rows[0]?.n ?? 0;
@@ -450,16 +453,23 @@ export async function resolveDefaultSource(engine: BrainEngine): Promise<string>
 
 export async function listSources(
   engine: BrainEngine,
-  opts: { includeArchived?: boolean } = {},
+  opts: { includeArchived?: boolean; sourceIds?: string[] } = {},
 ): Promise<SourceListEntry[]> {
   // v0.28.1 codex finding (MEDIUM): the prior version ignored the
   // includeArchived flag and returned every row. That leaked archived
   // sources' ids, local_paths, and remote_urls to read-scoped MCP callers
   // who shouldn't see soft-deleted state. Filter at the SQL level so the
   // archived rows never reach the wire by default.
-  const archivedFilter = opts.includeArchived
-    ? ''
-    : 'WHERE archived IS NOT TRUE';
+  const filters: string[] = [];
+  const params: unknown[] = [];
+  if (!opts.includeArchived) filters.push('archived IS NOT TRUE');
+  if (opts.sourceIds !== undefined) {
+    // An explicit empty OAuth allow-list is deny-all, never an unscoped read.
+    if (opts.sourceIds.length === 0) return [];
+    params.push(opts.sourceIds);
+    filters.push(`id = ANY($${params.length}::text[])`);
+  }
+  const where = filters.length > 0 ? ` WHERE ${filters.join(' AND ')}` : '';
   const rows = await engine.executeRaw<{
     id: string;
     name: string;
@@ -468,7 +478,8 @@ export async function listSources(
     config: unknown;
   }>(
     `SELECT id, name, local_path, last_sync_at, config
-       FROM sources ${archivedFilter} ORDER BY (id = 'default') DESC, id`,
+       FROM sources${where} ORDER BY (id = 'default') DESC, id`,
+    params,
   );
   const out: SourceListEntry[] = [];
   for (const r of rows) {

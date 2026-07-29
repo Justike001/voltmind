@@ -20,7 +20,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-import { detectInstallTarget } from '../src/commands/autopilot.ts';
+import { detectInstallTarget, parseSystemdUserUnitStatus } from '../src/commands/autopilot.ts';
 
 let tmp: string;
 const envSnapshot: Record<string, string | undefined> = {};
@@ -87,6 +87,16 @@ describe('detectInstallTarget', () => {
   // exercised by the E2E test (Task 14) against a stubbed host.
 });
 
+
+describe('Linux systemd status parsing', () => {
+  test('treats an enabled, active user unit as registered and running', () => {
+    expect(parseSystemdUserUnitStatus('LoadState=loaded\nUnitFileState=enabled\nActiveState=active\n')).toEqual({
+      registered: true,
+      enabled: true,
+      running: true,
+    });
+  });
+});
 // v0.36.1.x (cherry-pick #966): the autopilot wrapper script must source
 // ~/.zshenv BEFORE ~/.zshrc. zshenv is the canonical place for env vars in
 // non-interactive zsh; zshrc only fires for interactive shells, so vars
