@@ -39,6 +39,7 @@ import {
 } from './skill-platform-diagnostics.ts';
 import * as db from './db.ts';
 import { VERSION } from '../version.ts';
+import { hasScope } from './scope.ts';
 import {
   GET_RECENT_SALIENCE_DESCRIPTION,
   FIND_ANOMALIES_DESCRIPTION,
@@ -614,6 +615,7 @@ const put_page: Operation = {
   params: {
     slug: { type: 'string', required: true, description: 'Page slug' },
     content: { type: 'string', required: true, description: 'Full markdown content with YAML frontmatter' },
+    source_id: { type: 'string', description: "Target source. Defaults to the caller's authorized write source; remote callers cannot select another source." },
     // v0.39.3.0 provenance write-through (WARN-8 + A1 + CV6). Optional fields
     // for trusted local callers (capture CLI, autopilot, dream cycle). Remote
     // MCP callers (ctx.remote !== false) have their values OVERRIDDEN with
@@ -2376,9 +2378,28 @@ const get_ingest_log: Operation = {
   description: 'Get recent ingestion log entries',
   params: {
     limit: { type: 'number', description: 'Max entries (default 20)' },
+    // v0.42 (#861 audit follow-up, finding #5): optional source filter.
+    // Local CLI may pass `__all__` to see every source; remote callers may
+    // narrow to one of their authorized sources (or omit to use their
+    // OAuth-derived scope). Pre-fix this op returned every source's ingest
+    // history to any admin-scope caller, leaking another source's
+    // source_ref / summary text.
+    source: { type: 'string', description: 'Restrict to a source id. Local CLI may pass `__all__` for the brain-wide view; remote callers are scoped to their authorized sources.' },
   },
   handler: async (ctx, p) => {
-    return ctx.engine.getIngestLog({ limit: clampSearchLimit(p.limit as number | undefined, 20, 50) });
+    const limit = clampSearchLimit(p.limit as number | undefined, 20, 50);
+    const sourceIdParam = typeof p.source === 'string' ? p.source : undefined;
+    // resolveReadSourceScope honors the same precedence ladder as search /
+    // query / get_page: `__all__` → federated allowedSources (remote) or no
+    // filter (local); a concrete id must be within the caller's granted
+    // sources for remote callers. When no source is requested, remote
+    // callers default to sourceScopeOpts(ctx) (their source); local CLI
+    // (remote === false) gets the unscoped admin view so `voltmind ingest-log`
+    // without --source still shows the whole brain.
+    const scope = sourceIdParam !== undefined
+      ? resolveReadSourceScope(ctx, sourceIdParam)
+      : (ctx.remote !== false ? sourceScopeOpts(ctx) : {});
+    return ctx.engine.getIngestLog({ limit, ...scope });
   },
   scope: 'admin',
 };
@@ -2441,7 +2462,17 @@ const file_upload: Operation = {
     const stat = statSync(filePath);
     const content = readFileSync(filePath);
     const hash = createHash('sha256').update(content).digest('hex');
-    const storagePath = pageSlug ? `${pageSlug}/${filename}` : `unsorted/${hash.slice(0, 8)}-${filename}`;
+    // v0.42 (#861 audit follow-up, finding #6): scope the storage_path to the
+    // source so two sources with the same slug can each hold a same-named
+    // file without ON CONFLICT rewriting the other source's row. Pre-fix the
+    // path was `${pageSlug}/${filename}` with a GLOBAL UNIQUE(storage_path),
+    // so a source-B upload overwrote source-A's metadata row (source_id left
+    // pointing at A — cross-source attribution break). The source prefix is
+    // mirrored by migration v111's storage_path rewrite for existing rows.
+    const sourceId = ctx.sourceId ?? 'default';
+    const storagePath = pageSlug
+      ? `${sourceId}/${pageSlug}/${filename}`
+      : `${sourceId}/unsorted/${hash.slice(0, 8)}-${filename}`;
 
     const MIME_TYPES: Record<string, string> = {
       '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
@@ -2451,7 +2482,9 @@ const file_upload: Operation = {
     const mimeType = MIME_TYPES[extname(filePath).toLowerCase()] || null;
 
     const sql = db.getConnection();
-    const existing = await sql`SELECT id FROM files WHERE content_hash = ${hash} AND storage_path = ${storagePath}`;
+    // Scope the dedup check to (source_id, storage_path) so a same-content
+    // file in a different source isn't treated as a duplicate of this one.
+    const existing = await sql`SELECT id FROM files WHERE content_hash = ${hash} AND source_id = ${sourceId} AND storage_path = ${storagePath}`;
     if (existing.length > 0) {
       return { status: 'already_exists', storage_path: storagePath };
     }
@@ -2469,9 +2502,9 @@ const file_upload: Operation = {
 
     try {
       await sql`
-        INSERT INTO files (page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
-        VALUES (${pageSlug}, ${filename}, ${storagePath}, ${mimeType}, ${stat.size}, ${hash}, ${'{}'}::jsonb)
-        ON CONFLICT (storage_path) DO UPDATE SET
+        INSERT INTO files (source_id, page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
+        VALUES (${sourceId}, ${pageSlug}, ${filename}, ${storagePath}, ${mimeType}, ${stat.size}, ${hash}, ${'{}'}::jsonb)
+        ON CONFLICT (source_id, storage_path) DO UPDATE SET
           content_hash = EXCLUDED.content_hash,
           size_bytes = EXCLUDED.size_bytes,
           mime_type = EXCLUDED.mime_type
@@ -3335,6 +3368,20 @@ const find_contradictions: Operation = {
     },
   },
   handler: async (ctx, p) => {
+    // v0.42 (#861 audit follow-up, finding #5): contradiction pairs are read
+    // from the eval_contradictions_runs cache report, whose slug fields
+    // are NOT source-prefixed (a pair's `a.slug` / `b.slug` is bare). On a
+    // multi-source brain that means a remote admin-scope caller scoped to
+    // src-A would see contradiction pairs naming src-B pages — a cross-
+    // source content leak. There's no per-source filter to apply without
+    // re-running the probe with source attribution, so restrict to the
+    // trusted local CLI surface (same posture as get_recent_transcripts).
+    if (ctx.remote !== false) {
+      throw new OperationError(
+        'permission_denied',
+        'find_contradictions is local-only: cached contradiction reports are not source-scoped. Run via `voltmind call find_contradictions` (trusted local CLI).',
+      );
+    }
     const limit = typeof p.limit === 'number' && p.limit > 0 ? Math.min(p.limit, 100) : 20;
     const slugFilter = typeof p.slug === 'string' ? p.slug.toLowerCase() : null;
     const sevFilter = (p.severity === 'low' || p.severity === 'medium' || p.severity === 'high')
@@ -3498,6 +3545,19 @@ const get_recent_transcripts: Operation = {
     limit: { type: 'number', description: 'Max transcripts (default 50).' },
   },
   handler: async (ctx, p) => {
+    // v0.42 (#861 audit follow-up, finding #5): transcripts are read off the
+    // dream cycle's corpus directories (filesystem, not DB) and carry no
+    // source_id — there's no per-source filter to apply. Exposing raw meeting
+    // / session transcript text over MCP leaks host content to any admin-
+    // scope remote caller regardless of their OAuth source scope. Restrict
+    // to the trusted local CLI surface (mirrors the gate the
+    // transcripts.ts module docstring already claimed this op enforced).
+    if (ctx.remote !== false) {
+      throw new OperationError(
+        'permission_denied',
+        'get_recent_transcripts is local-only: transcript files are not source-scoped. Run via `voltmind call get_recent_transcripts` (trusted local CLI).',
+      );
+    }
     const { listRecentTranscripts } = await import('./transcripts.ts');
     return listRecentTranscripts(ctx.engine, {
       days: typeof p.days === 'number' ? p.days : undefined,
@@ -3650,9 +3710,18 @@ const sources_list: Operation = {
   scope: 'read',
   handler: async (ctx, p) => {
     const { listSources } = await import('./sources-ops.ts');
+    // Local CLI and OAuth clients with sources_admin may inspect the complete
+    // registry. Every other remote caller sees only its federated read grant
+    // (or its single write source when no federated grant exists).
+    const canListAll = ctx.remote === false || hasScope(ctx.auth?.scopes ?? [], 'sources_admin');
+    const scope = canListAll ? undefined : sourceScopeOpts(ctx);
+    const sourceIds = scope
+      ? (scope.sourceIds ?? (scope.sourceId ? [scope.sourceId] : []))
+      : undefined;
     return {
       sources: await listSources(ctx.engine, {
         includeArchived: (p.include_archived as boolean) === true,
+        ...(sourceIds !== undefined ? { sourceIds } : {}),
       }),
     };
   },
@@ -3983,6 +4052,7 @@ const apply_forget_fact: Operation = {
     const reason = typeof p.reason === 'string' && p.reason.trim() ? p.reason.trim() : 'forgotten';
     if (p.confirm !== true) throw new OperationError('invalid_params', 'apply_forget_fact requires confirm=true.');
     if (!sourceId) throw new OperationError('invalid_params', 'apply_forget_fact requires source_id.');
+    resolveWriteSourceId(ctx, sourceId);
     if (!citation) throw new OperationError('invalid_params', 'apply_forget_fact requires citation.');
     if (ctx.dryRun) return { dry_run: true, action: 'apply_forget_fact', id };
 

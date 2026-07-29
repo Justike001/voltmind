@@ -806,6 +806,16 @@ export class PGLiteEngine implements BrainEngine {
     });
   }
 
+  /**
+   * v0.42 #6: PGLite no-op. PGLite has no RLS engine (single-tenant local
+   * file), so there is no GUC to set. Implemented to satisfy the
+   * BrainEngine interface so dispatch code can call it unconditionally
+   * without branching on engine kind.
+   */
+  async setSourceScope(_sourceId: string): Promise<void> {
+    // intentionally empty — PGLite has no RLS.
+  }
+
   // Pages CRUD
   async getPage(slug: string, opts?: { sourceId?: string; includeDeleted?: boolean }): Promise<Page | null> {
     // v0.26.5: hide soft-deleted by default; opt-in via opts.includeDeleted.
@@ -2986,7 +2996,7 @@ export class PGLiteEngine implements BrainEngine {
     const result = await this.db.query<{ id: number; created: boolean }>(
       `INSERT INTO files (source_id, page_slug, page_id, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
-       ON CONFLICT (storage_path) DO UPDATE SET
+       ON CONFLICT (source_id, storage_path) DO UPDATE SET
          page_slug = EXCLUDED.page_slug,
          page_id = EXCLUDED.page_id,
          filename = EXCLUDED.filename,
@@ -4395,11 +4405,40 @@ export class PGLiteEngine implements BrainEngine {
     );
   }
 
-  async getIngestLog(opts?: { limit?: number }): Promise<IngestLogEntry[]> {
+  async getIngestLog(opts?: { limit?: number; sourceId?: string; sourceIds?: string[] }): Promise<IngestLogEntry[]> {
     const limit = opts?.limit || 50;
+    // v0.42 (#861 audit follow-up, finding #5): mirror the Postgres source
+    // scoping. PGLite is single-source / single-process so the leak surface
+    // is smaller, but the contract must match so op handlers can't drift
+    // between engines. sourceIds (federated) subsumes scalar sourceId;
+    // both unset = local-CLI admin view.
+    if (opts?.sourceIds && opts.sourceIds.length > 0) {
+      // PGLite parameterizes arrays via the IN ($1) spread; build the
+      // placeholder list to match the array length.
+      const ids = opts.sourceIds;
+      const placeholders = ids.map((_, i) => `$${i + 2}`).join(', ');
+      const { rows } = await this.db.query(
+        `SELECT * FROM ingest_log WHERE source_id IN (${placeholders}) ORDER BY created_at DESC LIMIT $1`,
+        [limit, ...ids],
+      );
+      return (rows as unknown as IngestLogEntry[]).map(r => ({
+        ...r,
+        source_id: r.source_id ?? 'default',
+      }));
+    }
+    if (opts?.sourceId) {
+      const { rows } = await this.db.query(
+        `SELECT * FROM ingest_log WHERE source_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [opts.sourceId, limit],
+      );
+      return (rows as unknown as IngestLogEntry[]).map(r => ({
+        ...r,
+        source_id: r.source_id ?? 'default',
+      }));
+    }
     const { rows } = await this.db.query(
       `SELECT * FROM ingest_log ORDER BY created_at DESC LIMIT $1`,
-      [limit]
+      [limit],
     );
     // Belt-and-suspenders source_id fallback for any pre-v50 row that
     // somehow survived without the backfill.

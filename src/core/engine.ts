@@ -646,6 +646,14 @@ export interface BrainEngine {
   initSchema(): Promise<void>;
   transaction<T>(fn: (engine: BrainEngine) => Promise<T>): Promise<T>;
   /**
+   * v0.42 #6: set the `app.source_id` session GUC for the current transaction.
+   * Activates the RLS source-isolation policies (migration v112) when the app
+   * role lacks BYPASSRLS. MUST be called inside a transaction (SET LOCAL).
+   * Inert under the default BYPASSRLS postgres role. No-op on PGLite.
+   * Defense-in-depth on top of the app-layer sourceScopeOpts(ctx) WHERE filters.
+   */
+  setSourceScope(sourceId: string): Promise<void>;
+  /**
    * Run `fn` with a dedicated connection (Postgres: reserved backend;
    * PGLite: pass-through). See `ReservedConnection` for semantics and
    * usage constraints. Release is automatic.
@@ -1587,7 +1595,18 @@ export interface BrainEngine {
 
   // Ingest log
   logIngest(entry: IngestLogInput): Promise<void>;
-  getIngestLog(opts?: { limit?: number }): Promise<IngestLogEntry[]>;
+  /**
+   * Recent ingestion log entries, newest first.
+   *
+   * v0.42 (#861 audit follow-up, finding #5): opts.sourceId / opts.sourceIds
+   * scope the SELECT so a remote caller authorized for one source can't
+   * enumerate another source's ingest history. When neither is set the
+   * engine returns every source's rows (the local-CLI admin view). The op
+   * handler (`get_ingest_log`) resolves these from sourceScopeOpts(ctx) /
+   * resolveReadSourceScope so the precedence ladder (federated allowedSources
+   * → scalar sourceId → no filter) matches every other read op.
+   */
+  getIngestLog(opts?: { limit?: number; sourceId?: string; sourceIds?: string[] }): Promise<IngestLogEntry[]>;
 
   // Sync
   /**

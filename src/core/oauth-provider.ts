@@ -44,7 +44,7 @@ export type { SqlQuery, SqlValue };
  * `redirect_uri` containing `,`) would be parsed by Postgres as MULTIPLE
  * array elements, smuggling values past validation. See CSO finding #5.
  */
-function pgArray(arr: string[]): string {
+export function pgArray(arr: string[]): string {
   if (!arr || arr.length === 0) return '{}';
   const escaped = arr.map(s => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
   return `{${escaped.join(',')}}`;
@@ -644,24 +644,36 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     }
 
     // Fallback: legacy access_tokens table (backward compat)
+    //
+    // v0.42 #7: read the persisted `scopes` column instead of hardcoding
+    // ['read','write','admin']. The column is backfilled to read+write+admin
+    // by migration v113 for existing tokens (preserves their behavior); NEW
+    // tokens minted by `auth create` carry whatever `--scopes` the operator
+    // chose (default read+write). NULL only on a brain that hasn't run v113
+    // yet — fall back to admin there so an unmigrated brain doesn't lock out
+    // its operator (fail-safe for the pre-migration window; apply-migrations
+    // lands v113 and the column becomes NOT NULL).
     const legacyRows = await this.sql`
-      SELECT name FROM access_tokens
+      SELECT name, scopes FROM access_tokens
       WHERE token_hash = ${tokenHash} AND revoked_at IS NULL
     `;
 
     if (legacyRows.length > 0) {
-      // Legacy tokens get full admin access (grandfather in).
       // For legacy tokens, name = clientId = clientName (single identifier).
       // Update last_used_at
       await this.sql`
         UPDATE access_tokens SET last_used_at = now() WHERE token_hash = ${tokenHash}
       `;
       const name = legacyRows[0].name as string;
+      const persistedScopes = (legacyRows[0].scopes as string[] | null) ?? null;
+      const scopes = persistedScopes && persistedScopes.length > 0
+        ? persistedScopes
+        : ['read', 'write', 'admin'];
       return {
         token,
         clientId: name,
         clientName: name,
-        scopes: ['read', 'write', 'admin'],
+        scopes,
         expiresAt: Math.floor(Date.now() / 1000) + 365 * 24 * 3600, // Legacy tokens never expire — set 1yr future
         // v0.34.1 (#861, D13): legacy bearer tokens default to 'default'
         // source — matches the pre-v0.34 effective behavior where the

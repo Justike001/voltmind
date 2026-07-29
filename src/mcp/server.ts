@@ -5,9 +5,10 @@ import type { BrainEngine } from '../core/engine.ts';
 import { operations } from '../core/operations.ts';
 import { VERSION } from '../version.ts';
 import { buildToolDefs } from './tool-defs.ts';
-import { dispatchToolCall, validateParams, buildOperationContext } from './dispatch.ts';
+import { dispatchToolCall, validateParams, buildOperationContext, resolveStdioScopes } from './dispatch.ts';
 import type { DispatchOpts, ToolResult } from './dispatch.ts';
 import { getBrainHotMemoryMeta } from '../core/facts/meta-hook.ts';
+import { filterOperationsForScopes } from '../core/scope.ts';
 
 export type McpToolDispatcher = (
   name: string,
@@ -15,9 +16,23 @@ export type McpToolDispatcher = (
   opts: DispatchOpts,
 ) => Promise<ToolResult>;
 
-/** Operations safe for untrusted agent-facing stdio MCP callers. */
+/**
+ * Operations safe for untrusted agent-facing stdio MCP callers.
+ *
+ * v0.41.x: stdio has no per-token OAuth scopes, so pre-fix it exposed every
+ * non-localOnly op (including 40+ admin-scope ops) to any local stdio client.
+ * We now filter the tools/list surface by the stdio default scope set
+ * (read+write; admin/sources_admin/users_admin/agent denied by default,
+ * configurable via VOLTMIND_MCP_STDIO_SCOPES). The dispatcher re-checks
+ * `op.scope` at call time as defense-in-depth (a client could still attempt
+ * an unlisted op name directly) — the filter is the UX surface, the call-time
+ * gate is the security surface.
+ */
 export function getStdioMcpOperations() {
-  return operations.filter(op => !op.localOnly);
+  return filterOperationsForScopes(
+    operations.filter(op => !op.localOnly),
+    resolveStdioScopes(),
+  );
 }
 
 export async function startMcpServer(
@@ -62,6 +77,13 @@ export async function startMcpServer(
       dispatchToolCall(engine, toolName, toolParams, dispatchOpts));
     return dispatch(name, params, {
       remote: true,
+      // v0.41.x stdio hardening: marks this dispatch as the stdio path so
+      // dispatch.ts (a) enforces op.scope against the stdio default scope
+      // set — admin ops are denied by default (VOLTMIND_MCP_STDIO_SCOPES
+      // overrides), closing the gap where stdio exposed every non-localOnly
+      // admin op, and (b) writes one mcp_request_log row per call (token_name
+      // NULL, agent_name 'stdio') since stdio previously had zero audit.
+      stdio: true,
       takesHoldersAllowList: ['world'],
       // v0.31: source defaults to 'default' for stdio (no per-token scope).
       // Operators who want a different source on stdio MCP should set

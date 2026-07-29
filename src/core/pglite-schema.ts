@@ -298,7 +298,10 @@ CREATE TABLE IF NOT EXISTS files (
   content_hash TEXT   NOT NULL,
   metadata     JSONB  NOT NULL DEFAULT '{}',
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(storage_path)
+  -- v0.42: scope path uniqueness to the source so two sources with the
+  -- same slug can each hold a same-named file without ON CONFLICT
+  -- rewriting the other source's row. Migration v111 swaps the constraint.
+  UNIQUE(source_id, storage_path)
 );
 
 CREATE INDEX IF NOT EXISTS idx_files_page ON files(page_slug);
@@ -786,7 +789,11 @@ CREATE TABLE IF NOT EXISTS access_tokens (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name         TEXT NOT NULL,
   token_hash   TEXT NOT NULL UNIQUE,
-  scopes       TEXT[],
+  -- v0.42 #7: legacy bearer tokens now carry an explicit scope set. Default
+  -- read+write (NOT admin). PGLite has no RLS so the source_id column is
+  -- for app-layer isolation parity only.
+  scopes       TEXT[] NOT NULL DEFAULT '{"read","write"}',
+  source_id    TEXT   NOT NULL DEFAULT 'default',
   created_at   TIMESTAMPTZ DEFAULT now(),
   last_used_at TIMESTAMPTZ,
   revoked_at   TIMESTAMPTZ
@@ -806,11 +813,22 @@ CREATE TABLE IF NOT EXISTS mcp_request_log (
   status        TEXT NOT NULL DEFAULT 'success',
   params        JSONB,
   error_message TEXT,
+  -- v0.42 audit-tenant axis: which source the caller acted on. NULL for
+  -- pre-auth failures and historical rows. Backfilled from
+  -- oauth_clients.source_id by migration v110.
+  source_id     TEXT,
+  -- v0.42 audit-tenant axis: which brain/mount the request targeted.
+  brain_id      TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_mcp_log_time_agent ON mcp_request_log(created_at, token_name);
 CREATE INDEX IF NOT EXISTS idx_mcp_log_agent_time ON mcp_request_log(agent_name, created_at DESC);
+-- v0.42: source-scoped audit queries. Partial so NULL source_id rows
+-- (pre-auth failures, pre-v0.42 history) are skipped.
+CREATE INDEX IF NOT EXISTS idx_mcp_log_source_id
+  ON mcp_request_log (source_id, created_at DESC)
+  WHERE source_id IS NOT NULL;
 
 -- ============================================================
 -- OAuth 2.1: clients, tokens, authorization codes

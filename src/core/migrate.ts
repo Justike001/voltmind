@@ -5085,6 +5085,340 @@ export const MIGRATIONS: Migration[] = [
       return rows.length === 2 && rows.every((row) => row.formatted?.toLowerCase() === 'halfvec(2048)');
     },
   },
+  {
+    version: 110,
+    name: 'mcp_request_log_source_brain_attribution',
+    // v0.42 audit-tenant axis (#861 follow-up, finding #3). mcp_request_log
+    // previously had no source/brain dimension — only token_name + agent_name
+    // + operation + status. An operator could not reconstruct "which source
+    // did this token touch" from the audit trail, so cross-source leakage
+    // was neither detectable nor blockable from the log itself.
+    //
+    // This migration adds two nullable columns (source_id, brain_id) so the
+    // log can carry the resolved source/brain for every request, backfills
+    // source_id on historical rows from oauth_clients.source_id (legacy
+    // access_tokens rows default to 'default'), and adds a partial index on
+    // source_id for source-scoped audit queries. brain_id is left NULL on
+    // historical rows (no brain id was threaded at log time).
+    //
+    // Columns are nullable (not NOT NULL) so the INSERT sites can land the
+    // new column before every transport threads a value — pre-auth failure
+    // rows legitimately have no resolved source. ADD COLUMN IF NOT EXISTS
+    // keeps re-runs no-op; fresh installs already get the columns inline
+    // via schema-embedded.ts / pglite-schema.ts.
+    sql: `
+      ALTER TABLE mcp_request_log
+        ADD COLUMN IF NOT EXISTS source_id TEXT,
+        ADD COLUMN IF NOT EXISTS brain_id TEXT;
+
+      -- Backfill source_id on existing rows. OAuth client tokens map to
+      -- oauth_clients.source_id; legacy bearer tokens (access_tokens) have
+      -- no source column and default to 'default' (the v0.34.1 behavior
+      -- where every legacy token is scoped to the default source). Rows
+      -- whose token_name doesn't match any client stay NULL — those are
+      -- pre-auth failures (token_name NULL) or rate-limit logs where no
+      -- token resolved.
+      UPDATE mcp_request_log m
+      SET source_id = COALESCE(
+        (SELECT source_id FROM oauth_clients WHERE client_id = m.token_name LIMIT 1),
+        'default'
+      )
+      WHERE source_id IS NULL
+        AND m.token_name IS NOT NULL;
+
+      -- Source-scoped audit queries ("every source-X request in the last
+      -- 24h"). Partial so NULL source_id rows (pre-auth failures, pre-v0.42
+      -- history that didn't match a client) are skipped.
+      CREATE INDEX IF NOT EXISTS idx_mcp_log_source_id
+        ON mcp_request_log (source_id, created_at DESC)
+        WHERE source_id IS NOT NULL;
+    `,
+    idempotent: true,
+  },
+  {
+    version: 111,
+    name: 'files_storage_path_source_scoped_unique',
+    // v0.42 storage isolation (#861 follow-up, finding #6). files.storage_path
+    // had a GLOBAL UNIQUE constraint, but file_upload built storage_path as
+    // `${pageSlug}/${filename}` with NO source prefix and the INSERT didn't
+    // write source_id (column defaulted to 'default'). Consequences on a
+    // multi-source brain:
+    //   - Two sources with the same slug each uploaded a same-named file →
+    //     second upload hit ON CONFLICT (storage_path) and OVERWROTE the
+    //     first source's metadata row (content_hash/mime/size replaced,
+    //     source_id left pointing at the first source) — cross-source
+    //     attribution break.
+    //   - Any file uploaded against a non-default source was recorded as
+    //     source_id='default', so idx_files_source_id couldn't isolate reads.
+    //
+    // This migration:
+    //   1. Drops the global files_storage_path_key UNIQUE constraint.
+    //   2. Backfills files.storage_path to the source-prefixed form
+    //      `${source_id}/${rest}` for rows not yet prefixed (idempotent guard
+    //      so the v0.18.0 storage-backfill orchestrator's already-moved rows
+    //      aren't double-prefixed).
+    //   3. Adds UNIQUE(source_id, storage_path) — safe because the old global
+    //      UNIQUE guaranteed storage_path was already unique, so (source_id,
+    //      storage_path) pairs are trivially unique pre-rewrite; post-rewrite
+    //      the source prefix makes same-named files in different sources
+    //      distinct keys.
+    //   4. Re-seeds file_migration_ledger so the existing v0.18.0 storage-
+    //      backfill orchestrator can finish moving the storage OBJECT for any
+    //      row whose DB path we rewrote (the orchestrator copies old→new key
+    //      and flips files.storage_path atomically with the object move).
+    //      For brains with no storage backend configured, there's no backing
+    //      object to move — the path is a synthetic DB key — so we mark those
+    //      ledger rows complete in-handler and skip the object-move phase.
+    //
+    // file_upload itself is fixed separately (writes source_id + source-
+    // prefixed path + ON CONFLICT (source_id, storage_path)). This migration
+    // only heals existing rows.
+    //
+    // PGLite has no files table (v0.18 omitted it; v0.27.1 added it inline
+    // via pglite-schema.ts). The handler gates on engine kind so PGLite
+    // brains no-op cleanly.
+    sql: '',
+    idempotent: true,
+    handler: async (engine) => {
+      if (engine.kind === 'pglite') return;
+
+      // 1. Drop the global UNIQUE constraint. Name is the PG default
+      //    (files_storage_path_key); guard via information_schema so a brain
+      //    that already swapped it (re-run, or fresh install that never had
+      //    the old constraint) no-ops.
+      await engine.executeRaw(`
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'files_storage_path_key'
+              AND conrelid = 'files'::regclass
+              AND contype = 'u'
+          ) THEN
+            ALTER TABLE files DROP CONSTRAINT files_storage_path_key;
+          END IF;
+        END $$;
+      `);
+
+      // 2. Backfill files.storage_path to source-prefixed form. Guard against
+      //    double-prefixing rows the v0.18.0 storage-backfill orchestrator
+      //    already rewrote (their storage_path already starts with
+      //    `${source_id}/`). The LIKE source_id || '/%' guard is safe because
+      //    source_id is validated to [a-z0-9-] at the app layer, so a
+      //    false-positive collision requires a page slug literally equal to
+      //    the source id — pathological.
+      await engine.executeRaw(`
+        UPDATE files
+           SET storage_path = source_id || '/' || storage_path
+         WHERE storage_path IS NOT NULL
+           AND source_id IS NOT NULL
+           AND storage_path NOT LIKE (source_id || '/%');
+      `);
+
+      // 3. Add the source-scoped composite UNIQUE. IF NOT EXISTS-equivalent
+      //    via the DO block so re-runs no-op. Named so the bootstrap +
+      //    schema-embedded.ts stay consistent.
+      await engine.executeRaw(`
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'files_source_storage_path_key'
+              AND conrelid = 'files'::regclass
+              AND contype = 'u'
+          ) THEN
+            ALTER TABLE files
+              ADD CONSTRAINT files_source_storage_path_key
+              UNIQUE (source_id, storage_path);
+          END IF;
+        END $$;
+      `);
+
+      // 4. Re-seed file_migration_ledger so the v0.18.0 storage-backfill
+      //    orchestrator can finish moving the storage object for any row
+      //    whose DB path we just rewrote. The ledger's storage_path_new is
+      //    now stale (it was computed pre-rewrite as source_id/old_path,
+      //    which now equals files.storage_path post-rewrite), so we set
+      //    storage_path_old back to the UN-prefixed original (recoverable
+      //    by stripping the source prefix we just added) and
+      //    storage_path_new to the current files.storage_path. Only
+      //    non-complete rows are reset so already-migrated files stay put.
+      //    Skipped entirely when the ledger table doesn't exist (fresh
+      //    install that went straight to the v0.42 schema).
+      const hasLedger = await engine.executeRaw<{ exists: boolean }>(
+        `SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema()
+            AND table_name = 'file_migration_ledger'
+        ) AS exists`,
+      );
+      if (hasLedger[0]?.exists) {
+        // Re-derive storage_path_old by stripping the leading `${source_id}/`
+        // prefix from the current (now source-prefixed) files.storage_path.
+        // storage_path_new is the current files.storage_path (already the
+        // target form). status reset to 'pending' so the orchestrator's
+        // copy+flip runs again; rows that were already 'complete' keep their
+        // status (their object was already moved to the source-prefixed key).
+        await engine.executeRaw(`
+          UPDATE file_migration_ledger l
+             SET storage_path_old = regexp_replace(
+                   f.storage_path,
+                   '^' || f.source_id || '/',
+                   ''
+                 ),
+                 storage_path_new = f.storage_path,
+                 status = CASE WHEN l.status = 'complete' THEN 'complete' ELSE 'pending' END,
+                 updated_at = now()
+            FROM files f
+           WHERE l.file_id = f.id;
+        `);
+      }
+    },
+    verify: async (engine) => {
+      if (engine.kind === 'pglite') return true;
+      const rows = await engine.executeRaw<{ n: number }>(
+        `SELECT count(*)::int AS n
+           FROM pg_constraint
+          WHERE conrelid = 'files'::regclass
+            AND contype = 'u'
+            AND conname = 'files_source_storage_path_key'`,
+      );
+      return (rows[0]?.n ?? 0) === 1;
+    },
+  },
+  {
+    version: 112,
+    name: 'rls_source_isolation_policies',
+    // v0.42 #6 — make RLS real. Pre-v0.42 the schema only ran
+    // `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` with ZERO `CREATE POLICY`,
+    // so RLS was decorative: under the default BYPASSRLS `postgres` app role
+    // nothing was filtered, and under a restricted role EVERY row was denied
+    // (no policy = deny-all). Neither state isolated by source.
+    //
+    // This migration installs actual source-isolation policies on the five
+    // source-bearing tables (pages, content_chunks, files, access_tokens,
+    // mcp_request_log). Each policy gates rows on the session GUC
+    // `app.source_id` (fail-closed when unset: current_setting(..., true)
+    // returns NULL → `source_id = NULL` → no rows). It also lands the
+    // `access_tokens.source_id` column the access_tokens policy needs
+    // (mcp_request_log.source_id already exists from v110).
+    //
+    // ACTIVATION: policies fire ONLY for roles WITHOUT BYPASSRLS. The
+    // shipped default `postgres` role bypasses RLS, so under the default
+    // these are inert (zero behavior change). Operators activate the
+    // backstop by deploying a restricted role + pointing DATABASE_URL at it;
+    // the app then sets `app.source_id` per request via
+    // PostgresEngine.setSourceScope(). doctor's rls_role check surfaces the
+    // inert state. This is defense-in-depth on top of the app-layer
+    // sourceScopeOpts(ctx) WHERE filters.
+    //
+    // PGLite has no RLS engine — no-op there, but the access_tokens.source_id
+    // column still lands for app-layer parity (pglite-schema.ts already
+    // declares it inline for fresh installs).
+    sql: '',
+    idempotent: true,
+    sqlFor: {
+      postgres: `
+        -- access_tokens.source_id (mcp_request_log.source_id already exists).
+        ALTER TABLE access_tokens
+          ADD COLUMN IF NOT EXISTS source_id TEXT NOT NULL DEFAULT 'default';
+        CREATE INDEX IF NOT EXISTS idx_access_tokens_source_id
+          ON access_tokens(source_id) WHERE revoked_at IS NULL;
+
+        -- Source-isolation policies. USING = read predicate, WITH CHECK =
+        -- write predicate. Drop-first so the block is idempotent.
+        DROP POLICY IF EXISTS pages_source_isolation ON pages;
+        CREATE POLICY pages_source_isolation ON pages
+          USING (source_id = current_setting('app.source_id', true))
+          WITH CHECK (source_id = current_setting('app.source_id', true));
+
+        -- Chunks inherit their source from their owning page; content_chunks
+        -- intentionally has no duplicated source_id column. PostgreSQL does
+        -- not permit subqueries directly in RLS expressions, so use a
+        -- narrowly scoped SECURITY DEFINER helper for the ownership lookup.
+        CREATE OR REPLACE FUNCTION public.voltmind_chunk_source_scope_matches(target_page_id INTEGER)
+        RETURNS BOOLEAN
+        LANGUAGE sql
+        STABLE
+        SECURITY DEFINER
+        SET search_path = pg_catalog, public
+        AS $fn$
+          SELECT EXISTS (
+            SELECT 1 FROM public.pages p
+            WHERE p.id = target_page_id
+              AND p.source_id = current_setting('app.source_id', true)
+          );
+        $fn$;
+
+        DROP POLICY IF EXISTS content_chunks_source_isolation ON content_chunks;
+        CREATE POLICY content_chunks_source_isolation ON content_chunks
+          USING (public.voltmind_chunk_source_scope_matches(page_id))
+          WITH CHECK (public.voltmind_chunk_source_scope_matches(page_id));
+        DROP POLICY IF EXISTS files_source_isolation ON files;
+        CREATE POLICY files_source_isolation ON files
+          USING (source_id = current_setting('app.source_id', true))
+          WITH CHECK (source_id = current_setting('app.source_id', true));
+
+        DROP POLICY IF EXISTS access_tokens_source_isolation ON access_tokens;
+        CREATE POLICY access_tokens_source_isolation ON access_tokens
+          USING (source_id = current_setting('app.source_id', true))
+          WITH CHECK (source_id = current_setting('app.source_id', true));
+
+        DROP POLICY IF EXISTS mcp_request_log_source_isolation ON mcp_request_log;
+        CREATE POLICY mcp_request_log_source_isolation ON mcp_request_log
+          USING (source_id = current_setting('app.source_id', true))
+          WITH CHECK (source_id = current_setting('app.source_id', true));
+      `,
+      pglite: `-- PGLite: no RLS engine. access_tokens.source_id lands for parity.
+        ALTER TABLE access_tokens
+          ADD COLUMN IF NOT EXISTS source_id TEXT NOT NULL DEFAULT 'default';`,
+    },
+    verify: async (engine) => {
+      if (engine.kind === 'pglite') return true;
+      const rows = await engine.executeRaw<{ n: number }>(
+        `SELECT count(*)::int AS n FROM pg_policies
+          WHERE policyname IN (
+            'pages_source_isolation',
+            'content_chunks_source_isolation',
+            'files_source_isolation',
+            'access_tokens_source_isolation',
+            'mcp_request_log_source_isolation'
+          )`,
+      );
+      return (rows[0]?.n ?? 0) === 5;
+    },
+  },
+  {
+    version: 113,
+    name: 'access_tokens_scopes_default',
+    // v0.42 #7 — close the "unconditional admin legacy token" hole.
+    // Pre-v0.42 `voltmind auth create` minted legacy access_tokens with NO
+    // scopes column value, and verifyAccessToken hardcoded
+    // scopes:['read','write','admin'] for every legacy token. So every legacy
+    // bearer token was an unconditional admin — the documented largest auth
+    // surface. SECURITY.md already recommends OAuth clients over legacy
+    // tokens; this tightens the legacy path for operators who still use it.
+    //
+    // Schema (schema.sql + pglite-schema.ts) now declares the column as
+    // `scopes TEXT[] NOT NULL DEFAULT '{"read","write"}'` so NEW tokens
+    // minted by `auth create` (which now persists --scopes, default
+    // read+write) get the narrow default automatically. This migration
+    // backfills EXISTING NULL rows to read+write+admin so their effective
+    // behavior is PRESERVED (no silent privilege loss on upgrade — an
+    // operator who relied on admin legacy tokens isn't locked out). Those
+    // operators should re-mint with explicit `--scopes` to narrow.
+    //
+    // Column DEFAULT is set to '{"read","write"}' for future inserts on both
+    // engines so raw INSERTs without an explicit scopes value also get the
+    // narrow default.
+    sql: `
+      -- Backfill NULL → admin to preserve existing tokens' behavior.
+      UPDATE access_tokens SET scopes = ARRAY['read','write','admin'] WHERE scopes IS NULL;
+      -- Narrow the column DEFAULT for future inserts (auth create persists
+      -- explicit scopes, so this only guards raw INSERTs that omit it).
+      ALTER TABLE access_tokens ALTER COLUMN scopes SET DEFAULT '{"read","write"}';
+      ALTER TABLE access_tokens ALTER COLUMN scopes SET NOT NULL;
+    `,
+    idempotent: true,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS.length > 0

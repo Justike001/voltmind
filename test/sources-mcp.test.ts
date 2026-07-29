@@ -18,6 +18,7 @@ import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { operations, OperationError } from '../src/core/operations.ts';
 import type { OperationContext, AuthInfo, Operation } from '../src/core/operations.ts';
 import { hasScope } from '../src/core/scope.ts';
+import { dispatchToolCall } from '../src/mcp/dispatch.ts';
 import { resetPgliteState } from './helpers/reset-pglite.ts';
 import { withEnv } from './helpers/with-env.ts';
 
@@ -154,7 +155,7 @@ describe('sources_* handlers — happy path', () => {
         url: 'https://github.com/example/repo',
       });
       const listOp = findOp('sources_list');
-      const result = (await listOp.handler(ctxRemote(['read']), {})) as any;
+      const result = (await listOp.handler(ctxRemote(['read', 'sources_admin']), {})) as any;
       expect(Array.isArray(result.sources)).toBe(true);
       const found = result.sources.find((s: any) => s.id === 'mcp-list-test');
       expect(found).toBeDefined();
@@ -358,11 +359,34 @@ describe('sources_list — include_archived honored (was silently leaking)', () 
       );
 
       const listOp = findOp('sources_list');
-      const result = (await listOp.handler(ctxRemote(['read']), {
+      const result = (await listOp.handler(ctxRemote(['read', 'sources_admin']), {
         include_archived: true,
       })) as any;
       const found = result.sources.find((s: any) => s.id === 'archived-included');
       expect(found).toBeDefined();
+    });
+  });
+});
+
+describe("sources_list page count", () => {
+  test("excludes soft-deleted pages", async () => {
+    await withEnv({ VOLTMIND_HOME, PATH: fakePath() }, async () => {
+      const addOp = findOp("sources_add");
+      await addOp.handler(ctxRemote(["sources_admin"]), {
+        id: "page-count",
+        url: "https://github.com/example/repo",
+      });
+      await engine.executeRaw(
+        `INSERT INTO pages (slug, source_id, type, title, compiled_truth, timeline, deleted_at)
+         VALUES ($1, $2, $3, $4, '', '', NULL),
+                ($5, $2, $3, $6, '', '', now())`,
+        ["page-count/active", "page-count", "note", "active", "page-count/deleted", "deleted"],
+      );
+
+      const listOp = findOp("sources_list");
+      const result = (await listOp.handler(ctxRemote(["read", "sources_admin"]), {})) as any;
+      const found = result.sources.find((s: any) => s.id === "page-count");
+      expect(found.page_count).toBe(1);
     });
   });
 });
@@ -384,5 +408,59 @@ describe('sources_add SSRF gate (delegated to parseRemoteUrl)', () => {
         expect((e as any).code).toBe('invalid_remote_url');
       }
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OAuth source routing contract
+// ---------------------------------------------------------------------------
+
+describe('source/auth contract', () => {
+  test('remote writes reject an explicit source outside OAuth write authority', async () => {
+    const result = await dispatchToolCall(engine, 'put_page', {
+      slug: 'notes/source-contract',
+      content: '# Source contract',
+      source_id: 'other-source',
+    }, {
+      remote: true,
+      sourceId: 'default',
+      auth: ctxRemote(['write']).auth,
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.content[0]!.text)).toMatchObject({ error: 'permission_denied' });
+  });
+
+  test('remote writes accept the OAuth-bound source when it is explicit', async () => {
+    const result = await dispatchToolCall(engine, 'put_page', {
+      slug: 'notes/source-contract',
+      content: '# Source contract',
+      source_id: 'default',
+      dry_run: true,
+    }, {
+      remote: true,
+      sourceId: 'default',
+      auth: ctxRemote(['write']).auth,
+    });
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0]!.text)).toMatchObject({ dry_run: true, action: 'put_page' });
+  });
+
+  test('sources_list scopes read clients and lets sources_admin inspect all sources', async () => {
+    const addOp = findOp('sources_add');
+    await addOp.handler(ctxRemote(['sources_admin']), { id: 'team-a' });
+    await addOp.handler(ctxRemote(['sources_admin']), { id: 'team-b' });
+    const listOp = findOp('sources_list');
+
+    const scopedCtx = ctxRemote(['read']);
+    scopedCtx.sourceId = 'team-a';
+    scopedCtx.auth!.allowedSources = ['team-a'];
+    const scoped = await listOp.handler(scopedCtx, {}) as { sources: Array<{ id: string }> };
+    expect(scoped.sources.map((source) => source.id)).toEqual(['team-a']);
+
+    const adminCtx = ctxRemote(['read', 'sources_admin']);
+    adminCtx.sourceId = 'team-a';
+    adminCtx.auth!.allowedSources = ['team-a'];
+    const full = await listOp.handler(adminCtx, {}) as { sources: Array<{ id: string }> };
+    expect(full.sources.map((source) => source.id)).toEqual(['default', 'team-a', 'team-b']);
   });
 });

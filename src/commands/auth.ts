@@ -66,10 +66,31 @@ async function withConfiguredSql<T>(
   }
 }
 
-async function create(name: string, opts: { takesHolders?: string[] } = {}) {
-  if (!name) { console.error('Usage: auth create <name> [--takes-holders world,garry]'); process.exit(1); }
+async function create(name: string, opts: { takesHolders?: string[]; scopes?: string[] } = {}) {
+  if (!name) { console.error('Usage: auth create <name> [--takes-holders world,garry] [--scopes "read write"]'); process.exit(1); }
   const token = generateToken();
   const hash = hashToken(token);
+
+  // v0.42 #7: resolve + validate the scope set. Default read+write (NOT
+  // admin) so `auth create` no longer mints unconditional admin tokens —
+  // the documented largest auth hole. Operators who need admin pass
+  // --scopes "read write admin". assertAllowedScopes throws on unknown
+  // scope strings (typo guard). The column DEFAULT is also read+write, but
+  // we persist explicitly so the chosen set is the source of truth
+  // regardless of the column default.
+  const { assertAllowedScopes } = await import('../core/scope.ts');
+  const scopes = opts.scopes && opts.scopes.length > 0
+    ? opts.scopes
+    : ['read', 'write'];
+  try {
+    assertAllowedScopes(scopes);
+  } catch (e: any) {
+    console.error(`Error: ${e.message}`);
+    process.exit(1);
+  }
+  if (scopes.includes('admin')) {
+    console.error('WARNING: granting admin scope to a legacy bearer token. Admin tokens can submit jobs, run actions, mutate schema packs, and read every source. Prefer a narrow scope (read / read write) and use `voltmind auth register-client` for OAuth clients with per-source bindings.');
+  }
 
   try {
     await withConfiguredSql(async (_sql, engine) => {
@@ -84,14 +105,23 @@ async function create(name: string, opts: { takesHolders?: string[] } = {}) {
       // through the wire-protocol type oid without the v0.12.0 double-encode
       // bug class (verified by test/e2e/auth-permissions.test.ts:67 on
       // Postgres and test/sql-query.test.ts on PGLite).
+      //
+      // v0.42 #7: also persist `scopes` (TEXT[]) via the pgArray helper so
+      // verifyAccessToken returns the operator-chosen set instead of the
+      // hardcoded admin fallback. The scopes column predates this change
+      // (schema.sql has had it since v4) but `auth create` never wrote it.
+      // Bind as a pgArray-formatted text literal + $N::text[] cast (same
+      // positional-binding pattern executeRawJsonb uses for ::jsonb) so the
+      // array survives the positional executeRaw path.
+      const { pgArray } = await import('../core/oauth-provider.ts');
       await executeRawJsonb(
         engine,
-        `INSERT INTO access_tokens (name, token_hash, permissions)
-         VALUES ($1, $2, $3::jsonb)`,
-        [name, hash],
+        `INSERT INTO access_tokens (name, token_hash, scopes, permissions)
+         VALUES ($1, $2, $3::text[], $4::jsonb)`,
+        [name, hash, pgArray(scopes)],
         [permissions],
       );
-      console.log(`Token created for "${name}" (takes_holders=${JSON.stringify(takesHolders)}):\n`);
+      console.log(`Token created for "${name}" (scopes=${scopes.join(' ')}, takes_holders=${JSON.stringify(takesHolders)}):\n`);
       console.log(`  ${token}\n`);
       console.log('Save this token — it will not be shown again.');
       console.log(`Revoke with: voltmind auth revoke "${name}"`);
@@ -145,7 +175,7 @@ async function permissions(name: string, action: string, value: string | undefin
 async function list() {
   await withConfiguredSql(async (sql) => {
     const rows = await sql`
-      SELECT name, created_at, last_used_at, revoked_at
+      SELECT name, scopes, created_at, last_used_at, revoked_at
       FROM access_tokens
       ORDER BY created_at DESC
     `;
@@ -153,14 +183,19 @@ async function list() {
       console.log('No tokens found. Create one: voltmind auth create "my-client"');
       return;
     }
-    console.log('Name                  Created              Last Used            Status');
-    console.log('─'.repeat(80));
+    console.log('Name                  Scopes               Created              Last Used            Status');
+    console.log('─'.repeat(100));
     for (const r of rows) {
       const name = (r.name as string).padEnd(20);
+      // v0.42 #7: surface the persisted scope set. NULL (pre-v113 brain or
+      // a token created before scopes were persisted) renders as '(admin)'
+      // since verifyAccessToken falls back to read+write+admin for NULL.
+      const scopesArr = (r.scopes as string[] | null) ?? ['read', 'write', 'admin'];
+      const scopes = (scopesArr.length > 0 ? scopesArr.join(' ') : '(none)').padEnd(20);
       const created = new Date(r.created_at as string).toISOString().slice(0, 19);
       const lastUsed = r.last_used_at ? new Date(r.last_used_at as string).toISOString().slice(0, 19) : 'never'.padEnd(19);
       const status = r.revoked_at ? 'REVOKED' : 'active';
-      console.log(`${name}  ${created}  ${lastUsed}  ${status}`);
+      console.log(`${name}  ${scopes}  ${created}  ${lastUsed}  ${status}`);
     }
   });
 }
@@ -465,12 +500,17 @@ export async function runAuth(args: string[]): Promise<void> {
   switch (cmd) {
     case 'create': {
       // v0.28: optional --takes-holders world,garry,brain (default: world only)
+      // v0.42 #7: optional --scopes "read write" (default: read write; NOT admin)
       const takesIdx = rest.indexOf('--takes-holders');
       const takesHolders = takesIdx >= 0 && rest[takesIdx + 1]
         ? rest[takesIdx + 1].split(',').map(s => s.trim()).filter(Boolean)
         : undefined;
-      const positional = rest.find(a => !a.startsWith('--') && a !== rest[takesIdx + 1]);
-      await create(positional || '', { takesHolders });
+      const scopesIdx = rest.indexOf('--scopes');
+      const scopes = scopesIdx >= 0 && rest[scopesIdx + 1]
+        ? rest[scopesIdx + 1].split(/\s+/).map(s => s.trim()).filter(Boolean)
+        : undefined;
+      const positional = rest.find(a => !a.startsWith('--') && a !== rest[takesIdx + 1] && a !== rest[scopesIdx + 1]);
+      await create(positional || '', { takesHolders, scopes });
       return;
     }
     case 'list': await list(); return;
@@ -493,11 +533,17 @@ export async function runAuth(args: string[]): Promise<void> {
       console.log(`VoltMind Token Management
 
 Usage:
-  voltmind auth create <name> [--takes-holders world,garry,brain]
+  voltmind auth create <name> [--takes-holders world,garry,brain] [--scopes "read write"]
                                                           Create a legacy bearer token. v0.28: --takes-holders
                                                           sets the per-token allow-list for the takes.holder
                                                           field (default: ["world"]). MCP-bound calls to
                                                           takes_list / takes_search / query filter by this.
+                                                          v0.42 #7: --scopes sets the token's capability scope
+                                                          (default: read write; NOT admin). Pass
+                                                          --scopes "read write admin" only when you need
+                                                          job/action/schema-pack ops — admin is the largest
+                                                          blast radius. Prefer voltmind auth register-client
+                                                          for OAuth clients with per-source bindings.
   voltmind auth list                                         List all tokens
   voltmind auth revoke <name>                                Revoke a legacy token
   voltmind auth permissions <name> set-takes-holders <h1,h2,h3>
