@@ -719,9 +719,28 @@ const put_page: Operation = {
       // Pack load failed; fall through to legacy inferType behavior.
       activePack = undefined;
     }
+    // v0.42: keep the write-through target and pages.source_path identical.
+    let writeThroughSourcePath: string | undefined;
+    try {
+      const configuredRepoPath = await ctx.engine.getConfig('sync.repo_path');
+      if (
+        typeof configuredRepoPath === 'string' &&
+        existsSync(configuredRepoPath) &&
+        statSync(configuredRepoPath).isDirectory()
+      ) {
+        const sourceId = ctx.sourceId ?? 'default';
+        const filePath = resolvePageFilePath(configuredRepoPath, slug, sourceId);
+        if (isWriteTargetContained(filePath, configuredRepoPath)) {
+          writeThroughSourcePath = relative(configuredRepoPath, filePath).split(sep).join('/');
+        }
+      }
+    } catch {
+      // Best-effort; the non-blocking write-through response remains unchanged.
+    }
     const result = await importFromContent(ctx.engine, slug, p.content as string, {
       noEmbed,
       ...(ctx.sourceId ? { sourceId: ctx.sourceId } : {}),
+      ...(writeThroughSourcePath ? { sourcePath: writeThroughSourcePath } : {}),
       // v0.39.0.0 T1.5: pack-aware type inference (loaded above; legacy
       // inferType behavior when undefined).
       ...(activePack ? { activePack } : {}),

@@ -112,6 +112,11 @@ export interface Page {
    */
   import_filename?: string | null;
   /**
+   * v0.32.7 CJK wave: repo-relative path used by sync deletion/rename
+   * reconciliation.
+   */
+  source_path?: string | null;
+  /**
    * v0.29.1: bumped by `recompute_emotional_weight` when the page's
    * emotional_weight changes. The salience query window uses
    * `GREATEST(updated_at, salience_touched_at)` so newly-salient old pages

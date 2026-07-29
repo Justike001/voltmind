@@ -98,8 +98,29 @@ describe('put_page write-through — happy path', () => {
     expect(fs.existsSync(expectedPath)).toBe(true);
     const onDisk = fs.readFileSync(expectedPath, 'utf8');
     expect(onDisk).toContain('WT body');
+    const rows = await engine.executeRaw<{ source_path: string | null }>(
+      'SELECT source_path FROM pages WHERE source_id = $1 AND slug = $2',
+      ['default', 'inbox/test-wt-1'],
+    );
+    expect(rows[0]?.source_path).toBe('inbox/test-wt-1.md');
   });
 
+  test('same-content put_page repairs a missing source_path', async () => {
+    const ctx = makeCtx();
+    const content = '---\ntitle: Repair\n---\n\nbody';
+    await putPage.handler(ctx, { slug: 'inbox/source-path-repair', content });
+    await engine.executeRaw(
+      'UPDATE pages SET source_path = NULL WHERE source_id = $1 AND slug = $2',
+      ['default', 'inbox/source-path-repair'],
+    );
+
+    await putPage.handler(ctx, { slug: 'inbox/source-path-repair', content });
+    const rows = await engine.executeRaw<{ source_path: string | null }>(
+      'SELECT source_path FROM pages WHERE source_id = $1 AND slug = $2',
+      ['default', 'inbox/source-path-repair'],
+    );
+    expect(rows[0]?.source_path).toBe('inbox/source-path-repair.md');
+  });
   test('stamps provenance frontmatter (ingested_via=put_page for local CLI)', async () => {
     const ctx = makeCtx({ remote: false });
     const result = (await putPage.handler(ctx, {
@@ -210,6 +231,15 @@ describe('put_page write-through — multi-source filing', () => {
     expect(result.write_through?.written).toBe(true);
     expect(result.write_through?.path).toBe(path.join(brainDir, '.sources/team-x/shared/page.md'));
     expect(fs.existsSync(result.write_through!.path!)).toBe(true);
+    const rows = await engine.executeRaw<{ source_path: string | null }>(
+      'SELECT source_path FROM pages WHERE source_id = $1 AND slug = $2',
+      ['team-x', 'shared/page'],
+    );
+    expect(rows[0]?.source_path).toBe('.sources/team-x/shared/page.md');
+    const { resolveSlugByPathOrSourcePath } = await import('../../src/commands/sync.ts');
+    await expect(
+      resolveSlugByPathOrSourcePath(engine, '.sources/team-x/shared/page.md', 'team-x'),
+    ).resolves.toBe('shared/page');
   });
 });
 
