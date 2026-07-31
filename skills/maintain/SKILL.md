@@ -47,6 +47,8 @@ This skill guarantees:
 - Back-link iron law is enforced
 - Citation format is validated against the standard
 - Results are reported with counts per dimension
+- Long-running tracking is checked for failed/stalled receipts, stale project
+  state, invalid bindings, and unresolved candidates.
 
 ## Phases
 
@@ -315,6 +317,34 @@ Check the integrity of stored files and redirect pointers:
 ### Open threads
 Timeline items older than 30 days with unresolved action items.
 - Flag for review
+
+### Long-running project tracking
+
+Run tracking diagnostics against the company-brain server with an explicit
+source. Do not run a client-local/default-source reconciliation:
+
+```bash
+voltmind projects tracking status --source-id <company-source>
+VOLTMIND_RUNTIME_ROLE=company-server \
+  voltmind projects tracking reconcile --source-id <company-source>
+```
+
+The status view is source-scoped. Reconcile replays durable evidence through
+the receipt gate; it never invents a new project/workstream and never modifies
+`tracking_bindings`.
+
+Also verify:
+
+- the server uses Postgres and runs either
+  `voltmind autopilot --runtime-role company-server` or
+  `voltmind jobs work --runtime-role company-server`;
+- no failed/dead `project_track_progress` jobs are stranded;
+- the last successful receipt is at least as new as the latest bound evidence;
+- `tracking_bindings` still refer to live connector resources;
+- `state/indexes/project-tracking-review` candidates are being reviewed.
+
+Dream/synthesis is not the project-tracking executor. It may consume already
+tracked state, but must not be relied on to repair an absent server worker.
 
 ## Benchmark Testing
 

@@ -9,8 +9,8 @@ source, and not the skill that is running.
 
 ## Decision Protocol
 
-1. Identify the primary subject: person, company, project, concept, meeting, or
-   raw/captured note.
+1. Identify the primary subject: person, company, project, concept, meeting,
+   internal org unit, or raw/captured note.
 2. File in the directory that matches that subject.
 3. Add citations and graph links to related pages when relationships are durable.
 4. When unsure, use `inbox/` or ask the user rather than inventing a taxonomy.
@@ -22,6 +22,7 @@ source, and not the skill that is running.
 | `inbox/` | one-off captures and untriaged notes |
 | `people/` | people the user expects to reference again |
 | `companies/` | companies relevant to the user's work or notes |
+| `orgs/` | internal teams, departments, functions, committees, working groups, and durable ownership groups when the active schema pack defines this type |
 | `projects/` | projects, products, workstreams |
 | `concepts/` | reusable ideas, frameworks, technical concepts |
 | `meetings/` | meeting notes or dated discussion records |

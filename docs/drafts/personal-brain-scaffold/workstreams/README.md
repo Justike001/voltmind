@@ -20,3 +20,6 @@ Tiebreaker:
 - `workstreams/` has no fixed end date.
 - `projects/` has a goal, owner, scope, status, and completion condition.
 
+For long-running tracking, maintain connector identities in page Frontmatter
+`tracking_bindings`; use `tracking_aliases` only for review candidates. Runtime
+never creates a workstream from an unbound source.

@@ -38,6 +38,8 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | "watch this video", "process this YouTube link", "ingest this PDF", "save this podcast", "process this book", "summarize this book", "PDF book", "ingest it into my brain", "what's in this screenshot", "check out this repo" | `skills/media-ingest/SKILL.md` |
 | Meeting transcript received | `skills/meeting-ingestion/SKILL.md` |
 | Generic "ingest this" (auto-routes to above) | `skills/ingest/SKILL.md` |
+| Teams/Outlook attachment, SharePoint/OneDrive path, RaiDrive/SMB/shared-drive path, `Z:\...`, or external file reference | `skills/ingest/SKILL.md` (use `search_file_refs` / `attach_file_refs`; materialize only on explicit request) |
+| Analyze a referenced SharePoint/OneDrive or mapped shared-drive file, or refresh an extracted artifact | `skills/ingest/SKILL.md` (`file_ref_materialize` after connector/local extraction) |
 
 
 ## Operational
@@ -60,6 +62,7 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | "Validate skills", skill health check | `skills/testing/SKILL.md` |
 | "list resolvers", "describe resolver", "resolver registry", "resolver diagnostics" | Run `voltmind resolvers list` or `voltmind resolvers describe <id>` |
 | Webhook setup, external event processing | `skills/webhook-transforms/SKILL.md` |
+| Microsoft connector relay event, delta replay, or event-version deduplication | `skills/webhook-transforms/SKILL.md` + `skills/ingest/SKILL.md` (`POST /ingest/events`) |
 | "Spawn agent", "background task", "parallel tasks", "steer agent", "pause/resume agent", "voltmind jobs submit", "submit a voltmind job", "submit a shell job", "shell job" | `skills/minion-orchestrator/SKILL.md` |
 | "present options", "ask before proceeding", "choice gate", "user decision" | `skills/ask-user/SKILL.md` |
 

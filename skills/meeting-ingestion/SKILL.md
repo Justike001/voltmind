@@ -35,9 +35,11 @@ This skill guarantees:
 - Meeting page created with attendees, summary, key decisions, action items
 - EVERY attendee gets a people page (created or updated)
 - EVERY company discussed gets entity propagation
-- Timeline entries on ALL mentioned entities (timeline merge)
+- Timeline entries on mentioned people and companies (timeline merge)
 - Meeting is NOT fully ingested until enrich runs for every entity
 - Back-links created bidirectionally
+- Preserve stable calendar/series/thread identity as `tracking_refs` when
+  available so runtime can reconcile the meeting to existing projects/workstreams.
 
 > **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
 
@@ -95,11 +97,16 @@ for dated events (auto-link only handles links, not timeline entries).
 
 ### Phase 4: Entity propagation (MANDATORY)
 
-For each company, project, or concept discussed:
+For each company or concept discussed:
 1. Check brain for existing page
 2. Create/update as needed
 3. Add timeline entry referencing the meeting
 4. Back-link from entity page to meeting page
+
+Project and workstream mentions are evidence links only in this skill. Do not
+`put_page` or `timeline-add` under `projects/`, `workstreams/`, or
+`state/{actions,decisions,commitments,risks}/`. Those mutations belong to the
+company-server tracking worker after the raw event is durable.
 
 ### Phase 5: Timeline merge
 
@@ -109,6 +116,15 @@ Acme Corp, the event goes on Alice's page, Bob's page, AND Acme Corp's page.
 ### Phase 6: Sync
 
 `voltmind sync` to update the index.
+
+### Long-running project tracking
+
+Do not create or update a project/workstream page during meeting ingestion.
+Submit the normalized event, including stable `tracking_refs` and
+`evidence_type`, to the company server's `POST /ingest/events`. The server
+persists raw evidence and then queues `project_track_progress`; a local
+`voltmind sync` alone does not trigger tracking. Review unbound or ambiguous
+candidates in `state/indexes/project-tracking-review`.
 
 ## Output Format
 
@@ -122,3 +138,5 @@ updated, {N} action items captured."
 - Not merging timelines across all mentioned entities
 - Creating attendee stubs without meaningful content
 - Filing meeting pages without cross-linking to all participants
+- Calling `put_page` or `timeline-add` for a project/workstream/state object
+  from this skill

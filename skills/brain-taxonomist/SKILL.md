@@ -70,12 +70,20 @@ You do NOT need to consult for:
 
 Walk these questions in order:
 1. Is the primary subject a NAMED PERSON? → person-typed directory
-2. Is the primary subject a NAMED ORGANIZATION? → company-typed directory
-3. Is it about a TIME-BOUNDED EVENT (meeting, deal, trip)? → temporal-typed directory
-4. Is it a REUSABLE MENTAL MODEL? → concept-typed directory
-5. Is it RAW MEDIA (article, video, book, PDF)? → media-typed directory
-6. Is it BULK SOURCE DATA? → source-typed directory
-7. None of the above → consult EIIRP Phase 3 for schema-pack candidate creation.
+2. Is the primary subject an INTERNAL ORG UNIT (team, department, function,
+   committee, working group, or durable ownership group)? → org-typed directory
+3. Is the primary subject an EXTERNAL ORGANIZATION? → company-typed directory
+4. Is it about a TIME-BOUNDED EVENT (meeting, deal, trip)? → temporal-typed directory
+5. Is it a REUSABLE MENTAL MODEL? → concept-typed directory
+6. Is it RAW MEDIA (article, video, book, PDF)? → media-typed directory
+7. Is it BULK SOURCE DATA? → source-typed directory
+8. None of the above → consult EIIRP Phase 3 for schema-pack candidate creation.
+
+For Teams ingestion, a group chat may match the internal-org branch when it is
+durable enough to track but the connector cannot yet prove its formal org type.
+In that case use the active pack's org path and mark the page as provisional
+(for example `org_kind: teams_group_chat`, `classification_status: provisional`).
+Do not infer a Department, Function, or formal Team from the chat name alone.
 
 ### Step 2: Look up the directory for that type in the active pack
 

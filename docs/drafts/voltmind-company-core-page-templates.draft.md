@@ -369,6 +369,8 @@ tags: []
 ## Workstreams
 
 Use `workstreams/` for long-running responsibility domains that may contain many projects and do not have a clear end date.
+Sources are attached only through page Frontmatter `tracking_bindings`; aliases are
+review hints, and unbound evidence is never promoted into a new workstream.
 
 ```markdown
 ---
@@ -386,6 +388,8 @@ related_entities: []
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 team: orgs/team-slug
+tracking_bindings: []
+tracking_aliases: []
 status: active | paused | archived
 tags: []
 ---
@@ -393,6 +397,12 @@ tags: []
 # Workstream Name
 
 > Long-running responsibility area, why it matters, and what success looks like over time.
+
+<!-- voltmind:tracking-state:begin -->
+## Tracked Current State
+
+Runtime-maintained directional progress appears here after an explicitly bound source is ingested.
+<!-- voltmind:tracking-state:end -->
 
 ## State
 
@@ -455,6 +465,8 @@ status: proposed | active | paused | shipped | archived
 my_role: owner | contributor | reviewer | observer
 team: orgs/team-slug
 workstream: workstreams/workstream-slug
+tracking_bindings: []
+tracking_aliases: []
 related_people: []
 related_companies: []
 related_systems: []
@@ -465,6 +477,12 @@ tags: []
 # Project Name
 
 > One-paragraph current state.
+
+<!-- voltmind:tracking-state:begin -->
+## Tracked Current State
+
+Runtime-maintained progress appears here after an explicitly bound source is ingested.
+<!-- voltmind:tracking-state:end -->
 
 ## State
 

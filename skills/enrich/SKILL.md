@@ -113,6 +113,14 @@ Don't just capture facts. Capture texture:
 | Ascending, plateauing, pivoting? | Trajectory section |
 | Role, company, funding, location | State section (hard facts) |
 
+When the source page contains `file_refs`, retain the file name and
+display/relative path as provenance context for the update. File URLs, legacy
+`open_path`, mapped-drive roots, UNC hosts, and storage IDs are navigation
+metadata, not evidence that a person, company, or project is an entity; exclude
+them from entity extraction. Do not replace an existing reference with a
+guessed path, and do not download or copy a referenced file unless the user
+explicitly requests materialization.
+
 ### Step 4: External data source lookups
 
 Priority order -- stop when you have enough signal for the entity's tier.

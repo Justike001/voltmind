@@ -26,6 +26,8 @@ tools:
   - get_backlinks
   - traverse_graph
   - get_timeline
+  - search_file_refs
+  - list_page_file_refs
 mutating: false
 ---
 
@@ -48,6 +50,9 @@ This skill guarantees:
    - Keyword search for specific names, dates, terms
    - Semantic query for conceptual questions
    - Structured queries (list by type, backlinks) for relational questions
+   - File intent (filename, SharePoint/OneDrive path, RaiDrive/SMB path,
+     `Z:\...`, PPTX/XLSX/PDF, attachment) uses `search_file_refs` first, then
+     reads the returned page slugs.
 2. **Execute searches:**
    - Keyword search voltmind for FTS matches (search)
    - Hybrid search voltmind for semantic+keyword with expansion (query)
@@ -88,6 +93,17 @@ whether to load a full page.
 
 - `voltmind search` / `voltmind query` return ranked chunks with context snippets.
   These are often enough to answer the question directly.
+- File-reference searches return either the current safe web URL or a logical
+  `root_key + relative_path`. On a thin client, `voltmind file-refs search`
+  adds `resolved_open_path` from that workstation's local root mapping.
+  Microsoft references use
+  `tenant_id`, `drive_id`, and `item_id` as stable identity. Shared-drive
+  references use `root_key + file_id` when a stable file ID exists, otherwise
+  `root_key + relative_path`. Do not expose these storage identifiers as
+  person/company entities. Treat any legacy server-side `open_path` as
+  non-authoritative. Report the logical path and locally resolved path when
+  available; only claim rename/move continuity when a stable item/file ID
+  exists.
 - Only use `voltmind get <slug>` to load the full page when a chunk confirms the
   page is relevant and you need more context (e.g., compiled truth, timeline).
 - **"Tell me about X"** -- get the full page (the user wants the complete picture).

@@ -21,6 +21,7 @@ writes_pages: true
 writes_to:
   - projects/
   - state/actions/
+  - state/decisions/
   - state/commitments/
   - state/risks/
 ---
@@ -41,6 +42,35 @@ Project pages should link to canonical state pages rather than duplicating them:
 - `state/risks/`
 - `meetings/`
 - `sources/`
+
+## Long-running tracking
+
+Projects and workstreams may declare stable source bindings in Frontmatter:
+
+```yaml
+tracking_bindings:
+  - provider: teams
+    resource: conversation
+    id: tenant-or-connector-conversation-id
+tracking_aliases: [optional human name, short code]
+```
+
+Bindings are the only automatic-write authorization. A source may be listed on
+multiple project/workstream pages. Runtime updates managed tracking state and
+Timeline blocks, preserves user-authored prose, and creates canonical
+action/decision/commitment/risk pages from structured progress signals. It never
+creates a project/workstream from an unbound event.
+
+This skill may edit project/workstream state only when the user explicitly
+invokes a project-maintenance workflow. It is not called as a write-capable
+sub-step of `ingest` or `meeting-ingestion`; automatic evidence processing is
+owned by the company-server tracking worker.
+
+When `state/indexes/project-tracking-review` contains a candidate, review the
+evidence, add the chosen binding to the canonical page Frontmatter, then run
+`VOLTMIND_RUNTIME_ROLE=company-server voltmind projects tracking reconcile
+--source-id <company-source>` on the company server, or wait for the next
+ingest retry.
 
 Write additively and preserve existing user prose. If a project update could become shared team context, create a local `contribution/candidates/` draft for user review; do not publish externally in Phase 1.
 

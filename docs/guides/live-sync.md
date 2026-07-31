@@ -87,6 +87,79 @@ Triggers sync on push events for instant sync (<5s).
   Verify `X-Hub-Signature-256` against a shared secret.
 - **Git post-receive hook:** If the brain repo is on the same machine.
 
+### Microsoft connector relay
+
+Teams/Outlook connectors can send normalized events to `POST /ingest/events`
+after the VoltMind relay feature is explicitly enabled:
+
+```bash
+voltmind config set ingestion.microsoft_relay.enabled true
+```
+
+The connector, not VoltMind, owns Microsoft OAuth and delta cursors. Each event
+may include validated SharePoint/OneDrive `file_refs`; VoltMind stores the
+stable tenant/drive/item identity and projects the name/path into the page, but
+does not download the file. Replays are safe by `(source, platform, event_id,
+event_version)`. To analyze a file, use the SharePoint/OneDrive connector to
+extract Markdown and call `file_ref_materialize`; the artifact keeps the
+observed eTag and is marked stale when the file changes.
+
+The same event can also carry a RaiDrive or mapped shared-drive reference:
+
+```json
+{
+  "schema_version": 1,
+  "provider": "filesystem",
+  "service": "raidrive",
+  "root_key": "synology-public",
+  "relative_path": "Public/Finance/FY27 Planning.xlsx",
+  "name": "FY27 Planning.xlsx",
+  "availability": "accessible",
+  "occurrence": {
+    "platform": "teams",
+    "relation": "mentioned",
+    "conversation_id": "conversation-id",
+    "message_id": "message-id",
+    "source_uri": "teams://conversation/message"
+  }
+}
+```
+
+Use the same `root_key` for every user. Each thin client keeps its own drive
+letter and username-specific UNC root in local file-plane configuration:
+
+```bash
+voltmind client-roots add synology-public \
+  --local-root 'Z:\' \
+  --unc-root '\\RaiDrive-CurrentUser\Synology'
+voltmind client-roots test synology-public
+```
+
+The client converts local paths to `root_key + relative_path` before normal
+ingestion, and resolves returned logical paths back to a local
+`resolved_open_path`. The host does not persist the `Z:` mapping or the
+username-bearing UNC host. A one-time remote backfill may send the drive-root
+prefix and UNC share name as non-persisted matching hints for legacy page text;
+it never sends the username-bearing UNC host. When the storage layer exposes a
+stable file identifier, include it as `file_id` so renames and moves update one
+reference. Without `file_id`, identity falls back to
+`root_key + relative_path`, so rename/move continuity cannot be guaranteed.
+
+For legacy pages, preview or apply reference indexing with:
+
+```bash
+voltmind file-refs backfill --dry-run
+voltmind file-refs backfill
+
+# On a configured thin client, local roots are normalized before the host scan.
+voltmind file-refs backfill --dry-run --root-key synology-public
+voltmind file-refs search 'Z:\Public\Finance\FY27 Planning.xlsx'
+
+# Remove historical machine-specific paths after previewing the affected count.
+voltmind file-refs scrub-open-paths --dry-run
+voltmind file-refs scrub-open-paths --yes
+```
+
 ### What Gets Synced
 
 Sync only indexes "syncable" markdown files. These are excluded by design:

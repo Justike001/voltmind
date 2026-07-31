@@ -13,6 +13,8 @@ related_entities: []
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 team: orgs/team-slug
+tracking_bindings: []
+tracking_aliases: []
 status: active | paused | archived
 tags: []
 ---
@@ -20,6 +22,12 @@ tags: []
 # Workstream Name
 
 > Long-running responsibility area, why it matters, and what success looks like over time.
+
+<!-- voltmind:tracking-state:begin -->
+## Tracked Current State
+
+Runtime-maintained directional progress appears here after an explicitly bound source is ingested.
+<!-- voltmind:tracking-state:end -->
 
 ## State
 

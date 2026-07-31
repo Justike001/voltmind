@@ -17,8 +17,12 @@ Page purpose:
 - Links to state objects
 - Meetings, sources, tickets, and docs
 
+Maintain connector identities in Frontmatter `tracking_bindings`; one source may
+bind to multiple projects/workstreams. `tracking_aliases` only create review
+candidates. Exact bindings update the managed state and Timeline; unbound evidence
+never creates a project automatically.
+
 Tiebreakers:
 - If no one is working on it yet, use `ideas/`.
 - If it is a concrete task, use `state/actions/`.
 - If it is a deliverable, use `artifacts/`.
-

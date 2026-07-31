@@ -68,6 +68,11 @@ to get you from zero to useful in one session.
   sessions can resume.
 - Entity detection and cross-linking run on every import, not as a separate
   pass.
+- Teams and Outlook imports retain every validated SharePoint/OneDrive or
+  mapped shared-drive file reference (attachments, inline links, explicit
+  mentions, and recognized `Z:\...`/UNC paths). References are metadata-only
+  by default; the connector or local mapping is used later only when a user
+  asks to inspect the file.
 - Every durable fact written to VoltMind needs a `[Source: ...]` citation.
 
 ## Prerequisites
@@ -225,9 +230,11 @@ Start with:
 3. **Threads with 3+ replies** — active conversations worth tracking.
 4. **Emails involving people already found in Calendar or Teams** — enrichment,
    not cold import.
-5. **Emails with attachments only when the user approves attachment context** —
-   attachment ingestion itself is outside the MVP unless text is already
-   available through the connector.
+5. **Emails with attachments, SharePoint/OneDrive links, or mapped-drive
+   paths** — capture the validated file identity, current display/relative
+   path, and safe web URL on the thread page. Resolve mapped-drive paths to a
+   logical `root_key + relative_path` on the thin client. Do not
+   download or parse the file during cold start.
 
 ### Processing
 
@@ -290,7 +297,9 @@ Use the Teams connector only. Recommended starting scope:
 - Recent 90 days for smaller teams.
 - Selected chats/channels named by the user.
 - Include message sender, timestamp, thread/channel, replies, reactions only
-  when they carry meaning, and linked meeting context when available.
+  when they carry meaning, linked meeting context when available, and every
+  attachment, inline SharePoint/OneDrive link, mapped-drive path, or explicitly
+  mentioned file.
 
 ### Fetch loop for active chats
 
@@ -373,6 +382,32 @@ For each meaningful Teams episode:
    artifact.
 8. **Back-link entities** — every mentioned entity with a page links back to
    the Teams-derived page or update.
+
+### External file references
+
+For each Teams or Outlook item, pass file references through the connector
+relay as `file_refs`. The relay/SharePoint connector must resolve the stable
+`(tenant_id, drive_id, item_id)` identity for Microsoft files when possible.
+For RaiDrive or another mapped shared drive, normalize the configured local or
+UNC root to a cross-user `root_key` and store only the remainder as
+`relative_path`. This normalization happens on the thin client; do not send the
+current user's `Z:\...` or username-specific UNC to the host. Use `file_id`
+when the NAS/SMB layer exposes one.
+Capture `attachment`, `inline_link`, and `mentioned` occurrences separately so
+one file can be traced to multiple messages or threads.
+
+The default cold-start behavior is reference-first:
+
+- write the file name, display/relative path, safe web URL or logical root,
+  service, and availability;
+- never persist OAuth tokens, cookies, signed URLs, or download payloads;
+- materialize a file only after the user asks for analysis, then store the
+  extracted Markdown under `artifacts/microsoft/...` or
+  `artifacts/filesystem/...`, with the observed eTag/version when available.
+
+When a file is moved or renamed, update the existing identity rather than
+creating a second file record. A single connector permission failure is not a
+tombstone; only an explicit deletion event marks a reference missing.
 
 ### Filtering rules
 

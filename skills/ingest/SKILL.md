@@ -12,10 +12,15 @@ tools:
   - add_link
   - add_timeline_entry
   - sync_brain
+  - search_file_refs
+  - list_page_file_refs
+  - attach_file_refs
+  - file_ref_materialize
 mutating: true
 writes_pages: true
 writes_to:
   - people/
+  - orgs/
   - companies/
   - concepts/
   - meetings/
@@ -30,13 +35,28 @@ Ingest meetings, articles, media, documents, and conversations into the brain.
 
 > **Filing rule:** Read `skills/_brain-filing-rules.md` before creating any new page.
 
+> **Taxonomy rule:** For every new page, route through `brain-taxonomist` and the
+> active schema pack (`voltmind schema show --json`). Do not use `RESOLVER.md`
+> or a vault `index.md` as the runtime taxonomy source. Folder README files may
+> explain a type, but the active pack is the machine-readable authority.
+
 ## Contract
 
 - Every fact written to a brain page carries an inline `[Source: ...]` citation with date and provenance.
 - Every entity mention creates a back-link from the entity's page to the page mentioning them (Iron Law).
-- Raw sources are preserved for provenance via `voltmind files upload-raw` with automatic size routing.
+- Raw sources are preserved for provenance via `voltmind files upload-raw` with
+  automatic size routing. SharePoint/OneDrive and mapped shared-drive
+  references are the exception: metadata is preserved in `external_file_refs`
+  and projected onto the page; the binary is not copied until an explicit
+  materialization request.
 - State sections are rewritten with current best understanding, never appended to.
 - Entity detection fires on every inbound message; notable entities get pages or updates.
+- Structured events may carry `tracking_refs` and `evidence_type`; preserve
+  these fields when forwarding events so runtime can reconcile existing
+  project/workstream pages.
+- Automatic ingest is not authorized to write `projects/`, `workstreams/`, or
+  canonical action/decision/commitment/risk pages. It must submit the event to
+  the company server; only the server tracking worker performs those writes.
 
 > **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
 
@@ -59,15 +79,98 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
 
 > **Router note:** This skill is a router. For specialized ingestion, see: idea-ingest, media-ingest, meeting-ingestion.
 
-1. **Parse the source.** Extract people, companies, dates, and events from the input.
-2. **For each entity mentioned:**
+1. **Parse the source.** Extract people, companies, dates, events, and any
+   external file references from the input.
+2. **Route external file references.** Validate each
+   `ExternalFileReferenceV1` and attach it to the source page. Microsoft files
+   use tenant/drive/item identity. RaiDrive and mapped shared drives use a
+   cross-user logical `root_key` plus normalized `relative_path`, or
+   `root_key + file_id` when the storage system supplies a stable file ID.
+   The thin client converts a user's `Z:\...` or username-specific UNC path to
+   that logical locator before sending it; new events must omit `open_path`.
+   Search and query can then find the file by name or logical path without
+   copying it. Use `file_ref_materialize` only after a user explicitly requests
+   file analysis.
+3. **Classify each new entity before writing:**
+   - Check for an existing page by stable external identity before using a name
+     match. For Teams data, prefer `conversation_id`, then `team_id + channel_id`,
+     then aliases/display name.
+   - Ask `brain-taxonomist` to resolve the page type and path from the active
+     schema pack. Never hardcode a folder because the source is Teams or because
+     a page resembles an existing page.
+   - An internal Teams group chat may be written to `orgs/` when no formal org
+     record is available, but it MUST be marked as a provisional communication
+     container rather than inferred as a Department, Function, or formal Team.
+     Use the stable Teams identifiers in frontmatter:
+
+     ```yaml
+     type: org
+     org_kind: teams_group_chat
+     classification_status: provisional
+     source_system: teams
+     conversation_id: <stable-id>
+     team_id: <stable-id>
+     channel_id: <stable-id>
+     ```
+
+     Omit identifiers that are not present. Do not create separate role pages;
+     keep role fields on `people/` and `orgs/` pages.
+4. **For each entity mentioned:**
    - Read the entity's page from voltmind to check if it exists
    - If exists: update compiled_truth (rewrite State section with new info, don't append)
    - If new: check notability gate, then store the page in voltmind with the appropriate type and slug
-3. **Append to timeline.** Add a timeline entry in voltmind for each event, with date, summary, and source citation.
-4. **Create cross-reference links.** Link entities in voltmind for every entity pair mentioned together, using the appropriate relationship type.
-5. **Back-link all entities.** Update EVERY mentioned entity's page with a back-link to this page (Iron Law).
-6. **Timeline merge.** The same event appears on ALL mentioned entities' timelines. If Alice met Bob at Acme Corp, the event goes on Alice's page, Bob's page, and Acme Corp's page.
+5. **Long-running tracking.** Persist raw evidence first, then let the runtime
+   resolve explicit `tracking_refs` against existing `tracking_bindings`. Never
+   create a new project merely because a new source event arrived; unresolved or
+   ambiguous matches go to `state/indexes/project-tracking-review`. For remote
+   company evidence, forward the normalized event to `POST /ingest/events`;
+   local Markdown writes plus `voltmind sync` do not execute project tracking.
+6. **Append to entity timelines.** Add timeline entries only to page types listed
+   in this skill's `writes_to`. Never use the generic timeline tool to bypass
+   the server runtime for a project, workstream, or canonical state object.
+7. **Create cross-reference links.** Link entities in voltmind for every entity pair mentioned together, using the appropriate relationship type.
+8. **Back-link all entities.** Update EVERY mentioned entity's page with a back-link to this page (Iron Law).
+9. **Timeline merge.** The same event appears on ALL mentioned entities' timelines. If Alice met Bob at Acme Corp, the event goes on Alice's page, Bob's page, and Acme Corp's page.
+
+### Teams group-chat identity and later reconciliation
+
+During MVP, a durable Teams group chat is an `orgs/` page with
+`org_kind: teams_group_chat` and `classification_status: provisional` when the
+connector cannot prove a formal organizational unit. This is an ingestion
+container, not a claim about the company's org chart.
+
+When deeper Graph permissions become available, reconcile in place by stable
+Teams identifiers. Update `org_kind`, ownership, membership, and scope on the
+same page; do not create a second org page merely because the chat is later
+resolved to a formal Team, Department, Function, Committee, or Working Group.
+
+### Microsoft reference ingest
+
+The connector owns Microsoft OAuth and delta cursors. VoltMind accepts only the
+OAuth-bound relay's normalized event and never accepts `source_id` from the
+payload. `POST /ingest/events` is idempotent by source, platform, event ID, and
+event version; replaying an older version cannot overwrite a newer page.
+
+The managed `voltmind:file-refs` block is searchable content. Human-authored
+content and non-relay references must remain untouched when a relay refreshes
+the block. `search_file_refs` is preferred for exact path, item ID, service, or
+MIME queries; normal `search`/`query` results also carry hydrated `file_refs`.
+
+### Mapped shared-drive reference ingest
+
+For RaiDrive, SMB, or another mapped shared drive, configure the same logical
+`root_key` on every client (for example `synology-public`). Keep each
+workstation's local drive and UNC roots only in its file-plane
+`~/.voltmind/config.json` under `client_file_roots`. Before ingestion, call the
+client resolver to emit only `root_key`, `relative_path`, and optional
+`file_id`; never send or persist a drive letter or username-bearing RaiDrive
+host. At query time, resolve the returned logical locator locally.
+
+If the connector supplies a stable NAS/SMB file ID, send it as `file_id`; this
+lets a move or rename update one reference. Without `file_id`, identity is
+path-based, so a move or rename cannot be proven to be the same file and may
+appear as a new reference. Missing mappings or temporary access failures must
+not delete an existing reference.
 
 ## Entity Detection on Every Message
 
@@ -282,6 +385,8 @@ up 100 bad pages is enormous.
 - **Skipping raw source preservation.** Every ingested item must have its raw source preserved. A brain page without provenance is unverifiable.
 - **Bulk processing without sample test.** Test on 3-5 items first. Fix quality issues in the approach, not via one-off patches.
 - **Paraphrasing the user's original thinking.** The user's exact language IS the insight. Capture verbatim phrasing for ideas, theses, and frameworks.
+- **Writing project tracking state from the client skill.** Preserve and submit
+  evidence; the company-server worker owns project/workstream/state mutations.
 
 ## Output Format
 

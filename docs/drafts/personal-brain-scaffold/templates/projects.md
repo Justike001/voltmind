@@ -16,6 +16,8 @@ status: proposed | active | paused | shipped | archived
 my_role: owner | contributor | reviewer | observer
 team: orgs/team-slug
 workstream: workstreams/workstream-slug
+tracking_bindings: []
+tracking_aliases: []
 related_people: []
 related_companies: []
 related_systems: []
@@ -26,6 +28,12 @@ tags: []
 # Project Name
 
 > One-paragraph current state.
+
+<!-- voltmind:tracking-state:begin -->
+## Tracked Current State
+
+Runtime-maintained progress appears here after an explicitly bound source is ingested.
+<!-- voltmind:tracking-state:end -->
 
 ## State
 

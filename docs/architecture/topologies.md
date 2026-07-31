@@ -108,6 +108,49 @@ instead of a local DB connection:
 }
 ```
 
+The same file can also carry workstation-local shared-drive mappings. These
+settings are part of the client file plane: they are never merged from the
+host database or sent to the host.
+
+```jsonc
+{
+  "client_file_roots": {
+    "synology-public": {
+      "local_root": "Z:\\",
+      "unc_root": "\\\\RaiDrive-CurrentUser\\Synology"
+    }
+  }
+}
+```
+
+The host persists only the canonical locator (`root_key`, `relative_path`, and
+optional stable `file_id`). In the steady-state ingestion/query protocol, the
+client normalizes `Z:\...` or its username-specific UNC equivalent before
+ingestion and reconstructs a local `resolved_open_path` after query.
+Consequently:
+
+- a host service never needs the mapped drive;
+- different users can use different drive letters or RaiDrive usernames;
+- a missing mapping is a client resolution failure, not a server-side file
+  tombstone;
+- `voltmind file-refs scrub-open-paths` can remove legacy workstation paths
+  after a dry-run review.
+
+The one-time remote backfill is the narrow exception: it may send a drive-root
+prefix such as `Z:\` and the UNC share name so the host can recognize paths
+already embedded in legacy page text. These matching hints are not persisted;
+the username-bearing UNC host is never sent.
+
+Configure and verify the file plane with:
+
+```bash
+voltmind client-roots add synology-public \
+  --local-root 'Z:\' \
+  --unc-root '\\RaiDrive-CurrentUser\Synology'
+voltmind client-roots test synology-public
+voltmind file-refs search 'Z:\Public\example.xlsx'
+```
+
 The CLI dispatch guard refuses any DB-bound command (`sync`, `embed`,
 `extract`, `migrate`, `apply-migrations`, `repair-jsonb`, `orphans`,
 `integrity`, `serve`) on a thin-client install with a clear error pointing
