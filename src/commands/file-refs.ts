@@ -33,7 +33,23 @@ export interface BackfillReport {
   refs_found: number;
   pages_updated: number;
   unresolved_path_refs: number;
+  /** Source-scoped, credential-free preview details. URLs and provider IDs are omitted. */
+  candidates: BackfillCandidate[];
+  candidate_details_truncated: boolean;
 }
+
+export interface BackfillCandidate {
+  page_slug: string;
+  provider: ExternalFileReferenceV1['provider'];
+  service: ExternalFileReferenceV1['service'];
+  name: string;
+  availability: ExternalFileReferenceV1['availability'];
+  display_path?: string;
+  root_key?: string;
+  relative_path?: string;
+}
+
+const MAX_BACKFILL_CANDIDATE_DETAILS = 100;
 
 function parseArgs(args: string[]): BackfillArgs {
   const sourceIndex = args.indexOf('--source');
@@ -104,7 +120,7 @@ function stripTrailingSeparators(path: string): string {
 
 function mappedDriveRef(rawPath: string, options: BackfillArgs): ExternalFileReferenceV1 | null {
   if (!options.rootKey || (!options.localRoot && !options.uncRoot && !options.uncShare)) return null;
-  const candidate = rawPath.trim().replace(/[.,;:]+$/g, '');
+  const candidate = rawPath.trim().replace(/[.,;:，。；：]+$/g, '');
   const roots = [options.localRoot, options.uncRoot].filter((root): root is string => Boolean(root));
   const matchedRoot = roots.find((root) => {
     const normalizedRoot = stripTrailingSeparators(root).toLowerCase();
@@ -168,9 +184,45 @@ function refsFromPage(frontmatter: unknown, text: string, options: BackfillArgs)
     seenMapped.add(key);
     unresolved++;
   };
-  for (const match of text.matchAll(/`((?:[a-z]:[\\/]|\\\\)[^`\r\n]+)`/gi)) addMappedPath(match[1]);
-  for (const match of text.matchAll(/(?:[a-z]:\\|\\\\[^\\\s]+\\[^\\\s]+\\)[^\s)<>\]]+/gi)) addMappedPath(match[0]);
+  const inlinePathRanges: Array<{ start: number; end: number }> = [];
+  for (const match of text.matchAll(/`((?:[a-z]:[\\/]|\\\\)[^`\r\n]+)`/gi)) {
+    addMappedPath(match[1]);
+    if (match.index !== undefined) {
+      inlinePathRanges.push({ start: match.index, end: match.index + match[0].length });
+    }
+  }
+  // Markdown backticks and sentence punctuation terminate a raw path. Without
+  // these delimiters, a path such as `Z:\\folder` followed by prose was
+  // incorrectly indexed a second time with the closing backtick and prose.
+  for (const match of text.matchAll(/(?:[a-z]:\\|\\\\[^\\\s]+\\[^\\\s]+\\)[^\s`)<>\]，。；：、]+/gi)) {
+    if (match.index !== undefined && inlinePathRanges.some(range => match.index! >= range.start && match.index! < range.end)) {
+      continue;
+    }
+    addMappedPath(match[0]);
+  }
   return { refs, unresolved };
+}
+
+function backfillCandidate(pageSlug: string, ref: ExternalFileReferenceV1): BackfillCandidate {
+  return ref.provider === 'filesystem'
+    ? {
+        page_slug: pageSlug,
+        provider: ref.provider,
+        service: ref.service,
+        name: ref.name,
+        availability: ref.availability,
+        display_path: ref.display_path,
+        root_key: ref.root_key,
+        relative_path: ref.relative_path,
+      }
+    : {
+        page_slug: pageSlug,
+        provider: ref.provider,
+        service: ref.service,
+        name: ref.name,
+        availability: ref.availability,
+        display_path: ref.display_path,
+      };
 }
 
 export async function backfillFileRefs(engine: BrainEngine, options: BackfillArgs): Promise<BackfillReport> {
@@ -191,6 +243,8 @@ export async function backfillFileRefs(engine: BrainEngine, options: BackfillArg
     refs_found: 0,
     pages_updated: 0,
     unresolved_path_refs: 0,
+    candidates: [],
+    candidate_details_truncated: false,
   };
 
   for (const row of pages) {
@@ -208,6 +262,13 @@ export async function backfillFileRefs(engine: BrainEngine, options: BackfillArg
     report.pages_with_refs++;
     report.refs_found += found.refs.length;
     report.unresolved_path_refs += found.unresolved;
+    for (const ref of found.refs) {
+      if (report.candidates.length >= MAX_BACKFILL_CANDIDATE_DETAILS) {
+        report.candidate_details_truncated = true;
+        break;
+      }
+      report.candidates.push(backfillCandidate(String(row.slug), ref));
+    }
     if (options.dryRun) continue;
 
     const page = {
