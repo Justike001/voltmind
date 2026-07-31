@@ -623,6 +623,11 @@ export const FRONTMATTER_LINK_MAP: FrontmatterFieldMapping[] = [
   { fields: ['lead'], pageType: 'deal', type: 'led_round', direction: 'incoming',
     dirHint: ['companies', 'funds', 'people'] },
   // Meeting pages
+  // Personal-brain operating state. These fields carry explicit, source-backed
+  // relationship slugs even when the body has no duplicate wikilink.
+  { fields: ['related_entities'], type: 'related_to', direction: 'outgoing', dirHint: '' },
+  { fields: ['related_people'], type: 'mentions', direction: 'outgoing', dirHint: 'people' },
+  { fields: ['owner'], pageType: 'action', type: 'assigned_to', direction: 'incoming', dirHint: 'people' },
   { fields: ['attendees'], pageType: 'meeting', type: 'attended', direction: 'incoming', dirHint: 'people' },
   // Any page type
   { fields: ['sources'], type: 'discussed_in', direction: 'incoming', dirHint: ['source', 'media'] },
@@ -677,7 +682,7 @@ export function makeResolver(
       const hints = Array.isArray(dirHint) ? dirHint : (dirHint ? [dirHint] : []);
 
       // Step 1: already a slug? (dir/name shape, lowercase, hyphenated)
-      if (/^[a-z][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/.test(trimmed)) {
+      if (/^[a-z][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)+$/.test(trimmed)) {
         const page = await engine.getPage(trimmed);
         if (page) {
           cache.set(cacheKey, trimmed);
@@ -838,6 +843,15 @@ export interface TimelineCandidate {
 // or `- **YYYY-MM-DD** - summary` or just `**YYYY-MM-DD** | summary`.
 const TIMELINE_LINE_RE = /^\s*-?\s*\*\*(\d{4}-\d{2}-\d{2})\*\*\s*[|\-–—]+\s*(.+?)\s*$/;
 
+
+/**
+ * Backlink maintenance writes dated "Referenced in [page]" bullets to entity
+ * pages. They are navigational provenance, not events in the entity's
+ * timeline, so graph extraction must never materialize them as timeline rows.
+ */
+export function isBacklinkTimelineEntry(summary: string): boolean {
+  return /^Referenced in\s+\[[^\]]+\]\(/i.test(summary.trim());
+}
 /**
  * Parse timeline entries from content. Looks at:
  *   - The full content (most pages have a top-level "## Timeline" heading).
@@ -860,7 +874,7 @@ export function parseTimelineEntries(content: string): TimelineCandidate[] {
     }
     const date = m[1];
     const summary = m[2].trim();
-    if (!isValidDate(date) || summary.length === 0) {
+    if (!isValidDate(date) || summary.length === 0 || isBacklinkTimelineEntry(summary)) {
       i++;
       continue;
     }

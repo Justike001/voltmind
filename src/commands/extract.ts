@@ -34,7 +34,7 @@ import type { BrainEngine, LinkBatchInput, TimelineBatchInput } from '../core/en
 import type { PageType } from '../core/types.ts';
 import { parseMarkdown } from '../core/markdown.ts';
 import {
-  extractPageLinks, parseTimelineEntries, inferLinkType, makeResolver,
+  extractPageLinks, parseTimelineEntries, inferLinkType, makeResolver, isBacklinkTimelineEntry,
   extractFrontmatterLinks,
   type UnresolvedFrontmatterRef,
 } from '../core/link-extraction.ts';
@@ -276,7 +276,7 @@ export async function extractLinksFromFile(
       async resolve(name: string, dirHint?: string | string[]): Promise<string | null> {
         if (!name) return null;
         const trimmed = name.trim();
-        if (/^[a-z][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/.test(trimmed) && allSlugs.has(trimmed)) {
+        if (/^[a-z][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)+$/.test(trimmed) && allSlugs.has(trimmed)) {
           return trimmed;
         }
         const hints = Array.isArray(dirHint) ? dirHint : (dirHint ? [dirHint] : []);
@@ -320,7 +320,10 @@ export function extractTimelineFromContent(content: string, slug: string): Extra
   const bulletPattern = /^-\s+\*\*(\d{4}-\d{2}-\d{2})\*\*\s*\|\s*(.+?)\s*[—–-]\s*(.+)$/gm;
   let match;
   while ((match = bulletPattern.exec(content)) !== null) {
-    entries.push({ slug, date: match[1], source: match[2].trim(), summary: match[3].trim() });
+    const source = match[2].trim();
+    const summary = match[3].trim();
+    if (isBacklinkTimelineEntry(`${source} — ${summary}`) || isBacklinkTimelineEntry(source)) continue;
+    entries.push({ slug, date: match[1], source, summary });
   }
 
   // Format 2: Header — ### YYYY-MM-DD — Title
@@ -1149,6 +1152,12 @@ async function extractLinksFromDB(
   }
 
   for (const { slug, source_id } of allRefs) {
+    // Templates describe future page shapes; their placeholder frontmatter is not graph evidence.
+    if (slug.startsWith('templates/')) {
+      processed++;
+      progress.tick(1);
+      continue;
+    }
     const page = await engine.getPage(slug, { sourceId: source_id });
     if (!page) continue;
     if (typeFilter && page.type !== typeFilter) continue;
@@ -1303,6 +1312,12 @@ async function extractTimelineFromDB(
   }
 
   for (const { slug, source_id } of allRefs) {
+    // Templates describe future page shapes; their placeholder frontmatter is not graph evidence.
+    if (slug.startsWith('templates/')) {
+      processed++;
+      progress.tick(1);
+      continue;
+    }
     const page = await engine.getPage(slug, { sourceId: source_id });
     if (!page) continue;
     if (typeFilter && page.type !== typeFilter) continue;
