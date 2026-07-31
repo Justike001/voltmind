@@ -16,6 +16,7 @@ import {
   _resetPackLocatorForTests,
 } from '../src/core/schema-pack/load-active.ts';
 import { _resetPackCacheForTests } from '../src/core/schema-pack/registry.ts';
+import { loadPackFromFile } from '../src/core/schema-pack/loader.ts';
 import type { OperationContext } from '../src/core/operations.ts';
 import { withEnv } from './helpers/with-env.ts';
 
@@ -259,6 +260,20 @@ describe('schema_apply_mutations', () => {
       }) as Record<string, unknown>;
       expect(result.mutations_applied).toBe(1);
       expect(result.batch_id).toBeDefined();
+    });
+  });
+
+  it('applies set_takes_bootstrap independently from extractable', async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_AUDIT_DIR: auditDir }, async () => {
+      const path = seedPack('mine');
+      const result = await operationsByName.schema_apply_mutations!.handler(ctxOf(), {
+        pack: 'mine',
+        mutations: [{ op: 'set_takes_bootstrap', type: 'person', value: true }],
+      }) as Record<string, unknown>;
+      expect(result.mutations_applied).toBe(1);
+      const type = loadPackFromFile(path).page_types[0]!;
+      expect(type.takes_bootstrap).toBe(true);
+      expect(type.extractable).toBe(false);
     });
   });
 

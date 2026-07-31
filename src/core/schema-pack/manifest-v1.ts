@@ -71,6 +71,14 @@ const PageTypeSchema = z.object({
    */
   extractable: z.boolean().default(false),
   /**
+   * Whether long-form pages of this type are eligible for the opt-in,
+   * LLM-backed takes bootstrap. This is deliberately independent from
+   * `extractable`: facts extraction and belief/claim extraction have
+   * different source-quality and cost profiles.
+   */
+  // Missing is the wire-compatible representation of false for older packs.
+  takes_bootstrap: z.boolean().optional(),
+  /**
    * Whether this type is an "expert" for find_experts / whoknows queries
    * (replaces hardcoded ['person','company'] at whoknows.ts:89 + the
    * find_experts SQL hardcodes).

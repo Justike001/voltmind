@@ -159,6 +159,7 @@ export const META_CHECK_NAMES: ReadonlySet<string> = new Set([
   'schema_pack_active',
   'schema_pack_consistency',
   'schema_pack_source_drift',
+  'takes_bootstrap_schema',
   'schema_version',
   'slug_fallback_audit',
   'upgrade_errors',

@@ -64,6 +64,7 @@ page_types:
     # extractable: false — learnings ARE distilled engineering insights;
     # they're not raw source material for further fact extraction.
     extractable: false
+    takes_bootstrap: true
     # expert_routing: false — learnings surface in code-aware queries
     # via direct slug search, not via whoknows/find_experts (whoknows is
     # person+company shaped, learnings are pattern shaped).

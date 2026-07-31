@@ -56,6 +56,7 @@ page_types:
     # them too (imported_from frontmatter marker handles the greenfield case;
     # the type itself signals "leaf node, no further derivation").
     extractable: false
+    takes_bootstrap: true
     # expert_routing: false — atoms don't surface in whoknows/find_experts.
     # Concepts (parent type from base) carry the routing weight for content
     # discovery; atoms are content-creator-internal raw material.

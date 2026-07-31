@@ -23,6 +23,7 @@ tools:
   - voltmind schema add-link-type
   - voltmind schema remove-link-type
   - voltmind schema set-extractable
+  - voltmind schema set-takes-bootstrap
   - voltmind schema set-expert-routing
   - voltmind schema sync
   - voltmind schema reload
@@ -86,6 +87,7 @@ Invoke when the user (or a sibling skill) says any of:
 - "I have 4000 untyped pages under `meetings/`"
 - "My brain doesn't know that `journal-article` is a type"
 - "Set `paper` to be extractable"
+- "Use `thesis` for takes bootstrap"
 - "Propose types from what I've ingested"
 - "Sync the new types to backfill existing pages"
 
@@ -159,6 +161,7 @@ voltmind schema add-type researcher \
   --primitive entity \
   --prefix people/researchers/ \
   --extractable \
+  --takes-bootstrap \
   --expert
 ```
 
@@ -167,7 +170,7 @@ that points to it), agents reaching this surface over MCP can use the
 batched `schema_apply_mutations` op:
 
 ```jsonl
-{"op": "add_type", "name": "researcher", "primitive": "entity", "prefix": "people/researchers/", "extractable": true, "expert_routing": true}
+{"op": "add_type", "name": "researcher", "primitive": "entity", "prefix": "people/researchers/", "extractable": true, "takes_bootstrap": true, "expert_routing": true}
 {"op": "add_type", "name": "paper", "primitive": "annotation", "prefix": "research/papers/", "extractable": true}
 {"op": "add_link_type", "name": "authored", "inference": {"page_type": "researcher", "target_type": "paper"}}
 ```
@@ -178,8 +181,8 @@ Validate before sync:
 voltmind schema lint --with-db
 ```
 
-The `--with-db` flag opts into the 2 DB-aware rules
-(`extractable_empty_corpus`, `mutation_count_anomaly`) that detect
+The `--with-db` flag opts into the 3 DB-aware rules
+(`extractable_empty_corpus`, `takes_bootstrap_empty_corpus`, `mutation_count_anomaly`) that detect
 mis-declared types you'd otherwise discover only at runtime.
 
 ### Phase 5 — Sync (backfill existing pages with the new types)
@@ -239,6 +242,13 @@ loadActivePack — v0.40.6.0 closed the cross-process invalidation gap).
 - `pages.type` backfilled on matching rows after `sync --apply`.
 - Query paths (`whoknows`, `find_experts`) now route through the new
   expert types.
+
+## Takes bootstrap boundary
+
+`extractable` is facts eligibility. `takes_bootstrap` is the separate, opt-in
+LLM path for weighted beliefs and claims. Do not derive one from the other. A
+missing `takes_bootstrap` flag means false and therefore no LLM cost. The fence
+parser for already-authored takes remains type-agnostic.
 
 ## Contract
 

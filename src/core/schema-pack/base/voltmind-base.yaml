@@ -49,8 +49,8 @@ takes_kinds:
 #
 # Each entry: primitive (defaults source), path_prefixes (inferType
 # mapping), aliases (empty by default — opt-in via user pack),
-# extractable (facts-eligible), expert_routing (whoknows/find_experts
-# candidate).
+# extractable (facts-eligible), takes_bootstrap (opt-in LLM takes source),
+# expert_routing (whoknows/find_experts candidate).
 page_types:
   # Stronger-signal types first (override ancestor-directory matches).
   - name: writing
@@ -59,6 +59,7 @@ page_types:
       - writing/
     aliases: []
     extractable: true
+    takes_bootstrap: true
     expert_routing: false
 
   - name: analysis
@@ -116,6 +117,7 @@ page_types:
     # explicitly. The pack-driven-ELIGIBLE_TYPES refactor (which would
     # make this flag actually drive backstop behavior) is a v0.42+ TODO.
     extractable: true
+    takes_bootstrap: true
     expert_routing: false
 
   - name: person
@@ -260,6 +262,7 @@ page_types:
       - atoms/
     aliases: []
     extractable: false
+    takes_bootstrap: true
     expert_routing: false
 
   # Types with no path prefix (set explicitly via frontmatter).

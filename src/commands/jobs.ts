@@ -1637,27 +1637,35 @@ export async function registerBuiltinHandlers(
     const data = (job.data ?? {}) as { sourceId?: string; maxPages?: number };
     const bootstrapCfg = await engine.getConfig('takes.bootstrap_enabled');
     const bootstrapEnabled = bootstrapCfg === 'true' || bootstrapCfg === '1';
-    // Schema packs are source-scoped. An unresolvable pack is an empty
-    // eligibility set (fail closed), so a background job cannot silently
-    // fall back to the retired hardcoded Gbrain page types.
+    const { resolveSourceId } = await import('../core/source-resolver.ts');
+    const sourceId = await resolveSourceId(engine, data.sourceId);
     const { loadConfig } = await import('../core/config.ts');
     const { loadActivePack } = await import('../core/schema-pack/load-active.ts');
-    const { extractableTypesFromPack } = await import('../core/schema-pack/extractable.ts');
+    const { takesBootstrapTypesFromPack } = await import('../core/schema-pack/takes-bootstrap.ts');
     let eligiblePageTypes = new Set<string>();
+    let packIdentity: string | undefined;
+    let packLoadError: string | undefined;
     try {
+      const sourcePack = await engine.getConfig(`schema_pack.source.${sourceId}`);
+      const dbConfig = await engine.getConfig('schema_pack');
       const pack = await loadActivePack({
         cfg: loadConfig(),
         remote: false,
-        sourceId: data.sourceId,
+        sourceId,
+        perSourceDb: sourcePack ? new Map([[sourceId, sourcePack]]) : undefined,
+        dbConfig: dbConfig ?? undefined,
       });
-      eligiblePageTypes = extractableTypesFromPack(pack.manifest);
-    } catch {
-      // Empty eligibility set is the intentional fail-closed behavior.
+      eligiblePageTypes = takesBootstrapTypesFromPack(pack.manifest);
+      packIdentity = pack.identity;
+    } catch (error) {
+      packLoadError = error instanceof Error ? error.message : String(error);
     }
     return await extractTakesFromPages(engine, {
       bootstrapEnabled,
-      sourceIdFilter: data.sourceId,
+      sourceIdFilter: sourceId,
       eligiblePageTypes,
+      packIdentity,
+      packLoadError,
       maxPages: data.maxPages,
     });
   });

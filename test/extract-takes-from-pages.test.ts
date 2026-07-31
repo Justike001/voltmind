@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { extractTakesFromPages } from '../src/core/extract-takes-from-pages.ts';
 import { __setChatTransportForTests, resetGateway, type ChatResult } from '../src/core/ai/gateway.ts';
-import { extractableTypesFromPack } from '../src/core/schema-pack/extractable.ts';
+import { takesBootstrapTypesFromPack } from '../src/core/schema-pack/takes-bootstrap.ts';
 
 let engine: PGLiteEngine;
 
@@ -40,7 +40,7 @@ function installChatStub(onCall: () => void): void {
 }
 
 describe('extractTakesFromPages — schema-pack eligibility', () => {
-  test('extracts a custom extractable type and ignores retired legacy types', async () => {
+  test('uses takes_bootstrap independently from facts extractable', async () => {
     const suffix = Math.random().toString(36).slice(2, 10);
     const custom = await engine.putPage(`research/${suffix}`, {
       title: 'Custom research', type: 'research-brief', compiled_truth: LONG_BODY,
@@ -49,10 +49,10 @@ describe('extractTakesFromPages — schema-pack eligibility', () => {
       title: 'Legacy-shaped page', type: 'concept', compiled_truth: LONG_BODY,
     });
 
-    const eligiblePageTypes = extractableTypesFromPack({
+    const eligiblePageTypes = takesBootstrapTypesFromPack({
       page_types: [
-        { name: 'research-brief', extractable: true },
-        { name: 'concept', extractable: false },
+        { name: 'research-brief', extractable: false, takes_bootstrap: true },
+        { name: 'concept', extractable: true, takes_bootstrap: false },
       ],
     } as never);
     let chatCalls = 0;
@@ -68,6 +68,41 @@ describe('extractTakesFromPages — schema-pack eligibility', () => {
     expect(result.claims_extracted).toBe(1);
     expect(chatCalls).toBe(1);
     expect(await engine.listTakes({ page_id: custom.id })).toHaveLength(1);
+  });
+
+  test('reports an empty matching corpus without checking or calling the LLM', async () => {
+    let chatCalls = 0;
+    installChatStub(() => { chatCalls++; });
+
+    const result = await extractTakesFromPages(engine, {
+      bootstrapEnabled: true,
+      sourceIdFilter: 'default',
+      packIdentity: 'custom@1.0.0+deadbeef',
+      eligiblePageTypes: new Set(['type-with-no-pages']),
+    });
+
+    expect(result).toMatchObject({
+      pages_scanned: 0,
+      no_op_reason: 'no_matching_pages',
+      source_id: 'default',
+      pack_identity: 'custom@1.0.0+deadbeef',
+      eligible_page_types: ['type-with-no-pages'],
+    });
+    expect(chatCalls).toBe(0);
+  });
+
+  test('reports pack load failure as a distinct fail-closed state', async () => {
+    let chatCalls = 0;
+    installChatStub(() => { chatCalls++; });
+
+    const result = await extractTakesFromPages(engine, {
+      bootstrapEnabled: true,
+      eligiblePageTypes: new Set(),
+      packLoadError: 'unknown schema pack: missing',
+    });
+
+    expect(result).toMatchObject({ no_op_reason: 'pack_load_failed', pack_load_error: 'unknown schema pack: missing' });
+    expect(chatCalls).toBe(0);
   });
 
   test('an empty pack eligibility set makes no LLM call', async () => {

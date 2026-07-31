@@ -1,4 +1,4 @@
-// v0.40.6.0 — lint-rules.ts unit tests. 36 cases (11 rules covering each
+// v0.40.6.0 — lint-rules.ts unit tests. 38 cases (12 rules covering each
 // of clean / single-violation / multi-violation paths plus the audit-aware
 // rule's empty-DB and audit-best-effort paths).
 
@@ -39,12 +39,13 @@ function mk(opts: Partial<SchemaPackManifest>): SchemaPackManifest {
   } as SchemaPackManifest;
 }
 
-const baseType = (over: { name: string; aliases?: string[]; extractable?: boolean; expert?: boolean; prefixes?: string[] }) => ({
+const baseType = (over: { name: string; aliases?: string[]; extractable?: boolean; takesBootstrap?: boolean; expert?: boolean; prefixes?: string[] }) => ({
   name: over.name,
   primitive: 'entity' as const,
   path_prefixes: over.prefixes ?? [],
   aliases: over.aliases ?? [],
   extractable: over.extractable ?? false,
+  takes_bootstrap: over.takesBootstrap ?? false,
   expert_routing: over.expert ?? false,
 });
 
@@ -331,12 +332,34 @@ describe('runAllLintRules — composition', () => {
   });
 });
 
-describe('rule registry shape', () => {
-  it('ALL_LINT_RULES contains 11 rules', () => {
-    expect(ALL_LINT_RULES.length).toBe(11);
+describe('takes bootstrap DB-aware diagnostics', () => {
+  it('warns when enabled pack has no eligible types', async () => {
+    const manifest = mk({ page_types: [baseType({ name: 'meeting', extractable: true })] });
+    const engine = {
+      getConfig: async () => 'true',
+      executeRaw: async () => [{ cnt: '0' }],
+    } as never;
+    const report = await runAllLintRules(manifest, { engine });
+    expect(report.warnings.some((warning) => warning.rule === 'takes_bootstrap_no_eligible_types')).toBe(true);
   });
 
-  it('FILE_PLANE_LINT_RULES excludes the 2 DB-aware rules', () => {
+  it('warns when an eligible canonical type has no pages', async () => {
+    const manifest = mk({ page_types: [baseType({ name: 'atom', takesBootstrap: true })] });
+    const engine = {
+      getConfig: async () => 'true',
+      executeRaw: async () => [{ cnt: '0' }],
+    } as never;
+    const report = await runAllLintRules(manifest, { engine });
+    expect(report.warnings.some((warning) => warning.rule === 'takes_bootstrap_empty_corpus')).toBe(true);
+  });
+});
+
+describe('rule registry shape', () => {
+  it('ALL_LINT_RULES contains 12 rules', () => {
+    expect(ALL_LINT_RULES.length).toBe(12);
+  });
+
+  it('FILE_PLANE_LINT_RULES excludes the 3 DB-aware rules', () => {
     expect(FILE_PLANE_LINT_RULES.length).toBe(9);
     expect(FILE_PLANE_LINT_RULES.every((r) => !r.planeAware)).toBe(true);
   });

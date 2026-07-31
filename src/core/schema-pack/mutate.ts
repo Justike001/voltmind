@@ -30,11 +30,11 @@
 //       (atomic rename) or the original file stays untouched. The .tmp may
 //       linger on crash; the next call cleans it up before writing.
 //
-// Public API: 11 mutation primitives wrapping the skeleton:
+// Public API: 12 mutation primitives wrapping the skeleton:
 //   add_type, remove_type, update_type
 //   add_alias, remove_alias, add_prefix, remove_prefix
 //   add_link_type, remove_link_type
-//   set_extractable, set_expert_routing
+//   set_extractable, set_takes_bootstrap, set_expert_routing
 //
 // All primitives return the same MutateResult shape so MCP's batched
 // `schema_apply_mutations` op (Phase 7) can compose them homogeneously.
@@ -96,6 +96,7 @@ export class SchemaPackMutationError extends Error {
 export const BUNDLED_PACK_NAMES = new Set([
   'voltmind-base',
   'voltmind-recommended',
+  'voltmind-personal-brain',
   'voltmind-company-core',
   'voltmind-creator',
   'voltmind-investor',
@@ -318,7 +319,7 @@ function writePackManifest(
  * Run a mutator function against a pack with full safety guarantees:
  * atomic write, per-pack lock, audit log, cache + query-cache invalidation.
  *
- * All 11 mutation primitives below wrap this skeleton — they're each
+ * All 12 mutation primitives below wrap this skeleton — they're each
  * ~5 lines that build the transformation function. Adding a new
  * primitive only requires writing the pure transformation.
  *
@@ -492,7 +493,7 @@ function checkNoReferences(manifest: SchemaPackManifest, typeName: string): void
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// 11 mutation primitives
+// 12 mutation primitives
 // ────────────────────────────────────────────────────────────────────────
 
 export interface AddTypeOpts {
@@ -500,6 +501,7 @@ export interface AddTypeOpts {
   primitive: PackPrimitive;
   prefix: string;
   extractable?: boolean;
+  takesBootstrap?: boolean;
   expertRouting?: boolean;
   aliases?: string[];
 }
@@ -522,6 +524,7 @@ export async function addTypeToPack(packName: string, opts: AddTypeOpts, mutateO
       path_prefixes: [opts.prefix],
       aliases: opts.aliases ?? [],
       extractable: opts.extractable ?? false,
+      takes_bootstrap: opts.takesBootstrap ?? false,
       expert_routing: opts.expertRouting ?? false,
     };
     return { ...m, page_types: [...m.page_types, newType] };
@@ -645,6 +648,15 @@ export async function removeLinkTypeFromPack(packName: string, linkName: string,
 
 export async function setExtractableOnType(packName: string, typeName: string, value: boolean, mutateOpts: MutateOpts = {}): Promise<MutateResult> {
   return updateTypeOnPack(packName, { name: typeName, patch: { extractable: value } }, { ...mutateOpts });
+}
+
+export async function setTakesBootstrapOnType(packName: string, typeName: string, value: boolean, mutateOpts: MutateOpts = {}): Promise<MutateResult> {
+  validateTypeName(typeName);
+  return withMutation(packName, mutateOpts, (manifest) => {
+    const type = findType(manifest, typeName);
+    const updated: PackPageType = { ...type, takes_bootstrap: value };
+    return { ...manifest, page_types: manifest.page_types.map((pageType) => pageType.name === typeName ? updated : pageType) };
+  }, 'set_takes_bootstrap', { type: typeName });
 }
 
 export async function setExpertRoutingOnType(packName: string, typeName: string, value: boolean, mutateOpts: MutateOpts = {}): Promise<MutateResult> {

@@ -82,6 +82,7 @@ page_types:
     # can mine into facts (the thesis itself is a claim; sub-bets are
     # claims). extract_facts walks them.
     extractable: true
+    takes_bootstrap: true
     # expert_routing: false — theses don't surface in find_experts;
     # founders + companies carry that weight.
     expert_routing: false

@@ -21,6 +21,36 @@ The epistemological layer. WHO believes WHAT, with confidence weight and time.
 
 **Query surface:** `voltmind takes list`, `voltmind takes search`, `voltmind think`
 
+### LLM bootstrap eligibility
+
+The bootstrap path is an explicit, pack-authored source policy — not a page
+index and not the facts extractor. A canonical page type participates only when
+the source's resolved Schema Pack declares:
+
+```yaml
+page_types:
+  - name: atom
+    extractable: false
+    takes_bootstrap: true
+```
+
+- `extractable` controls facts extraction.
+- `takes_bootstrap` controls the opt-in LLM pass that emits weighted
+  `fact` / `take` / `bet` / `hunch` claims.
+- The takes fence parser reads already-authored fences for every page type and
+  does not consult either flag.
+- Matching uses canonical frontmatter `type` values (for example `original`),
+  never directory names (for example `originals`). An `atom` declaration
+  also covers `type: atom, subtype: lore`.
+- Missing `takes_bootstrap`, an empty eligible set, a failed pack resolution,
+  or zero matching pages all fail closed before an LLM call.
+
+The path remains double-gated: `takes.bootstrap_enabled=true` plus explicit
+`voltmind takes extract --from-pages --yes`. Pack authors can change the flag
+with `voltmind schema set-takes-bootstrap <type> <true|false>` on a writable
+pack.
+
+
 ## Facts (hot memory — `facts` table, v0.31)
 
 Personal knowledge from the brain owner's conversations. Real-time capture.

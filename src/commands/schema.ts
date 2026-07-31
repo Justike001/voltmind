@@ -13,7 +13,7 @@
 //                         update-type, add-alias, remove-alias,
 //                         add-prefix, remove-prefix, add-link-type,
 //                         remove-link-type, set-extractable,
-//                         set-expert-routing
+//                         set-takes-bootstrap, set-expert-routing
 //   Discovery + repair:   detect, suggest, review-candidates,
 //                         review-orphans, sync
 
@@ -40,6 +40,7 @@ import {
   SchemaPackMutationError,
   setExpertRoutingOnType,
   setExtractableOnType,
+  setTakesBootstrapOnType,
   UnknownPackError,
   updateTypeOnPack,
   __setPackLocatorForTests,
@@ -83,6 +84,7 @@ export async function runSchema(args: string[]): Promise<void> {
     case 'add-link-type': return runAddLinkTypeCmd(args.slice(1));
     case 'remove-link-type': return runRemoveLinkTypeCmd(args.slice(1));
     case 'set-extractable': return runSetExtractableCmd(args.slice(1));
+    case 'set-takes-bootstrap': return runSetTakesBootstrapCmd(args.slice(1));
     case 'set-expert-routing': return runSetExpertRoutingCmd(args.slice(1));
     case undefined:
     case '--help':
@@ -121,9 +123,9 @@ Authoring (v0.40.6.0):
   diff <a> <b>            Compare page_type sets across two packs
 
   add-type <name> --primitive <p> --prefix <dir/>
-                          [--extractable] [--expert] [--alias <a>]* [--pack <name>]
+                          [--extractable] [--takes-bootstrap] [--expert] [--alias <a>]* [--pack <name>]
   remove-type <name>      [--pack <name>]
-  update-type <name>      [--extractable BOOL] [--expert BOOL] [--primitive P] [--pack <name>]
+  update-type <name>      [--extractable BOOL] [--takes-bootstrap BOOL] [--expert BOOL] [--primitive P] [--pack <name>]
   add-alias <type> <alias>      [--pack <name>]
   remove-alias <type> <alias>   [--pack <name>]
   add-prefix <type> <prefix>    [--pack <name>]
@@ -131,6 +133,7 @@ Authoring (v0.40.6.0):
   add-link-type <name> [--inverse <verb>] [--page-type <t>] [--target-type <t>] [--pack <name>]
   remove-link-type <name>       [--pack <name>]
   set-extractable <type> <true|false>      [--pack <name>]
+  set-takes-bootstrap <type> <true|false>   [--pack <name>]
   set-expert-routing <type> <true|false>   [--pack <name>]
 
 Discovery + repair:
@@ -244,6 +247,7 @@ async function runShow(args: string[]): Promise<void> {
         directory: pt.path_prefixes[0] ?? null,
         path_prefixes: pt.path_prefixes,
         extractable: pt.extractable,
+        takes_bootstrap: pt.takes_bootstrap,
         expert_routing: pt.expert_routing,
         aliases: pt.aliases ?? [],
       })),
@@ -272,6 +276,7 @@ async function runShow(args: string[]): Promise<void> {
   for (const pt of manifest.page_types) {
     const flags: string[] = [];
     if (pt.extractable) flags.push('extractable');
+    if (pt.takes_bootstrap) flags.push('takes-bootstrap');
     if (pt.expert_routing) flags.push('expert');
     const flagStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
     const prefixStr = pt.path_prefixes.length > 0 ? ` (${pt.path_prefixes.join(', ')})` : '';
@@ -782,6 +787,7 @@ async function runExplainCmd(args: string[]): Promise<void> {
   console.log(`  path_prefixes: ${found.path_prefixes.join(', ')}`);
   console.log(`  aliases:       ${(found.aliases ?? []).join(', ') || '<none>'}`);
   console.log(`  extractable:   ${found.extractable}`);
+  console.log(`  takes_bootstrap: ${found.takes_bootstrap}`);
   console.log(`  expert_routing: ${found.expert_routing}`);
 }
 
@@ -1037,6 +1043,7 @@ async function runAddTypeCmd(args: string[]): Promise<void> {
   let primitive: string | undefined;
   let prefix: string | undefined;
   let extractable = false;
+  let takesBootstrap = false;
   let expert = false;
   const aliases: string[] = [];
   for (let i = 0; i < args.length; i++) {
@@ -1046,6 +1053,7 @@ async function runAddTypeCmd(args: string[]): Promise<void> {
     else if (a === '--prefix') prefix = args[++i];
     else if (a?.startsWith('--prefix=')) prefix = a.slice('--prefix='.length);
     else if (a === '--extractable') extractable = true;
+    else if (a === '--takes-bootstrap') takesBootstrap = true;
     else if (a === '--expert' || a === '--expert-routing') expert = true;
     else if (a === '--alias') aliases.push(args[++i]!);
     else if (a?.startsWith('--alias=')) aliases.push(a.slice('--alias='.length));
@@ -1058,7 +1066,7 @@ async function runAddTypeCmd(args: string[]): Promise<void> {
   try {
     const result = await addTypeToPack(packName, {
       name, primitive: primitive as PackPrimitive, prefix,
-      extractable, expertRouting: expert, aliases,
+      extractable, takesBootstrap, expertRouting: expert, aliases,
     });
     emitMutateResult(result, json);
   } catch (e) { handleMutationError(e); }
@@ -1085,6 +1093,10 @@ async function runUpdateTypeCmd(args: string[]): Promise<void> {
       const v = parseBool(args[++i]);
       if (v === null) { console.error('--extractable requires true|false'); process.exit(2); }
       patch.extractable = v;
+    } else if (a === '--takes-bootstrap') {
+      const v = parseBool(args[++i]);
+      if (v === null) { console.error('--takes-bootstrap requires true|false'); process.exit(2); }
+      patch.takes_bootstrap = v;
     } else if (a === '--expert' || a === '--expert-routing') {
       const v = parseBool(args[++i]);
       if (v === null) { console.error('--expert requires true|false'); process.exit(2); }
@@ -1171,6 +1183,17 @@ async function runSetExtractableCmd(args: string[]): Promise<void> {
   if (v === null) { console.error('Second argument must be true|false'); process.exit(2); }
   try { emitMutateResult(await setExtractableOnType(packName, pos[0]!, v), json); }
   catch (e) { handleMutationError(e); }
+}
+
+async function runSetTakesBootstrapCmd(args: string[]): Promise<void> {
+  const { json } = parseFlags(args);
+  const packName = pickPackName({}, args);
+  const pos = args.filter((a) => !a.startsWith('--'));
+  if (pos.length < 2) { console.error('Usage: voltmind schema set-takes-bootstrap <type> <true|false>'); process.exit(2); }
+  const value = parseBool(pos[1]);
+  if (value === null) { console.error('Second argument must be true|false'); process.exit(2); }
+  try { emitMutateResult(await setTakesBootstrapOnType(packName, pos[0]!, value), json); }
+  catch (error) { handleMutationError(error); }
 }
 
 async function runSetExpertRoutingCmd(args: string[]): Promise<void> {

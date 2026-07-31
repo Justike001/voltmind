@@ -118,6 +118,11 @@ export {
 } from './extractable.ts';
 
 export {
+  takesBootstrapTypesFromPack,
+  isTakesBootstrapType,
+} from './takes-bootstrap.ts';
+
+export {
   enrichableTypesFromPack,
   rubricNameForType,
 } from './enrichable.ts';
@@ -173,6 +178,7 @@ export {
   addLinkTypeToPack,
   removeLinkTypeFromPack,
   setExtractableOnType,
+  setTakesBootstrapOnType,
   setExpertRoutingOnType,
 } from './mutate.ts';
 

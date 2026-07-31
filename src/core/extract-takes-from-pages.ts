@@ -1,7 +1,7 @@
 // src/core/extract-takes-from-pages.ts
 // v0.41.18.0 (A12, A24, T9). Haiku classifier loop over the active source
-// pack's `extractable: true` page types extracts gradeable claims and inserts
-// them as takes fence rows. Eligibility intentionally arrives from the caller:
+// pack's `takes_bootstrap: true` page types extracts gradeable claims and
+// inserts them as takes rows. Eligibility intentionally arrives from the caller:
 // this low-level worker owns no schema-resolution policy, and must never
 // reintroduce a hardcoded legacy/Gbrain type allowlist.
 //
@@ -48,6 +48,10 @@ export interface ExtractTakesFromPagesOpts {
    * be resolved, rather than falling back to a legacy type list.
    */
   eligiblePageTypes: ReadonlySet<string>;
+  /** Resolved pack identity, surfaced in the result for auditability. */
+  packIdentity?: string;
+  /** Pack resolution failure. Forces a fail-closed, zero-cost no-op. */
+  packLoadError?: string;
   /** Max pages to classify per run (caps cost). Default 50. */
   maxPages?: number;
   /** Owner identifier for the inserted takes. Default 'system'. */
@@ -65,6 +69,17 @@ export interface ExtractTakesFromPagesResult {
   consent_gate_blocked: boolean;
   /** True if chat gateway is unavailable (no LLM call possible). */
   llm_unavailable: boolean;
+  source_id: string | null;
+  pack_identity: string | null;
+  eligible_page_types: string[];
+  no_op_reason:
+    | 'bootstrap_disabled'
+    | 'pack_load_failed'
+    | 'no_eligible_types'
+    | 'no_matching_pages'
+    | 'llm_unavailable'
+    | null;
+  pack_load_error?: string;
 }
 
 interface PageRow {
@@ -108,6 +123,13 @@ export async function extractTakesFromPages(
   engine: BrainEngine,
   opts: ExtractTakesFromPagesOpts,
 ): Promise<ExtractTakesFromPagesResult> {
+  const eligiblePageTypes = [...opts.eligiblePageTypes].sort();
+  const context = {
+    source_id: opts.sourceIdFilter ?? null,
+    pack_identity: opts.packIdentity ?? null,
+    eligible_page_types: eligiblePageTypes,
+  };
+
   // A12 consent gate: refuse without bootstrap_enabled even on manual call.
   if (!opts.bootstrapEnabled) {
     return {
@@ -115,12 +137,24 @@ export async function extractTakesFromPages(
       claims_extracted: 0,
       consent_gate_blocked: true,
       llm_unavailable: false,
+      ...context,
+      no_op_reason: 'bootstrap_disabled',
     };
   }
 
-  const eligiblePageTypes = [...opts.eligiblePageTypes];
+  if (opts.packLoadError) {
+    return {
+      pages_scanned: 0,
+      claims_extracted: 0,
+      consent_gate_blocked: false,
+      llm_unavailable: false,
+      ...context,
+      no_op_reason: 'pack_load_failed',
+      pack_load_error: opts.packLoadError,
+    };
+  }
 
-  // A custom pack can intentionally have no takes-extractable types. Return
+  // A custom pack can intentionally have no takes-bootstrap types. Return
   // before even checking the gateway so this path has no LLM call or cost.
   if (eligiblePageTypes.length === 0) {
     return {
@@ -128,21 +162,13 @@ export async function extractTakesFromPages(
       claims_extracted: 0,
       consent_gate_blocked: false,
       llm_unavailable: false,
-    };
-  }
-
-  const model = opts.model ?? 'anthropic:claude-haiku-4-5';
-  if (!isAvailable('chat', model)) {
-    return {
-      pages_scanned: 0,
-      claims_extracted: 0,
-      consent_gate_blocked: false,
-      llm_unavailable: true,
+      ...context,
+      no_op_reason: 'no_eligible_types',
     };
   }
 
   const dryRun = opts.dryRun ?? false;
-  const maxPages = opts.maxPages ?? 50;
+  const maxPages = Math.max(1, Math.min(1000, Math.trunc(opts.maxPages ?? 50)));
   const holder = opts.holder ?? 'system';
 
   const params: string[] = [...eligiblePageTypes];
@@ -165,6 +191,29 @@ export async function extractTakesFromPages(
       LIMIT ${maxPages}`,
     params,
   );
+
+  if (pages.length === 0) {
+    return {
+      pages_scanned: 0,
+      claims_extracted: 0,
+      consent_gate_blocked: false,
+      llm_unavailable: false,
+      ...context,
+      no_op_reason: 'no_matching_pages',
+    };
+  }
+
+  const model = opts.model ?? 'anthropic:claude-haiku-4-5';
+  if (!isAvailable('chat', model)) {
+    return {
+      pages_scanned: 0,
+      claims_extracted: 0,
+      consent_gate_blocked: false,
+      llm_unavailable: true,
+      ...context,
+      no_op_reason: 'llm_unavailable',
+    };
+  }
 
   let pagesScanned = 0;
   let claimsExtracted = 0;
@@ -241,5 +290,7 @@ export async function extractTakesFromPages(
     claims_extracted: claimsExtracted,
     consent_gate_blocked: false,
     llm_unavailable: false,
+    ...context,
+    no_op_reason: null,
   };
 }

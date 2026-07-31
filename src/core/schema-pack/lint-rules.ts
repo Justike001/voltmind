@@ -6,7 +6,7 @@
 //   - Phase 7's `schema_lint` MCP op composes them without printing to stdout.
 //
 // Each rule is a pure function: takes a manifest (+ optional opts) and
-// returns an array of issues. No I/O except for the two DB-aware rules,
+// returns an array of issues. No I/O except for the three DB-aware rules,
 // which gate on opts.engine being present (file-plane callers omit).
 //
 // Issue shape mirrors the StructuredAgentError envelope from
@@ -300,6 +300,44 @@ export const extractableEmptyCorpus: LintRule = async (manifest, opts) => {
   return issues;
 };
 
+export const takesBootstrapEmptyCorpus: LintRule = async (manifest, opts) => {
+  if (!opts?.engine) return [];
+  const enabled = await opts.engine.getConfig('takes.bootstrap_enabled');
+  if (enabled !== 'true' && enabled !== '1') return [];
+  const eligible = manifest.page_types.filter((type) => type.takes_bootstrap === true);
+  if (eligible.length === 0) {
+    return [{
+      rule: 'takes_bootstrap_no_eligible_types',
+      severity: 'warning',
+      message: `takes bootstrap is enabled but pack '${manifest.name}' declares no takes_bootstrap:true page types`,
+      pack: manifest.name,
+      hint: 'mark high-value prose types with takes_bootstrap:true or disable takes.bootstrap_enabled',
+    }];
+  }
+  const issues: LintIssue[] = [];
+  for (const type of eligible) {
+    try {
+      const rows = await opts.engine.executeRaw<{ cnt?: string | number }>(
+        `SELECT COUNT(*)::text AS cnt FROM pages WHERE deleted_at IS NULL AND type = $1`,
+        [type.name],
+      );
+      if (Number(rows[0]?.cnt ?? 0) === 0) {
+        issues.push({
+          rule: 'takes_bootstrap_empty_corpus',
+          severity: 'warning',
+          message: `type '${type.name}' is takes_bootstrap:true but matches 0 typed pages in the DB`,
+          pack: manifest.name,
+          type: type.name,
+          hint: 'check canonical page.type values and source pack routing before enabling the LLM bootstrap',
+        });
+      }
+    } catch {
+      return [];
+    }
+  }
+  return issues;
+};
+
 export const mutationCountAnomaly: LintRule = (manifest, opts) => {
   const daysBack = opts?.daysBack ?? 7;
   const issues: LintIssue[] = [];
@@ -337,6 +375,7 @@ export const ALL_LINT_RULES: ReadonlyArray<{ name: string; rule: LintRule; plane
   { name: 'prefix_collision', rule: prefixCollision, planeAware: false },
   { name: 'prefix_strict_subset_overlap', rule: prefixStrictSubsetOverlap, planeAware: false },
   { name: 'extractable_empty_corpus', rule: extractableEmptyCorpus, planeAware: true },
+  { name: 'takes_bootstrap_empty_corpus', rule: takesBootstrapEmptyCorpus, planeAware: true },
   { name: 'mutation_count_anomaly', rule: mutationCountAnomaly, planeAware: true },
 ];
 

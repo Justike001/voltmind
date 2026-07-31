@@ -729,6 +729,7 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
   checks.push(await checkSchemaPackActive(engine));
   checks.push(await checkSchemaPackConsistency(engine));
   checks.push(await checkSchemaPackSourceDrift(engine));
+  checks.push(await checkTakesBootstrapSchema(engine));
 
   // 7. v0.32.3 search-lite mode + per-key drift surface.
   checks.push(await checkSearchMode(engine));
@@ -5579,6 +5580,8 @@ export async function buildChecks(
   if (engine !== null) {
     progress.heartbeat('sync_freshness');
     checks.push(await checkSyncFreshness(engine));
+    progress.heartbeat('takes_bootstrap_schema');
+    checks.push(await checkTakesBootstrapSchema(engine));
     // v0.38 — full-cycle freshness, sibling to sync_freshness. Reads
     // last_full_cycle_at from sources.config; mirrors what autopilot's
     // per-source dispatch gate sees.
@@ -6272,6 +6275,69 @@ async function checkSchemaPackActive(engine: BrainEngine): Promise<Check> {
       name: 'schema_pack_active',
       status: 'warn',
       message: `Active pack failed to resolve: ${(e as Error).message}. Run \`voltmind schema active\` to debug.`,
+    };
+  }
+}
+
+async function checkTakesBootstrapSchema(engine: BrainEngine): Promise<Check> {
+  const enabled = await engine.getConfig('takes.bootstrap_enabled');
+  if (enabled !== 'true' && enabled !== '1') {
+    return { name: 'takes_bootstrap_schema', status: 'ok', message: 'Takes bootstrap is disabled — no LLM cost.' };
+  }
+  try {
+    const { loadConfig } = await import('../core/config.ts');
+    const { loadActivePack } = await import('../core/schema-pack/load-active.ts');
+    const { takesBootstrapTypesFromPack } = await import('../core/schema-pack/takes-bootstrap.ts');
+    const sourceRows = await engine.executeRaw<{ id: string }>(
+      `SELECT DISTINCT source_id AS id FROM pages WHERE deleted_at IS NULL ORDER BY source_id`,
+    );
+    const sourceIds = sourceRows.length > 0 ? sourceRows.map((row) => row.id) : ['default'];
+    const dbConfig = await engine.getConfig('schema_pack');
+    let eligibleTypeCount = 0;
+    let matchingPageCount = 0;
+    for (const sourceId of sourceIds) {
+      const sourcePack = await engine.getConfig(`schema_pack.source.${sourceId}`);
+      const pack = await loadActivePack({
+        cfg: loadConfig(),
+        remote: false,
+        sourceId,
+        perSourceDb: sourcePack ? new Map([[sourceId, sourcePack]]) : undefined,
+        dbConfig: dbConfig ?? undefined,
+      });
+      const types = [...takesBootstrapTypesFromPack(pack.manifest)];
+      eligibleTypeCount += types.length;
+      if (types.length === 0) {
+        return {
+          name: 'takes_bootstrap_schema',
+          status: 'warn',
+          message: `Source '${sourceId}' uses ${pack.identity}, which declares no takes_bootstrap:true page types. No LLM call will occur.`,
+        };
+      }
+      const params: string[] = [sourceId, ...types];
+      const placeholders = types.map((_, index) => `$${index + 2}`).join(', ');
+      const rows = await engine.executeRaw<{ cnt?: string | number }>(
+        `SELECT COUNT(*)::text AS cnt FROM pages WHERE deleted_at IS NULL AND source_id = $1 AND type IN (${placeholders})`,
+        params,
+      );
+      matchingPageCount += Number(rows[0]?.cnt ?? 0);
+    }
+    if (matchingPageCount === 0) {
+      return {
+        name: 'takes_bootstrap_schema',
+        status: 'warn',
+        message: `Takes bootstrap is enabled and ${eligibleTypeCount} source/type routes are declared, but 0 pages match canonical page.type values. No LLM call will occur.`,
+      };
+    }
+    return {
+      name: 'takes_bootstrap_schema',
+      status: 'ok',
+      message: `Takes bootstrap routing is ready: ${matchingPageCount} page(s) across ${sourceIds.length} source(s).`,
+    };
+  } catch (error) {
+    return {
+      name: 'takes_bootstrap_schema',
+      status: 'warn',
+      message: `Takes bootstrap pack resolution failed: ${error instanceof Error ? error.message : String(error)}. No LLM call will occur.`,
     };
   }
 }

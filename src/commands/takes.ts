@@ -557,8 +557,8 @@ Common flags:
 
 /**
  * v0.41.18.0 (A12, A24, T9) — `voltmind takes extract --from-pages` runs
- * Haiku over the active source schema pack's `extractable: true` page types
- * lifts gradeable claims into the takes fence.
+ * Haiku over the active source schema pack's `takes_bootstrap: true` page
+ * types and lifts gradeable claims into structured takes.
  *
  * Two-gate consent: requires `takes.bootstrap_enabled=true` in config
  * AND explicit --yes flag for any non-dryRun run. Refuses LLM-bearing
@@ -601,13 +601,17 @@ async function cmdExtract(engine: BrainEngine, rest: string[]): Promise<void> {
   const sourceIdFilter = await resolveSourceId(engine, explicitSourceId);
   const { loadConfig } = await import('../core/config.ts');
   const { loadActivePack } = await import('../core/schema-pack/load-active.ts');
-  const { extractableTypesFromPack } = await import('../core/schema-pack/extractable.ts');
+  const { takesBootstrapTypesFromPack } = await import('../core/schema-pack/takes-bootstrap.ts');
+  const sourcePack = await engine.getConfig(`schema_pack.source.${sourceIdFilter}`);
+  const dbConfig = await engine.getConfig('schema_pack');
   const activePack = await loadActivePack({
     cfg: loadConfig(),
     remote: false,
     sourceId: sourceIdFilter,
+    perSourceDb: sourcePack ? new Map([[sourceIdFilter, sourcePack]]) : undefined,
+    dbConfig: dbConfig ?? undefined,
   });
-  const eligiblePageTypes = extractableTypesFromPack(activePack.manifest);
+  const eligiblePageTypes = takesBootstrapTypesFromPack(activePack.manifest);
   const eligibleLabel = [...eligiblePageTypes].sort().join(', ') || '(none)';
 
   if (!dryRun && !skipConfirm) {
@@ -625,6 +629,7 @@ async function cmdExtract(engine: BrainEngine, rest: string[]): Promise<void> {
     dryRun,
     sourceIdFilter,
     eligiblePageTypes,
+    packIdentity: activePack.identity,
     maxPages,
     holder,
     model,
@@ -635,6 +640,8 @@ async function cmdExtract(engine: BrainEngine, rest: string[]): Promise<void> {
   }
   process.stdout.write(
     `takes extract --from-pages: ${result.claims_extracted} claim(s) from ${result.pages_scanned} page(s)` +
+    ` [source=${result.source_id ?? 'unknown'}, pack=${result.pack_identity ?? 'unknown'}, types=${result.eligible_page_types.join(',') || 'none'}]` +
+    (result.no_op_reason ? ` (no-op: ${result.no_op_reason})` : '') +
     (dryRun ? ' (dry-run)' : '') + '\n',
   );
 }

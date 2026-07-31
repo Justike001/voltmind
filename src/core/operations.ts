@@ -5316,7 +5316,7 @@ const schema_review_orphans: Operation = {
 
 const schema_apply_mutations: Operation = {
   name: 'schema_apply_mutations',
-  description: 'v0.40.7.0: batched schema pack mutation. ATOMIC: all mutations succeed or all roll back. Audit log records one batch_id. Admin scope; NOT localOnly so remote agents (your OpenClaw, etc.) can author packs over normal MCP. Mutation shape per ApplyMutationsRequest type — supports add_type / remove_type / update_type / add_alias / remove_alias / add_prefix / remove_prefix / add_link_type / remove_link_type / set_extractable / set_expert_routing.',
+  description: 'v0.40.7.0: batched schema pack mutation. ATOMIC: all mutations succeed or all roll back. Audit log records one batch_id. Admin scope; NOT localOnly so remote agents (your OpenClaw, etc.) can author packs over normal MCP. Mutation shape per ApplyMutationsRequest type — supports add_type / remove_type / update_type / add_alias / remove_alias / add_prefix / remove_prefix / add_link_type / remove_link_type / set_extractable / set_takes_bootstrap / set_expert_routing.',
   params: {
     pack: { type: 'string', required: true, description: 'Pack to mutate (must not be bundled)' },
     mutations: {
@@ -5347,7 +5347,7 @@ const schema_apply_mutations: Operation = {
       addTypeToPack, removeTypeFromPack, updateTypeOnPack,
       addAliasToType, removeAliasFromType, addPrefixToType, removePrefixFromType,
       addLinkTypeToPack, removeLinkTypeFromPack,
-      setExtractableOnType, setExpertRoutingOnType,
+      setExtractableOnType, setTakesBootstrapOnType, setExpertRoutingOnType,
       SchemaPackMutationError,
     } = await import('./schema-pack/mutate.ts');
     const baseMutateOpts = {
@@ -5378,6 +5378,7 @@ const schema_apply_mutations: Operation = {
                 primitive: m.primitive as never,
                 prefix: m.prefix as string,
                 extractable: m.extractable as boolean | undefined,
+                takesBootstrap: m.takes_bootstrap as boolean | undefined,
                 expertRouting: m.expert_routing as boolean | undefined,
                 aliases: m.aliases as string[] | undefined,
               }, innerOpts);
@@ -5412,6 +5413,9 @@ const schema_apply_mutations: Operation = {
               break;
             case 'set_extractable':
               r = await setExtractableOnType(pack, m.type as string, m.value as boolean, innerOpts);
+              break;
+            case 'set_takes_bootstrap':
+              r = await setTakesBootstrapOnType(pack, m.type as string, m.value as boolean, innerOpts);
               break;
             case 'set_expert_routing':
               r = await setExpertRoutingOnType(pack, m.type as string, m.value as boolean, innerOpts);

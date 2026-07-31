@@ -39,6 +39,7 @@ page_types:
     path_prefixes: [state/risks/]
     aliases: [blocker, concern]
     extractable: true
+    takes_bootstrap: true
     expert_routing: false
   - name: index
     primitive: annotation
@@ -123,12 +124,14 @@ page_types:
     path_prefixes: [concepts/]
     aliases: []
     extractable: true
+    takes_bootstrap: true
     expert_routing: false
   - name: idea
     primitive: concept
     path_prefixes: [ideas/]
     aliases: [thesis, bet, observation, product-thought]
     extractable: true
+    takes_bootstrap: true
     expert_routing: false
   - name: policy
     primitive: media

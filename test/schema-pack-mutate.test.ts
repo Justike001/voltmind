@@ -1,4 +1,4 @@
-// v0.40.6.0 — mutate.ts contract tests for the 11 primitives + withMutation skeleton.
+// v0.40.6.0 — mutate.ts contract tests for the 12 primitives + withMutation skeleton.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -18,6 +18,7 @@ import {
   SchemaPackMutationError,
   setExpertRoutingOnType,
   setExtractableOnType,
+  setTakesBootstrapOnType,
   updateTypeOnPack,
 } from '../src/core/schema-pack/mutate.ts';
 import { loadPackFromFile, parseYamlMini } from '../src/core/schema-pack/loader.ts';
@@ -402,7 +403,7 @@ describe('addLinkTypeToPack / removeLinkTypeFromPack', () => {
 
 // ─── flag setters ──────────────────────────────────────────────────────
 
-describe('setExtractableOnType / setExpertRoutingOnType', () => {
+describe('page type flag setters', () => {
   it('setExtractable flips the flag', async () => {
     await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_AUDIT_DIR: auditDir }, async () => {
       const path = seedPack('mine', 'json');
@@ -410,6 +411,16 @@ describe('setExtractableOnType / setExpertRoutingOnType', () => {
       expect(loadPackFromFile(path).page_types[0]!.extractable).toBe(true);
       await setExtractableOnType('mine', 'person', false, { lockDir });
       expect(loadPackFromFile(path).page_types[0]!.extractable).toBe(false);
+    });
+  });
+
+  it('setTakesBootstrap flips a flag independent from extractable', async () => {
+    await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_AUDIT_DIR: auditDir }, async () => {
+      const path = seedPack('mine', 'json');
+      await setTakesBootstrapOnType('mine', 'person', true, { lockDir });
+      const type = loadPackFromFile(path).page_types[0]!;
+      expect(type.takes_bootstrap).toBe(true);
+      expect(type.extractable).toBe(false);
     });
   });
 
