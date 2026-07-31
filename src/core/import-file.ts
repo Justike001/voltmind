@@ -29,6 +29,15 @@ import {
 } from './embedding-context.ts';
 import { loadSearchModeConfig, resolveSearchMode } from './search/mode.ts';
 import { computeCorpusGeneration } from './contextual-retrieval-service.ts';
+import {
+  fileRefsFrontmatter,
+  normalizeExternalFileRefs,
+  normalizePersistedExternalFileRefs,
+  normalizePageMetadata,
+  persistExternalFileRefs,
+  withExternalFileRefsProjection,
+  type ExternalFileReferenceV1,
+} from './external-file-refs.ts';
 
 /**
  * v0.20.0 Cathedral II Layer 8 D2 — markdown fence extraction helper.
@@ -251,6 +260,18 @@ export async function importFromContent(
     source_kind?: string | null;
     source_uri?: string | null;
     ingested_via?: string | null;
+    externalFileRefs?: ExternalFileReferenceV1[];
+    /** Rebuild page projection/frontmatter without creating association rows. */
+    skipExternalFileRefPersistence?: boolean;
+    pageMetadata?: Record<string, unknown>;
+    ingestionEventState?: {
+      sourceId: string;
+      sourceKind: string;
+      eventId: string;
+      eventVersion?: string | null;
+      jobId?: number | null;
+      contentHash?: string | null;
+    };
   } = {},
 ): Promise<ImportResult> {
   // v0.18.0+ multi-source: when caller is syncing under a non-default source,
@@ -259,6 +280,32 @@ export async function importFromContent(
   // silently fabricated a duplicate at (default, slug) — causing later
   // bare-slug subqueries (getTags, deleteChunks, etc.) to crash with 21000.
   const sourceId = opts.sourceId;
+  let externalFileRefs = opts.externalFileRefs && opts.externalFileRefs.length > 0
+    ? normalizeExternalFileRefs(opts.externalFileRefs)
+    : [];
+  const externalFileRefsUpdated = externalFileRefs.length > 0;
+  if (externalFileRefs.length > 0) {
+    content = withExternalFileRefsProjection(content, externalFileRefs);
+  }
+  // A relay may legitimately omit refs (or send an empty array) while a
+  // connector is temporarily unable to enumerate attachments. Preserve the
+  // last known Microsoft-managed projection until an explicit ref update or
+  // tombstone arrives; a transient connector gap must not erase history.
+  let existing = await engine.getPage(slug, sourceId ? { sourceId } : undefined);
+  if (externalFileRefs.length === 0 && existing?.frontmatter?.file_refs !== undefined) {
+    try {
+      const previousRefs = normalizePersistedExternalFileRefs(existing.frontmatter.file_refs);
+      if (previousRefs.length > 0) {
+        content = withExternalFileRefsProjection(content, previousRefs);
+        // Keep the normalized refs in the same transaction so the projection,
+        // index, and page hash remain aligned.
+        externalFileRefs = previousRefs;
+      }
+    } catch {
+      // Malformed legacy frontmatter is left untouched; a future connector
+      // event with validated refs can repair it.
+    }
+  }
   // Reject oversized payloads before any parsing, chunking, or embedding happens.
   // Uses Buffer.byteLength to count UTF-8 bytes the same way disk size would,
   // so the network path behaves identically to the file path.
@@ -273,6 +320,13 @@ export async function importFromContent(
   }
 
   const parsed = parseMarkdown(content, slug + '.md', { activePack: opts.activePack });
+  const pageMetadata = normalizePageMetadata(opts.pageMetadata);
+  if (Object.keys(pageMetadata).length > 0) {
+    parsed.frontmatter = { ...parsed.frontmatter, ingestion_metadata: pageMetadata };
+  }
+  if (externalFileRefs.length > 0) {
+    parsed.frontmatter = { ...parsed.frontmatter, ...fileRefsFrontmatter(externalFileRefs) };
+  }
 
   // v0.41 content-sanity gate. Runs AFTER parseMarkdown so the assessor
   // sees the parsed body (compiled_truth + timeline), title, and
@@ -421,12 +475,12 @@ export async function importFromContent(
     tags: parsed.tags,
   };
 
-  const existing = await engine.getPage(slug, sourceId ? { sourceId } : undefined);
   // A page created by an older put_page may have identical content but no
   // source_path. Do not take the idempotency shortcut in that case: the
   // write-through path is also a metadata repair path for sync deletion.
   const sourcePathNeedsUpdate = opts.sourcePath !== undefined && existing?.source_path !== opts.sourcePath;
-  if (existing?.content_hash === hash && !opts.forceRechunk && !sourcePathNeedsUpdate) {
+  if (existing?.content_hash === hash && !opts.forceRechunk && !sourcePathNeedsUpdate
+    && !externalFileRefsUpdated && !opts.ingestionEventState) {
     return { slug, status: 'skipped', chunks: 0, parsedPage };
   }
 
@@ -636,6 +690,30 @@ export async function importFromContent(
       // ingested_at is server-stamped at the engine layer when any
       // provenance write fires; never client-controlled.
     }, txOpts);
+
+    if (externalFileRefs.length > 0 && !opts.skipExternalFileRefPersistence) {
+      await persistExternalFileRefs(tx, slug, sourceId ?? 'default', externalFileRefs);
+    }
+
+    if (opts.ingestionEventState) {
+      const statePageRows = await tx.executeRaw<{ id: number }>(
+        'SELECT id FROM pages WHERE source_id = $1 AND slug = $2 AND deleted_at IS NULL LIMIT 1',
+        [sourceId ?? 'default', slug],
+      );
+      await tx.executeRaw(
+        `INSERT INTO ingestion_event_state
+          (source_id, source_kind, event_id, event_version, slug, page_id, content_hash, job_id, processed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+         ON CONFLICT (source_id, source_kind, event_id)
+         DO UPDATE SET event_version = EXCLUDED.event_version, slug = EXCLUDED.slug,
+           page_id = EXCLUDED.page_id, content_hash = EXCLUDED.content_hash,
+           job_id = EXCLUDED.job_id, processed_at = now()`,
+        [opts.ingestionEventState.sourceId, opts.ingestionEventState.sourceKind,
+          opts.ingestionEventState.eventId, opts.ingestionEventState.eventVersion ?? null, slug,
+          statePageRows[0]?.id ?? null, opts.ingestionEventState.contentHash ?? hash,
+          opts.ingestionEventState.jobId ?? null],
+      );
+    }
 
     // v0.40.3.0: stamp the contextual retrieval state columns alongside
     // the page write. updatePageContextualRetrievalState is a narrow

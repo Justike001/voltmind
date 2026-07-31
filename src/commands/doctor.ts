@@ -72,6 +72,56 @@ const DYNAMIC_ENGINE_HEALTH_CHECK_NAMES: Array<Pick<Check, 'name'>> = [
 ];
 void DYNAMIC_ENGINE_HEALTH_CHECK_NAMES;
 
+/** Connector relay/file-reference health without exposing message or path data. */
+export async function checkMicrosoftIngestionHealth(engine: BrainEngine): Promise<Check> {
+  try {
+    const enabled = (await engine.getConfig('ingestion.microsoft_relay.enabled')) === 'true';
+    const eventRows = await engine.executeRaw<{ latest_received: string | null; latest_processed: string | null }>(
+      `SELECT max(received_at)::text AS latest_received, max(processed_at)::text AS latest_processed
+         FROM ingestion_event_state WHERE source_kind = 'microsoft-connector-relay'`,
+    );
+    const queuedRows = await engine.executeRaw<{ n: number }>(
+      `SELECT count(*)::int AS n FROM minion_jobs
+        WHERE name = 'ingest_capture' AND status IN ('waiting', 'active')`,
+    );
+    const failedRows = await engine.executeRaw<{ n: number }>(
+      `SELECT count(*)::int AS n FROM minion_jobs
+        WHERE name = 'ingest_capture' AND status IN ('dead', 'failed')`,
+    );
+    const refRows = await engine.executeRaw<{ unresolved: number; stale: number }>(
+      `SELECT
+         count(*) FILTER (WHERE availability IN ('unverified', 'denied'))::int AS unresolved,
+         count(*) FILTER (WHERE materialized_page_id IS NOT NULL AND materialized_etag IS NOT NULL
+                           AND e_tag IS NOT NULL AND materialized_etag <> e_tag)::int AS stale
+       FROM external_file_refs`,
+    );
+    const queued = Number(queuedRows[0]?.n ?? 0);
+    const failed = Number(failedRows[0]?.n ?? 0);
+    const unresolved = Number(refRows[0]?.unresolved ?? 0);
+    const stale = Number(refRows[0]?.stale ?? 0);
+    const latest = eventRows[0]?.latest_processed ?? eventRows[0]?.latest_received ?? 'never';
+    const issues = [
+      failed > 0 ? `${failed} failed relay job(s)` : '',
+      unresolved > 0 ? `${unresolved} unresolved/denied reference(s)` : '',
+      stale > 0 ? `${stale} stale materialization(s)` : '',
+    ].filter(Boolean);
+    return {
+      name: 'ingestion_health',
+      status: failed > 0 ? 'fail' : issues.length > 0 ? 'warn' : 'ok',
+      message: !enabled
+        ? 'Connector relay disabled (enable ingestion.microsoft_relay.enabled to receive Teams/Outlook file-reference events)'
+        : `Relay ${issues.length > 0 ? 'needs attention: ' + issues.join(', ') : 'healthy'}; queued=${queued}; last_event=${latest}`,
+      details: { enabled, queued, failed, unresolved, stale, latest_event: latest },
+    };
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === '42P01' || code === '42703') {
+      return { name: 'ingestion_health', status: 'warn', message: 'Skipped: run schema migrations to enable connector relay/file-reference health checks' };
+    }
+    return { name: 'ingestion_health', status: 'warn', message: `Could not check: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
 /**
  * Structured doctor report. Stable shape consumed by:
  *   - voltmind doctor --json (CLI)
@@ -644,6 +694,8 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
   } else {
     checks.push({ name: 'queue_health', status: 'ok', message: 'PGLite — no queue to check' });
   }
+
+  checks.push(await checkMicrosoftIngestionHealth(engine));
 
   // v0.41 Bug 2 / Eng D8 — subagent_health surfaces rate-lease pressure to the operator.
   checks.push(await checkSubagentHealth(engine));
@@ -5358,6 +5410,9 @@ export async function buildChecks(
       queueHealthHb();
     }
   }
+
+  progress.heartbeat('ingestion_health');
+  checks.push(await checkMicrosoftIngestionHealth(engine));
 
   // 11.4 subagent_capability (v0.38 — D7; was subagent_provider in v0.31.12). Surfaces a
   // warn when models.tier.subagent or models.default points at a non-Anthropic

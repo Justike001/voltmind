@@ -27,6 +27,11 @@ import { CJK_SLUG_CHARS } from './cjk.ts';
 import { readoutProvenance, withReadoutProvenance } from './readout-provenance.ts';
 import { isWriteTargetContained } from './path-confine.ts';
 import {
+  listExternalFileRefsForPages,
+  normalizeExternalFileRefs,
+  type ExternalFileReferenceV1,
+} from './external-file-refs.ts';
+import {
   auditFrontmatter,
   checkSkillify,
   checkSkillTree,
@@ -625,6 +630,7 @@ const put_page: Operation = {
     source_kind: { type: 'string', required: false, description: 'Ingestion channel taxonomy (capture-cli | put_page | webhook | …). Remote callers: SERVER-STAMPED, client value ignored.' },
     source_uri: { type: 'string', required: false, description: 'Original URI/path/message-id the event carried. Remote callers: SERVER-STAMPED null.' },
     ingested_via: { type: 'string', required: false, description: 'Richer label paired with source_kind. Remote callers: SERVER-STAMPED.' },
+    file_refs: { type: 'array', required: false, items: { type: 'object' }, description: 'Validated SharePoint/OneDrive file references associated with this page.' },
   },
   mutating: true,
   scope: 'write',
@@ -754,6 +760,7 @@ const put_page: Operation = {
       source_kind: provenanceKind,
       source_uri: provenanceUri,
       ingested_via: provenanceVia,
+      ...(p.file_refs !== undefined ? { externalFileRefs: normalizeExternalFileRefs(p.file_refs) } : {}),
     });
 
     // v0.39 T13 — auto-prompt on first unknown-type write.
@@ -1332,6 +1339,14 @@ const list_pages: Operation = {
 
 // --- Search ---
 
+async function hydrateSearchFileRefs(engine: BrainEngine, results: import('./types.ts').SearchResult[]) {
+  const refsByPage = await listExternalFileRefsForPages(engine, results.map((result) => result.page_id));
+  return results.map((result) => {
+    const fileRefs = refsByPage.get(result.page_id);
+    return fileRefs && fileRefs.length > 0 ? { ...result, file_refs: fileRefs } : result;
+  });
+}
+
 const search: Operation = {
   name: 'search',
   description: SEARCH_DESCRIPTION,
@@ -1351,7 +1366,7 @@ const search: Operation = {
       offset: (p.offset as number) || 0,
       ...sourceScopeOpts(ctx),
     });
-    const results = dedupResults(raw);
+    const results = await hydrateSearchFileRefs(ctx.engine, dedupResults(raw));
     const latency_ms = Date.now() - startedAt;
 
     // v0.37.0 (D11): op-layer last_retrieved_at write-back. Fire-and-forget;
@@ -1495,12 +1510,12 @@ const query: Operation = {
       // hybridSearch and calls searchVector directly, so it needs its
       // own thread of the source scope. Pre-fix, this branch leaked
       // image pages across sources independent of the text path's fix.
-      const results = await ctx.engine.searchVector(vec, {
+      const results = await hydrateSearchFileRefs(ctx.engine, await ctx.engine.searchVector(vec, {
         limit: (p.limit as number) || 20,
         offset: (p.offset as number) || 0,
         embeddingColumn: mode.unified_multimodal ? 'embedding_multimodal' : 'embedding_image',
         ...querySourceScope,
-      });
+      }));
       return results;
     }
 
@@ -1518,7 +1533,7 @@ const query: Operation = {
     // v0.32.x search-lite: route the query op through hybridSearchCached so
     // semantic cache + token budget + intent weighting fire automatically.
     // Plain hybridSearch remains the bare API for callers that opt out.
-    const results = await hybridSearchCached(ctx.engine, queryText, {
+    const rawResults = await hybridSearchCached(ctx.engine, queryText, {
       limit: (p.limit as number) || 20,
       offset: (p.offset as number) || 0,
       expansion: expand,
@@ -1548,6 +1563,7 @@ const query: Operation = {
       // (master's #1182 cleanup of the duplicate sourceScopeOpts spread).
       embeddingColumn: embeddingColumnParam,
     });
+    const results = await hydrateSearchFileRefs(ctx.engine, rawResults);
     const latency_ms = Date.now() - startedAt;
 
     // v0.37.0 (D11): op-layer last_retrieved_at write-back. Same shape as the
@@ -2543,6 +2559,420 @@ const file_url: Operation = {
     }
     // TODO: generate signed URL from Supabase Storage
     return { storage_path: rows[0].storage_path, url: `voltmind:files/${rows[0].storage_path}` };
+  },
+};
+
+const search_file_refs: Operation = {
+  name: 'search_file_refs',
+  description: 'Search SharePoint, OneDrive, and mapped shared-drive file references attached to brain pages.',
+  params: {
+    query: { type: 'string', description: 'File name, path, URL, or item identifier.' },
+    service: { type: 'string', enum: ['sharepoint', 'onedrive', 'raidrive'], description: 'Optional storage service filter.' },
+    root_key: { type: 'string', description: 'Exact logical shared-drive root key.' },
+    relative_path: { type: 'string', description: 'Exact path below root_key, using forward slashes.' },
+    file_id: { type: 'string', description: 'Exact provider/NAS file identifier.' },
+    page_slug: { type: 'string', description: 'Optional page slug that must reference the file.' },
+    limit: { type: 'number', description: 'Max results (default 20, cap 100).' },
+  },
+  scope: 'read',
+  handler: async (ctx, p) => {
+    const queryText = String(p.query ?? '').trim();
+    const exactRoot = typeof p.root_key === 'string' ? p.root_key.trim().toLowerCase() : '';
+    const exactPath = typeof p.relative_path === 'string' ? p.relative_path.trim().replace(/\\/g, '/') : '';
+    const exactFileId = typeof p.file_id === 'string' ? p.file_id.trim() : '';
+    if (!queryText && !exactRoot && !exactPath && !exactFileId) {
+      throw new OperationError('invalid_params', 'query or an exact root_key/relative_path/file_id filter is required');
+    }
+    const limit = clampSearchLimit(p.limit as number | undefined, 20, 100);
+    const params: unknown[] = [];
+    const where: string[] = [];
+    if (queryText) {
+      params.push(queryText);
+      const token = `$${params.length}`;
+      where.push(`(strpos(lower(coalesce(efr.name, '')), lower(${token})) > 0
+        OR strpos(lower(coalesce(efr.display_path, '')), lower(${token})) > 0
+        OR strpos(lower(coalesce(efr.web_url, '')), lower(${token})) > 0
+        OR strpos(lower(coalesce(efr.item_id, '')), lower(${token})) > 0
+        OR strpos(lower(coalesce(efr.root_key, '')), lower(${token})) > 0
+        OR strpos(lower(coalesce(efr.relative_path, '')), lower(${token})) > 0
+        OR strpos(lower(coalesce(efr.open_path, '')), lower(${token})) > 0
+        OR strpos(lower(coalesce(efr.file_id, '')), lower(${token})) > 0)`);
+    }
+    if (exactRoot) {
+      params.push(exactRoot);
+      where.push(`lower(efr.root_key) = $${params.length}`);
+    }
+    if (exactPath) {
+      params.push(exactPath);
+      where.push(`lower(efr.relative_path) = lower($${params.length})`);
+    }
+    if (exactFileId) {
+      params.push(exactFileId);
+      where.push(`efr.file_id = $${params.length}`);
+    }
+    if (p.service === 'sharepoint' || p.service === 'onedrive' || p.service === 'raidrive') {
+      params.push(p.service);
+      where.push(`efr.service = $${params.length}`);
+    }
+    const scope = sourceScopeOpts(ctx);
+    if (scope.sourceIds && scope.sourceIds.length > 0) {
+      params.push(scope.sourceIds);
+      where.push(`efr.source_id = ANY($${params.length}::text[])`);
+    } else if (scope.sourceId) {
+      params.push(scope.sourceId);
+      where.push(`efr.source_id = $${params.length}`);
+    }
+    if (typeof p.page_slug === 'string' && p.page_slug.trim()) {
+      params.push(p.page_slug.trim());
+      where.push(`EXISTS (
+        SELECT 1 FROM page_external_file_refs pfr
+        JOIN pages sp ON sp.id = pfr.page_id
+        WHERE pfr.file_ref_id = efr.id AND sp.source_id = efr.source_id
+          AND sp.slug = $${params.length} AND sp.deleted_at IS NULL
+      )`);
+    }
+    params.push(limit);
+    const rows = await ctx.engine.executeRaw<Record<string, unknown>>(
+      `SELECT efr.id, efr.source_id, efr.provider, efr.service, efr.tenant_id, efr.drive_id, efr.item_id,
+              efr.name, efr.display_path, efr.web_url, efr.mime_type, efr.size_bytes,
+              efr.root_key, efr.relative_path, NULL::text AS open_path, efr.file_id,
+              efr.e_tag, efr.last_modified_at, efr.availability,
+              mp.slug AS materialized_page_slug, efr.materialized_etag,
+              efr.materialized_stale,
+              COALESCE(array_agg(DISTINCT sp.slug) FILTER (WHERE sp.slug IS NOT NULL), ARRAY[]::text[]) AS page_slugs
+         FROM external_file_refs efr
+         LEFT JOIN pages mp ON mp.id = efr.materialized_page_id
+         LEFT JOIN page_external_file_refs pfr ON pfr.file_ref_id = efr.id
+         LEFT JOIN pages sp ON sp.id = pfr.page_id AND sp.source_id = efr.source_id AND sp.deleted_at IS NULL
+        WHERE ${where.join(' AND ')}
+        GROUP BY efr.id, efr.source_id, efr.provider, efr.service, efr.tenant_id, efr.drive_id, efr.item_id,
+                 efr.name, efr.display_path, efr.web_url, efr.mime_type, efr.size_bytes,
+                 efr.root_key, efr.relative_path, efr.file_id,
+                 efr.e_tag, efr.last_modified_at, efr.availability,
+                 efr.materialized_etag, efr.materialized_stale,
+                 mp.slug, efr.last_seen_at
+        ORDER BY efr.last_seen_at DESC, efr.name ASC
+        LIMIT $${params.length}`,
+      params,
+    );
+    return rows;
+  },
+};
+
+const list_page_file_refs: Operation = {
+  name: 'list_page_file_refs',
+  description: 'List external cloud and mapped shared-drive references attached to a page.',
+  params: { slug: { type: 'string', required: true, description: 'Page slug.' } },
+  scope: 'read',
+  handler: async (ctx, p) => {
+    const slug = p.slug as string;
+    const scope = sourceScopeOpts(ctx);
+    const params: unknown[] = [slug];
+    const where = ['p.slug = $1', 'p.deleted_at IS NULL'];
+    if (scope.sourceIds && scope.sourceIds.length > 0) {
+      params.push(scope.sourceIds);
+      where.push(`p.source_id = ANY($${params.length}::text[])`);
+    } else if (scope.sourceId) {
+      params.push(scope.sourceId);
+      where.push(`p.source_id = $${params.length}`);
+    }
+    return ctx.engine.executeRaw<Record<string, unknown>>(
+      `SELECT efr.id, p.source_id, efr.provider, efr.service, efr.tenant_id, efr.drive_id, efr.item_id,
+              efr.name, efr.display_path, efr.web_url, efr.mime_type, efr.size_bytes,
+              efr.root_key, efr.relative_path, NULL::text AS open_path, efr.file_id,
+              efr.e_tag, efr.c_tag, efr.last_modified_at, efr.availability, efr.materialized_stale,
+              per.relation, per.platform, per.conversation_id, per.message_id, per.source_uri,
+              mp.slug AS materialized_page_slug, efr.materialized_etag
+         FROM pages p
+         JOIN page_external_file_refs per ON per.page_id = p.id
+         JOIN external_file_refs efr ON efr.id = per.file_ref_id
+         LEFT JOIN pages mp ON mp.id = efr.materialized_page_id
+        WHERE efr.source_id = p.source_id AND ${where.join(' AND ')}
+        ORDER BY efr.name ASC`,
+      params,
+    );
+  },
+};
+
+const attach_file_refs: Operation = {
+  name: 'attach_file_refs',
+  description: 'Attach validated cloud or shared-drive file references to an existing page and update its generated projection.',
+  params: {
+    slug: { type: 'string', required: true, description: 'Page slug.' },
+    file_refs: { type: 'array', required: true, items: { type: 'object' }, description: 'Validated ExternalFileReferenceV1 objects.' },
+  },
+  mutating: true,
+  scope: 'write',
+  handler: async (ctx, p) => {
+    const slug = p.slug as string;
+    const sourceId = ctx.sourceId ?? 'default';
+    const refs = normalizeExternalFileRefs(p.file_refs);
+    const page = await ctx.engine.getPage(slug, { sourceId });
+    if (!page) throw new OperationError('page_not_found', `Page not found: ${sourceId}:${slug}`);
+    const tags = await ctx.engine.getTags(slug, { sourceId });
+    const content = serializePageToMarkdown(page, tags);
+    const result = await importFromContent(ctx.engine, slug, content, {
+      noEmbed: true,
+      sourceId,
+      source_kind: 'file-ref-attachment',
+      source_uri: page.source_uri ?? null,
+      ingested_via: 'attach_file_refs',
+      externalFileRefs: refs,
+    });
+    return { slug, source_id: sourceId, refs_attached: refs.length, status: result.status };
+  },
+};
+
+const backfill_file_refs: Operation = {
+  name: 'backfill_file_refs',
+  description: 'Preview or apply source-scoped indexing of legacy SharePoint/OneDrive links and logical mapped-drive paths. Host never accesses the mapped drive.',
+  params: {
+    dry_run: { type: 'boolean', description: 'Preview without writing pages or references.' },
+    root_key: { type: 'string', description: 'Logical shared-drive root key used for recognized mapped paths.' },
+    local_root: { type: 'string', description: 'Drive prefix such as Z:\\. Used only for request-time text normalization; not persisted.' },
+    unc_share: { type: 'string', description: 'UNC share name such as Synology. The username-bearing UNC host is never sent or persisted.' },
+  },
+  mutating: true,
+  scope: 'write',
+  handler: async (ctx, p) => {
+    const rootKey = typeof p.root_key === 'string' ? p.root_key.trim().toLowerCase() : undefined;
+    const localRoot = typeof p.local_root === 'string' ? p.local_root.trim() : undefined;
+    const uncShare = typeof p.unc_share === 'string' ? p.unc_share.trim() : undefined;
+    if ((localRoot || uncShare) && !rootKey) {
+      throw new OperationError('invalid_params', 'root_key is required when local_root or unc_share is provided');
+    }
+    if (rootKey && !/^[a-z0-9][a-z0-9._-]*$/.test(rootKey)) {
+      throw new OperationError('invalid_params', 'root_key is invalid');
+    }
+    if (localRoot && !/^[a-z]:[\\/]*$/i.test(localRoot)) {
+      throw new OperationError('invalid_params', 'local_root must be a drive root such as Z:\\');
+    }
+    if (uncShare && (!/^[^\\/\r\n]{1,255}$/.test(uncShare))) {
+      throw new OperationError('invalid_params', 'unc_share must be a share name without a host or slash');
+    }
+    const { backfillFileRefs } = await import('../commands/file-refs.ts');
+    return backfillFileRefs(ctx.engine, {
+      dryRun: p.dry_run === true,
+      json: true,
+      sourceId: ctx.sourceId ?? 'default',
+      rootKey,
+      localRoot,
+      uncShare,
+    });
+  },
+};
+
+const scrub_file_ref_open_paths: Operation = {
+  name: 'scrub_file_ref_open_paths',
+  description: 'Preview or remove deprecated workstation-specific open_path values from filesystem refs and rebuild logical page projections.',
+  params: {
+    apply: { type: 'boolean', description: 'Apply the scrub. Omit/false for a read-only preview.' },
+  },
+  mutating: true,
+  scope: 'write',
+  handler: async (ctx, p) => {
+    const sourceId = ctx.sourceId ?? 'default';
+    const countRows = await ctx.engine.executeRaw<{ refs: number; pages: number }>(
+      `SELECT count(DISTINCT efr.id)::int AS refs, count(DISTINCT pfr.page_id)::int AS pages
+         FROM external_file_refs efr
+         LEFT JOIN page_external_file_refs pfr ON pfr.file_ref_id = efr.id
+        WHERE efr.source_id = $1 AND efr.provider = 'filesystem' AND efr.open_path IS NOT NULL`,
+      [sourceId],
+    );
+    const preview = {
+      source_id: sourceId,
+      refs_with_open_path: Number(countRows[0]?.refs ?? 0),
+      affected_pages: Number(countRows[0]?.pages ?? 0),
+      applied: false,
+    };
+    if (p.apply !== true || preview.refs_with_open_path === 0) return preview;
+
+    const pageRows = await ctx.engine.executeRaw<{ slug: string }>(
+      `SELECT DISTINCT p.slug
+         FROM pages p
+         JOIN page_external_file_refs pfr ON pfr.page_id = p.id
+         JOIN external_file_refs efr ON efr.id = pfr.file_ref_id
+        WHERE p.source_id = $1 AND p.deleted_at IS NULL
+          AND efr.source_id = p.source_id AND efr.provider = 'filesystem' AND efr.open_path IS NOT NULL`,
+      [sourceId],
+    );
+    let pagesReprojected = 0;
+    for (const { slug } of pageRows) {
+      const page = await ctx.engine.getPage(slug, { sourceId });
+      if (!page) continue;
+      const rows = await ctx.engine.executeRaw<Record<string, unknown>>(
+        `SELECT DISTINCT efr.provider, efr.service, efr.tenant_id, efr.drive_id, efr.item_id,
+                efr.name, efr.display_path, efr.web_url, efr.root_key, efr.relative_path,
+                efr.file_id, efr.mime_type, efr.size_bytes, efr.e_tag, efr.c_tag,
+                efr.last_modified_at::text, efr.availability
+           FROM pages p
+           JOIN page_external_file_refs pfr ON pfr.page_id = p.id
+           JOIN external_file_refs efr ON efr.id = pfr.file_ref_id
+          WHERE p.source_id = $1 AND p.slug = $2 AND efr.source_id = p.source_id`,
+        [sourceId, slug],
+      );
+      const refs = normalizeExternalFileRefs(rows.map(row => row.provider === 'filesystem'
+        ? {
+            schema_version: 1,
+            provider: 'filesystem',
+            service: 'raidrive',
+            root_key: row.root_key,
+            relative_path: row.relative_path,
+            file_id: row.file_id ?? undefined,
+            name: row.name,
+            display_path: row.display_path ?? undefined,
+            mime_type: row.mime_type ?? undefined,
+            size_bytes: row.size_bytes === null || row.size_bytes === undefined ? undefined : Number(row.size_bytes),
+            e_tag: row.e_tag ?? undefined,
+            c_tag: row.c_tag ?? undefined,
+            last_modified_at: row.last_modified_at ?? undefined,
+            availability: row.availability,
+          }
+        : {
+            schema_version: 1,
+            provider: 'microsoft',
+            service: row.service,
+            tenant_id: row.tenant_id,
+            drive_id: row.drive_id,
+            item_id: row.item_id,
+            name: row.name,
+            display_path: row.display_path ?? undefined,
+            web_url: row.web_url,
+            mime_type: row.mime_type ?? undefined,
+            size_bytes: row.size_bytes === null || row.size_bytes === undefined ? undefined : Number(row.size_bytes),
+            e_tag: row.e_tag ?? undefined,
+            c_tag: row.c_tag ?? undefined,
+            last_modified_at: row.last_modified_at ?? undefined,
+            availability: row.availability,
+          }));
+      const tags = await ctx.engine.getTags(slug, { sourceId });
+      await importFromContent(ctx.engine, slug, serializePageToMarkdown(page, tags), {
+        sourceId,
+        source_kind: 'file-ref-open-path-scrub',
+        source_uri: page.source_uri ?? null,
+        ingested_via: 'scrub_file_ref_open_paths',
+        externalFileRefs: refs,
+        skipExternalFileRefPersistence: true,
+        noEmbed: true,
+      });
+      pagesReprojected++;
+    }
+    await ctx.engine.executeRaw(
+      `UPDATE external_file_refs
+          SET open_path = NULL
+        WHERE source_id = $1 AND provider = 'filesystem' AND open_path IS NOT NULL`,
+      [sourceId],
+    );
+    return {
+      ...preview,
+      applied: true,
+      refs_scrubbed: preview.refs_with_open_path,
+      pages_reprojected: pagesReprojected,
+    };
+  },
+};
+
+const file_ref_materialize: Operation = {
+  name: 'file_ref_materialize',
+  description: 'Store connector-extracted Markdown for an external file as an artifact page and record its observed version.',
+  params: {
+    file_ref_id: { type: 'number', required: true, description: 'External file reference id.' },
+    artifact_slug: { type: 'string', description: 'Optional legacy artifact slug. New clients let the server derive it from file identity.' },
+    content: { type: 'string', required: true, description: 'Connector-extracted Markdown content.' },
+    observed_etag: { type: 'string', description: 'File eTag observed during extraction.' },
+  },
+  mutating: true,
+  scope: 'write',
+  handler: async (ctx, p) => {
+    const fileRefId = Number(p.file_ref_id);
+    if (!Number.isSafeInteger(fileRefId) || fileRefId <= 0) throw new OperationError('invalid_params', 'file_ref_id must be a positive integer');
+    // Materialization is a write. Federated-read sources may be searched, but
+    // they must never become an implicit write target for a remote caller.
+    const sourceId = ctx.sourceId ?? 'default';
+    const params: unknown[] = [fileRefId];
+    const where = ['efr.id = $1'];
+    params.push(sourceId);
+    where.push(`efr.source_id = $${params.length}`);
+    const rows = await ctx.engine.executeRaw<{
+      id: number;
+      source_id: string;
+      provider: string;
+      tenant_id: string;
+      drive_id: string;
+      item_id: string;
+      root_key: string | null;
+      relative_path: string | null;
+      file_id: string | null;
+      web_url: string | null;
+      e_tag: string | null;
+      availability: string;
+    }>(
+      `SELECT id, source_id, provider, tenant_id, drive_id, item_id,
+              root_key, relative_path, file_id, web_url, e_tag, availability
+         FROM external_file_refs efr WHERE ${where.join(' AND ')} LIMIT 1`,
+      params,
+    );
+    const ref = rows[0];
+    if (!ref) throw new OperationError('page_not_found', `External file reference not found: ${fileRefId}`);
+    if (ref.availability === 'denied') {
+      throw new OperationError('permission_denied', 'The connector reports that this external file is not accessible; existing materialization was preserved.');
+    }
+    const { createHash } = await import('node:crypto');
+    const identity = ref.provider === 'filesystem'
+      ? `${ref.source_id}:filesystem:${ref.root_key}:${ref.file_id ? `id:${ref.file_id}` : `path:${ref.relative_path?.toLowerCase()}`}`
+      : `${ref.source_id}:microsoft:${ref.tenant_id}:${ref.drive_id}:${ref.item_id}`;
+    const expectedPrefix = ref.provider === 'filesystem' ? 'artifacts/filesystem/' : 'artifacts/microsoft/';
+    const derivedArtifactSlug = `${expectedPrefix}${createHash('sha256').update(identity).digest('hex').slice(0, 24)}`;
+    const artifactSlug = typeof p.artifact_slug === 'string' && p.artifact_slug.length > 0
+      ? p.artifact_slug
+      : derivedArtifactSlug;
+    if (!artifactSlug.startsWith(expectedPrefix)) {
+      throw new OperationError('invalid_params', `artifact_slug must start with ${expectedPrefix}`);
+    }
+    validatePageSlug(artifactSlug);
+    if (typeof p.content !== 'string' || p.content.length === 0 || p.content.length > 500_000) {
+      throw new OperationError('invalid_params', 'content must be a non-empty string of at most 500000 characters');
+    }
+    if (p.observed_etag !== undefined && (typeof p.observed_etag !== 'string' || p.observed_etag.length > 512)) {
+      throw new OperationError('invalid_params', 'observed_etag must be at most 512 characters');
+    }
+    const result = await importFromContent(ctx.engine, artifactSlug, p.content as string, {
+      sourceId: ref.source_id,
+      source_kind: 'file-ref-materialization',
+      source_uri: ref.provider === 'filesystem'
+        ? `voltmind-file://${encodeURIComponent(ref.root_key ?? 'unknown')}/${(ref.relative_path ?? '').split('/').map(encodeURIComponent).join('/')}`
+        : ref.web_url,
+      ingested_via: 'file_ref_materialize',
+      noEmbed: true,
+    });
+    const page = await ctx.engine.getPage(artifactSlug, { sourceId: ref.source_id });
+    if (page) {
+      await ctx.engine.executeRaw(
+          `UPDATE external_file_refs
+             SET materialized_page_id = $1, materialized_etag = $2, materialized_stale = false,
+                 last_seen_at = now(), availability = 'accessible'
+          WHERE id = $3 AND source_id = $4`,
+        [page.id, (p.observed_etag as string | undefined) ?? ref.e_tag, fileRefId, sourceId],
+      );
+      await ctx.engine.executeRaw(
+        `INSERT INTO page_external_file_refs
+           (page_id, file_ref_id, relation, origin_key, source_uri, first_seen_at, last_seen_at)
+         VALUES ($1, $2, 'materialized_as', $3, $4, now(), now())
+         ON CONFLICT (page_id, file_ref_id, relation, origin_key)
+         DO UPDATE SET last_seen_at = now(), source_uri = EXCLUDED.source_uri`,
+        [page.id, fileRefId, `materialized:${fileRefId}`,
+          ref.provider === 'filesystem'
+            ? `voltmind-file://${encodeURIComponent(ref.root_key ?? 'unknown')}/${(ref.relative_path ?? '').split('/').map(encodeURIComponent).join('/')}`
+            : ref.web_url],
+      );
+    }
+    return {
+      file_ref_id: fileRefId,
+      artifact_slug: artifactSlug,
+      derived_artifact_slug: derivedArtifactSlug,
+      status: result.status,
+      observed_etag: p.observed_etag ?? ref.e_tag,
+    };
   },
 };
 
@@ -5152,7 +5582,8 @@ export const operations: Operation[] = [
   // Ingest log
   log_ingest, get_ingest_log,
   // Files
-  file_list, file_upload, file_url,
+  file_list, file_upload, file_url, search_file_refs, list_page_file_refs, attach_file_refs,
+  backfill_file_refs, scrub_file_ref_open_paths, file_ref_materialize,
   // Jobs (Minions)
   submit_job, get_job, list_jobs, cancel_job, retry_job, get_job_progress,
   get_job_failure_report, get_job_checkpoints, get_job_undo_report, plan_job_batch,

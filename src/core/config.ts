@@ -244,6 +244,16 @@ export interface VoltMindConfig {
   };
 
   /**
+   * Client-local mappings for shared filesystem roots. This file-plane field
+   * is intentionally never merged from the DB or sent to the host: drive
+   * letters and RaiDrive UNC hosts are workstation/user specific.
+   */
+  client_file_roots?: Record<string, {
+    local_root?: string;
+    unc_root?: string;
+  }>;
+
+  /**
    * v0.38 — active schema pack name (D13 tier 6 in the 7-tier resolution
    * chain). The pack drives type inference, alias closure for search,
    * link-verb regexes, expert-routing flags, and enrichment dispatch.

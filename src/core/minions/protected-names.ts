@@ -43,6 +43,11 @@ export const PROTECTED_JOB_NAMES: ReadonlySet<string> = new Set([
   // no remote / MCP / autopilot path can bulk-extract takes without
   // explicit operator intent.
   'extract-takes-from-pages',
+  // Project tracking mutates durable project/workstream pages and canonical
+  // state objects from remotely supplied evidence. Only the trusted
+  // ingest-capture path on a company-server worker may enqueue it; remote
+  // submit_job callers must never choose its target event/source payload.
+  'project_track_progress',
 ]);
 
 /** Check a job name against the protected set. Normalizes whitespace first. */

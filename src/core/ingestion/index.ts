@@ -22,7 +22,11 @@ export type {
   IngestionSource,
   IngestionSourceContext,
   IngestionSourceHealth,
+  SourceEvidenceType,
+  TrackingReference,
 } from './types.ts';
+
+export type { ExternalFileReferenceV1 } from '../external-file-refs.ts';
 
 export {
   INGESTION_CONTENT_TYPES,

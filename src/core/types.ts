@@ -576,6 +576,8 @@ export interface SearchResult {
   chunk_index: number;
   score: number;
   stale: boolean;
+  /** External SharePoint/OneDrive references attached to the result page. */
+  file_refs?: import('./external-file-refs.ts').ExternalFileReferenceSummary[];
   /**
    * v0.36 (cross-modal wave): the chunk's modality discriminator from
    * content_chunks.modality. 'text' for the existing text-embedding rows,

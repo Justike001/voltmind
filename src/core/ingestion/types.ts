@@ -32,6 +32,7 @@
 
 import type { BrainEngine } from '../engine.ts';
 import type { Logger } from '../operations.ts';
+import type { ExternalFileReferenceV1 } from '../external-file-refs.ts';
 
 /**
  * Contract version stamped on every voltmind.plugin.json that ships an
@@ -66,6 +67,22 @@ export const INGESTION_CONTENT_TYPES = [
 
 export type IngestionContentType = typeof INGESTION_CONTENT_TYPES[number];
 
+/** Stable external identity used to associate an ingest event with a
+ * long-running project or workstream. Values are provider-owned opaque IDs;
+ * VoltMind never attempts to derive them from message text. */
+export interface TrackingReference {
+  provider: string;
+  resource: string;
+  id: string;
+}
+
+export type SourceEvidenceType =
+  | 'teams_thread'
+  | 'meeting_transcript'
+  | 'email'
+  | 'calendar_event'
+  | 'other';
+
 /**
  * Stable event the daemon receives from every source. Carries enough
  * identity for content-hash dedup at the daemon layer and enough provenance
@@ -95,6 +112,10 @@ export interface IngestionEvent {
    *  responsibility because the source knows whether content is text or
    *  a path-pointer. */
   content_hash: string;
+  /** Optional stable identity for a source event (message/thread/episode). */
+  event_id?: string;
+  /** Optional source revision (modified timestamp, version, or eTag). */
+  event_version?: string;
   /**
    * Trust tag. Set to true by sources that receive input from untrusted
    * channels (webhook, future URL fetcher sources). The downstream put_page
@@ -103,9 +124,16 @@ export interface IngestionEvent {
    * watcher reading the user's own brain repo) MUST leave this false.
    */
   untrusted_payload?: boolean;
-  /** Optional source-specific metadata. Free-form. Persisted into the page's
-   *  frontmatter under `ingestion_metadata` when present. */
+  /** Optional source-specific transport metadata. Never blindly persisted. */
   metadata?: Record<string, unknown>;
+  /** Validated external cloud or mapped shared-drive references for this event. */
+  file_refs?: ExternalFileReferenceV1[];
+  /** Explicit, allow-listed page metadata. */
+  page_metadata?: Record<string, unknown>;
+  /** Optional stable identities emitted by a connector/source adapter. */
+  tracking_refs?: TrackingReference[];
+  /** Semantic evidence channel used for filing raw source pages. */
+  evidence_type?: SourceEvidenceType;
 }
 
 /**
@@ -317,6 +345,12 @@ export function validateIngestionEvent(event: unknown): IngestionEventError | nu
     );
   }
 
+  for (const field of ['event_id', 'event_version'] as const) {
+    if (e[field] !== undefined && (typeof e[field] !== 'string' || (e[field] as string).length === 0 || (e[field] as string).length > 512)) {
+      return new IngestionEventError(field, 'must be a non-empty string of at most 512 characters when present', e as Partial<IngestionEvent>);
+    }
+  }
+
   // metadata is optional but must be a plain object if present.
   if (e.metadata !== undefined) {
     if (e.metadata === null || typeof e.metadata !== 'object' || Array.isArray(e.metadata)) {
@@ -325,6 +359,48 @@ export function validateIngestionEvent(event: unknown): IngestionEventError | nu
         'must be a plain object when present',
         e as Partial<IngestionEvent>,
       );
+    }
+  }
+
+  if (e.page_metadata !== undefined) {
+    if (e.page_metadata === null || typeof e.page_metadata !== 'object' || Array.isArray(e.page_metadata)) {
+      return new IngestionEventError('page_metadata', 'must be a plain object when present', e as Partial<IngestionEvent>);
+    }
+    if (JSON.stringify(e.page_metadata).length > 64_000) {
+      return new IngestionEventError('page_metadata', 'must be at most 64KB when serialized', e as Partial<IngestionEvent>);
+    }
+  }
+
+  if (e.tracking_refs !== undefined) {
+    if (!Array.isArray(e.tracking_refs) || e.tracking_refs.length > 20) {
+      return new IngestionEventError('tracking_refs', 'must be an array with at most 20 entries', e as Partial<IngestionEvent>);
+    }
+    for (const ref of e.tracking_refs) {
+      if (!ref || typeof ref !== 'object' || Array.isArray(ref)) {
+        return new IngestionEventError('tracking_refs', 'entries must be objects', e as Partial<IngestionEvent>);
+      }
+      const candidate = ref as Record<string, unknown>;
+      for (const field of ['provider', 'resource', 'id'] as const) {
+        if (typeof candidate[field] !== 'string' || candidate[field].trim().length === 0 || candidate[field].length > 512) {
+          return new IngestionEventError(`tracking_refs.${field}`, 'must be a non-empty string of at most 512 characters', e as Partial<IngestionEvent>);
+        }
+      }
+    }
+  }
+
+  if (e.evidence_type !== undefined && !(['teams_thread', 'meeting_transcript', 'email', 'calendar_event', 'other'] as string[]).includes(e.evidence_type as string)) {
+    return new IngestionEventError('evidence_type', 'must be a supported source evidence type', e as Partial<IngestionEvent>);
+  }
+
+  if (e.file_refs !== undefined) {
+    try {
+      // Keep the public validator dependency-free at the type boundary. The
+      // full URL/identity validation runs in the ingest handler before write.
+      if (!Array.isArray(e.file_refs) || e.file_refs.length > 100) {
+        return new IngestionEventError('file_refs', 'must be an array with at most 100 items', e as Partial<IngestionEvent>);
+      }
+    } catch {
+      return new IngestionEventError('file_refs', 'must be a valid array', e as Partial<IngestionEvent>);
     }
   }
 

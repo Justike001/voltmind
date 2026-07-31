@@ -235,7 +235,7 @@ export async function submitVerificationCycle(engine: BrainEngine, args: string[
 export async function runAutopilot(engine: BrainEngine, args: string[]) {
   if (args.includes('--help') || args.includes('-h')) {
     console.log(
-      'Usage: voltmind autopilot [--repo <path>] [--interval N] [--json] [--no-worker] [--log-file <path>]\n' +
+      'Usage: voltmind autopilot [--repo <path>] [--interval N] [--json] [--no-worker] [--runtime-role client|company-server] [--log-file <path>]\n' +
       '       voltmind autopilot --install [--paused] [--repo <path>] [--target <target>] [--runtime-env-file <path>]\n' +
       '       voltmind autopilot --uninstall\n' +
       '       voltmind autopilot --status [--json]\n' +
@@ -281,6 +281,12 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
   const jsonMode = args.includes('--json');
   const forceInline = args.includes('--inline');
   const noWorker = !shouldSpawnAutopilotWorker(args);
+  const runtimeRole = parseArg(args, '--runtime-role')
+    ?? process.env.VOLTMIND_RUNTIME_ROLE
+    ?? 'client';
+  if (runtimeRole !== 'client' && runtimeRole !== 'company-server') {
+    throw new Error(`Invalid runtime role '${runtimeRole}'. Expected client or company-server.`);
+  }
 
   if (!repoPath) {
     console.error('No repo path. Use --repo or run voltmind sync --repo first.');
@@ -319,6 +325,12 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
   const engineType = cfg?.engine ?? 'pglite';
   const useMinionsDispatch = mode !== 'off' && engineType === 'postgres' && !forceInline;
   const spawnManagedWorker = useMinionsDispatch && !noWorker;
+  if (runtimeRole === 'company-server' && !spawnManagedWorker) {
+    throw new Error(
+      'company-server project tracking requires Postgres, minion_mode enabled, and a managed worker; ' +
+      'remove --inline/--no-worker or run `voltmind jobs work --runtime-role company-server` separately.',
+    );
+  }
 
   // Runtime status file (spec §9): atomic local state so --status doesn't
   // have to guess from process existence. Heartbeat updated every cycle.
@@ -371,10 +383,10 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     // autopilot are the production paths that opt in.
     childSupervisor = new ChildWorkerSupervisor({
       cliInvocation,
-      args: ['jobs', 'work', '--max-rss', '2048'],
+      args: ['jobs', 'work', '--max-rss', '2048', '--runtime-role', runtimeRole],
       // process.env clone; the worker daemon is a public host-local command
       // and receives the same runtime environment as Autopilot.
-      env: { ...process.env },
+      env: { ...process.env, VOLTMIND_RUNTIME_ROLE: runtimeRole },
       maxCrashes: 5,
       isStopping: () => stopping,
       onMaxCrashesExceeded: (count, max) => {

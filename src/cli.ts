@@ -60,7 +60,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'source-audit', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'source-audit', 'import', 'export', 'files', 'file-refs', 'client-roots', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages', 'projects']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'extract',
@@ -82,7 +82,7 @@ const CLI_ONLY_SELF_HELP = new Set([
   'daemon',
   'actions',
   'jobs',
-  'pages', 'backfill',
+  'pages', 'backfill', 'file-refs', 'client-roots',
   'skillpack', 'skillpack-check',
   'integrations', 'friction',
   'frontmatter', 'check-resolvable',
@@ -986,6 +986,11 @@ async function handleCliOnly(command: string, args: string[]) {
     await runSchema(args);
     return;
   }
+  if (command === 'client-roots') {
+    const { runClientRoots } = await import('./commands/client-roots.ts');
+    await runClientRoots(args);
+    return;
+  }
   if (command === 'init') {
     const { runInit } = await import('./commands/init.ts');
     await runInit(args);
@@ -1368,6 +1373,15 @@ async function handleCliOnly(command: string, args: string[]) {
     return;
   }
 
+  if (command === 'file-refs') {
+    const { runFileRefs } = await import('./commands/file-refs.ts');
+    const cfg = loadConfig();
+    if (args.length === 0 || args.includes('--help') || args.includes('-h') || args[0] === 'help' || isThinClient(cfg)) {
+      await runFileRefs(null, args);
+      return;
+    }
+  }
+
   // v0.39.3.0 WARN-5: same pattern for `capture --help`. CLI_ONLY_SELF_HELP
   // now includes 'capture' so the generic short-circuit at :101 stays out
   // of the way, but the dispatch case at :1229 still needs an engine. The
@@ -1604,6 +1618,11 @@ async function handleCliOnly(command: string, args: string[]) {
         await runFiles(engine, args);
         break;
       }
+      case 'file-refs': {
+        const { runFileRefs } = await import('./commands/file-refs.ts');
+        await runFileRefs(engine, args);
+        break;
+      }
       case 'embed': {
         const { runEmbed } = await import('./commands/embed.ts');
         await runEmbed(engine, args);
@@ -1712,6 +1731,12 @@ async function handleCliOnly(command: string, args: string[]) {
       case 'orphans': {
         const { runOrphans } = await import('./commands/orphans.ts');
         await runOrphans(engine, args);
+        break;
+      }
+      case 'projects': {
+        const { runProjectTracking } = await import('./commands/project-tracking.ts');
+        if (args[0] !== 'tracking') throw new Error('Usage: voltmind projects tracking status|reconcile');
+        await runProjectTracking(engine, args.slice(1));
         break;
       }
       case 'source-audit': {
@@ -2252,6 +2277,9 @@ FILES
   files clean <dir> --yes            Remove redirect pointers
   files upload-raw <file> --page s   Smart raw-file upload/pointer route
   files status [dir]                 Show migration status
+  client-roots <list|add|test>       Configure workstation-local file roots
+  file-refs search <name-or-path>    Search logical external file references
+  file-refs backfill [--dry-run]     Index legacy cloud/shared-drive links
 
 RETRIEVAL ENRICHMENT
   extract <links|timeline|all>       Extract graph/timeline signals
@@ -2309,6 +2337,7 @@ QUALITY / EVAL
 P2.1 — LOCAL BRAIN OPERATIONS
   report <...>                       Save or read local audit reports
   source-audit --source-dir <path>   Reconcile a local source with active DB pages (read-only)
+  projects tracking status|reconcile  Inspect or replay long-running project tracking receipts
   export <dir>                       Export the brain as markdown
   features [--auto-fix]              Inspect or apply supported feature fixes
   models [doctor]                    Inspect model routing or probe models

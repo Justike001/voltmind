@@ -27,7 +27,7 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
 import type { BrainEngine } from '../core/engine.ts';
-import { operations, OperationError } from '../core/operations.ts';
+import { operations, OperationError, validatePageSlug } from '../core/operations.ts';
 import type { OperationContext, AuthInfo } from '../core/operations.ts';
 import { VoltMindOAuthProvider, validateTokenEndpointAuthMethod } from '../core/oauth-provider.ts';
 import type { SqlQuery } from '../core/oauth-provider.ts';
@@ -50,7 +50,82 @@ import {
   validateIngestionEvent,
   type IngestionContentType,
   type IngestionEvent,
+  type SourceEvidenceType,
+  type TrackingReference,
 } from '../core/ingestion/types.ts';
+import { normalizeExternalFileRefs } from '../core/external-file-refs.ts';
+
+const RELAY_EVIDENCE_TYPES = new Set<SourceEvidenceType>([
+  'teams_thread',
+  'meeting_transcript',
+  'email',
+  'calendar_event',
+  'other',
+]);
+
+function relayIdentity(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || value.length > 512) {
+    throw new Error(`${field} must be a non-empty string of at most 512 characters`);
+  }
+  return value;
+}
+
+/** Normalize connector-owned stable identities into the public tracking contract. */
+export function normalizeRelayTracking(
+  raw: Record<string, unknown>,
+): { tracking_refs: TrackingReference[]; evidence_type: SourceEvidenceType } {
+  const refs: TrackingReference[] = [];
+  if (raw.tracking_refs !== undefined) {
+    if (!Array.isArray(raw.tracking_refs) || raw.tracking_refs.length > 20) {
+      throw new Error('tracking_refs must be an array with at most 20 entries');
+    }
+    for (const item of raw.tracking_refs) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        throw new Error('tracking_refs entries must be objects');
+      }
+      const ref = item as Record<string, unknown>;
+      const provider = relayIdentity(ref.provider, 'tracking_refs.provider');
+      const resource = relayIdentity(ref.resource, 'tracking_refs.resource');
+      const id = relayIdentity(ref.id, 'tracking_refs.id');
+      if (!provider || !resource || !id) {
+        throw new Error('tracking_refs entries require provider, resource, and id');
+      }
+      refs.push({ provider, resource, id });
+    }
+  }
+
+  const platform = raw.platform;
+  const add = (provider: string, resource: string, value: unknown, field: string) => {
+    const id = relayIdentity(value, field);
+    if (id) refs.push({ provider, resource, id });
+  };
+  if (platform === 'teams') {
+    add('teams', 'conversation', raw.conversation_id, 'conversation_id');
+    add('teams', 'team', raw.team_id, 'team_id');
+    add('teams', 'channel', raw.channel_id, 'channel_id');
+    add('teams', 'meeting_series', raw.meeting_series_id, 'meeting_series_id');
+  } else if (platform === 'outlook') {
+    add('outlook', 'email_thread', raw.thread_id ?? raw.conversation_id, 'thread_id');
+    add('outlook', 'meeting_series', raw.meeting_series_id, 'meeting_series_id');
+    add('outlook', 'calendar_series', raw.calendar_series_id, 'calendar_series_id');
+  }
+
+  const deduped = refs.filter((ref, index, all) =>
+    all.findIndex(other =>
+      other.provider === ref.provider && other.resource === ref.resource && other.id === ref.id) === index);
+  const suppliedType = raw.evidence_type;
+  if (suppliedType !== undefined && (
+    typeof suppliedType !== 'string' || !RELAY_EVIDENCE_TYPES.has(suppliedType as SourceEvidenceType)
+  )) {
+    throw new Error('evidence_type is not supported');
+  }
+  const evidenceType = suppliedType as SourceEvidenceType | undefined
+    ?? (platform === 'teams'
+      ? (raw.meeting_series_id ? 'meeting_transcript' : 'teams_thread')
+      : (raw.meeting_series_id || raw.calendar_series_id ? 'calendar_event' : 'email'));
+  return { tracking_refs: deduped, evidence_type: evidenceType };
+}
 
 /**
  * /health endpoint timeout. 3s rather than 5s: Fly.io's default
@@ -2651,7 +2726,27 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       const content = body.toString('utf8');
       const contentHash = computeContentHash(content);
       const sourceUri = (readCompatHeader('x-voltmind-source-uri', 'x-gbrain-source-uri') || `mcp-webhook:${authInfo.clientId}:${Date.now()}`).slice(0, 1024);
-      const sourceId = (readCompatHeader('x-voltmind-source-id', 'x-gbrain-source-id') || `webhook-${authInfo.clientId}`).slice(0, 256);
+      const emitterId = readCompatHeader('x-voltmind-source-id', 'x-gbrain-source-id')
+        ?.slice(0, 256);
+      const sourceId = authInfo.sourceId;
+      if (!sourceId) {
+        res.status(403).json({
+          error: 'source_scope_required',
+          message: 'Ingest token must be bound to exactly one brain source',
+        });
+        return;
+      }
+      const sourceRows = await engine.executeRaw<{ id: string }>(
+        'SELECT id FROM sources WHERE id=$1 LIMIT 1',
+        [sourceId],
+      );
+      if (sourceRows.length === 0) {
+        res.status(403).json({
+          error: 'source_scope_invalid',
+          message: `OAuth source '${sourceId}' is not registered`,
+        });
+        return;
+      }
       const callerSlug = readCompatHeader('x-voltmind-slug', 'x-gbrain-slug');
 
       const event: IngestionEvent = {
@@ -2667,6 +2762,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
           ip: req.ip,
           user_agent: req.header('user-agent') ?? '',
           client_id: authInfo.clientId,
+          ...(emitterId ? { emitter_id: emitterId } : {}),
           ...(callerSlug ? { slug: callerSlug } : {}),
         },
       };
@@ -2749,6 +2845,171 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
           });
         }
       }
+    },
+  );
+
+  // Microsoft connector relay. The connector owns Microsoft OAuth and delta
+  // cursors; VoltMind receives normalized text plus stable file identities.
+  // This endpoint is additive to the legacy raw /ingest route.
+  const microsoftRelayLimiter = rateLimit({
+    windowMs: 10_000,
+    limit: 100,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'rate_limit_exceeded', message: 'too many Microsoft relay events; backoff and retry' },
+  });
+
+  app.post(
+    '/ingest/events',
+    microsoftRelayLimiter,
+    requireBearerAuth({ verifier: oauthProvider, requiredScopes: ['write'] }),
+    express.json({ limit: ingestMaxBytes }),
+    async (req: Request, res: Response) => {
+      const authInfo = (req as Request & { auth?: AuthInfo }).auth as AuthInfo;
+      const sourceId = authInfo.sourceId;
+      if (!sourceId) {
+        res.status(403).json({
+          error: 'source_scope_required',
+          message: 'Microsoft relay token must be bound to exactly one company-brain source',
+        });
+        return;
+      }
+      const sourceRows = await engine.executeRaw<{ id: string }>(
+        'SELECT id FROM sources WHERE id=$1 LIMIT 1',
+        [sourceId],
+      );
+      if (sourceRows.length === 0) {
+        res.status(403).json({
+          error: 'source_scope_invalid',
+          message: `OAuth source '${sourceId}' is not registered`,
+        });
+        return;
+      }
+      const relayEnabled = process.env.VOLTMIND_MICROSOFT_RELAY_ENABLED === '1'
+        || (await engine.getConfig('ingestion.microsoft_relay.enabled')) === 'true';
+      if (!relayEnabled) {
+        res.status(404).json({
+          error: 'microsoft_relay_disabled',
+          message: 'Enable ingestion.microsoft_relay.enabled before sending connector events',
+        });
+        return;
+      }
+      const body = req.body as { schema_version?: unknown; events?: unknown } | undefined;
+      if (!body || body.schema_version !== 1 || !Array.isArray(body.events)) {
+        res.status(400).json({ error: 'invalid_batch', message: 'body must contain schema_version: 1 and an events array' });
+        return;
+      }
+      if (body.events.length === 0 || body.events.length > 50) {
+        res.status(400).json({ error: 'invalid_batch', message: 'events must contain between 1 and 50 items' });
+        return;
+      }
+      const events: Array<{ event: IngestionEvent; slug?: string }> = [];
+      try {
+        for (const raw of body.events) {
+          if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('each event must be an object');
+          const r = raw as Record<string, unknown>;
+          if (r.platform !== 'teams' && r.platform !== 'outlook') throw new Error('platform must be teams or outlook');
+          for (const field of ['event_id', 'event_version', 'source_uri'] as const) {
+            if (typeof r[field] !== 'string' || r[field].length === 0 || r[field].length > 4096) {
+              throw new Error(`${field} must be a non-empty string of at most 4096 characters`);
+            }
+          }
+          if (r.occurred_at !== undefined
+            && (typeof r.occurred_at !== 'string' || r.occurred_at.length > 64 || !Number.isFinite(Date.parse(r.occurred_at)))) {
+            throw new Error('occurred_at must be an ISO timestamp when present');
+          }
+          if (typeof r.content !== 'string' || r.content.length === 0 || r.content.length > 500_000) {
+            throw new Error('content must be a non-empty string of at most 500000 characters');
+          }
+          const contentType = typeof r.content_type === 'string' ? r.content_type : 'text/markdown';
+          if (!['text/markdown', 'text/plain', 'text/html', 'application/json'].includes(contentType)) {
+            throw new Error(`content_type '${contentType}' is not supported by the relay`);
+          }
+          const refs = normalizeExternalFileRefs(r.file_refs);
+          const tracking = normalizeRelayTracking(r);
+          const content = r.content as string;
+          const contentHash = computeContentHash(JSON.stringify({
+            content,
+            file_refs: refs,
+            tracking_refs: tracking.tracking_refs,
+            evidence_type: tracking.evidence_type,
+          }));
+          const event: IngestionEvent = {
+            source_id: sourceId,
+            source_kind: 'microsoft-connector-relay',
+            source_uri: r.source_uri as string,
+            received_at: new Date().toISOString(),
+            content_type: contentType as IngestionContentType,
+            content,
+            content_hash: contentHash,
+            event_id: r.event_id as string,
+            event_version: r.event_version as string,
+            untrusted_payload: true,
+            file_refs: refs,
+            tracking_refs: tracking.tracking_refs,
+            evidence_type: tracking.evidence_type,
+            page_metadata: {
+              platform: r.platform,
+              ...(typeof r.occurred_at === 'string' ? { occurred_at: r.occurred_at } : {}),
+              ...Object.fromEntries(
+                ['team_name', 'channel_name', 'conversation_name', 'workstream', 'project_name']
+                  .filter(key => typeof r[key] === 'string' && (r[key] as string).length <= 512)
+                  .map(key => [key, r[key] as string]),
+              ),
+            },
+          };
+          const validationErr = validateIngestionEvent(event);
+          if (validationErr) throw new Error(validationErr.message);
+          let slug: string | undefined;
+          if (typeof r.slug === 'string' && r.slug.length > 0) {
+            validatePageSlug(r.slug);
+            slug = r.slug;
+          } else {
+            // Connectors should provide the richer channel/chat/day slug when
+            // they know that granularity. This deterministic fallback still
+            // prevents a repeated event from creating a content-hash slug.
+            const eventSlugHash = createHash('sha256')
+              .update(`${sourceId}:${r.platform}:${r.event_id}`)
+              .digest('hex')
+              .slice(0, 16);
+            slug = r.platform === 'outlook'
+              ? `sources/emails/${eventSlugHash}`
+              : `sources/teams/${eventSlugHash}`;
+          }
+          events.push({ event, slug });
+        }
+      } catch (err) {
+        res.status(400).json({ error: 'invalid_event', message: err instanceof Error ? err.message : String(err) });
+        return;
+      }
+
+      const results: Array<{ event_id: string; status: 'queued' | 'duplicate'; job_id: number }> = [];
+      try {
+        for (const { event, slug } of events) {
+          const idempotencyKey = `ingest:microsoft:${sourceId}:${event.source_uri}:${event.event_id}:${event.event_version}`;
+          const existing = await engine.executeRaw<{ id: number }>(
+            'SELECT id FROM minion_jobs WHERE idempotency_key = $1 LIMIT 1',
+            [idempotencyKey],
+          );
+          if (existing[0]?.id !== undefined) {
+            results.push({ event_id: event.event_id!, status: 'duplicate', job_id: existing[0].id });
+            continue;
+          }
+          const job = await queueAdd(
+            'ingest_capture',
+            { event, slug },
+            {
+              idempotency_key: idempotencyKey,
+              maxWaiting: 50,
+            },
+          );
+          results.push({ event_id: event.event_id!, status: 'queued', job_id: job.id });
+        }
+      } catch (err) {
+        res.status(503).json({ error: 'queue_submission_failed', message: err instanceof Error ? err.message : String(err), results });
+        return;
+      }
+      res.status(202).json({ source_id: sourceId, results });
     },
   );
 

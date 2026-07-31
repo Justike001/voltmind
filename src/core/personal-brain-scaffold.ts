@@ -299,10 +299,29 @@ export function installPersonalBrainScaffold(root: string = defaultPersonalBrain
     writeAdditive(root, entry.path, entry.content, createdFiles, skippedFiles);
   }
   for (const entry of EXTRA_PERSONAL_BRAIN_SCAFFOLD) {
-    writeAdditive(root, entry.path, entry.content, createdFiles, skippedFiles);
+    writeAdditive(root, entry.path, enrichTrackingTemplate(entry), createdFiles, skippedFiles);
   }
   ensureReadmes(root, createdFiles, skippedFiles);
   return { root, createdFiles, skippedFiles, source: 'embedded' };
+}
+
+/** Keep packaged fallback templates aligned with the source templates even
+ * when a release was built before the generated scaffold was refreshed. */
+function enrichTrackingTemplate(entry: ScaffoldEntry): string {
+  if (entry.path !== 'templates/projects.md' && entry.path !== 'templates/workstreams.md') return entry.content;
+  let content = entry.content;
+  const marker = 'tracking_bindings: []\ntracking_aliases: []\n';
+  if (!content.includes(marker)) {
+    const anchor = entry.path === 'templates/projects.md'
+      ? 'workstream: workstreams/workstream-slug\n'
+      : 'team: orgs/team-slug\n';
+    content = content.replace(anchor, `${anchor}${marker}`);
+  }
+  const state = entry.path === 'templates/projects.md'
+    ? '\n<!-- voltmind:tracking-state:begin -->\n## Tracked Current State\n\nRuntime-maintained progress appears here after an explicitly bound source is ingested.\n<!-- voltmind:tracking-state:end -->\n'
+    : '\n<!-- voltmind:tracking-state:begin -->\n## Tracked Current State\n\nRuntime-maintained directional progress appears here after an explicitly bound source is ingested.\n<!-- voltmind:tracking-state:end -->\n';
+  if (!content.includes('voltmind:tracking-state:begin')) content = content.replace('\n## State\n', `${state}\n## State\n`);
+  return content;
 }
 
 function resolveDraftScaffoldDir(): string | null {

@@ -19,6 +19,26 @@ function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
 }
 
+export type VoltMindRuntimeRole = 'client' | 'company-server';
+
+/**
+ * Project tracking is a company-brain server capability, not a generic
+ * worker capability. Requiring an explicit role prevents a Windows client
+ * that happens to share the Postgres queue from claiming tracking mutations.
+ */
+export function resolveRuntimeRole(
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): VoltMindRuntimeRole {
+  const raw = parseFlag(args, '--runtime-role') ?? env.VOLTMIND_RUNTIME_ROLE ?? 'client';
+  if (raw !== 'client' && raw !== 'company-server') {
+    throw new Error(
+      `Invalid runtime role '${raw}'. Expected client or company-server.`,
+    );
+  }
+  return raw;
+}
+
 /** Parse `--max-waiting N` from CLI args. Returns undefined if absent.
  *  Throws on malformed input (caller should surface the error and exit).
  *  Clamps to [1, 100] to match the queue-layer clamp in MinionQueue.add.
@@ -142,7 +162,7 @@ USAGE
   voltmind jobs undo-report <id>
   voltmind jobs plan <name> --dry-run [--source-id id]
   voltmind jobs stats
-  voltmind jobs work [--concurrency N] [--max-rss MB]
+  voltmind jobs work [--concurrency N] [--max-rss MB] [--runtime-role client|company-server]
   voltmind jobs watch [--refresh-ms=N] [--json]
 
 `);
@@ -327,7 +347,7 @@ Usage:
         });
 
         // Register built-in handlers
-        await registerBuiltinHandlers(worker, engine);
+        await registerBuiltinHandlers(worker, engine, { runtimeRole: resolveRuntimeRole(args) });
 
         if (!worker.registeredNames.includes(name)) {
           console.error(`Error: Unknown job type '${name}'.`);
@@ -832,7 +852,7 @@ Usage:
       const worker = new MinionWorker(engine, {
         queue: queueName, concurrency, maxRssMb, healthCheckInterval,
       });
-      await registerBuiltinHandlers(worker, engine);
+      await registerBuiltinHandlers(worker, engine, { runtimeRole: resolveRuntimeRole(args) });
 
       // Subscribe to self-health failures emitted by the worker. Library code
       // (worker.ts) never calls process.exit directly so it stays embeddable;
@@ -1117,7 +1137,11 @@ Usage:
  *
  * Per the v0.11.1 plan (Codex architecture #5 — tension 3).
  */
-export async function registerBuiltinHandlers(worker: MinionWorker, engine: BrainEngine): Promise<void> {
+export async function registerBuiltinHandlers(
+  worker: MinionWorker,
+  engine: BrainEngine,
+  options: { runtimeRole?: VoltMindRuntimeRole } = {},
+): Promise<void> {
   worker.register('sync', async (job) => {
     const { performSync } = await import('./sync.ts');
     const repoPath = typeof job.data.repoPath === 'string' ? job.data.repoPath : undefined;
@@ -1482,7 +1506,12 @@ export async function registerBuiltinHandlers(worker: MinionWorker, engine: Brai
   // caller-provided slug).
   // ============================================================
   const { makeIngestCaptureHandler } = await import('../core/minions/handlers/ingest-capture.ts');
-  worker.register('ingest_capture', makeIngestCaptureHandler(engine));
+  worker.register('ingest_capture', makeIngestCaptureHandler(engine, new MinionQueue(engine)));
+  if (options.runtimeRole === 'company-server') {
+    const { makeProjectTrackProgressHandler } = await import('../core/minions/handlers/project-track-progress.ts');
+    worker.register('project_track_progress', makeProjectTrackProgressHandler(engine));
+    process.stderr.write('[minion worker] company-server project tracking enabled\n');
+  }
 
   // ============================================================
   // v0.36+ brain-health-100 wave: 11 new handlers for autonomous

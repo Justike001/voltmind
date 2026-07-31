@@ -309,6 +309,126 @@ CREATE INDEX IF NOT EXISTS idx_files_page_id ON files(page_id);
 CREATE INDEX IF NOT EXISTS idx_files_source_id ON files(source_id);
 CREATE INDEX IF NOT EXISTS idx_files_hash ON files(content_hash);
 
+-- External cloud or shared-filesystem references.
+CREATE TABLE IF NOT EXISTS external_file_refs (
+  id SERIAL PRIMARY KEY,
+  source_id TEXT NOT NULL DEFAULT 'default' REFERENCES sources(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL DEFAULT 'microsoft',
+  service TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  drive_id TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  display_path TEXT,
+  web_url TEXT,
+  root_key TEXT,
+  relative_path TEXT,
+  open_path TEXT,
+  file_id TEXT,
+  mime_type TEXT,
+  size_bytes BIGINT,
+  e_tag TEXT,
+  c_tag TEXT,
+  last_modified_at TIMESTAMPTZ,
+  availability TEXT NOT NULL DEFAULT 'unverified',
+  materialized_page_id INTEGER REFERENCES pages(id) ON DELETE SET NULL,
+  materialized_etag TEXT,
+  materialized_stale BOOLEAN NOT NULL DEFAULT false,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT external_file_refs_identity UNIQUE (source_id, provider, tenant_id, drive_id, item_id),
+  CONSTRAINT external_file_refs_provider CHECK (provider IN ('microsoft', 'filesystem')),
+  CONSTRAINT external_file_refs_service CHECK (service IN ('sharepoint', 'onedrive', 'raidrive')),
+  CONSTRAINT external_file_refs_availability CHECK (availability IN ('accessible', 'denied', 'missing', 'unverified'))
+);
+ALTER TABLE external_file_refs ADD COLUMN IF NOT EXISTS materialized_stale BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS external_file_refs_source_idx ON external_file_refs(source_id);
+CREATE INDEX IF NOT EXISTS external_file_refs_search_idx ON external_file_refs
+  USING GIN (to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(display_path, '') || ' ' ||
+    coalesce(web_url, '') || ' ' || coalesce(root_key, '') || ' ' || coalesce(relative_path, '')));
+CREATE INDEX IF NOT EXISTS external_file_refs_logical_path_idx
+  ON external_file_refs(source_id, root_key, lower(relative_path))
+  WHERE provider = 'filesystem';
+CREATE INDEX IF NOT EXISTS external_file_refs_file_id_idx
+  ON external_file_refs(source_id, root_key, file_id)
+  WHERE provider = 'filesystem' AND file_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS page_external_file_refs (
+  page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  file_ref_id INTEGER NOT NULL REFERENCES external_file_refs(id) ON DELETE CASCADE,
+  relation TEXT NOT NULL,
+  origin_key TEXT NOT NULL,
+  platform TEXT,
+  conversation_id TEXT,
+  message_id TEXT,
+  source_uri TEXT,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (page_id, file_ref_id, relation, origin_key)
+);
+CREATE INDEX IF NOT EXISTS page_external_file_refs_file_idx ON page_external_file_refs(file_ref_id);
+CREATE INDEX IF NOT EXISTS page_external_file_refs_page_idx ON page_external_file_refs(page_id);
+CREATE TABLE IF NOT EXISTS ingestion_event_state (
+  source_id TEXT NOT NULL,
+  source_kind TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  event_version TEXT,
+  slug TEXT,
+  page_id INTEGER REFERENCES pages(id) ON DELETE SET NULL,
+  content_hash TEXT,
+  job_id INTEGER,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  processed_at TIMESTAMPTZ,
+  PRIMARY KEY (source_id, source_kind, event_id)
+);
+CREATE INDEX IF NOT EXISTS ingestion_event_state_received_idx ON ingestion_event_state(received_at DESC);
+
+CREATE TABLE IF NOT EXISTS project_tracking_receipts (
+  page_source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+  event_source_id TEXT NOT NULL,
+  event_kind TEXT NOT NULL,
+  event_key TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_slug TEXT NOT NULL,
+  event_version TEXT,
+  content_hash TEXT,
+  evidence_slug TEXT,
+  outcome TEXT NOT NULL,
+  matched_by TEXT,
+  details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (page_source_id, event_source_id, event_kind, event_key, target_type, target_slug),
+  CHECK (target_type IN ('project', 'workstream', 'review')),
+  CHECK (outcome IN ('applied', 'candidate', 'skipped', 'failed'))
+);
+CREATE INDEX IF NOT EXISTS project_tracking_receipts_source_idx ON project_tracking_receipts(page_source_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS project_tracking_receipts_target_idx ON project_tracking_receipts(page_source_id, target_slug, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS project_tracking_receipt_history (
+  id BIGSERIAL PRIMARY KEY,
+  page_source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+  event_source_id TEXT NOT NULL,
+  event_kind TEXT NOT NULL,
+  event_key TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_slug TEXT NOT NULL,
+  event_version TEXT,
+  content_hash TEXT NOT NULL,
+  evidence_slug TEXT,
+  outcome TEXT NOT NULL,
+  matched_by TEXT,
+  details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_error TEXT,
+  supersedes_content_hash TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (target_type IN ('project', 'workstream', 'review')),
+  CHECK (outcome IN ('applied', 'candidate', 'skipped', 'failed')),
+  UNIQUE (page_source_id, event_source_id, event_kind, event_key, target_type, target_slug, content_hash)
+);
+CREATE INDEX IF NOT EXISTS project_tracking_receipt_history_source_idx ON project_tracking_receipt_history(page_source_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS project_tracking_receipt_history_target_idx ON project_tracking_receipt_history(page_source_id, target_slug, created_at DESC);
+
 -- ============================================================
 -- timeline_entries: structured timeline
 -- ============================================================

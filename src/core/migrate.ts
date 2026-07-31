@@ -5419,6 +5419,251 @@ export const MIGRATIONS: Migration[] = [
     `,
     idempotent: true,
   },
+  {
+    version: 115,
+    name: 'external_microsoft_file_references',
+    // Stable SharePoint / OneDrive identities and page occurrences. The
+    // migration is intentionally additive; existing files remain VoltMind
+    // hosted binaries and existing ingestion sources remain valid.
+    sql: `
+      CREATE TABLE IF NOT EXISTS external_file_refs (
+        id SERIAL PRIMARY KEY,
+        source_id TEXT NOT NULL DEFAULT 'default' REFERENCES sources(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL DEFAULT 'microsoft',
+        service TEXT NOT NULL,
+        tenant_id TEXT NOT NULL,
+        drive_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        display_path TEXT,
+        web_url TEXT,
+        root_key TEXT,
+        relative_path TEXT,
+        open_path TEXT,
+        file_id TEXT,
+        mime_type TEXT,
+        size_bytes BIGINT,
+        e_tag TEXT,
+        c_tag TEXT,
+        last_modified_at TIMESTAMPTZ,
+        availability TEXT NOT NULL DEFAULT 'unverified',
+        materialized_page_id INTEGER REFERENCES pages(id) ON DELETE SET NULL,
+        materialized_etag TEXT,
+        materialized_stale BOOLEAN NOT NULL DEFAULT false,
+        first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT external_file_refs_identity UNIQUE (source_id, provider, tenant_id, drive_id, item_id),
+        CONSTRAINT external_file_refs_provider CHECK (provider IN ('microsoft', 'filesystem')),
+        CONSTRAINT external_file_refs_service CHECK (service IN ('sharepoint', 'onedrive', 'raidrive')),
+        CONSTRAINT external_file_refs_availability CHECK (availability IN ('accessible', 'denied', 'missing', 'unverified'))
+      );
+      ALTER TABLE external_file_refs ADD COLUMN IF NOT EXISTS materialized_stale BOOLEAN NOT NULL DEFAULT false;
+      CREATE INDEX IF NOT EXISTS external_file_refs_source_idx ON external_file_refs(source_id);
+      CREATE INDEX IF NOT EXISTS external_file_refs_search_idx ON external_file_refs
+        USING GIN (to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(display_path, '') || ' ' ||
+          coalesce(web_url, '') || ' ' || coalesce(root_key, '') || ' ' || coalesce(relative_path, '') || ' ' || coalesce(open_path, '')));
+      CREATE TABLE IF NOT EXISTS page_external_file_refs (
+        page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+        file_ref_id INTEGER NOT NULL REFERENCES external_file_refs(id) ON DELETE CASCADE,
+        relation TEXT NOT NULL,
+        origin_key TEXT NOT NULL,
+        platform TEXT,
+        conversation_id TEXT,
+        message_id TEXT,
+        source_uri TEXT,
+        first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (page_id, file_ref_id, relation, origin_key)
+      );
+      CREATE INDEX IF NOT EXISTS page_external_file_refs_file_idx ON page_external_file_refs(file_ref_id);
+      CREATE INDEX IF NOT EXISTS page_external_file_refs_page_idx ON page_external_file_refs(page_id);
+      CREATE TABLE IF NOT EXISTS ingestion_event_state (
+        source_id TEXT NOT NULL,
+        source_kind TEXT NOT NULL,
+        event_id TEXT NOT NULL,
+        event_version TEXT,
+        slug TEXT,
+        page_id INTEGER REFERENCES pages(id) ON DELETE SET NULL,
+        content_hash TEXT,
+        job_id INTEGER,
+        received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        processed_at TIMESTAMPTZ,
+        PRIMARY KEY (source_id, source_kind, event_id)
+      );
+      CREATE INDEX IF NOT EXISTS ingestion_event_state_received_idx ON ingestion_event_state(received_at DESC);
+    `,
+    idempotent: true,
+    handler: async (engine) => {
+      if (engine.kind !== 'postgres') return;
+      await engine.executeRaw(`
+        ALTER TABLE external_file_refs ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE page_external_file_refs ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE ingestion_event_state ENABLE ROW LEVEL SECURITY;
+
+        DROP POLICY IF EXISTS external_file_refs_source_isolation ON external_file_refs;
+        CREATE POLICY external_file_refs_source_isolation ON external_file_refs
+          USING (source_id = current_setting('app.source_id', true))
+          WITH CHECK (source_id = current_setting('app.source_id', true));
+
+        CREATE OR REPLACE FUNCTION public.voltmind_file_ref_page_source_scope_matches(target_page_id INTEGER)
+        RETURNS BOOLEAN
+        LANGUAGE sql
+        STABLE
+        SECURITY DEFINER
+        SET search_path = pg_catalog, public
+        AS $fn$
+          SELECT EXISTS (
+            SELECT 1 FROM public.pages p
+            WHERE p.id = target_page_id
+              AND p.source_id = current_setting('app.source_id', true)
+          );
+        $fn$;
+
+        DROP POLICY IF EXISTS page_external_file_refs_source_isolation ON page_external_file_refs;
+        CREATE POLICY page_external_file_refs_source_isolation ON page_external_file_refs
+          USING (public.voltmind_file_ref_page_source_scope_matches(page_id))
+          WITH CHECK (public.voltmind_file_ref_page_source_scope_matches(page_id));
+
+        DROP POLICY IF EXISTS ingestion_event_state_source_isolation ON ingestion_event_state;
+        CREATE POLICY ingestion_event_state_source_isolation ON ingestion_event_state
+          USING (source_id = current_setting('app.source_id', true))
+          WITH CHECK (source_id = current_setting('app.source_id', true));
+      `);
+    },
+  },
+  {
+    version: 114,
+    name: 'project_tracking_receipts',
+    sql: `
+      CREATE TABLE IF NOT EXISTS project_tracking_receipts (
+        page_source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+        event_source_id TEXT NOT NULL,
+        event_kind TEXT NOT NULL,
+        event_key TEXT NOT NULL,
+        target_type TEXT NOT NULL,
+        target_slug TEXT NOT NULL,
+        event_version TEXT,
+        content_hash TEXT,
+        evidence_slug TEXT,
+        outcome TEXT NOT NULL,
+        matched_by TEXT,
+        details JSONB NOT NULL DEFAULT '{}'::jsonb,
+        last_error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (page_source_id, event_source_id, event_kind, event_key, target_type, target_slug),
+        CHECK (target_type IN ('project', 'workstream', 'review')),
+        CHECK (outcome IN ('applied', 'candidate', 'skipped', 'failed'))
+      );
+      CREATE INDEX IF NOT EXISTS project_tracking_receipts_source_idx
+        ON project_tracking_receipts(page_source_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS project_tracking_receipts_target_idx
+        ON project_tracking_receipts(page_source_id, target_slug, updated_at DESC);
+    `,
+    idempotent: true,
+    handler: async (engine) => {
+      if (engine.kind !== 'postgres') return;
+      await engine.executeRaw(`
+        ALTER TABLE project_tracking_receipts ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS project_tracking_receipts_source_isolation ON project_tracking_receipts;
+        CREATE POLICY project_tracking_receipts_source_isolation ON project_tracking_receipts
+          USING (page_source_id = current_setting('app.source_id', true))
+          WITH CHECK (page_source_id = current_setting('app.source_id', true));
+      `);
+    },
+  },
+  {
+    version: 116,
+    name: 'external_shared_filesystem_references',
+    sql: `
+      ALTER TABLE external_file_refs ALTER COLUMN web_url DROP NOT NULL;
+      ALTER TABLE external_file_refs ADD COLUMN IF NOT EXISTS root_key TEXT;
+      ALTER TABLE external_file_refs ADD COLUMN IF NOT EXISTS relative_path TEXT;
+      ALTER TABLE external_file_refs ADD COLUMN IF NOT EXISTS open_path TEXT;
+      ALTER TABLE external_file_refs ADD COLUMN IF NOT EXISTS file_id TEXT;
+
+      ALTER TABLE external_file_refs DROP CONSTRAINT IF EXISTS external_file_refs_provider;
+      ALTER TABLE external_file_refs ADD CONSTRAINT external_file_refs_provider
+        CHECK (provider IN ('microsoft', 'filesystem'));
+      ALTER TABLE external_file_refs DROP CONSTRAINT IF EXISTS external_file_refs_service;
+      ALTER TABLE external_file_refs ADD CONSTRAINT external_file_refs_service
+        CHECK (service IN ('sharepoint', 'onedrive', 'raidrive'));
+
+      DROP INDEX IF EXISTS external_file_refs_search_idx;
+      CREATE INDEX external_file_refs_search_idx ON external_file_refs
+        USING GIN (to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(display_path, '') || ' ' ||
+          coalesce(web_url, '') || ' ' || coalesce(root_key, '') || ' ' || coalesce(relative_path, '') || ' ' || coalesce(open_path, '')));
+    `,
+    idempotent: true,
+  },
+  {
+    version: 117,
+    name: 'thin_client_file_root_resolution',
+    // Mapped-drive paths are resolved on the thin client. The host indexes
+    // only the logical root/path and keeps open_path as a nullable legacy
+    // observation for backwards compatibility.
+    sql: `
+      ALTER TABLE external_file_refs ALTER COLUMN open_path DROP NOT NULL;
+      DROP INDEX IF EXISTS external_file_refs_search_idx;
+      CREATE INDEX external_file_refs_search_idx ON external_file_refs
+        USING GIN (to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(display_path, '') || ' ' ||
+          coalesce(web_url, '') || ' ' || coalesce(root_key, '') || ' ' || coalesce(relative_path, '')));
+      CREATE INDEX IF NOT EXISTS external_file_refs_logical_path_idx
+        ON external_file_refs(source_id, root_key, lower(relative_path))
+        WHERE provider = 'filesystem';
+      CREATE INDEX IF NOT EXISTS external_file_refs_file_id_idx
+        ON external_file_refs(source_id, root_key, file_id)
+        WHERE provider = 'filesystem' AND file_id IS NOT NULL;
+    `,
+    idempotent: true,
+  },
+  {
+    version: 118,
+    name: 'project_tracking_receipt_history',
+    sql: `
+      CREATE TABLE IF NOT EXISTS project_tracking_receipt_history (
+        id BIGSERIAL PRIMARY KEY,
+        page_source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+        event_source_id TEXT NOT NULL,
+        event_kind TEXT NOT NULL,
+        event_key TEXT NOT NULL,
+        target_type TEXT NOT NULL,
+        target_slug TEXT NOT NULL,
+        event_version TEXT,
+        content_hash TEXT NOT NULL,
+        evidence_slug TEXT,
+        outcome TEXT NOT NULL,
+        matched_by TEXT,
+        details JSONB NOT NULL DEFAULT '{}'::jsonb,
+        last_error TEXT,
+        supersedes_content_hash TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CHECK (target_type IN ('project', 'workstream', 'review')),
+        CHECK (outcome IN ('applied', 'candidate', 'skipped', 'failed')),
+        UNIQUE (
+          page_source_id, event_source_id, event_kind, event_key,
+          target_type, target_slug, content_hash
+        )
+      );
+      CREATE INDEX IF NOT EXISTS project_tracking_receipt_history_source_idx
+        ON project_tracking_receipt_history(page_source_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS project_tracking_receipt_history_target_idx
+        ON project_tracking_receipt_history(page_source_id, target_slug, created_at DESC);
+    `,
+    idempotent: true,
+    handler: async (engine) => {
+      if (engine.kind !== 'postgres') return;
+      await engine.executeRaw(`
+        ALTER TABLE project_tracking_receipt_history ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS project_tracking_receipt_history_source_isolation
+          ON project_tracking_receipt_history;
+        CREATE POLICY project_tracking_receipt_history_source_isolation
+          ON project_tracking_receipt_history
+          USING (page_source_id = current_setting('app.source_id', true))
+          WITH CHECK (page_source_id = current_setting('app.source_id', true));
+      `);
+    },
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS.length > 0
