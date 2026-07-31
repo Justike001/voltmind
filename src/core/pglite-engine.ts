@@ -55,6 +55,7 @@ import {
   EmbeddingColumnNotRegisteredError,
 } from './search/embedding-column.ts';
 import { hasCJK, escapeLikePattern } from './cjk.ts';
+import { healthEntityTypeSql } from './health-entity-types.ts';
 
 type PGLiteDB = PGlite;
 
@@ -4265,7 +4266,8 @@ export class PGLiteEngine implements BrainEngine {
     };
   }
 
-  async getHealth(): Promise<BrainHealth> {
+  async getHealth(opts?: { entityTypes?: string[] }): Promise<BrainHealth> {
+    const entityTypeFilter = healthEntityTypeSql(opts?.entityTypes);
     // Combined metrics from master (brain_score components: dead_links, link_count,
     // pages_with_timeline) and v0.10.3 graph layer (link_coverage, timeline_coverage,
     // most_connected). Both coexist: master's brain_score is the composite
@@ -4273,7 +4275,7 @@ export class PGLiteEngine implements BrainEngine {
     const { rows: [h] } = await this.db.query(`
       WITH entity_pages AS (
         SELECT id, slug FROM pages
-        WHERE type IN ('person', 'company') AND deleted_at IS NULL
+        WHERE ${entityTypeFilter} AND deleted_at IS NULL
       ), scored_pages AS (
         -- Navigation, policy, and template documents are deliberately sparse.
         -- Excluding them prevents their lack of timelines/links from lowering
@@ -4337,7 +4339,7 @@ export class PGLiteEngine implements BrainEngine {
               JOIN pages dst ON dst.id = l.to_page_id AND dst.deleted_at IS NULL
               WHERE l.from_page_id = p.id OR l.to_page_id = p.id)::int as link_count
       FROM pages p
-      WHERE p.type IN ('person', 'company') AND p.deleted_at IS NULL
+      WHERE ${entityTypeFilter} AND p.deleted_at IS NULL
       ORDER BY link_count DESC
       LIMIT 5
     `);

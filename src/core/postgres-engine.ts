@@ -58,6 +58,7 @@ import { validateSlug, contentHash, rowToPage, rowToChunk, rowToSearchResult, pa
 import { resolveBoostMap, resolveHardExcludes } from './search/source-boost.ts';
 import { buildSourceFactorCase, buildHardExcludeClause, buildVisibilityClause, buildRecencyComponentSql } from './search/sql-ranking.ts';
 import { DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from './ai/defaults.ts';
+import { healthEntityTypeSql } from './health-entity-types.ts';
 
 function escapeSqlStringLiteral(value: string): string {
   return value.replace(/'/g, "''");
@@ -4253,7 +4254,8 @@ export class PostgresEngine implements BrainEngine {
     };
   }
 
-  async getHealth(): Promise<BrainHealth> {
+  async getHealth(opts?: { entityTypes?: string[] }): Promise<BrainHealth> {
+    const entityTypeFilter = healthEntityTypeSql(opts?.entityTypes);
     const sql = this.sql;
     // Bug 11 doc-drift fix — orphan_pages means "islanded" (no inbound AND
     // no outbound links), aligning both engines with the user-facing
@@ -4264,7 +4266,7 @@ export class PostgresEngine implements BrainEngine {
     const [h] = await sql`
       WITH entity_pages AS (
         SELECT id, slug FROM pages
-        WHERE type IN ('person', 'company') AND deleted_at IS NULL
+        WHERE ${sql.unsafe(entityTypeFilter)} AND deleted_at IS NULL
       ), scored_pages AS (
         -- Navigation, policy, and template documents are deliberately sparse.
         -- Excluding them prevents their lack of timelines/links from lowering
@@ -4325,7 +4327,7 @@ export class PostgresEngine implements BrainEngine {
               JOIN pages dst ON dst.id = l.to_page_id AND dst.deleted_at IS NULL
               WHERE l.from_page_id = p.id OR l.to_page_id = p.id)::int as link_count
       FROM pages p
-      WHERE p.type IN ('person', 'company') AND p.deleted_at IS NULL
+      WHERE ${sql.unsafe(entityTypeFilter)} AND p.deleted_at IS NULL
       ORDER BY link_count DESC
       LIMIT 5
     `;

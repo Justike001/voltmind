@@ -2026,7 +2026,9 @@ const get_health: Operation = {
   description: 'Brain health dashboard (embed coverage, stale pages, orphans)',
   params: {},
   handler: async (ctx) => {
-    return ctx.engine.getHealth();
+    const { loadActivePackBestEffort, healthEntityTypesFromPack } = await import('./schema-pack/index.ts');
+    const pack = await loadActivePackBestEffort(ctx);
+    return ctx.engine.getHealth({ entityTypes: pack ? healthEntityTypesFromPack(pack.manifest) : [] });
   },
   scope: 'admin',
   cliHints: { name: 'health' },
@@ -4695,10 +4697,12 @@ const schema_graph: Operation = {
     const edges: Array<{ from: string; verb: string; to: string }> = [];
     for (const lt of pack.manifest.link_types) {
       if (lt.inference?.page_type) {
+        const tt = lt.inference.target_type;
+        const to = tt ? (Array.isArray(tt) ? tt.join('|') : tt) : '*';
         edges.push({
           from: lt.inference.page_type,
           verb: lt.name,
-          to: lt.inference.target_type ?? '*',
+          to,
         });
       }
     }

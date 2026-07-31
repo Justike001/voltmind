@@ -68,9 +68,25 @@ export function inferLinkTypeFromPack(
   // Pass 2: regex matchers under the ReDoS guard.
   // Caller passes a PageRegexBudget instance so cumulative regex
   // time on this page stays capped at LINK_EXTRACTION_TOTAL_BUDGET_MS.
+  //
+  // target_type guard (NER precision): a link_type MAY declare
+  // `inference.target_type` to restrict which target page types the
+  // verb can apply to (e.g. `authored` → target must be `artifact`,
+  // `discovered_by` → target must be `risk`/`bug`). When declared and
+  // the actual target type mismatches, the verb is SKIPPED (not
+  // returned) so a narrower-applicable verb later in declaration
+  // order, or the by-mention fallback, can take over. Without this
+  // guard, any person name appearing in prose containing «发现/依据/
+  // 负责» would be mis-typed as discovered_by/evidence_for/owns of a
+  // person — the dominant NER precision failure mode.
   for (const lt of pack.link_types) {
     const pattern = lt.inference?.regex;
     if (!pattern) continue;
+    if (lt.inference?.target_type) {
+      const allowed = lt.inference.target_type;
+      const arr = Array.isArray(allowed) ? allowed : [allowed];
+      if (!arr.includes(pageType)) continue;
+    }
     if (budget) {
       const match = budget.runBounded(lt.name, pattern, context);
       if (match === undefined) {

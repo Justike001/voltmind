@@ -1093,9 +1093,9 @@ export interface BrainHealth {
    * DELETEs can produce dangling references.
    */
   dead_links: number;
-  /** Fraction of entity pages (person/company) with >= 1 inbound link. */
+  /** Fraction of active-schema entity pages with >= 1 inbound link. */
   link_coverage: number;
-  /** Fraction of entity pages (person/company) with >= 1 structured timeline entry. */
+  /** Fraction of active-schema entity pages with >= 1 structured timeline entry. */
   timeline_coverage: number;
   /** Top 5 entities by total link count (in + out). */
   most_connected: Array<{ slug: string; link_count: number }>;

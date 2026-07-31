@@ -1591,7 +1591,7 @@ export interface BrainEngine {
 
   // Stats + health
   getStats(): Promise<BrainStats>;
-  getHealth(): Promise<BrainHealth>;
+  getHealth(opts?: { entityTypes?: string[] }): Promise<BrainHealth>;
 
   // Ingest log
   logIngest(entry: IngestLogInput): Promise<void>;

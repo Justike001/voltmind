@@ -146,15 +146,20 @@ export const linkTypesUndeclared: LintRule = (manifest) => {
         hint: `add a page_type for '${lt.inference.page_type}' OR remove the inference rule`,
       });
     }
-    if (lt.inference?.target_type && !typeNames.has(lt.inference.target_type)) {
-      issues.push({
-        rule: 'link_types_undeclared_target_type',
-        severity: 'error',
-        message: `link_type '${lt.name}' inference.target_type='${lt.inference.target_type}' is not a declared page_type`,
-        pack: manifest.name,
-        link: lt.name,
-        hint: `add a page_type for '${lt.inference.target_type}' OR remove inference.target_type`,
-      });
+    if (lt.inference?.target_type) {
+      const targets = Array.isArray(lt.inference.target_type) ? lt.inference.target_type : [lt.inference.target_type];
+      for (const t of targets) {
+        if (!typeNames.has(t)) {
+          issues.push({
+            rule: 'link_types_undeclared_target_type',
+            severity: 'error',
+            message: `link_type '${lt.name}' inference.target_type='${t}' is not a declared page_type`,
+            pack: manifest.name,
+            link: lt.name,
+            hint: `add a page_type for '${t}' OR remove inference.target_type`,
+          });
+        }
+      }
     }
   }
   return issues;
