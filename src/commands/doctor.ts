@@ -3250,23 +3250,38 @@ export async function buildChecks(
         const slice = await engine.listPages({ limit: 50, type: t as import('../core/types.ts').PageType });
         sample.push(...slice);
       }
-      if (sample.length === 0) {
+      const eligible = sample.filter((page) => {
+        if (page.slug === 'meetings/readme' || page.slug.startsWith('templates/')) return false;
+        if (page.type !== 'meeting') return true;
+        const body = `${page.compiled_truth ?? ''}\n${page.timeline ?? ''}`.trim();
+        const transcriptMatch = body.match(/(?:^|\n)##\s*Transcript\s*\n([\s\S]*)$/i);
+        if (!transcriptMatch) return false;
+        const transcriptLines = transcriptMatch[1]
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean);
+        return transcriptLines.some(
+          (line) => !/^-\s*(Source available|Time|Location):/i.test(line),
+        );
+      });
+
+      if (eligible.length === 0) {
         checks.push({
           name: 'conversation_format_coverage',
           status: 'ok',
-          message: 'No conversation-type pages — coverage check not applicable',
+          message: `No eligible conversation transcript pages (${sample.length} metadata/template page(s) excluded)`,
         });
       } else {
         const hitsByPattern: Record<string, number> = {};
         let unmatched = 0;
-        for (const page of sample) {
+        for (const page of eligible) {
           const body = `${page.compiled_truth ?? ''}\n${page.timeline ?? ''}`.trim();
           const result = parseConversation(body, { page, noPolish: true, noFallback: true });
           const id = result.matched_pattern_id ?? '_no_match';
           hitsByPattern[id] = (hitsByPattern[id] ?? 0) + 1;
           if (result.phase === 'no_match') unmatched++;
         }
-        const unmatchedPct = (unmatched / sample.length) * 100;
+        const unmatchedPct = (unmatched / eligible.length) * 100;
         const breakdown = Object.entries(hitsByPattern)
           .sort(([, a], [, b]) => b - a)
           .map(([k, v]) => `${k}=${v}`)
@@ -3276,7 +3291,7 @@ export async function buildChecks(
             name: 'conversation_format_coverage',
             status: 'warn',
             message:
-              `${unmatched}/${sample.length} conversation pages (${unmatchedPct.toFixed(1)}%) match NO built-in pattern. ` +
+              `${unmatched}/${eligible.length} eligible conversation pages (${unmatchedPct.toFixed(1)}%) match NO built-in pattern. ` +
               `Breakdown: ${breakdown}. ` +
               `Investigate: voltmind conversation-parser scan <slug> | ` +
               `Enable LLM fallback (opt-in): voltmind config set conversation_parser.llm_fallback_enabled true`,
@@ -3285,7 +3300,7 @@ export async function buildChecks(
           checks.push({
             name: 'conversation_format_coverage',
             status: 'ok',
-            message: `${sample.length} pages: ${breakdown}`,
+            message: `${eligible.length} eligible pages: ${breakdown} (${sample.length - eligible.length} metadata/template page(s) excluded)`,
           });
         }
       }
