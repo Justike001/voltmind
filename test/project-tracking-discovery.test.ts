@@ -13,6 +13,7 @@ describe('long-running project tracking capability injection', () => {
     expect(operationsByName.get_project_tracking_status?.scope).toBe('read');
     expect(operationsByName.reconcile_project_tracking?.scope).toBe('admin');
     expect(operationsByName.submit_ingestion_event?.params).not.toHaveProperty('source_id');
+    expect(operationsByName.submit_ingestion_event?.params).toHaveProperty('file_refs');
 
     const tools = buildToolDefs(operations);
     for (const name of [
@@ -72,6 +73,15 @@ describe('long-running project tracking capability injection', () => {
       content: 'Milestone reached.',
       event_id: 'event-1',
       event_version: '2',
+      file_refs: [{
+        schema_version: 1,
+        provider: 'filesystem',
+        service: 'raidrive',
+        root_key: 'synology-public',
+        relative_path: 'Public/Projects/Example',
+        name: 'Example',
+        availability: 'unverified',
+      }],
       tracking_refs: [{ provider: 'teams', resource: 'conversation', id: 'conversation-example' }],
       evidence_type: 'teams_thread',
     }, {
@@ -85,7 +95,53 @@ describe('long-running project tracking capability injection', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.name).toBe('ingest_capture');
     expect((calls[0]?.data?.event as { source_id?: string }).source_id).toBe('company-a');
+    expect((calls[0]?.data?.event as { file_refs?: unknown[] }).file_refs).toHaveLength(1);
     expect(calls[0]?.data).not.toHaveProperty('page_source_id');
+  });
+
+  test('attachment-only changes produce a distinct ingestion idempotency key', async () => {
+    const keys: string[] = [];
+    const engine = {
+      executeRaw: async (sql: string) => sql.includes('FROM sources') ? [{ id: 'company-a' }] : [],
+    } as unknown as BrainEngine;
+    const queue = {
+      add: async (_name: string, _data?: Record<string, unknown>, opts?: Record<string, unknown>) => {
+        keys.push(String(opts?.idempotency_key));
+        return { id: keys.length };
+      },
+    };
+    const base = {
+      source_kind: 'teams-connector',
+      source_uri: 'teams://conversation/file-ref-change',
+      content: 'Please review the shared folder.',
+      event_id: 'event-file-ref-change',
+      event_version: '1',
+    };
+    await submitTrackedIngestionEvent(engine, 'company-a', {
+      ...base,
+      file_refs: [{
+        schema_version: 1,
+        provider: 'filesystem',
+        service: 'raidrive',
+        root_key: 'synology-public',
+        relative_path: 'Public/Projects/First',
+        name: 'First',
+      }],
+    }, queue);
+    await submitTrackedIngestionEvent(engine, 'company-a', {
+      ...base,
+      file_refs: [{
+        schema_version: 1,
+        provider: 'filesystem',
+        service: 'raidrive',
+        root_key: 'synology-public',
+        relative_path: 'Public/Projects/Second',
+        name: 'Second',
+      }],
+    }, queue);
+
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(keys[1]);
   });
 
   test('mutating tracking operations reject a client runtime before touching storage', async () => {

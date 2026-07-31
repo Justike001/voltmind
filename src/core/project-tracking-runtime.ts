@@ -6,6 +6,10 @@ import type {
   SourceEvidenceType,
   TrackingReference,
 } from './ingestion/types.ts';
+import {
+  normalizeExternalFileRefs,
+  type ExternalFileReferenceV1,
+} from './external-file-refs.ts';
 import { MinionQueue } from './minions/queue.ts';
 
 export interface TrackingQueue {
@@ -32,6 +36,7 @@ export interface SubmitTrackedIngestionInput {
   event_version?: string;
   occurred_at?: string;
   tracking_refs?: TrackingReference[];
+  file_refs?: ExternalFileReferenceV1[];
   evidence_type?: SourceEvidenceType;
   page_metadata?: Record<string, unknown>;
   slug?: string;
@@ -45,8 +50,12 @@ export async function submitTrackedIngestionEvent(
   queue: TrackingQueue = new MinionQueue(engine),
 ): Promise<{ source_id: string; status: 'queued' | 'duplicate'; job_id: number }> {
   await requireRegisteredSource(engine, sourceId);
+  const fileRefs = input.file_refs === undefined
+    ? undefined
+    : normalizeExternalFileRefs(input.file_refs);
   const contentHash = computeContentHash(JSON.stringify({
     content: input.content,
+    file_refs: fileRefs ?? [],
     tracking_refs: input.tracking_refs ?? [],
     evidence_type: input.evidence_type,
     page_metadata: input.page_metadata ?? {},
@@ -61,6 +70,7 @@ export async function submitTrackedIngestionEvent(
     content_hash: contentHash,
     ...(input.event_id ? { event_id: input.event_id } : {}),
     ...(input.event_version ? { event_version: input.event_version } : {}),
+    ...(fileRefs ? { file_refs: fileRefs } : {}),
     ...(input.tracking_refs ? { tracking_refs: input.tracking_refs } : {}),
     ...(input.evidence_type ? { evidence_type: input.evidence_type } : {}),
     ...(input.page_metadata ? { page_metadata: input.page_metadata } : {}),

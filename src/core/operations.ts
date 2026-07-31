@@ -3009,6 +3009,11 @@ const submit_ingestion_event: Operation = {
       items: { type: 'object' },
       description: 'Normalized bindings: [{provider, resource, id}]. These are matched only within the authorized source.',
     },
+    file_refs: {
+      type: 'array',
+      items: { type: 'object' },
+      description: 'Validated SharePoint/OneDrive or logical mapped-drive references to persist with the evidence page.',
+    },
     evidence_type: { type: 'string', enum: ['teams_thread', 'meeting_transcript', 'email', 'calendar_event', 'other'], description: 'Evidence filing category.' },
     page_metadata: { type: 'object', description: 'Allow-listed routing hints such as team_name, channel_name, workstream, or project_name.' },
     slug: { type: 'string', description: 'Optional evidence page slug. Omit to use the stable inbox fallback.' },
@@ -3044,6 +3049,12 @@ const submit_ingestion_event: Operation = {
     if (p.tracking_refs !== undefined && !Array.isArray(p.tracking_refs)) {
       throw new OperationError('invalid_params', 'tracking_refs must be an array');
     }
+    let fileRefs;
+    try {
+      fileRefs = p.file_refs === undefined ? undefined : normalizeExternalFileRefs(p.file_refs);
+    } catch (error) {
+      throw new OperationError('invalid_params', error instanceof Error ? error.message : String(error));
+    }
     try {
       return await submitTrackedIngestionEvent(ctx.engine, sourceId, {
         source_kind: sourceKind,
@@ -3053,6 +3064,7 @@ const submit_ingestion_event: Operation = {
         event_id: p.event_id as string | undefined,
         event_version: p.event_version as string | undefined,
         occurred_at: p.occurred_at as string | undefined,
+        file_refs: fileRefs,
         tracking_refs: p.tracking_refs as TrackingReference[] | undefined,
         evidence_type: p.evidence_type as SourceEvidenceType | undefined,
         page_metadata: p.page_metadata as Record<string, unknown> | undefined,
