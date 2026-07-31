@@ -132,6 +132,30 @@ export function shouldSpawnAutopilotWorker(args: string[]): boolean {
 }
 
 /**
+ * Interpret `systemctl --user show` output without tying the status command to
+ * systemd's human-oriented rendering. Exported for a narrow regression test:
+ * an enabled, active Linux user unit must make runtime_ready attainable.
+ */
+export function parseSystemdUserUnitStatus(output: string): {
+  registered: boolean;
+  enabled: boolean;
+  running: boolean;
+} {
+  const properties = new Map<string, string>();
+  for (const line of output.split(/\r?\n/)) {
+    const index = line.indexOf('=');
+    if (index > 0) properties.set(line.slice(0, index), line.slice(index + 1));
+  }
+  const unitFileState = properties.get('UnitFileState');
+  const activeState = properties.get('ActiveState');
+  return {
+    registered: properties.get('LoadState') === 'loaded',
+    enabled: unitFileState === 'enabled' || unitFileState === 'enabled-runtime',
+    running: activeState === 'active' || activeState === 'reloading',
+  };
+}
+
+/**
  * A force-killed Autopilot leaves its lock file behind. Its mtime cannot tell
  * us whether the owning process is still alive: after a hard kill it remains
  * fresh, which used to make every scheduler retry exit for ten minutes.
@@ -1620,6 +1644,7 @@ async function readBusinessReadiness(engine: BrainEngine): Promise<BusinessReadi
 
 async function showStatus(engine: BrainEngine, json: boolean) {
   const logFile = join(process.env.HOME || '', '.voltmind', 'autopilot.log');
+  const manifest = loadManifest();
   let lastLine = '';
   try {
     const content = readFileSync(logFile, 'utf-8');
@@ -1651,6 +1676,18 @@ async function showStatus(engine: BrainEngine, json: boolean) {
     if (process.platform === 'darwin') {
       schedulerRegistered = existsSync(plistPath());
       schedulerTarget = 'macos';
+    } else if (manifest?.target === 'linux-systemd') {
+      schedulerTarget = 'linux-systemd';
+      try {
+        const output = execSync(
+          'systemctl --user show voltmind-autopilot.service --property=LoadState --property=UnitFileState --property=ActiveState --no-pager',
+          { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+        );
+        const systemd = parseSystemdUserUnitStatus(output);
+        schedulerRegistered = systemd.registered;
+        schedulerEnabled = systemd.enabled;
+        schedulerRunning = systemd.running;
+      } catch { /* best-effort */ }
     } else {
       try {
         const crontab = execSync('crontab -l 2>/dev/null || true', { encoding: 'utf-8' });
@@ -1665,7 +1702,6 @@ async function showStatus(engine: BrainEngine, json: boolean) {
   const heartbeatStale = rt ? isHeartbeatStale(rt.heartbeatAt, 120_000) : true;
   const autopilotProcessAlive = !!rt && isProcessAlive(rt.pid);
   const autopilotActive = !!rt && autopilotProcessAlive && !heartbeatStale && rt.state !== 'failed' && rt.state !== 'stopping';
-  const manifest = loadManifest();
   if (manifest) schedulerTarget = manifest.target;
 
   const workerExpected = rt?.supervisor.workerExpected ?? false;

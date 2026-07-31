@@ -494,7 +494,14 @@ CREATE TABLE IF NOT EXISTS access_tokens (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name         TEXT NOT NULL,
   token_hash   TEXT NOT NULL UNIQUE,
-  scopes       TEXT[],
+  -- v0.42 #7: legacy bearer tokens now carry an explicit scope set. Default
+  -- read+write (NOT admin) so `auth create` no longer mints unconditional
+  -- admin tokens — the documented largest hole. Existing NULL rows backfill
+  -- to read+write+admin by migration v113 to preserve their behavior.
+  scopes       TEXT[] NOT NULL DEFAULT '{"read","write"}',
+  -- v0.42 #6: source axis for the access_tokens RLS policy. Default 'default'
+  -- matches the legacy verify path's sourceId fallback.
+  source_id    TEXT   NOT NULL DEFAULT 'default',
   created_at   TIMESTAMPTZ DEFAULT now(),
   last_used_at TIMESTAMPTZ,
   revoked_at   TIMESTAMPTZ
@@ -514,8 +521,25 @@ CREATE TABLE IF NOT EXISTS mcp_request_log (
   status        TEXT NOT NULL DEFAULT 'success',
   params        JSONB,
   error_message TEXT,
+  -- v0.42 audit-tenant axis: which source the caller acted on. NULL for
+  -- pre-auth failures (no resolved source) and historical rows. Backfilled
+  -- from oauth_clients.source_id by migration v110; legacy access_tokens
+  -- rows default to 'default'. Lets an operator reconstruct "which source
+  -- did this token touch" from the audit trail — impossible pre-v0.42.
+  source_id     TEXT,
+  -- v0.42 audit-tenant axis: which brain/mount the request targeted.
+  -- NULL when the transport didn't resolve a brain id (legacy HTTP transport,
+  -- pre-v0.42 rows). Not indexed — source_id is the primary filter axis.
+  brain_id      TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- v0.42: source-scoped audit queries ("show me every source-X request in
+-- the last 24h"). Partial so the index stays small — NULL source_id rows
+-- (pre-auth failures, pre-v0.42 history) are skipped.
+CREATE INDEX IF NOT EXISTS idx_mcp_log_source_id
+  ON mcp_request_log (source_id, created_at DESC)
+  WHERE source_id IS NOT NULL;
 
 -- ============================================================
 -- OAuth 2.1: clients, tokens, authorization codes
@@ -656,7 +680,14 @@ CREATE TABLE IF NOT EXISTS files (
   content_hash TEXT   NOT NULL,
   metadata     JSONB  NOT NULL DEFAULT '{}',
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(storage_path)
+  -- v0.42 (#861 audit follow-up): scope the path uniqueness to the source
+  -- so two sources with the same slug can each hold a file of the same
+  -- name without ON CONFLICT overwriting the other source's row. Pre-v0.42
+  -- the bare UNIQUE(storage_path) was global, so a same-slug upload in
+  -- source B rewrote source A's metadata (content_hash/mime/size) while
+  -- leaving source_id pointing at A — a cross-source attribution break.
+  -- Migration v111 swaps the constraint on upgrade.
+  UNIQUE(source_id, storage_path)
 );
 
 -- Migration: drop storage_url if it exists (renamed to storage_path only)
@@ -1261,12 +1292,30 @@ CREATE TRIGGER minion_job_notify AFTER INSERT OR UPDATE OF status ON minion_jobs
   FOR EACH ROW EXECUTE FUNCTION notify_minion_job_change();
 
 -- ============================================================
--- Row Level Security: block anon access, postgres role bypasses
+-- Row Level Security: real source-isolation policies (v0.42 #6)
 -- ============================================================
--- The postgres role (used by gbrain via pooler) has BYPASSRLS.
--- Enabling RLS with no policies means the anon key can't read anything.
--- Only enable if the current role actually has BYPASSRLS privilege,
--- otherwise we'd lock ourselves out.
+-- Pre-v0.42 only `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` ran, with ZERO
+-- `CREATE POLICY`. So RLS was decorative: under the default `postgres`
+-- (BYPASSRLS) app role nothing was filtered, and under a restricted role
+-- EVERY row was denied (no policy = deny-all). Neither state provided the
+-- per-source isolation the security review expected.
+--
+-- These policies gate reads/writes on the source-bearing tables to the
+-- session GUC `app.source_id` (set per-request by the app, fail-closed when
+-- unset: current_setting(..., true) returns NULL → `source_id = NULL` is
+-- NULL → no rows). This is defense-in-depth ON TOP of the app-layer
+-- `sourceScopeOpts(ctx)` WHERE filters — it catches the "missed thread"
+-- bug class (a read path that forgot to thread sourceId) at the DB.
+--
+-- ACTIVATION: policies fire ONLY for roles WITHOUT BYPASSRLS. The default
+-- `postgres` app role bypasses RLS, so under the shipped default these are
+-- inert (no behavior change). Operators who want the backstop active deploy
+-- a restricted role (e.g. `voltmind_app`) and point DATABASE_URL at it; the
+-- app sets `app.source_id` per request via PostgresEngine.setSourceScope().
+-- The doctor `rls_role` check flags a BYPASSRLS app role so the inert state
+-- is visible.
+--
+-- PGLite has no RLS engine — pglite-schema.ts mirrors the columns only.
 DO $$
 DECLARE
   has_bypass BOOLEAN;
@@ -1314,8 +1363,53 @@ BEGIN
     ALTER TABLE oauth_clients ENABLE ROW LEVEL SECURITY;
     ALTER TABLE oauth_tokens ENABLE ROW LEVEL SECURITY;
     ALTER TABLE oauth_codes ENABLE ROW LEVEL SECURITY;
-    RAISE NOTICE 'RLS enabled on all tables (role % has BYPASSRLS)', current_user;
+
+    -- CREATE POLICY is a utility command and cannot run inside this DO block.
+    RAISE NOTICE 'v0.42 #6: RLS enabled (role % has BYPASSRLS; source-isolation policies are inert until app role is restricted + app.source_id is set per request)', current_user;
   ELSE
     RAISE WARNING 'Skipping RLS: role % does not have BYPASSRLS privilege. Run as postgres role to enable.', current_user;
   END IF;
 END $$;
+
+-- Keep fresh Postgres installs equivalent to migration v112. The policies
+-- are intentionally outside the bootstrap DO block because CREATE POLICY is
+-- a utility command. DROP-first makes this safe when a schema bootstrap is
+-- followed by migrations, which recreate the same policies.
+DROP POLICY IF EXISTS pages_source_isolation ON pages;
+CREATE POLICY pages_source_isolation ON pages
+  USING (source_id = current_setting('app.source_id', true))
+  WITH CHECK (source_id = current_setting('app.source_id', true));
+
+CREATE OR REPLACE FUNCTION public.voltmind_chunk_source_scope_matches(target_page_id INTEGER)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $fn$
+  SELECT EXISTS (
+    SELECT 1 FROM public.pages p
+    WHERE p.id = target_page_id
+      AND p.source_id = current_setting('app.source_id', true)
+  );
+$fn$;
+
+DROP POLICY IF EXISTS content_chunks_source_isolation ON content_chunks;
+CREATE POLICY content_chunks_source_isolation ON content_chunks
+  USING (public.voltmind_chunk_source_scope_matches(page_id))
+  WITH CHECK (public.voltmind_chunk_source_scope_matches(page_id));
+
+DROP POLICY IF EXISTS files_source_isolation ON files;
+CREATE POLICY files_source_isolation ON files
+  USING (source_id = current_setting('app.source_id', true))
+  WITH CHECK (source_id = current_setting('app.source_id', true));
+
+DROP POLICY IF EXISTS access_tokens_source_isolation ON access_tokens;
+CREATE POLICY access_tokens_source_isolation ON access_tokens
+  USING (source_id = current_setting('app.source_id', true))
+  WITH CHECK (source_id = current_setting('app.source_id', true));
+
+DROP POLICY IF EXISTS mcp_request_log_source_isolation ON mcp_request_log;
+CREATE POLICY mcp_request_log_source_isolation ON mcp_request_log
+  USING (source_id = current_setting('app.source_id', true))
+  WITH CHECK (source_id = current_setting('app.source_id', true));

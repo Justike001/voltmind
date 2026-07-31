@@ -298,7 +298,10 @@ describe('verifyAccessToken', () => {
   });
 
   test('legacy access_tokens fallback works', async () => {
-    // Insert a legacy bearer token
+    // Insert a legacy bearer token with NO explicit scopes. v0.42 #7: the
+    // column DEFAULT is now read+write (NOT admin), so verifyAccessToken
+    // returns the persisted narrow set instead of the pre-v0.42 hardcoded
+    // ['read','write','admin']. This is the closed hole.
     const legacyToken = generateToken('voltmind_');
     const hash = hashToken(legacyToken);
     await sql`
@@ -308,7 +311,21 @@ describe('verifyAccessToken', () => {
 
     const authInfo = await provider.verifyAccessToken(legacyToken);
     expect(authInfo.clientId).toBe('legacy-agent');
-    expect(authInfo.scopes).toEqual(['read', 'write', 'admin']); // grandfathered full access
+    expect(authInfo.scopes).toEqual(['read', 'write']); // safe default, not admin
+  });
+
+  test('legacy token with explicit admin scopes returns admin (v0.42 #7)', async () => {
+    // An operator who needs admin must opt in explicitly at mint time.
+    const adminToken = generateToken('voltmind_');
+    const hash = hashToken(adminToken);
+    const { pgArray } = await import('../src/core/oauth-provider.ts');
+    await sql`
+      INSERT INTO access_tokens (id, name, token_hash, scopes)
+      VALUES (${crypto.randomUUID()}, ${'admin-agent'}, ${hash}, ${pgArray(['read', 'write', 'admin'])}::text[])
+    `;
+
+    const authInfo = await provider.verifyAccessToken(adminToken);
+    expect(authInfo.scopes).toEqual(['read', 'write', 'admin']);
   });
 });
 
@@ -1461,9 +1478,9 @@ describe('v0.41.3 DCR validator (T5)', () => {
   test('DCR accepts "client_secret_basic" — codex F3 regression', async () => {
     const reg = await provider.clientsStore.registerClient!({
       client_name: 'dcr-basic-test',
-      grant_types: ['client_credentials'],
+      grant_types: ['authorization_code'],
       scope: 'read',
-      redirect_uris: [],
+      redirect_uris: ['https://example.test/cb'],
       token_endpoint_auth_method: 'client_secret_basic',
     } as any);
     expect(reg.client_id).toStartWith('voltmind_cl_');

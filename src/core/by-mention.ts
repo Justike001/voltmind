@@ -42,6 +42,24 @@ export const LINKABLE_ENTITY_TYPES = ['person', 'company', 'organization', 'enti
 const MIN_NAME_LENGTH = 4;
 
 /**
+ * Minimum title length for CJK-dominant titles. Chinese person/company
+ * names are commonly 2-3 characters (张三, 字节跳动 is 4); requiring 4
+ * ASCII-equivalent chars would drop most legitimate CJK entities. Lowered
+ * to 2 because single CJK chars are still too ambiguous for auto-linking
+ * (filtered separately by the single-token gate below).
+ */
+const MIN_NAME_LENGTH_CJK = 2;
+
+/**
+ * CJK Unified Ideographs (+ Ext A + Compatibility) — the ranges that
+ * matter for Chinese entity names. Used both to widen the tokenizer and
+ * to relax MIN_NAME_LENGTH for CJK-dominant titles.
+ */
+function hasCjk(text: string): boolean {
+  return /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(text);
+}
+
+/**
  * Built-in ignore list — common ambiguous tokens whose body-text mentions
  * are usually NOT references to the named brand/entity. Suppressed at
  * gazetteer-build time when no corresponding entity page exists.
@@ -105,17 +123,23 @@ export interface FindMentionsOpts {
 
 /**
  * Token-only tokenizer. Returns `[token, offset]` pairs for every
- * `[a-zA-Z0-9]+` run, lowercased. Non-ASCII (CJK, accented) is
- * deliberately not tokenized in v1 — entity gazetteer is English-dominant
- * in production today. Widening to `\p{L}+` is a future option once a
- * real CJK entity catalog appears (filed under TODO-1 + a TODO for
- * Unicode-aware tokenization).
+ * `[a-zA-Z0-9]+` run (lowercased) AND every individual CJK ideograph.
+ *
+ * CJK has no whitespace word boundaries, so a multi-char Chinese name
+ * like "字节跳动" is tokenized as four single-char tokens ['字','节','跳','动'];
+ * the maximal-munch matcher then reassembles it against a gazetteer entry
+ * whose `tokens` are likewise ['字','节','跳','动']. Each CJK char is one
+ * UTF-16 code unit (BMP), so offsets index cleanly into the source string.
+ *
+ * Non-CJK non-ASCII (accented Latin, etc.) is still not tokenized — CJK is
+ * the pressing gap for Chinese chat-log ingestion; broader `\p{L}+` Unicode
+ * tokenization remains a future option (filed under TODO-1).
  *
  * Possessive "Acme's" tokenizes as ['acme', 's'] (single-quote breaks the
  * run) — single-word "Acme" lookup succeeds at offset 0; the trailing 's'
  * is harmless noise.
  */
-const TOKEN_RE = /[a-zA-Z0-9]+/g;
+const TOKEN_RE = /[a-zA-Z0-9]+|[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/g;
 
 interface ScannedToken {
   text: string;       // lowercase
@@ -175,7 +199,13 @@ export async function buildGazetteer(
 
   const gazetteer: Gazetteer = new Map();
   for (const row of rows) {
-    if (!row.title || row.title.length < MIN_NAME_LENGTH) continue;
+    if (!row.title) continue;
+    // CJK-dominant titles use a relaxed min length: Chinese person/company
+    // names are commonly 2-3 chars (张三, 字节). ASCII titles keep the
+    // stricter 4-char gate to suppress dense false-positive auto-links
+    // (AI, YC, X, IBM).
+    const minLen = hasCjk(row.title) ? MIN_NAME_LENGTH_CJK : MIN_NAME_LENGTH;
+    if (row.title.length < minLen) continue;
     if (ignoreSet.has(row.title) && !existingTitles.has(row.title)) continue;
 
     const tokens = tokenizeTitle(row.title);

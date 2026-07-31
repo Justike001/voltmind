@@ -197,20 +197,189 @@ page_types:
     extractable: false
     expert_routing: false
 
+# Link verbs — VoltMind Personal Brain ontology v1.
+#
+# Designed to compile enterprise collaboration (Teams transcripts, IM, daily
+# logs) into a queryable work-memory graph across four sub-graphs:
+#   People graph        — who works with whom, who reports to whom
+#   Execution graph      — who owns / is assigned / contributes / authors
+#   Knowledge provenance — where a decision / topic / risk came from
+#   Business graph       — company relationships (partner / customer / vendor)
+#
+# Two kinds of inference:
+#   1. page_type-bound (attended): deterministic, no regex.
+#   2. inference.regex: powers `extract links --ner`. The NER path consults
+#      pack-declared regex ONLY — it does NOT fall through to the legacy
+#      in-code matchers in link-extraction.ts. Without regex entries --ner
+#      returns 0.
+#
+# Every regex is BILINGUAL (English + Chinese):
+#   - English patterns stay \b-bounded (word boundaries work for ASCII).
+#   - Chinese alternatives match ideographs literally. CJK has no \b
+#     word-boundary semantics, so we list triggers as plain alternations;
+#     they fire within the 80-char context window around a recognized
+#     entity mention (see extract-ner.ts CONTEXT_WINDOW_CHARS).
+#
+# Chinese trigger policy: KEEP every previously-shipped formal/official
+# trigger AND add the colloquial / IM-flavored ones. Formal + official +
+# colloquial all coexist; this file only accumulates, never drops.
+#
+# Declaration order matters: NER resolves first-match-wins. Verbs are
+# ordered so the more-specific signal precedes the broader one:
+#   - advises  before works_at  ("担任顾问" → advises, not works_at's 担任)
+#   - assigned_to before owns    ("action负责人" → assigned_to, not owns's 负责)
+#   - reports_to before member_of ("汇报给张三" → reports_to, not member_of)
+#   - contributes_to before works_on ("contribute to project" → contributes_to)
+#   - blocks / depends_on are split: blocks = negative blocker,
+#     depends_on = structural dependency. "depends on / 依赖 / 取决于"
+#     live ONLY on depends_on so blocks cannot starve it.
+#   - works_at is intentionally LAST (before mentions): it is the most
+#     over-matching generic verb (加入 / 担任 / 现在在 …) and must yield to
+#     every more-specific verb first.
+#
+# The 4 relationship verbs (founded/invested_in/advises/works_at) mirror
+# the FULL production regex set in link-extraction.ts (FOUNDED_RE /
+# INVESTED_RE / ADVISES_RE / WORKS_AT_RE) plus Chinese equivalents, so
+# --ner matches what the default extract path catches in English prose.
 link_types:
   - name: attended
     inference:
       page_type: meeting
+
+  - name: reports_to
+    inverse: manages
+    inference:
+      regex: \b(reports to|managed by|manager is|direct report|line manager|reports into)\b|(汇报给|直属领导|直属老板|直属|上级是|老板是|向.{0,8}汇报|直接汇报|report给|report to)
+
+  - name: manages
+    inverse: reports_to
+    inference:
+      regex: \b(manage|managed|lead|leader of|manager of|leads the team)\b|(管理|带团队|带人|带.{0,8}工程师|负责管理|下面的人|手下|直属下属|带着.{0,8}做)
+
+  - name: advises
+    inference:
+      regex: \b(advises|advised|advisor (?:to|at|for|of)|advisory (?:board|role|position|capacity|engagement|partnership|contract|relationship|work)|board advisor|on .{0,20} advisory board|joined .{0,20} advisory board|in an? advisory (?:capacity|role|position)|as an? (?:advisor|security advisor|technical advisor|strategic advisor|industry advisor|product advisor|board advisor|senior advisor)|(?:strategic|technical|security|product|industry|senior|board) advisor (?:to|at|for|of)|consults for|consulting role (?:at|with))\b|(顾问|担任顾问|顾问委员会|战略顾问|技术顾问|安全顾问|产品顾问|资深顾问|提供咨询|咨询角色|咨询顾问|帮忙看|给.{0,8}建议|给.{0,8}意见|提供意见)
+
+  - name: mentors
+    inverse: mentored_by
+    inference:
+      regex: \b(mentor|mentored|coach|coached)\b|(指导|辅导|培养|带新人|带徒弟|教他|教我)
+
+  - name: introduced
+    inverse: introduced_by
+    inference:
+      regex: \b(introduce|introduced|connect)\b|(介绍认识|引荐|牵线|帮忙认识|拉.{0,8}认识)
+
   - name: member_of
     inverse: has_member
-  - name: owns
-    inverse: owned_by
+    inference:
+      target_type: [org, company]
+      regex: \b(member of|part of|on the team|in the org|belongs to|reports into)\b|(属于|隶属于|是.{0,6}成员|团队成员|加入.{0,8}团队|在.{0,8}团队|归.{0,6}管)
+
+  - name: collaborates_with
+    inference:
+      regex: \b(collaborate|collaborated|working with|sync with|align with|partner with)\b|(一起做|一起推进|一起负责|协作|合作|配合|同步|对齐|跟.{0,8}一起|和.{0,8}一起)
+
   - name: assigned_to
     inverse: assigned
+    inference:
+      regex: \b(assigned to|tasked with|action item for|follow-up for|owner is)\b|(分配给|指派给|交办给|安排给|交给|落实到|让.{0,6}负责|麻烦.{0,6}跟一下|这个给.{0,6}|接一下|action负责人|待办负责人|任务负责人)
+
+  - name: owns
+    inverse: owned_by
+    inference:
+      target_type: [project, workstream]
+      regex: \b(owns|owner of|owner|responsible for|runs|leads|head of|in charge of|driving|drives)\b|(负责|主导|掌管|牵头|主管|带队|owner是|drive|驱动|挂在.{0,6}名下|归.{0,6}负责|项目负责人|workstream负责人)
+
+  - name: reviewed_by
+    inverse: reviewed
+    inference:
+      target_type: artifact
+      regex: \b(review|reviewed|approve|approved)\b|(评审|审核|审批|review一下|帮忙看看|看一下方案)
+
+  - name: authored
+    inverse: authored_by
+    inference:
+      target_type: artifact
+      regex: \b(authored|written by|drafted|created by)\b|(写的|撰写|起草|整理|输出|产出|文档是.{0,8}写)
+
+  - name: contributes_to
+    inverse: contributors
+    inference:
+      target_type: [project, workstream, artifact]
+      regex: \b(contribute|contributed|contribution)\b|(贡献|提供|支持|帮忙完成|输出|补充)
+
+  - name: works_on
+    inverse: contributors
+    inference:
+      target_type: [project, workstream]
+      regex: \b(work on|working on|worked on|contribute to|contributing)\b|(参与|负责做|在做|正在做|跟进|推进|维护|开发|投入到|加入.{0,8}项目|搞.{0,8}项目)
+
   - name: blocks
     inverse: blocked_by
+    inference:
+      target_type: action
+      regex: \b(blocks|blocked by|blocking|jeopardizes|threatens|risk to)\b|(阻塞|阻碍|卡住|卡在|依赖不了|危及|影响进度|等待|等着)
+
+  - name: depends_on
+    inference:
+      target_type: project
+      regex: \b(depends on|based on|requires|rely on|relying on)\b|(依赖|基于|建立在|需要.{0,8}支持|离不开|取决于)
+
+  - name: decided_in
+    inference:
+      target_type: decision
+      regex: \b(decided in|decided at)\b|(决定于|会上决定|会议决定|讨论后确定|定下来|拍板)
+
   - name: evidence_for
     inverse: has_evidence
+    inference:
+      target_type: decision
+      regex: \b(evidence for|evidence of|supports|source for|cited in|reference for|basis for|corroborates)\b|(证据|依据|佐证|引用|来源于|出处是|来源是|支持|听谁说的|群里提到|会议里说)
+
+  - name: discussed_in
+    inference:
+      target_type: concept
+      regex: \b(discussed in|topic of|covered in|raised in|came up in)\b|(在.{0,10}讨论|讨论于|讨论过|聊过|提过|说过|会上讲|同步过|review过|在.{0,10}提及|在.{0,10}提出)
+
+  - name: discovered_by
+    inverse: discovered
+    inference:
+      target_type: risk
+      regex: \b(discovered|identified|found)\b|(发现|识别|提出来|指出|暴露)
+
+  - name: founded
+    inverse: founded_by
+    inference:
+      regex: \b(founded|co-?founded|started the company|incorporated|founder of|founders? (?:include|are)|the founder|is a co-?founder|is one of the founders)\b|(创立了?|创办了?|联合创始|创始人|创办者|共同创立|发起成立|创立者)
+
+  - name: invested_in
+    inverse: invested_by
+    inference:
+      regex: \b(invested in|invests in|investing in|invest in|investment in|investments in|backed by|funding from|funded by|raised from|led the (?:seed|Series|round|investment)|led .{0,30}(?:Series [A-Z]|seed|round|investment)|participated in (?:the )?(?:seed|Series|round)|wrote (?:a |the )?check|first check|early investor|portfolio (?:company|includes)|board seat (?:at|in|on)|term sheet for)\b|(投资了?|投资过|投了|领投|参投|跟投|注资|入股|融资来自?|获投|早期投资|天使投资|下注|押注|打款|给.{0,8}钱|投了一笔|写check|给TS)
+
+  - name: partner_of
+    inference:
+      regex: \b(partner|partnership|strategic partner)\b|(合作伙伴|合作方|战略合作|联合推进|生态伙伴)
+
+  - name: customer_of
+    inverse: supplier_to
+    inference:
+      regex: \b(customer|client)\b|(客户|甲方|采购方|使用方)
+
+  - name: supplies_to
+    inverse: supplier
+    inference:
+      regex: \b(supplier|vendor|provide)\b|(供应商|供货|提供.{0,8}|厂商)
+
+  - name: competes_with
+    inference:
+      regex: \b(compete|competitor)\b|(竞品|竞争对手|对标|相比|抢市场)
+
+  - name: works_at
+    inference:
+      regex: \b(CEO of|CTO of|COO of|CFO of|CMO of|CRO of|VP at|VP of|VPs? Engineering|VPs? Product|works at|worked at|working at|employed by|employed at|joined as|joined the team|engineer at|engineer for|director at|director of|head of|heads up .{0,20} at|leads engineering|leads product|leads the .{0,20} (?:team|org) at|manages engineering at|manages product at|running (?:engineering|product|design) at|currently at|previously at|previously worked at|spent .* (?:years|months) at|stint at|stint as|tenure at|tenure as|role at|position at|(?:senior|staff|principal|lead|backend|frontend|full-?stack|ML|data|security) engineer at|promoted to (?:senior|staff|principal|lead) .{0,20} at|(?:his|her|their|my) time at)\b|(加入|入职|跳槽|来了|过去在|之前在|目前在|现在在|转到|任职于|就职于|就职|担任|出任|就任|现任|曾任|在.{0,8}工作|升任|当上)
+
   - name: mentions
 
 frontmatter_links:

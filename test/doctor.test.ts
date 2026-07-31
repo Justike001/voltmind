@@ -584,6 +584,19 @@ describe('v0.32.4 — sync_freshness check', () => {
     // must include the id so the CLI command actually works.
     expect(result.message).toContain(`'wiki-id'`);
   });
+
+  test('source query excludes archived sources', async () => {
+    const { checkSyncFreshness } = await import('../src/commands/doctor.ts');
+    let sql = '';
+    const engine = {
+      executeRaw: async (query: string) => {
+        sql = query;
+        return [];
+      },
+    };
+    await checkSyncFreshness(engine as any);
+    expect(sql).toContain('archived IS NOT TRUE');
+  });
 });
 
 // Supervisor crash classifier wiring. Pre-fix, doctor.ts:1013 counted every

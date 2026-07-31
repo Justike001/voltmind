@@ -58,6 +58,7 @@ import { validateSlug, contentHash, rowToPage, rowToChunk, rowToSearchResult, pa
 import { resolveBoostMap, resolveHardExcludes } from './search/source-boost.ts';
 import { buildSourceFactorCase, buildHardExcludeClause, buildVisibilityClause, buildRecencyComponentSql } from './search/sql-ranking.ts';
 import { DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from './ai/defaults.ts';
+import { healthEntityTypeSql } from './health-entity-types.ts';
 
 function escapeSqlStringLiteral(value: string): string {
   return value.replace(/'/g, "''");
@@ -778,6 +779,35 @@ export class PostgresEngine implements BrainEngine {
       Object.defineProperty(txEngine, '_sql', { value: tx as unknown as ReturnType<typeof postgres>, writable: false });
       return fn(txEngine);
     }) as Promise<T>;
+  }
+
+  /**
+   * v0.42 #6: set the `app.source_id` session GUC for the CURRENT transaction.
+   *
+   * This is the activation hook for the RLS source-isolation policies
+   * installed by migration v112 / schema.sql. The policies are
+   * `USING (source_id = current_setting('app.source_id', true))`; without
+   * this call the GUC is unset, `current_setting(..., true)` returns NULL,
+   * and `source_id = NULL` fails closed (no rows) under a non-BYPASSRLS role.
+   *
+   * MUST be called inside a transaction (the dispatcher wraps the op handler
+   * in `engine.transaction(...)`). `SET LOCAL` scopes the GUC to the
+   * transaction so it can never leak onto a pooled connection — the same
+   * pattern the search-vector path uses for `SET LOCAL statement_timeout`.
+   *
+   * Inert under the default BYPASSRLS `postgres` app role (RLS doesn't fire).
+   * No-op on PGLite (no RLS engine; overridden there).
+   */
+  async setSourceScope(sourceId: string): Promise<void> {
+    // SET LOCAL requires a transaction; if a caller invoked us outside one
+    // (a future code path that doesn't wrap), postgres.js would throw. Guard
+    // so the method degrades to a no-op rather than crashing the op — the
+    // app-layer WHERE filter is the primary control anyway.
+    try {
+      await this.sql`SET LOCAL app.source_id = ${sourceId}`;
+    } catch {
+      // best-effort: RLS is defense-in-depth, never the primary gate.
+    }
   }
 
   async withReservedConnection<T>(fn: (conn: ReservedConnection) => Promise<T>): Promise<T> {
@@ -3043,7 +3073,7 @@ export class PostgresEngine implements BrainEngine {
     const rows = await sql<Array<{ id: number; created: boolean }>>`
       INSERT INTO files (source_id, page_slug, page_id, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
       VALUES (${sourceId}, ${spec.page_slug ?? null}, ${spec.page_id ?? null}, ${spec.filename}, ${spec.storage_path}, ${spec.mime_type ?? null}, ${spec.size_bytes ?? null}, ${spec.content_hash}, ${sql.json(metadata)})
-      ON CONFLICT (storage_path) DO UPDATE SET
+      ON CONFLICT (source_id, storage_path) DO UPDATE SET
         page_slug = EXCLUDED.page_slug,
         page_id = EXCLUDED.page_id,
         filename = EXCLUDED.filename,
@@ -4224,7 +4254,8 @@ export class PostgresEngine implements BrainEngine {
     };
   }
 
-  async getHealth(): Promise<BrainHealth> {
+  async getHealth(opts?: { entityTypes?: string[] }): Promise<BrainHealth> {
+    const entityTypeFilter = healthEntityTypeSql(opts?.entityTypes);
     const sql = this.sql;
     // Bug 11 doc-drift fix — orphan_pages means "islanded" (no inbound AND
     // no outbound links), aligning both engines with the user-facing
@@ -4235,7 +4266,7 @@ export class PostgresEngine implements BrainEngine {
     const [h] = await sql`
       WITH entity_pages AS (
         SELECT id, slug FROM pages
-        WHERE type IN ('person', 'company') AND deleted_at IS NULL
+        WHERE ${sql.unsafe(entityTypeFilter)} AND deleted_at IS NULL
       ), scored_pages AS (
         -- Navigation, policy, and template documents are deliberately sparse.
         -- Excluding them prevents their lack of timelines/links from lowering
@@ -4296,7 +4327,7 @@ export class PostgresEngine implements BrainEngine {
               JOIN pages dst ON dst.id = l.to_page_id AND dst.deleted_at IS NULL
               WHERE l.from_page_id = p.id OR l.to_page_id = p.id)::int as link_count
       FROM pages p
-      WHERE p.type IN ('person', 'company') AND p.deleted_at IS NULL
+      WHERE ${sql.unsafe(entityTypeFilter)} AND p.deleted_at IS NULL
       ORDER BY link_count DESC
       LIMIT 5
     `;
@@ -4363,9 +4394,37 @@ export class PostgresEngine implements BrainEngine {
     `;
   }
 
-  async getIngestLog(opts?: { limit?: number }): Promise<IngestLogEntry[]> {
+  async getIngestLog(opts?: { limit?: number; sourceId?: string; sourceIds?: string[] }): Promise<IngestLogEntry[]> {
     const sql = this.sql;
     const limit = opts?.limit || 50;
+    // v0.42 (#861 audit follow-up, finding #5): scope the SELECT to the
+    // caller's source set so a remote OAuth client scoped to src-A can't
+    // enumerate src-B's ingest history. sourceIds (federated) subsumes
+    // the scalar sourceId case; both unset = local-CLI admin view (every
+    // source). The `= ANY` form keeps the query plannable for both the
+    // single-source and federated-multi-source shapes.
+    if (opts?.sourceIds && opts.sourceIds.length > 0) {
+      const rows = await sql`
+        SELECT * FROM ingest_log
+        WHERE source_id = ANY(${opts.sourceIds})
+        ORDER BY created_at DESC LIMIT ${limit}
+      `;
+      return (rows as unknown as IngestLogEntry[]).map(r => ({
+        ...r,
+        source_id: r.source_id ?? 'default',
+      }));
+    }
+    if (opts?.sourceId) {
+      const rows = await sql`
+        SELECT * FROM ingest_log
+        WHERE source_id = ${opts.sourceId}
+        ORDER BY created_at DESC LIMIT ${limit}
+      `;
+      return (rows as unknown as IngestLogEntry[]).map(r => ({
+        ...r,
+        source_id: r.source_id ?? 'default',
+      }));
+    }
     const rows = await sql`
       SELECT * FROM ingest_log ORDER BY created_at DESC LIMIT ${limit}
     `;

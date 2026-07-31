@@ -172,6 +172,30 @@ describe('sources list', () => {
     const select = calls.find(c => c.sql.includes('ORDER BY (id = \'default\') DESC'));
     expect(select).toBeDefined();
   });
+
+  test("excludes archived sources and counts only active pages", async () => {
+    const { engine, calls } = makeStub({
+      "SELECT id, name, local_path, last_commit, last_sync_at, config, created_at": [
+        { id: "default", name: "default", local_path: null, last_commit: null, last_sync_at: null, config: "{}", created_at: new Date(), archived: false },
+        { id: "archived", name: "archived", local_path: null, last_commit: null, last_sync_at: null, config: "{}", created_at: new Date(), archived: true },
+      ],
+      "COUNT(*)::int AS n": [{ n: 1 }],
+    });
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { logs.push(String(args[0])); };
+    try {
+      await runSources(engine, ["list", "--json"]);
+    } finally {
+      console.log = originalLog;
+    }
+    const result = JSON.parse(logs[0]!);
+    expect(result.sources.map((s: { id: string }) => s.id)).toEqual(["default"]);
+    const sourceQuery = calls.find(c => c.sql.includes("FROM sources"));
+    expect(sourceQuery?.sql).toContain("archived");
+    const pageQuery = calls.find(c => c.sql.includes("FROM pages"));
+    expect(pageQuery?.sql).toContain("deleted_at IS NULL");
+  });
 });
 
 // ── remove ──────────────────────────────────────────────────

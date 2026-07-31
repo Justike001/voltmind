@@ -55,6 +55,7 @@ import {
   EmbeddingColumnNotRegisteredError,
 } from './search/embedding-column.ts';
 import { hasCJK, escapeLikePattern } from './cjk.ts';
+import { healthEntityTypeSql } from './health-entity-types.ts';
 
 type PGLiteDB = PGlite;
 
@@ -804,6 +805,16 @@ export class PGLiteEngine implements BrainEngine {
       Object.defineProperty(txEngine, 'db', { get: () => tx });
       return fn(txEngine);
     });
+  }
+
+  /**
+   * v0.42 #6: PGLite no-op. PGLite has no RLS engine (single-tenant local
+   * file), so there is no GUC to set. Implemented to satisfy the
+   * BrainEngine interface so dispatch code can call it unconditionally
+   * without branching on engine kind.
+   */
+  async setSourceScope(_sourceId: string): Promise<void> {
+    // intentionally empty — PGLite has no RLS.
   }
 
   // Pages CRUD
@@ -2986,7 +2997,7 @@ export class PGLiteEngine implements BrainEngine {
     const result = await this.db.query<{ id: number; created: boolean }>(
       `INSERT INTO files (source_id, page_slug, page_id, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
-       ON CONFLICT (storage_path) DO UPDATE SET
+       ON CONFLICT (source_id, storage_path) DO UPDATE SET
          page_slug = EXCLUDED.page_slug,
          page_id = EXCLUDED.page_id,
          filename = EXCLUDED.filename,
@@ -4255,7 +4266,8 @@ export class PGLiteEngine implements BrainEngine {
     };
   }
 
-  async getHealth(): Promise<BrainHealth> {
+  async getHealth(opts?: { entityTypes?: string[] }): Promise<BrainHealth> {
+    const entityTypeFilter = healthEntityTypeSql(opts?.entityTypes);
     // Combined metrics from master (brain_score components: dead_links, link_count,
     // pages_with_timeline) and v0.10.3 graph layer (link_coverage, timeline_coverage,
     // most_connected). Both coexist: master's brain_score is the composite
@@ -4263,7 +4275,7 @@ export class PGLiteEngine implements BrainEngine {
     const { rows: [h] } = await this.db.query(`
       WITH entity_pages AS (
         SELECT id, slug FROM pages
-        WHERE type IN ('person', 'company') AND deleted_at IS NULL
+        WHERE ${entityTypeFilter} AND deleted_at IS NULL
       ), scored_pages AS (
         -- Navigation, policy, and template documents are deliberately sparse.
         -- Excluding them prevents their lack of timelines/links from lowering
@@ -4327,7 +4339,7 @@ export class PGLiteEngine implements BrainEngine {
               JOIN pages dst ON dst.id = l.to_page_id AND dst.deleted_at IS NULL
               WHERE l.from_page_id = p.id OR l.to_page_id = p.id)::int as link_count
       FROM pages p
-      WHERE p.type IN ('person', 'company') AND p.deleted_at IS NULL
+      WHERE ${entityTypeFilter} AND p.deleted_at IS NULL
       ORDER BY link_count DESC
       LIMIT 5
     `);
@@ -4395,11 +4407,40 @@ export class PGLiteEngine implements BrainEngine {
     );
   }
 
-  async getIngestLog(opts?: { limit?: number }): Promise<IngestLogEntry[]> {
+  async getIngestLog(opts?: { limit?: number; sourceId?: string; sourceIds?: string[] }): Promise<IngestLogEntry[]> {
     const limit = opts?.limit || 50;
+    // v0.42 (#861 audit follow-up, finding #5): mirror the Postgres source
+    // scoping. PGLite is single-source / single-process so the leak surface
+    // is smaller, but the contract must match so op handlers can't drift
+    // between engines. sourceIds (federated) subsumes scalar sourceId;
+    // both unset = local-CLI admin view.
+    if (opts?.sourceIds && opts.sourceIds.length > 0) {
+      // PGLite parameterizes arrays via the IN ($1) spread; build the
+      // placeholder list to match the array length.
+      const ids = opts.sourceIds;
+      const placeholders = ids.map((_, i) => `$${i + 2}`).join(', ');
+      const { rows } = await this.db.query(
+        `SELECT * FROM ingest_log WHERE source_id IN (${placeholders}) ORDER BY created_at DESC LIMIT $1`,
+        [limit, ...ids],
+      );
+      return (rows as unknown as IngestLogEntry[]).map(r => ({
+        ...r,
+        source_id: r.source_id ?? 'default',
+      }));
+    }
+    if (opts?.sourceId) {
+      const { rows } = await this.db.query(
+        `SELECT * FROM ingest_log WHERE source_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [opts.sourceId, limit],
+      );
+      return (rows as unknown as IngestLogEntry[]).map(r => ({
+        ...r,
+        source_id: r.source_id ?? 'default',
+      }));
+    }
     const { rows } = await this.db.query(
       `SELECT * FROM ingest_log ORDER BY created_at DESC LIMIT $1`,
-      [limit]
+      [limit],
     );
     // Belt-and-suspenders source_id fallback for any pre-v50 row that
     // somehow survived without the backfill.

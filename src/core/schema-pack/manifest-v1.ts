@@ -33,7 +33,14 @@ const PackPrimitiveEnum = z.enum(PACK_PRIMITIVES);
 const LinkInferenceSchema = z.object({
   regex: z.string().optional(),
   page_type: z.string().optional(),
-  target_type: z.string().optional(),
+  /**
+   * Optional target page-type constraint for NER precision. When declared,
+   * `extract links --ner` only emits this verb when the recognized target
+   * page's type matches. Accepts a single type string OR a list (for verbs
+   * whose semantic target spans multiple types, e.g. owns → project |
+   * workstream). Default: no constraint (verb may apply to any target type).
+   */
+  target_type: z.union([z.string(), z.array(z.string())]).optional(),
 }).strict();
 
 const LinkTypeSchema = z.object({

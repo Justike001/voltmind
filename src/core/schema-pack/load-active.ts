@@ -22,8 +22,7 @@
 // writing to `~/.voltmind/schema-packs/`.
 
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import type { VoltMindConfig } from '../config.ts';
 import { voltmindPath } from '../config.ts';
 import type { SchemaPackManifest } from './manifest-v1.ts';
@@ -38,6 +37,36 @@ import {
   type ResolutionResult,
 } from './registry.ts';
 
+// Bun does not embed assets discovered only through runtime path joins. Keep
+// every bundled manifest as a static `type: 'file'` import so `bun build
+// --compile` can resolve the same files as a source checkout.
+// @ts-ignore — type: 'file' is Bun ESM syntax, not represented in lib.d.ts.
+import VOLTMIND_BASE_PACK from './base/voltmind-base.yaml' with { type: 'file' };
+// @ts-ignore — type: 'file' is Bun ESM syntax, not represented in lib.d.ts.
+import VOLTMIND_PERSONAL_BRAIN_PACK from './base/voltmind-personal-brain.yaml' with { type: 'file' };
+// @ts-ignore — type: 'file' is Bun ESM syntax, not represented in lib.d.ts.
+import VOLTMIND_RECOMMENDED_PACK from './base/voltmind-recommended.yaml' with { type: 'file' };
+// @ts-ignore — type: 'file' is Bun ESM syntax, not represented in lib.d.ts.
+import VOLTMIND_COMPANY_CORE_PACK from './base/voltmind-company-core.yaml' with { type: 'file' };
+// @ts-ignore — type: 'file' is Bun ESM syntax, not represented in lib.d.ts.
+import VOLTMIND_CREATOR_PACK from './base/voltmind-creator.yaml' with { type: 'file' };
+// @ts-ignore — type: 'file' is Bun ESM syntax, not represented in lib.d.ts.
+import VOLTMIND_INVESTOR_PACK from './base/voltmind-investor.yaml' with { type: 'file' };
+// @ts-ignore — type: 'file' is Bun ESM syntax, not represented in lib.d.ts.
+import VOLTMIND_ENGINEER_PACK from './base/voltmind-engineer.yaml' with { type: 'file' };
+// @ts-ignore — type: 'file' is Bun ESM syntax, not represented in lib.d.ts.
+import VOLTMIND_EVERYTHING_PACK from './base/voltmind-everything.yaml' with { type: 'file' };
+
+const BUNDLED_PACK_PATHS: ReadonlyMap<string, string> = new Map([
+  ['voltmind-base', VOLTMIND_BASE_PACK as unknown as string],
+  ['voltmind-personal-brain', VOLTMIND_PERSONAL_BRAIN_PACK as unknown as string],
+  ['voltmind-recommended', VOLTMIND_RECOMMENDED_PACK as unknown as string],
+  ['voltmind-company-core', VOLTMIND_COMPANY_CORE_PACK as unknown as string],
+  ['voltmind-creator', VOLTMIND_CREATOR_PACK as unknown as string],
+  ['voltmind-investor', VOLTMIND_INVESTOR_PACK as unknown as string],
+  ['voltmind-engineer', VOLTMIND_ENGINEER_PACK as unknown as string],
+  ['voltmind-everything', VOLTMIND_EVERYTHING_PACK as unknown as string],
+]);
 /**
  * Inputs the caller (operations.ts handler / engine query path) provides.
  * Most callers only need `cfg` + `remote`; thin-client + source-aware
@@ -92,37 +121,8 @@ export function _resetPackLocatorForTests(): void {
  * throwing UnknownPackError with a paste-ready install hint.
  */
 function defaultPackLocator(name: string): string | null {
-  // v0.39 T8 — bundled packs registry. voltmind-base + voltmind-recommended
-  // ship in src/core/schema-pack/base/. Add a new entry here to bundle
-  // additional canonical packs.
-  //
-  // v0.41 T4 — lens packs join the bundle: creator (atoms + concepts +
-  // extract_atoms/synthesize_concepts phases), investor (theses + bet
-  // resolution + 3 calibration domains), engineer (gstack-learnings bridge
-  // + 3 calibration domains), everything (meta-pack stacking all three
-  // via extends + borrow_from). Each ships as a real YAML at base/<name>.yaml.
-  const BUNDLED: ReadonlyArray<string> = [
-    'voltmind-base',
-    'voltmind-personal-brain',
-    'voltmind-recommended',
-    'voltmind-company-core',
-    'voltmind-creator',
-    'voltmind-investor',
-    'voltmind-engineer',
-    'voltmind-everything',
-  ];
-  if (BUNDLED.includes(name)) {
-    // Resolve bundled YAML relative to this source file. Works in both
-    // direct-bun execution and bun --compile binaries.
-    const here = dirname(fileURLToPath(import.meta.url));
-    const bundledPath = join(here, 'base', `${name}.yaml`);
-    if (existsSync(bundledPath)) return bundledPath;
-    // Repo-root fallback for tests running from a worktree where the
-    // module path doesn't resolve to the source tree.
-    const repoRootFallback = join(here, '..', '..', '..', 'src', 'core', 'schema-pack', 'base', `${name}.yaml`);
-    if (existsSync(repoRootFallback)) return repoRootFallback;
-    return null;
-  }
+  const bundledPath = BUNDLED_PACK_PATHS.get(name);
+  if (bundledPath) return bundledPath;
   // User-installed pack at ~/.voltmind/schema-packs/<name>/pack.{yaml,json}
   const baseDir = voltmindPath('schema-packs', name);
   const candidates = ['pack.yaml', 'pack.yml', 'pack.json'];

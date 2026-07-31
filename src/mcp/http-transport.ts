@@ -33,6 +33,7 @@ import { VERSION } from '../version.ts';
 import { dispatchToolCall } from './dispatch.ts';
 import { buildDefaultLimiters, type RateLimiter } from './rate-limit.ts';
 import { sqlQueryForEngine } from '../core/sql-query.ts';
+import { resolveBrainId } from '../core/brain-resolver.ts';
 
 const DEFAULT_BODY_CAP = 1024 * 1024; // 1 MiB
 
@@ -135,7 +136,14 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
   const limiters = opts.limiters || buildDefaultLimiters();
   const bodyCap = envInt('VOLTMIND_HTTP_MAX_BODY_BYTES', DEFAULT_BODY_CAP);
   const corsAllowlist = parseCorsAllowlist();
-  const tools = buildToolDefs(operations);
+  const tools = buildToolDefs(operations.filter(op => !op.localOnly));
+
+  // v0.42 (#861 audit follow-up): resolve the brain (mount) id once at
+  // transport startup so every mcp_request_log row this server writes is
+  // attributable to the brain it served. Mirrors the per-request source_id
+  // axis (source = which repo; brain = which database). Falls back to the
+  // host brain id when no mount / VOLTMIND_BRAIN_ID / dotfile resolves.
+  const brainIdForProcess = resolveBrainId(null);
 
   /**
    * v0.41.3 (T6): single consolidated CORS header builder. Pre-fix there were
@@ -214,9 +222,23 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
     }
   }
 
-  function logRequest(tokenName: string | null, operation: string, status: string, latencyMs: number) {
-    sql`INSERT INTO mcp_request_log (token_name, operation, latency_ms, status)
-        VALUES (${tokenName}, ${operation}, ${latencyMs}, ${status})`
+  function logRequest(
+    tokenName: string | null,
+    operation: string,
+    status: string,
+    latencyMs: number,
+    sourceId?: string | null,
+  ) {
+    // v0.42 (#861 audit follow-up): thread the resolved source_id so the
+    // audit trail can be sliced per-source. NULL for pre-auth failures
+    // (no token resolved yet) and historical paths that didn't carry it.
+    // brain_id is the process-wide resolved brain (mount) id — fixed for
+    // the life of this transport so every row from this server is
+    // attributable to the brain it served.
+    const brainId = brainIdForProcess;
+    const values = [tokenName, operation, latencyMs, status, sourceId ?? null, brainId];
+    sql`INSERT INTO mcp_request_log (token_name, operation, latency_ms, status, source_id, brain_id)
+        VALUES (${values[0]}, ${values[1]}, ${values[2]}, ${values[3]}, ${values[4]}, ${values[5]})`
       .catch(() => { /* best-effort */ });
   }
 
@@ -295,7 +317,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
       // Post-auth token-id rate limit. Limits runaway authed clients.
       const tokCheck = limiters.token.check(auth.tokenId!);
       if (!tokCheck.allowed) {
-        logRequest(auth.tokenName!, 'unknown', 'rate_limited', Date.now() - startedMs);
+        logRequest(auth.tokenName!, 'unknown', 'rate_limited', Date.now() - startedMs, auth.sourceId);
         return Response.json(
           { error: 'rate_limited', message: 'Too many requests for this token' },
           {
@@ -321,7 +343,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
 
       // initialize
       if (method === 'initialize') {
-        logRequest(auth.tokenName!, 'initialize', 'success', Date.now() - startedMs);
+        logRequest(auth.tokenName!, 'initialize', 'success', Date.now() - startedMs, auth.sourceId);
         return Response.json(
           {
             result: {
@@ -343,7 +365,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
 
       // tools/list
       if (method === 'tools/list') {
-        logRequest(auth.tokenName!, 'tools/list', 'success', Date.now() - startedMs);
+        logRequest(auth.tokenName!, 'tools/list', 'success', Date.now() - startedMs, auth.sourceId);
         return Response.json(
           { result: { tools }, jsonrpc: '2.0', id },
           { headers: corsHeaders(origin) },
@@ -364,7 +386,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
           sourceId: auth.sourceId,
         });
         const status = result.isError ? 'error' : 'success';
-        logRequest(auth.tokenName!, `tools/call:${toolName}`, status, Date.now() - startedMs);
+        logRequest(auth.tokenName!, `tools/call:${toolName}`, status, Date.now() - startedMs, auth.sourceId);
         return Response.json(
           { result, jsonrpc: '2.0', id },
           { headers: corsHeaders(origin) },

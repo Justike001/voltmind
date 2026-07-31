@@ -106,7 +106,10 @@ async function fetchSource(engine: BrainEngine, id: string): Promise<SourceRow |
 
 async function countPages(engine: BrainEngine, sourceId: string): Promise<number> {
   const rows = await engine.executeRaw<{ n: number }>(
-    `SELECT COUNT(*)::int AS n FROM pages WHERE source_id = $1`,
+    `SELECT COUNT(*)::int AS n
+       FROM pages
+      WHERE source_id = $1
+        AND deleted_at IS NULL`,
     [sourceId],
   );
   return rows[0]?.n ?? 0;
@@ -183,9 +186,8 @@ async function runList(engine: BrainEngine, args: string[]): Promise<void> {
   const json = args.includes('--json');
 
   // v0.40 (D7): loadAllSources is the single source of truth for source enum.
-  // Pass includeArchived=true to preserve the legacy `runList` behavior of
-  // surfacing archived rows (they get the ⚠ marker below).
-  const rows: LoadedSourceRow[] = await loadAllSources(engine, { includeArchived: true });
+  // The shared loader excludes soft-archived rows by default.
+  const rows: LoadedSourceRow[] = await loadAllSources(engine);
 
   const entries: SourceListEntry[] = [];
   for (const r of rows) {

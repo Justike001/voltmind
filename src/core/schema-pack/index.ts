@@ -205,3 +205,9 @@ export {
   runAllLintRules,
   runFilePlaneLintRules,
 } from './lint-rules.ts';
+
+export {
+  LEGACY_HEALTH_ENTITY_TYPES,
+  healthEntityTypesFromPack,
+  healthEntityTypeSql,
+} from '../health-entity-types.ts';

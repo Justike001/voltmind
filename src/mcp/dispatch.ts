@@ -7,9 +7,12 @@
  */
 
 import type { BrainEngine } from '../core/engine.ts';
-import { operations, OperationError } from '../core/operations.ts';
+import { operations, OperationError, resolveWriteSourceId } from '../core/operations.ts';
 import type { Operation, OperationContext, AuthInfo } from '../core/operations.ts';
 import { loadConfig } from '../core/config.ts';
+import { hasScope } from '../core/scope.ts';
+import { executeRawJsonb } from '../core/sql-query.ts';
+import { resolveBrainId } from '../core/brain-resolver.ts';
 
 export interface ToolResult {
   content: { type: 'text'; text: string }[];
@@ -70,6 +73,87 @@ export interface DispatchOpts {
    * was replaced by dispatchToolCall.
    */
   auth?: AuthInfo;
+  /**
+   * v0.41.x stdio hardening: marks this dispatch as coming from the stdio
+   * MCP transport (server.ts). When true, the dispatcher (a) enforces
+   * `op.scope` against the stdio default scope set (admin / sources_admin /
+   * users_admin / agent are denied by default) — closing the gap where
+   * stdio MCP exposed every non-localOnly admin op because stdio has no
+   * OAuth token to gate on, and (b) writes one `mcp_request_log` row per
+   * tool call (success + every error path) with `token_name = NULL`,
+   * `agent_name = 'stdio'` — stdio previously had zero audit coverage.
+   *
+   * Other transports opt out: serve-http does its own scope check + audit
+   * (it has OAuth scopes to gate on); the legacy http-transport and the
+   * local daemon keep their existing behavior. Default false preserves
+   * both.
+   */
+  stdio?: boolean;
+}
+
+/**
+ * Default capability scope granted to unauthenticated stdio MCP callers.
+ *
+ * stdio MCP has no per-token auth (local pipe), so unlike the HTTP path it
+ * cannot gate on OAuth scopes. Pre-v0.41.x stdio exposed EVERY non-localOnly
+ * operation — including 40+ admin-scope ops (submit_job, action_run,
+ * schema_apply_mutations, get_ingest_log, get_recent_transcripts, …) — to any
+ * local stdio client. That is the same trust posture the HTTP transport
+ * explicitly rejects via `hasScope`.
+ *
+ * The default grants `read` + `write` (write implies read) so agents can
+ * still read the brain and author pages, but DENIES admin / sources_admin /
+ * users_admin / agent — matching the security-review finding that admin
+ * ops must be opt-in, not default.
+ *
+ * Operators who need the legacy broad surface (e.g., a stdio wrapper that
+ * triggers sync/embed jobs) set `VOLTMIND_MCP_STDIO_SCOPES` to a
+ * space-separated scope list (e.g. `"read write admin"`). Read at call
+ * time so a restart isn't required to tighten/loosen.
+ */
+export const STDIO_DEFAULT_SCOPES: ReadonlyArray<string> = Object.freeze(['read', 'write']);
+
+/** Resolve the stdio caller's granted scopes, honoring the env override. */
+export function resolveStdioScopes(): string[] {
+  const raw = process.env.VOLTMIND_MCP_STDIO_SCOPES;
+  if (!raw || !raw.trim()) return [...STDIO_DEFAULT_SCOPES];
+  const parsed = raw.split(/\s+/).map((s) => s.trim()).filter(Boolean);
+  return parsed.length > 0 ? parsed : [...STDIO_DEFAULT_SCOPES];
+}
+
+/**
+ * Best-effort `mcp_request_log` row for the stdio path. stdio has no token,
+ * so `token_name` is NULL and `agent_name` is the literal `"stdio"` marker
+ * (matches the audit-review ask: "token_name 留空或标记 stdio"). Params are
+ * redacted via `summarizeMcpParams` — same privacy posture as the HTTP
+ * transport (declared keys only, no values, no attacker-controlled key
+ * names). Never throws; a DB blip must not flip a tool call to error.
+ */
+function auditStdioRequest(
+  engine: BrainEngine,
+  name: string,
+  status: 'success' | 'error',
+  latencyMs: number,
+  params: unknown,
+  errorMessage?: string,
+  sourceId?: string | null,
+  brainId?: string | null,
+): void {
+  try {
+    const summary = summarizeMcpParams(name, params);
+    // v0.42 (#861 audit follow-up): thread the resolved source_id + brain_id
+    // so stdio audit rows carry the same tenant axis as the HTTP path.
+    // sourceId comes from the stdio dispatch (VOLTMIND_SOURCE / 'default');
+    // brainId is the resolved mount id. Both nullable for forward-compat
+    // with transports that don't resolve them.
+    void executeRawJsonb(
+      engine,
+      `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+      [null, 'stdio', name, latencyMs, status, errorMessage ?? null, sourceId ?? null, brainId ?? null],
+      [summary],
+    ).catch(() => { /* best-effort audit */ });
+  } catch { /* best-effort audit */ }
 }
 
 /**
@@ -225,6 +309,26 @@ export async function dispatchToolCall(
   params: Record<string, unknown> | undefined,
   opts: DispatchOpts = {},
 ): Promise<ToolResult> {
+  const startedAt = Date.now();
+  // stdio path: no OAuth auth, but still untrusted (server.ts sets remote=true).
+  // Gate scope enforcement + audit on the explicit `stdio` flag so the legacy
+  // http-transport and local-daemon dispatch callers keep their existing
+  // behavior (their audit/scope stories are separate follow-ups).
+  const isStdio = opts.stdio === true;
+  // v0.42 (#861 audit follow-up): thread the resolved source_id + brain_id
+  // into the stdio audit row so it carries the same tenant axis as the
+  // HTTP path. sourceId comes from the stdio dispatch opts (server.ts sets
+  // it from VOLTMIND_SOURCE || 'default'); brainId is the resolved mount id.
+  // Resolved once per dispatchToolCall (resolveBrainId walks the filesystem
+  // dotfile chain, so caching at call scope avoids repeating that per
+  // audit-status callback within one call).
+  const auditSourceId = isStdio ? (opts.sourceId ?? null) : null;
+  const auditBrainId = isStdio ? resolveBrainId(null) : null;
+  const audit = isStdio
+    ? (status: 'success' | 'error', errorMessage?: string) =>
+        auditStdioRequest(engine, name, status, Date.now() - startedAt, params, errorMessage, auditSourceId, auditBrainId)
+    : undefined;
+
   const op = operations.find(o => o.name === name);
   if (!op) {
     // Always return JSON-shaped error content. v0.31 e2e tests
@@ -232,15 +336,50 @@ export async function dispatchToolCall(
     // plain `Error: ...` string here breaks the contract on every
     // unknown-op path and the resulting test failure looked like a
     // transport bug.
+    audit?.('error', `unknown_tool: ${name}`);
     return {
       content: [{ type: 'text', text: JSON.stringify({ error: 'unknown_tool', message: `Unknown tool: ${name}` }, null, 2) }],
       isError: true,
     };
   }
 
+  if (op.localOnly && (opts.remote ?? true) !== false) {
+    audit?.('error', `local_only: ${name}`);
+    return { content: [{ type: 'text', text: JSON.stringify({ error: 'operation_not_available', message: 'Operation ' + name + ' is local-only.' }, null, 2) }], isError: true };
+  }
+
+  // stdio scope enforcement (v0.41.x): stdio has no OAuth token, so it cannot
+  // reuse the HTTP transport's `hasScope(authInfo.scopes, …)` gate. Without
+  // this, every non-localOnly admin op (submit_job, action_run,
+  // schema_apply_mutations, get_ingest_log, get_recent_transcripts, …) was
+  // callable by any local stdio client. We gate against the configurable
+  // stdio default scope set (read+write; admin/sources_admin/users_admin/
+  // agent denied by default). HTTP is unaffected — it carries `opts.auth` and
+  // serve-http.ts already enforced scope before calling us; the `stdio` flag
+  // is what selects this branch.
+  if (isStdio) {
+    const requiredScope = op.scope || 'read';
+    const grantedScopes = resolveStdioScopes();
+    if (!hasScope(grantedScopes, requiredScope)) {
+      audit?.('error', `insufficient_scope: requires '${requiredScope}'`);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            error: 'insufficient_scope',
+            message: `Operation ${name} requires '${requiredScope}' scope`,
+            your_scopes: grantedScopes,
+          }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+  }
+
   const safeParams = params || {};
   const validationError = validateParams(op, safeParams);
   if (validationError) {
+    audit?.('error', `invalid_params: ${validationError}`);
     return {
       content: [{ type: 'text', text: JSON.stringify({ error: 'invalid_params', message: validationError }, null, 2) }],
       isError: true,
@@ -250,6 +389,14 @@ export async function dispatchToolCall(
   const ctx = buildOperationContext(engine, safeParams, opts);
 
   try {
+    // A caller-supplied source_id on any mutating operation is an authority
+    // assertion, never a hint. Reject mismatches before the handler can silently
+    // fall back to the OAuth-bound personal source. Individual handlers still
+    // resolve the id when they need to route a multi-source write explicitly.
+    if (op.mutating && typeof safeParams.source_id === 'string') {
+      resolveWriteSourceId(ctx, safeParams.source_id);
+    }
+
     const result = await op.handler(ctx, safeParams);
     const out: ToolResult = { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     // v0.31 (eD3 + eE4): best-effort _meta.brain_hot_memory injection.
@@ -265,9 +412,11 @@ export async function dispatchToolCall(
         ctx.logger.warn(`[mcp] _meta hook failed for ${name}: ${msg}; degrading to no-_meta`);
       }
     }
+    audit?.('success');
     return out;
   } catch (e: unknown) {
     if (e instanceof OperationError) {
+      audit?.('error', `${e.code}: ${e.message}`);
       return { content: [{ type: 'text', text: JSON.stringify(e.toJSON(), null, 2) }], isError: true };
     }
     // Non-OperationError (uncaught throws) — wrap in the same shape so
@@ -275,6 +424,7 @@ export async function dispatchToolCall(
     // plain `Error: ${msg}` strings here, which broke any caller that
     // tried JSON.parse(content).
     const msg = e instanceof Error ? e.message : String(e);
+    audit?.('error', `internal_error: ${msg}`);
     return {
       content: [{ type: 'text', text: JSON.stringify({ error: 'internal_error', message: msg }, null, 2) }],
       isError: true,

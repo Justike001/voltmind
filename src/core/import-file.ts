@@ -216,7 +216,8 @@ export async function importFromContent(
      * v0.32.7 CJK wave: repo-relative path captured at import. Stored on
      * `pages.source_path` so sync's delete/rename code can look up the
      * page slug by path when the slug isn't derivable (frontmatter
-     * fallback). MCP `put_page` callers leave undefined (no file).
+     * fallback). `put_page` supplies this when its write-through repo is
+     * configured; DB-only callers leave it undefined.
      */
     sourcePath?: string;
     /**
@@ -421,7 +422,11 @@ export async function importFromContent(
   };
 
   const existing = await engine.getPage(slug, sourceId ? { sourceId } : undefined);
-  if (existing?.content_hash === hash && !opts.forceRechunk) {
+  // A page created by an older put_page may have identical content but no
+  // source_path. Do not take the idempotency shortcut in that case: the
+  // write-through path is also a metadata repair path for sync deletion.
+  const sourcePathNeedsUpdate = opts.sourcePath !== undefined && existing?.source_path !== opts.sourcePath;
+  if (existing?.content_hash === hash && !opts.forceRechunk && !sourcePathNeedsUpdate) {
     return { slug, status: 'skipped', chunks: 0, parsedPage };
   }
 

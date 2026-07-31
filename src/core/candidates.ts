@@ -40,6 +40,15 @@ function sha8(s: string): string {
   return createHash('sha256').update(s).digest('hex').slice(0, 8);
 }
 
+type CandidateSourceScope = { sourceId?: string; sourceIds?: string[] };
+
+function assertCandidateInScope(candidate: CandidateEnvelope, scope: CandidateSourceScope): void {
+  const allowed = scope.sourceIds && scope.sourceIds.length > 0 ? scope.sourceIds : scope.sourceId ? [scope.sourceId] : null;
+  if (allowed && !allowed.includes(candidate.source_id)) {
+    throw new OperationError('invalid_params', `Candidate not found: ${candidate.id}`);
+  }
+}
+
 function rowToCandidate(row: Record<string, unknown>): CandidateEnvelope {
   const candidate = {
     id: Number(row.id),
@@ -197,8 +206,9 @@ export async function proposeExtractionCandidate(
   return { candidate: rowToCandidate(rows[0]!) };
 }
 
-export async function previewCandidateApply(engine: BrainEngine, candidateId: number): Promise<Record<string, unknown>> {
+export async function previewCandidateApply(engine: BrainEngine, candidateId: number, scope: CandidateSourceScope = {}): Promise<Record<string, unknown>> {
   const c = await getCandidate(engine, candidateId);
+  assertCandidateInScope(c, scope);
   const row = `| ${c.claim_text} | ${c.kind} | ${c.holder} | ${c.weight.toFixed(2)} | ${c.domain ?? ''} | | | |`;
   return {
     candidate_id: c.id,
@@ -214,11 +224,13 @@ export async function previewCandidateApply(engine: BrainEngine, candidateId: nu
 export async function applyCandidate(
   engine: BrainEngine,
   opts: { candidateId: number; sourceId: string; citation: string; confirm: boolean },
+  scope: CandidateSourceScope = {},
 ): Promise<Record<string, unknown>> {
   if (!opts.confirm) throw new OperationError('permission_denied', 'apply_candidate requires confirm=true.');
   if (!opts.sourceId) throw new OperationError('invalid_params', 'source_id is required.');
   if (!opts.citation) throw new OperationError('invalid_params', 'citation is required.');
   const c = await getCandidate(engine, opts.candidateId);
+  assertCandidateInScope(c, scope);
   if (c.status !== 'pending') throw new OperationError('invalid_params', `Candidate ${c.id} is ${c.status}.`);
   if (c.source_id !== opts.sourceId) {
     throw new OperationError('invalid_params', `source_id mismatch: candidate is ${c.source_id}.`);
@@ -271,8 +283,9 @@ export async function applyCandidate(
   };
 }
 
-export async function rejectCandidate(engine: BrainEngine, candidateId: number): Promise<Record<string, unknown>> {
+export async function rejectCandidate(engine: BrainEngine, candidateId: number, scope: CandidateSourceScope = {}): Promise<Record<string, unknown>> {
   const c = await getCandidate(engine, candidateId);
+  assertCandidateInScope(c, scope);
   await engine.executeRaw(
     `UPDATE take_proposals
         SET status = 'rejected',

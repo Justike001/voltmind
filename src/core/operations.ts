@@ -39,6 +39,7 @@ import {
 } from './skill-platform-diagnostics.ts';
 import * as db from './db.ts';
 import { VERSION } from '../version.ts';
+import { hasScope } from './scope.ts';
 import {
   GET_RECENT_SALIENCE_DESCRIPTION,
   FIND_ANOMALIES_DESCRIPTION,
@@ -478,6 +479,18 @@ export function resolveReadSourceScope(
   return { sourceId: requestedSourceId };
 }
 
+/**
+ * Resolve a source for a write-side operation. Remote callers may write only
+ * to the OAuth client sourceId; federated read scope is never write authority.
+ */
+export function resolveWriteSourceId(ctx: OperationContext, requestedSourceId?: string): string {
+  const sourceId = requestedSourceId ?? ctx.sourceId;
+  if (ctx.remote !== false && sourceId !== ctx.sourceId) {
+    throw new OperationError('permission_denied', 'source ' + sourceId + ' is outside your write authority (authorized source: ' + ctx.sourceId + ').');
+  }
+  return sourceId;
+}
+
 export interface Operation {
   name: string;
   description: string;
@@ -494,7 +507,7 @@ export interface Operation {
    * Local CLI callers (ctx.remote === false) bypass scope enforcement
    * because the trust boundary there is the OS, not OAuth scopes.
    */
-  scope?: 'read' | 'write' | 'admin' | 'sources_admin' | 'users_admin';
+  scope?: 'read' | 'write' | 'admin' | 'sources_admin' | 'users_admin' | 'agent';
   localOnly?: boolean;
   cliHints?: {
     name?: string;
@@ -602,6 +615,7 @@ const put_page: Operation = {
   params: {
     slug: { type: 'string', required: true, description: 'Page slug' },
     content: { type: 'string', required: true, description: 'Full markdown content with YAML frontmatter' },
+    source_id: { type: 'string', description: "Target source. Defaults to the caller's authorized write source; remote callers cannot select another source." },
     // v0.39.3.0 provenance write-through (WARN-8 + A1 + CV6). Optional fields
     // for trusted local callers (capture CLI, autopilot, dream cycle). Remote
     // MCP callers (ctx.remote !== false) have their values OVERRIDDEN with
@@ -707,9 +721,28 @@ const put_page: Operation = {
       // Pack load failed; fall through to legacy inferType behavior.
       activePack = undefined;
     }
+    // v0.42: keep the write-through target and pages.source_path identical.
+    let writeThroughSourcePath: string | undefined;
+    try {
+      const configuredRepoPath = await ctx.engine.getConfig('sync.repo_path');
+      if (
+        typeof configuredRepoPath === 'string' &&
+        existsSync(configuredRepoPath) &&
+        statSync(configuredRepoPath).isDirectory()
+      ) {
+        const sourceId = ctx.sourceId ?? 'default';
+        const filePath = resolvePageFilePath(configuredRepoPath, slug, sourceId);
+        if (isWriteTargetContained(filePath, configuredRepoPath)) {
+          writeThroughSourcePath = relative(configuredRepoPath, filePath).split(sep).join('/');
+        }
+      }
+    } catch {
+      // Best-effort; the non-blocking write-through response remains unchanged.
+    }
     const result = await importFromContent(ctx.engine, slug, p.content as string, {
       noEmbed,
       ...(ctx.sourceId ? { sourceId: ctx.sourceId } : {}),
+      ...(writeThroughSourcePath ? { sourcePath: writeThroughSourcePath } : {}),
       // v0.39.0.0 T1.5: pack-aware type inference (loaded above; legacy
       // inferType behavior when undefined).
       ...(activePack ? { activePack } : {}),
@@ -1993,7 +2026,9 @@ const get_health: Operation = {
   description: 'Brain health dashboard (embed coverage, stale pages, orphans)',
   params: {},
   handler: async (ctx) => {
-    return ctx.engine.getHealth();
+    const { loadActivePackBestEffort, healthEntityTypesFromPack } = await import('./schema-pack/index.ts');
+    const pack = await loadActivePackBestEffort(ctx);
+    return ctx.engine.getHealth({ entityTypes: pack ? healthEntityTypesFromPack(pack.manifest) : [] });
   },
   scope: 'admin',
   cliHints: { name: 'health' },
@@ -2247,8 +2282,9 @@ const preview_signal_enrichment: Operation = {
   scope: 'read',
   handler: async (ctx, p) => {
     const { previewSignalEnrichment } = await import('./enrichment-service.ts');
+    const sourceId = resolveWriteSourceId(ctx, p.source_id as string);
     return previewSignalEnrichment(ctx.engine, {
-      sourceId: p.source_id as string,
+      sourceId,
       pageSlug: p.page_slug as string | undefined,
       text: p.text as string | undefined,
       limit: p.limit as number | undefined,
@@ -2274,8 +2310,9 @@ const apply_signal_enrichment: Operation = {
   handler: async (ctx, p) => {
     if (p.confirm !== true) throw new OperationError('permission_denied', 'apply_signal_enrichment requires confirm=true.');
     const { applySignalEnrichment } = await import('./enrichment-service.ts');
+    const sourceId = resolveWriteSourceId(ctx, p.source_id as string);
     return applySignalEnrichment(ctx.engine, {
-      sourceId: p.source_id as string,
+      sourceId,
       pageSlug: p.page_slug as string | undefined,
       text: p.text as string | undefined,
       limit: p.limit as number | undefined,
@@ -2294,7 +2331,7 @@ const resolve_slugs: Operation = {
     partial: { type: 'string', required: true },
   },
   handler: async (ctx, p) => {
-    return ctx.engine.resolveSlugs(p.partial as string);
+    return ctx.engine.resolveSlugs(p.partial as string, sourceScopeOpts(ctx));
   },
   scope: 'read',
 };
@@ -2343,11 +2380,30 @@ const get_ingest_log: Operation = {
   description: 'Get recent ingestion log entries',
   params: {
     limit: { type: 'number', description: 'Max entries (default 20)' },
+    // v0.42 (#861 audit follow-up, finding #5): optional source filter.
+    // Local CLI may pass `__all__` to see every source; remote callers may
+    // narrow to one of their authorized sources (or omit to use their
+    // OAuth-derived scope). Pre-fix this op returned every source's ingest
+    // history to any admin-scope caller, leaking another source's
+    // source_ref / summary text.
+    source: { type: 'string', description: 'Restrict to a source id. Local CLI may pass `__all__` for the brain-wide view; remote callers are scoped to their authorized sources.' },
   },
   handler: async (ctx, p) => {
-    return ctx.engine.getIngestLog({ limit: clampSearchLimit(p.limit as number | undefined, 20, 50) });
+    const limit = clampSearchLimit(p.limit as number | undefined, 20, 50);
+    const sourceIdParam = typeof p.source === 'string' ? p.source : undefined;
+    // resolveReadSourceScope honors the same precedence ladder as search /
+    // query / get_page: `__all__` → federated allowedSources (remote) or no
+    // filter (local); a concrete id must be within the caller's granted
+    // sources for remote callers. When no source is requested, remote
+    // callers default to sourceScopeOpts(ctx) (their source); local CLI
+    // (remote === false) gets the unscoped admin view so `voltmind ingest-log`
+    // without --source still shows the whole brain.
+    const scope = sourceIdParam !== undefined
+      ? resolveReadSourceScope(ctx, sourceIdParam)
+      : (ctx.remote !== false ? sourceScopeOpts(ctx) : {});
+    return ctx.engine.getIngestLog({ limit, ...scope });
   },
-  scope: 'read',
+  scope: 'admin',
 };
 
 // --- File Operations ---
@@ -2408,7 +2464,17 @@ const file_upload: Operation = {
     const stat = statSync(filePath);
     const content = readFileSync(filePath);
     const hash = createHash('sha256').update(content).digest('hex');
-    const storagePath = pageSlug ? `${pageSlug}/${filename}` : `unsorted/${hash.slice(0, 8)}-${filename}`;
+    // v0.42 (#861 audit follow-up, finding #6): scope the storage_path to the
+    // source so two sources with the same slug can each hold a same-named
+    // file without ON CONFLICT rewriting the other source's row. Pre-fix the
+    // path was `${pageSlug}/${filename}` with a GLOBAL UNIQUE(storage_path),
+    // so a source-B upload overwrote source-A's metadata row (source_id left
+    // pointing at A — cross-source attribution break). The source prefix is
+    // mirrored by migration v111's storage_path rewrite for existing rows.
+    const sourceId = ctx.sourceId ?? 'default';
+    const storagePath = pageSlug
+      ? `${sourceId}/${pageSlug}/${filename}`
+      : `${sourceId}/unsorted/${hash.slice(0, 8)}-${filename}`;
 
     const MIME_TYPES: Record<string, string> = {
       '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
@@ -2418,7 +2484,9 @@ const file_upload: Operation = {
     const mimeType = MIME_TYPES[extname(filePath).toLowerCase()] || null;
 
     const sql = db.getConnection();
-    const existing = await sql`SELECT id FROM files WHERE content_hash = ${hash} AND storage_path = ${storagePath}`;
+    // Scope the dedup check to (source_id, storage_path) so a same-content
+    // file in a different source isn't treated as a duplicate of this one.
+    const existing = await sql`SELECT id FROM files WHERE content_hash = ${hash} AND source_id = ${sourceId} AND storage_path = ${storagePath}`;
     if (existing.length > 0) {
       return { status: 'already_exists', storage_path: storagePath };
     }
@@ -2436,9 +2504,9 @@ const file_upload: Operation = {
 
     try {
       await sql`
-        INSERT INTO files (page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
-        VALUES (${pageSlug}, ${filename}, ${storagePath}, ${mimeType}, ${stat.size}, ${hash}, ${'{}'}::jsonb)
-        ON CONFLICT (storage_path) DO UPDATE SET
+        INSERT INTO files (source_id, page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
+        VALUES (${sourceId}, ${pageSlug}, ${filename}, ${storagePath}, ${mimeType}, ${stat.size}, ${hash}, ${'{}'}::jsonb)
+        ON CONFLICT (source_id, storage_path) DO UPDATE SET
           content_hash = EXCLUDED.content_hash,
           size_bytes = EXCLUDED.size_bytes,
           mime_type = EXCLUDED.mime_type
@@ -3116,7 +3184,7 @@ const find_orphans: Operation = {
       description: 'Include auto-generated and pseudo pages (default: false)',
     },
   },
-  scope: 'read',
+  scope: 'admin',
   handler: async (ctx, p) => {
     const { findOrphans } = await import('../commands/orphans.ts');
     return findOrphans(ctx.engine, { includePseudo: (p.include_pseudo as boolean) || false });
@@ -3168,7 +3236,7 @@ const get_calibration_profile: Operation = {
 const get_recent_salience: Operation = {
   name: 'get_recent_salience',
   description: GET_RECENT_SALIENCE_DESCRIPTION,
-  scope: 'read',
+  scope: 'admin',
   params: {
     days: { type: 'number', description: 'Window in days. Default 14.' },
     limit: { type: 'number', description: 'Max results (default 20, capped at 100).' },
@@ -3206,7 +3274,7 @@ const get_recent_salience: Operation = {
 const find_anomalies: Operation = {
   name: 'find_anomalies',
   description: FIND_ANOMALIES_DESCRIPTION,
-  scope: 'read',
+  scope: 'admin',
   params: {
     since: {
       type: 'string',
@@ -3282,7 +3350,7 @@ const find_experts: Operation = {
 const find_contradictions: Operation = {
   name: 'find_contradictions',
   description: FIND_CONTRADICTIONS_DESCRIPTION,
-  scope: 'read',
+  scope: 'admin',
   // Reads eval_contradictions_runs.report_json for the latest run, then
   // filters in-memory by slug and severity. No new probe is triggered;
   // the agent surfaces what's already on disk.
@@ -3302,6 +3370,20 @@ const find_contradictions: Operation = {
     },
   },
   handler: async (ctx, p) => {
+    // v0.42 (#861 audit follow-up, finding #5): contradiction pairs are read
+    // from the eval_contradictions_runs cache report, whose slug fields
+    // are NOT source-prefixed (a pair's `a.slug` / `b.slug` is bare). On a
+    // multi-source brain that means a remote admin-scope caller scoped to
+    // src-A would see contradiction pairs naming src-B pages — a cross-
+    // source content leak. There's no per-source filter to apply without
+    // re-running the probe with source attribution, so restrict to the
+    // trusted local CLI surface (same posture as get_recent_transcripts).
+    if (ctx.remote !== false) {
+      throw new OperationError(
+        'permission_denied',
+        'find_contradictions is local-only: cached contradiction reports are not source-scoped. Run via `voltmind call find_contradictions` (trusted local CLI).',
+      );
+    }
     const limit = typeof p.limit === 'number' && p.limit > 0 ? Math.min(p.limit, 100) : 20;
     const slugFilter = typeof p.slug === 'string' ? p.slug.toLowerCase() : null;
     const sevFilter = (p.severity === 'low' || p.severity === 'medium' || p.severity === 'high')
@@ -3309,7 +3391,7 @@ const find_contradictions: Operation = {
       : null;
     const rows = await ctx.engine.loadContradictionsTrend(30);
     if (rows.length === 0) {
-      return { contradictions: [], note: 'No cached contradiction probe runs in the last 30 days.' };
+      return { contradictions: [], note: 'No probe runs in the last 30 days (no cached contradiction probe runs in the last 30 days).' };
     }
     const latest = rows[0];
     const report = latest.report_json as Record<string, unknown> | null;
@@ -3453,7 +3535,7 @@ const find_trajectory: Operation = {
 const get_recent_transcripts: Operation = {
   name: 'get_recent_transcripts',
   description: GET_RECENT_TRANSCRIPTS_DESCRIPTION,
-  scope: 'read',
+  scope: 'admin',
   // Retrieval-enrichment readout. Public MCP surface is read-only and capped
   // by listRecentTranscripts; transcript mutation/import remains CLI-only.
   params: {
@@ -3465,6 +3547,19 @@ const get_recent_transcripts: Operation = {
     limit: { type: 'number', description: 'Max transcripts (default 50).' },
   },
   handler: async (ctx, p) => {
+    // v0.42 (#861 audit follow-up, finding #5): transcripts are read off the
+    // dream cycle's corpus directories (filesystem, not DB) and carry no
+    // source_id — there's no per-source filter to apply. Exposing raw meeting
+    // / session transcript text over MCP leaks host content to any admin-
+    // scope remote caller regardless of their OAuth source scope. Restrict
+    // to the trusted local CLI surface (mirrors the gate the
+    // transcripts.ts module docstring already claimed this op enforced).
+    if (ctx.remote !== false) {
+      throw new OperationError(
+        'permission_denied',
+        'get_recent_transcripts is local-only: transcript files are not source-scoped. Run via `voltmind call get_recent_transcripts` (trusted local CLI).',
+      );
+    }
     const { listRecentTranscripts } = await import('./transcripts.ts');
     return listRecentTranscripts(ctx.engine, {
       days: typeof p.days === 'number' ? p.days : undefined,
@@ -3617,9 +3712,18 @@ const sources_list: Operation = {
   scope: 'read',
   handler: async (ctx, p) => {
     const { listSources } = await import('./sources-ops.ts');
+    // Local CLI and OAuth clients with sources_admin may inspect the complete
+    // registry. Every other remote caller sees only its federated read grant
+    // (or its single write source when no federated grant exists).
+    const canListAll = ctx.remote === false || hasScope(ctx.auth?.scopes ?? [], 'sources_admin');
+    const scope = canListAll ? undefined : sourceScopeOpts(ctx);
+    const sourceIds = scope
+      ? (scope.sourceIds ?? (scope.sourceId ? [scope.sourceId] : []))
+      : undefined;
     return {
       sources: await listSources(ctx.engine, {
         includeArchived: (p.include_archived as boolean) === true,
+        ...(sourceIds !== undefined ? { sourceIds } : {}),
       }),
     };
   },
@@ -3950,6 +4054,7 @@ const apply_forget_fact: Operation = {
     const reason = typeof p.reason === 'string' && p.reason.trim() ? p.reason.trim() : 'forgotten';
     if (p.confirm !== true) throw new OperationError('invalid_params', 'apply_forget_fact requires confirm=true.');
     if (!sourceId) throw new OperationError('invalid_params', 'apply_forget_fact requires source_id.');
+    resolveWriteSourceId(ctx, sourceId);
     if (!citation) throw new OperationError('invalid_params', 'apply_forget_fact requires citation.');
     if (ctx.dryRun) return { dry_run: true, action: 'apply_forget_fact', id };
 
@@ -3999,8 +4104,9 @@ const propose_extraction_candidates: Operation = {
   mutating: true,
   handler: async (ctx, p) => {
     const { proposeExtractionCandidate } = await import('./candidates.ts');
+    const sourceId = resolveWriteSourceId(ctx, p.source_id as string);
     return proposeExtractionCandidate(ctx.engine, {
-      sourceId: p.source_id as string,
+      sourceId,
       pageSlug: p.page_slug as string,
       claim: p.claim as string,
       citation: p.citation as string,
@@ -4021,7 +4127,7 @@ const preview_candidate_apply: Operation = {
   scope: 'read',
   handler: async (ctx, p) => {
     const { previewCandidateApply } = await import('./candidates.ts');
-    return previewCandidateApply(ctx.engine, p.candidate_id as number);
+    return previewCandidateApply(ctx.engine, p.candidate_id as number, sourceScopeOpts(ctx));
   },
 };
 
@@ -4038,12 +4144,13 @@ const apply_candidate: Operation = {
   mutating: true,
   handler: async (ctx, p) => {
     const { applyCandidate } = await import('./candidates.ts');
+    const sourceId = resolveWriteSourceId(ctx, p.source_id as string);
     return applyCandidate(ctx.engine, {
       candidateId: p.candidate_id as number,
-      sourceId: p.source_id as string,
+      sourceId,
       citation: p.citation as string,
       confirm: p.confirm === true,
-    });
+    }, sourceScopeOpts(ctx));
   },
 };
 
@@ -4057,7 +4164,7 @@ const reject_candidate: Operation = {
   mutating: true,
   handler: async (ctx, p) => {
     const { rejectCandidate } = await import('./candidates.ts');
-    return rejectCandidate(ctx.engine, p.candidate_id as number);
+    return rejectCandidate(ctx.engine, p.candidate_id as number, sourceScopeOpts(ctx));
   },
 };
 
@@ -4115,7 +4222,7 @@ const code_callers: Operation = {
     source_id: { type: 'string', description: "Scope to a single source. Defaults to ctx.sourceId; pass '__all__' to force cross-source." },
     all_sources: { type: 'boolean', description: 'Force cross-source search (equivalent to source_id=__all__).' },
   },
-  scope: 'read',
+  scope: 'admin',
   handler: async (ctx, p) => {
     const symbol = p.symbol as string;
     const limit = (p.limit as number) ?? 100;
@@ -4146,7 +4253,7 @@ const code_callees: Operation = {
     source_id: { type: 'string', description: "Scope to a single source. Defaults to ctx.sourceId; pass '__all__' to force cross-source." },
     all_sources: { type: 'boolean', description: 'Force cross-source search.' },
   },
-  scope: 'read',
+  scope: 'admin',
   handler: async (ctx, p) => {
     const symbol = p.symbol as string;
     const limit = (p.limit as number) ?? 100;
@@ -4176,7 +4283,7 @@ const code_def: Operation = {
     limit: { type: 'number', description: 'Max definition sites returned. Default 20.' },
     lang: { type: 'string', description: "Filter by content_chunks.language (e.g. 'typescript', 'python')." },
   },
-  scope: 'read',
+  scope: 'admin',
   handler: async (ctx, p) => {
     const { findCodeDef } = await import('../commands/code-def.ts');
     const defs = await findCodeDef(ctx.engine, p.symbol as string, {
@@ -4196,7 +4303,7 @@ const code_refs: Operation = {
     limit: { type: 'number', description: 'Max references returned. Default 50.' },
     lang: { type: 'string', description: "Filter by content_chunks.language." },
   },
-  scope: 'read',
+  scope: 'admin',
   handler: async (ctx, p) => {
     const { findCodeRefs } = await import('../commands/code-refs.ts');
     const refs = await findCodeRefs(ctx.engine, p.symbol as string, {
@@ -4590,10 +4697,12 @@ const schema_graph: Operation = {
     const edges: Array<{ from: string; verb: string; to: string }> = [];
     for (const lt of pack.manifest.link_types) {
       if (lt.inference?.page_type) {
+        const tt = lt.inference.target_type;
+        const to = tt ? (Array.isArray(tt) ? tt.join('|') : tt) : '*';
         edges.push({
           from: lt.inference.page_type,
           verb: lt.name,
-          to: lt.inference.target_type ?? '*',
+          to,
         });
       }
     }

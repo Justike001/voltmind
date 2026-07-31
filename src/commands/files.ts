@@ -6,6 +6,7 @@ import { sqlQueryForEngine, executeRawJsonb } from '../core/sql-query.ts';
 import { humanSize } from '../core/file-resolver.ts';
 import { createProgress } from '../core/progress.ts';
 import { getCliOptions, cliOptsToProgressOptions } from '../core/cli-options.ts';
+import { resolveSourceId } from '../core/source-resolver.ts';
 
 /** Size threshold: files >= 100 MB use TUS resumable upload */
 const SIZE_THRESHOLD = 100 * 1024 * 1024;
@@ -143,13 +144,19 @@ async function uploadFile(engine: BrainEngine, args: string[]) {
   const stat = statSync(filePath);
   const hash = fileHash(filePath);
   const filename = basename(filePath);
-  const storagePath = pageSlug ? `${pageSlug}/${filename}` : `unsorted/${hash.slice(0, 8)}-${filename}`;
+  // v0.42 (#861 audit follow-up): scope the storage path to the source so
+  // two sources with the same slug can each hold a same-named file. The
+  // GLOBAL UNIQUE(storage_path) is now UNIQUE(source_id, storage_path).
+  const sourceId = await resolveSourceId(engine, args.find((a, i) => args[i - 1] === '--source'));
+  const storagePath = pageSlug
+    ? `${sourceId}/${pageSlug}/${filename}`
+    : `${sourceId}/unsorted/${hash.slice(0, 8)}-${filename}`;
   const mimeType = getMimeType(filePath);
 
   const sql = sqlQueryForEngine(engine);
 
-  // Check for existing file by hash
-  const existing = await sql`SELECT id FROM files WHERE content_hash = ${hash} AND storage_path = ${storagePath}`;
+  // Check for existing file by hash (scoped to source)
+  const existing = await sql`SELECT id FROM files WHERE content_hash = ${hash} AND source_id = ${sourceId} AND storage_path = ${storagePath}`;
   if (existing.length > 0) {
     console.log(`File already uploaded (hash match): ${storagePath}`);
     return;
@@ -168,9 +175,9 @@ async function uploadFile(engine: BrainEngine, args: string[]) {
   }
 
   await sql`
-    INSERT INTO files (page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
-    VALUES (${pageSlug}, ${filename}, ${storagePath}, ${mimeType}, ${stat.size}, ${hash}, ${'{}'}::jsonb)
-    ON CONFLICT (storage_path) DO UPDATE SET
+    INSERT INTO files (source_id, page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
+    VALUES (${sourceId}, ${pageSlug}, ${filename}, ${storagePath}, ${mimeType}, ${stat.size}, ${hash}, ${'{}'}::jsonb)
+    ON CONFLICT (source_id, storage_path) DO UPDATE SET
       content_hash = EXCLUDED.content_hash,
       size_bytes = EXCLUDED.size_bytes,
       mime_type = EXCLUDED.mime_type
@@ -230,7 +237,11 @@ async function uploadRaw(engine: BrainEngine, args: string[]) {
   const storage = await createStorage(config.storage as any);
   const content = readFileSync(filePath);
   const hash = createHash('sha256').update(content).digest('hex');
-  const storagePath = pageSlug ? `${pageSlug}/${filename}` : `unsorted/${hash.slice(0, 8)}-${filename}`;
+  // v0.42 (#861 audit follow-up): scope the storage path to the source.
+  const sourceId = await resolveSourceId(engine, args.find((a, i) => args[i - 1] === '--source'));
+  const storagePath = pageSlug
+    ? `${sourceId}/${pageSlug}/${filename}`
+    : `${sourceId}/unsorted/${hash.slice(0, 8)}-${filename}`;
   const bucket = (config.storage as any).bucket || 'brain-files';
 
   const method = content.length >= SIZE_THRESHOLD ? 'TUS resumable' : 'standard';
@@ -263,13 +274,13 @@ async function uploadRaw(engine: BrainEngine, args: string[]) {
   // an actual object, not a JSON-encoded string (D1 wave).
   await executeRawJsonb(
     engine,
-    `INSERT INTO files (page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-     ON CONFLICT (storage_path) DO UPDATE SET
+    `INSERT INTO files (source_id, page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+     ON CONFLICT (source_id, storage_path) DO UPDATE SET
        content_hash = EXCLUDED.content_hash,
        size_bytes = EXCLUDED.size_bytes,
        mime_type = EXCLUDED.mime_type`,
-    [pageSlug, filename, storagePath, mimeType, stat.size, 'sha256:' + hash],
+    [sourceId, pageSlug, filename, storagePath, mimeType, stat.size, 'sha256:' + hash],
     [{ type: fileType, upload_method: method }],
   );
 
@@ -324,6 +335,11 @@ async function syncFiles(engine: BrainEngine, dir?: string) {
   const progress = createProgress(cliOptsToProgressOptions(getCliOptions()));
   progress.start('files.sync', files.length);
 
+  // v0.42 (#861 audit follow-up): resolve the source once for the whole
+  // sync so every synced file lands under its source-scoped path. The
+  // GLOBAL UNIQUE(storage_path) is now UNIQUE(source_id, storage_path).
+  const sourceId = await resolveSourceId(engine, undefined);
+
   for (let i = 0; i < files.length; i++) {
     const filePath = files[i];
     const relativePath = relative(dir, filePath);
@@ -332,12 +348,12 @@ async function syncFiles(engine: BrainEngine, dir?: string) {
 
     const hash = fileHash(filePath);
     const filename = basename(filePath);
-    const storagePath = relativePath.replace(/\\/g, '/');
+    const storagePath = `${sourceId}/${relativePath.replace(/\\/g, '/')}`;
     const mimeType = getMimeType(filePath);
     const stat = statSync(filePath);
 
     const sql = sqlQueryForEngine(engine);
-    const existing = await sql`SELECT id FROM files WHERE content_hash = ${hash} AND storage_path = ${storagePath}`;
+    const existing = await sql`SELECT id FROM files WHERE content_hash = ${hash} AND source_id = ${sourceId} AND storage_path = ${storagePath}`;
     if (existing.length > 0) {
       skipped++;
       continue;
@@ -348,9 +364,9 @@ async function syncFiles(engine: BrainEngine, dir?: string) {
     const pageSlug = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : null;
 
     await sql`
-      INSERT INTO files (page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
-      VALUES (${pageSlug}, ${filename}, ${storagePath}, ${mimeType}, ${stat.size}, ${hash}, ${'{}'}::jsonb)
-      ON CONFLICT (storage_path) DO UPDATE SET
+      INSERT INTO files (source_id, page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
+      VALUES (${sourceId}, ${pageSlug}, ${filename}, ${storagePath}, ${mimeType}, ${stat.size}, ${hash}, ${'{}'}::jsonb)
+      ON CONFLICT (source_id, storage_path) DO UPDATE SET
         content_hash = EXCLUDED.content_hash,
         size_bytes = EXCLUDED.size_bytes,
         mime_type = EXCLUDED.mime_type

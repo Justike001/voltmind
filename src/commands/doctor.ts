@@ -1724,7 +1724,9 @@ export async function checkFactsEmbeddingWidthConsistency(engine: BrainEngine): 
 export async function checkSourceRoutingHealth(engine: BrainEngine): Promise<Check> {
   try {
     const sources = await engine.executeRaw<{ id: string }>(
-      `SELECT id FROM sources WHERE id <> 'default'`,
+      `SELECT id FROM sources
+        WHERE id <> 'default'
+          AND archived IS NOT TRUE`,
     );
     if (sources.length === 0) {
       return { name: 'source_routing_health', status: 'ok', message: 'Single-source brain (no federation to check)' };
@@ -1733,7 +1735,11 @@ export async function checkSourceRoutingHealth(engine: BrainEngine): Promise<Che
     const emptySources: string[] = [];
     for (const s of sources) {
       const rows = await engine.executeRaw<{ n: string }>(
-        `SELECT COUNT(*)::text AS n FROM pages WHERE source_id = $1 LIMIT $2`,
+        `SELECT COUNT(*)::text AS n
+           FROM pages
+          WHERE source_id = $1
+            AND deleted_at IS NULL
+          LIMIT $2`,
         [s.id, perSourceCap],
       );
       if (Number(rows[0]?.n ?? 0) === 0) {
@@ -2516,7 +2522,10 @@ export async function checkSyncFreshness(
       local_path: string | null;
       last_sync_at: Date | null;
     }>(
-      `SELECT id, name, local_path, last_sync_at FROM sources WHERE local_path IS NOT NULL`,
+      `SELECT id, name, local_path, last_sync_at
+         FROM sources
+        WHERE local_path IS NOT NULL
+          AND archived IS NOT TRUE`,
     );
 
     if (sources.length === 0) {

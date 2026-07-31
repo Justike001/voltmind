@@ -103,10 +103,10 @@ function mkReport(opts: Partial<ProbeReport> & {
 }
 
 describe('M3 find_contradictions MCP op', () => {
-  test('op is registered with read scope', () => {
+  test('op is registered with admin scope', () => {
     const op = operationsByName['find_contradictions'];
     expect(op).toBeTruthy();
-    expect(op.scope).toBe('read');
+    expect(op.scope).toBe('admin');
     expect(op.localOnly).toBeFalsy();
   });
 

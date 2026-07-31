@@ -112,6 +112,11 @@ export interface Page {
    */
   import_filename?: string | null;
   /**
+   * v0.32.7 CJK wave: repo-relative path used by sync deletion/rename
+   * reconciliation.
+   */
+  source_path?: string | null;
+  /**
    * v0.29.1: bumped by `recompute_emotional_weight` when the page's
    * emotional_weight changes. The salience query window uses
    * `GREATEST(updated_at, salience_touched_at)` so newly-salient old pages
@@ -1088,9 +1093,9 @@ export interface BrainHealth {
    * DELETEs can produce dangling references.
    */
   dead_links: number;
-  /** Fraction of entity pages (person/company) with >= 1 inbound link. */
+  /** Fraction of active-schema entity pages with >= 1 inbound link. */
   link_coverage: number;
-  /** Fraction of entity pages (person/company) with >= 1 structured timeline entry. */
+  /** Fraction of active-schema entity pages with >= 1 structured timeline entry. */
   timeline_coverage: number;
   /** Top 5 entities by total link count (in + out). */
   most_connected: Array<{ slug: string; link_count: number }>;
