@@ -4,3 +4,5 @@
 {"intent": "Who is Paul Graham and what has he written about startups", "expected_skill": "query"}
 {"intent": "I need background on the Series B round Acme raised last year", "expected_skill": "query", "ambiguous_with": ["brain-ops"]}
 {"intent": "Do we already have notes on this person", "expected_skill": "query", "ambiguous_with": ["brain-ops"]}
+{"intent":"Search for the shared drive file named FY27 Planning.xlsx","expected_skill":"query","ambiguous_with":["ingest"]}
+{"intent":"Look up the RaiDrive path mentioned in yesterday's Teams discussion","expected_skill":"query","ambiguous_with":["ingest"]}

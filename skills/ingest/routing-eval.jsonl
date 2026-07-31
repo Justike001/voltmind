@@ -1,0 +1,8 @@
+// External-file and client-root routing fixtures for skills/ingest.
+{"intent":"Please configure shared drive access for this thin client","expected_skill":"ingest","ambiguous_with":["setup"]}
+{"intent":"Configure RaiDrive so this workstation can resolve the public NAS","expected_skill":"ingest","ambiguous_with":["setup"]}
+{"intent":"Map Z drive references without storing my username on the Host","expected_skill":"ingest","ambiguous_with":["setup"]}
+{"intent":"Capture this SharePoint attachment as a searchable file reference","expected_skill":"ingest","ambiguous_with":["capture"]}
+{"intent":"Ingest the OneDrive file mentioned in this Outlook thread","expected_skill":"ingest"}
+{"intent":"Normalize this RaiDrive path before sending the event to VoltMind","expected_skill":"ingest"}
+{"intent":"配置共享盘，让这个客户端可以打开查询返回的文件","expected_skill":"ingest","ambiguous_with":["setup"]}

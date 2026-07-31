@@ -1,15 +1,23 @@
 ---
 name: setup
-description: Set up VoltMind with auto-provision Supabase or PGLite, AGENTS.md injection, first import
+description: Set up VoltMind with Supabase or PGLite, agent instructions, first import, and thin-client shared-drive roots. Use for first boot or configuring RaiDrive/SMB/Z-drive mappings on a client workstation.
 triggers:
   - "set up voltmind"
   - "initialize brain"
   - "voltmind setup"
+  - "configure shared drive"
+  - "configure raidrive"
+  - "map z drive"
+  - "配置共享盘"
+  - "映射 z 盘"
 tools:
   - get_stats
   - get_health
   - sync_brain
   - put_page
+  - search_file_refs
+  - backfill_file_refs
+  - scrub_file_ref_open_paths
 mutating: true
 ---
 
@@ -66,6 +74,24 @@ Supabase gives you managed Postgres + pgvector (vector search built in) for $25/
 
 There is no `--local`, `--sqlite`, or offline mode. VoltMind requires Postgres + pgvector
 (local PGLite or remote Supabase / self-hosted).
+
+## Thin-client shared-drive roots
+
+Configure mapped drives on each client workstation after `init --mcp-only`.
+These commands are CLI-local and must not run on the Host:
+
+```powershell
+voltmind client-roots add synology-public `
+  --local-root 'Z:\' `
+  --unc-root '\\RaiDrive-CurrentUser\Synology'
+voltmind client-roots test synology-public
+```
+
+Every workstation uses the same `root_key` but may use a different drive letter
+or RaiDrive username. If the agent cannot execute a shell on that workstation,
+return the commands for the user to run. Verify retrieval with
+`voltmind file-refs search '<local-path>'`; the Host stores only the logical
+root/path identity.
 
 ## Phase A: Supabase Setup (recommended)
 

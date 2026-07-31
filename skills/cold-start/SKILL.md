@@ -26,6 +26,10 @@ tools:
   - add_link
   - add_timeline_entry
   - sync_brain
+  - search_file_refs
+  - list_page_file_refs
+  - attach_file_refs
+  - file_ref_materialize
 mutating: true
 writes_pages: true
 writes_to:
@@ -384,6 +388,11 @@ For each meaningful Teams episode:
    the Teams-derived page or update.
 
 ### External file references
+
+Before importing mapped-drive references, verify the current thin client has a
+root mapping. If it does not, chain into `ingest`'s mapped shared-drive setup
+and run `voltmind client-roots add/test` locally. Do not ask the Host to resolve
+the client's drive letter.
 
 For each Teams or Outlook item, pass file references through the connector
 relay as `file_refs`. The relay/SharePoint connector must resolve the stable

@@ -1,10 +1,21 @@
 ---
 name: ingest
-description: Route content to specialized ingestion skills. Detects input type and delegates.
+description: Route content and external file references into VoltMind. Use for ingestion, Teams/Outlook attachments, SharePoint/OneDrive links, mapped shared drives, or materializing a referenced file.
 triggers:
   - "ingest this"
   - "save this to brain"
   - "process this meeting"
+  - "configure shared drive"
+  - "configure raidrive"
+  - "map z drive"
+  - "shared drive path mapping"
+  - "sharepoint attachment"
+  - "onedrive file"
+  - "raidrive path"
+  - "shared drive path"
+  - "配置共享盘"
+  - "配置 raidrive"
+  - "映射 z 盘"
 tools:
   - search
   - get_page
@@ -158,6 +169,22 @@ MIME queries; normal `search`/`query` results also carry hydrated `file_refs`.
 
 ### Mapped shared-drive reference ingest
 
+When the user is configuring or repairing a mapped shared-drive path, run the
+following on the thin-client workstation, not on the Host server:
+
+```powershell
+voltmind client-roots add synology-public `
+  --local-root 'Z:\' `
+  --unc-root '\\RaiDrive-CurrentUser\Synology'
+voltmind client-roots test synology-public
+voltmind client-roots normalize 'Z:\Public\Finance\example.xlsx'
+```
+
+Use a stable organization-wide root key; substitute the current workstation's
+drive letter and UNC host. If the agent has no local shell on that workstation,
+give these commands to the user instead of calling a Host MCP tool. Never run
+`client-roots` through remote MCP: it belongs to the client file plane.
+
 For RaiDrive, SMB, or another mapped shared drive, configure the same logical
 `root_key` on every client (for example `synology-public`). Keep each
 workstation's local drive and UNC roots only in its file-plane
@@ -171,6 +198,16 @@ lets a move or rename update one reference. Without `file_id`, identity is
 path-based, so a move or rename cannot be proven to be the same file and may
 appear as a new reference. Missing mappings or temporary access failures must
 not delete an existing reference.
+
+For lookup, prefer the local wrapper when a workstation path was supplied:
+
+```powershell
+voltmind file-refs search 'Z:\Public\Finance\example.xlsx'
+```
+
+It normalizes locally, calls `search_file_refs` on the Host, and adds
+`resolved_open_path` locally. Agents without client shell access should call
+`search_file_refs` with `root_key` and `relative_path` instead.
 
 ## Entity Detection on Every Message
 

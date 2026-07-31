@@ -3,8 +3,10 @@ name: maintain
 version: 1.0.0
 description: |
   Brain health checks: back-link enforcement, citation audit, filing validation,
-  stale info detection, orphan pages, and benchmarks. Use when asked to check
-  brain health, run maintenance, or audit quality.
+  stale info detection, orphan pages, external-file-reference backfill/path
+  cleanup, and benchmarks. Use when asked to check brain health, run
+  maintenance, audit quality, index legacy file links, or remove stored local
+  drive paths.
 triggers:
   - "brain health"
   - "check backlinks"
@@ -24,6 +26,12 @@ triggers:
   - "what patterns did you see"
   - "did the dream cycle run"
   - "consolidate yesterday's conversations"
+  - "backfill file references"
+  - "index legacy file links"
+  - "scrub open paths"
+  - "remove stored drive paths"
+  - "补录文件引用"
+  - "清理本地文件路径"
 tools:
   - get_health
   - get_page
@@ -32,6 +40,9 @@ tools:
   - get_backlinks
   - add_link
   - search
+  - search_file_refs
+  - backfill_file_refs
+  - scrub_file_ref_open_paths
 mutating: true
 ---
 
@@ -51,6 +62,28 @@ This skill guarantees:
   state, invalid bindings, and unresolved candidates.
 
 ## Phases
+
+### External file-reference maintenance
+
+Use source-scoped Host operations for legacy indexing and cleanup:
+
+1. Preview `backfill_file_refs`, then apply it only after reviewing counts.
+   On a thin client, `voltmind file-refs backfill --dry-run --root-key <key>`
+   supplies only transient matching hints; the Host never accesses the drive.
+2. Verify representative names or logical paths with `search_file_refs`.
+3. Preview `scrub_file_ref_open_paths`; apply only after confirming the affected
+   page/ref counts. This removes deprecated stored workstation paths and
+   rebuilds logical projections.
+4. Do not mark references missing because one client lacks a mapping or mount.
+
+CLI equivalents for an agent with the appropriate local shell are:
+
+```powershell
+voltmind file-refs backfill --dry-run --root-key synology-public
+voltmind file-refs backfill --root-key synology-public
+voltmind file-refs scrub-open-paths --dry-run
+voltmind file-refs scrub-open-paths --yes
+```
 
 ### Autonomous path (v0.36.4.0) — when you want to reach a target score
 

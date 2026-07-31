@@ -97,7 +97,9 @@ export interface RoutingCaseResult {
  */
 export function normalizeText(s: string): string {
   if (!s) return '';
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  // Preserve Unicode letters/numbers so CJK and other non-Latin skill
+  // triggers participate in the same structural routing contract.
+  return s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 }
 
 /**

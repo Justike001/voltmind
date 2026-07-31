@@ -3,6 +3,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { checkResolvable } from "../src/core/check-resolvable.ts";
 import { PROTECTED_JOB_NAMES } from "../src/core/minions/protected-names.ts";
+import { parseSkillFrontmatter } from "../src/core/skill-frontmatter.ts";
 
 const SKILLS_DIR = join(import.meta.dir, "..", "skills");
 const RESOLVER_PATH = join(SKILLS_DIR, "RESOLVER.md");
@@ -89,18 +90,13 @@ describe("RESOLVER.md trigger round-trip (D5/C)", () => {
       expect(existsSync(skillFullPath)).toBe(true);
 
       const skillContent = readFileSync(skillFullPath, "utf-8");
-      const fmMatch = skillContent.match(/^---\n([\s\S]*?)\n---/);
-      if (!fmMatch) {
+      const parsed = parseSkillFrontmatter(skillContent);
+      if (!parsed) {
         throw new Error(`No YAML frontmatter in ${row.skillPath}`);
       }
-      const frontmatter = fmMatch[1];
-      // Parse frontmatter triggers: list. Match "..." OR '...' items separately
-      // so apostrophes inside double-quoted values don't truncate the capture.
-      const triggersBlock = frontmatter.match(/triggers:\s*\n((?:\s*-\s*(?:"[^"]*"|'[^']*')\s*\n?)+)/);
-      const declaredTriggers = triggersBlock
-        ? Array.from(triggersBlock[1].matchAll(/-\s*(?:"([^"]*)"|'([^']*)')/g))
-            .map(m => m[1] ?? m[2])
-        : [];
+      // Use the shared parser so resolver validation follows the same YAML
+      // subset and CRLF normalization as runtime skill discovery.
+      const declaredTriggers = parsed.triggers ?? [];
 
       // Fuzzy match: RESOLVER.md phrases are natural-language summaries of the
       // skill's intent; frontmatter triggers are the agent-facing phrase set.
