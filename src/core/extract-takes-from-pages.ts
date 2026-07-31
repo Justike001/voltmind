@@ -1,7 +1,9 @@
 // src/core/extract-takes-from-pages.ts
-// v0.41.18.0 (A12, A24, T9). Haiku classifier loop over allowlisted page
-// types — concept, atom, lore, briefing, writing, originals — extracts
-// gradeable claims and inserts them as takes fence rows.
+// v0.41.18.0 (A12, A24, T9). Haiku classifier loop over the active source
+// pack's `extractable: true` page types extracts gradeable claims and inserts
+// them as takes fence rows. Eligibility intentionally arrives from the caller:
+// this low-level worker owns no schema-resolution policy, and must never
+// reintroduce a hardcoded legacy/Gbrain type allowlist.
 //
 // Two-gate consent per A12:
 //   - takes.bootstrap_enabled (default false): must be true to run at all.
@@ -16,10 +18,6 @@
 import type { BrainEngine } from './engine.ts';
 import type { TakeBatchInput, TakeKind } from './engine.ts';
 import { chat, isAvailable } from './ai/gateway.ts';
-
-export const ALLOWED_PAGE_TYPES = [
-  'concept', 'atom', 'lore', 'briefing', 'writing', 'originals',
-] as const;
 
 const CLASSIFIER_SYSTEM = `You extract gradeable CLAIMS from longform writing.
 
@@ -44,6 +42,12 @@ export interface ExtractTakesFromPagesOpts {
   dryRun?: boolean;
   /** Scope to a single source. */
   sourceIdFilter?: string;
+  /**
+   * Types eligible for take extraction in the active schema pack. An empty
+   * set is a deliberate no-op: callers must fail closed if the pack cannot
+   * be resolved, rather than falling back to a legacy type list.
+   */
+  eligiblePageTypes: ReadonlySet<string>;
   /** Max pages to classify per run (caps cost). Default 50. */
   maxPages?: number;
   /** Owner identifier for the inserted takes. Default 'system'. */
@@ -114,6 +118,19 @@ export async function extractTakesFromPages(
     };
   }
 
+  const eligiblePageTypes = [...opts.eligiblePageTypes];
+
+  // A custom pack can intentionally have no takes-extractable types. Return
+  // before even checking the gateway so this path has no LLM call or cost.
+  if (eligiblePageTypes.length === 0) {
+    return {
+      pages_scanned: 0,
+      claims_extracted: 0,
+      consent_gate_blocked: false,
+      llm_unavailable: false,
+    };
+  }
+
   const model = opts.model ?? 'anthropic:claude-haiku-4-5';
   if (!isAvailable('chat', model)) {
     return {
@@ -127,16 +144,20 @@ export async function extractTakesFromPages(
   const dryRun = opts.dryRun ?? false;
   const maxPages = opts.maxPages ?? 50;
   const holder = opts.holder ?? 'system';
-  const sourceFilter = opts.sourceIdFilter ? `AND source_id = $1` : '';
-  const params = opts.sourceIdFilter ? [opts.sourceIdFilter] : [];
+
+  const params: string[] = [...eligiblePageTypes];
+  const typePlaceholders = eligiblePageTypes.map((_, index) => `$${index + 1}`).join(', ');
+  const sourceFilter = opts.sourceIdFilter
+    ? `AND source_id = $${params.length + 1}`
+    : '';
+  if (opts.sourceIdFilter) params.push(opts.sourceIdFilter);
 
   // Fetch eligible pages. Order by updated_at DESC so recently-edited
   // pages get bootstrapped first.
-  const typesList = ALLOWED_PAGE_TYPES.map((t) => `'${t}'`).join(', ');
   const pages = await engine.executeRaw<PageRow>(
     `SELECT id, slug, source_id, type, compiled_truth, updated_at
        FROM pages
-      WHERE type IN (${typesList})
+      WHERE type IN (${typePlaceholders})
         AND deleted_at IS NULL
         AND length(COALESCE(compiled_truth, '')) > 200
         ${sourceFilter}

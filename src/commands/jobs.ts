@@ -1608,9 +1608,27 @@ export async function registerBuiltinHandlers(worker: MinionWorker, engine: Brai
     const data = (job.data ?? {}) as { sourceId?: string; maxPages?: number };
     const bootstrapCfg = await engine.getConfig('takes.bootstrap_enabled');
     const bootstrapEnabled = bootstrapCfg === 'true' || bootstrapCfg === '1';
+    // Schema packs are source-scoped. An unresolvable pack is an empty
+    // eligibility set (fail closed), so a background job cannot silently
+    // fall back to the retired hardcoded Gbrain page types.
+    const { loadConfig } = await import('../core/config.ts');
+    const { loadActivePack } = await import('../core/schema-pack/load-active.ts');
+    const { extractableTypesFromPack } = await import('../core/schema-pack/extractable.ts');
+    let eligiblePageTypes = new Set<string>();
+    try {
+      const pack = await loadActivePack({
+        cfg: loadConfig(),
+        remote: false,
+        sourceId: data.sourceId,
+      });
+      eligiblePageTypes = extractableTypesFromPack(pack.manifest);
+    } catch {
+      // Empty eligibility set is the intentional fail-closed behavior.
+    }
     return await extractTakesFromPages(engine, {
       bootstrapEnabled,
       sourceIdFilter: data.sourceId,
+      eligiblePageTypes,
       maxPages: data.maxPages,
     });
   });

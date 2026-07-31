@@ -557,7 +557,7 @@ Common flags:
 
 /**
  * v0.41.18.0 (A12, A24, T9) — `voltmind takes extract --from-pages` runs
- * Haiku over concept/atom/lore/briefing/writing/originals pages and
+ * Haiku over the active source schema pack's `extractable: true` page types
  * lifts gradeable claims into the takes fence.
  *
  * Two-gate consent: requires `takes.bootstrap_enabled=true` in config
@@ -575,7 +575,7 @@ async function cmdExtract(engine: BrainEngine, rest: string[]): Promise<void> {
   const dryRun = rest.includes('--dry-run');
   const skipConfirm = rest.includes('--yes');
   const sourceIdx = rest.indexOf('--source-id');
-  const sourceIdFilter = sourceIdx >= 0 ? rest[sourceIdx + 1] : undefined;
+  const explicitSourceId = sourceIdx >= 0 ? rest[sourceIdx + 1] : undefined;
   const maxIdx = rest.indexOf('--max-pages');
   const maxPagesRaw = maxIdx >= 0 ? rest[maxIdx + 1] : undefined;
   const maxPages = maxPagesRaw ? Math.max(1, Math.min(1000, parseInt(maxPagesRaw, 10) || 50)) : 50;
@@ -593,9 +593,26 @@ async function cmdExtract(engine: BrainEngine, rest: string[]): Promise<void> {
     );
     process.exit(2);
   }
+
+  // Resolve exactly one source before loading its pack. A pack is source
+  // scoped, so an unscoped all-source query would apply the wrong schema to
+  // at least one source in a multi-source brain.
+  const { resolveSourceId } = await import('../core/source-resolver.ts');
+  const sourceIdFilter = await resolveSourceId(engine, explicitSourceId);
+  const { loadConfig } = await import('../core/config.ts');
+  const { loadActivePack } = await import('../core/schema-pack/load-active.ts');
+  const { extractableTypesFromPack } = await import('../core/schema-pack/extractable.ts');
+  const activePack = await loadActivePack({
+    cfg: loadConfig(),
+    remote: false,
+    sourceId: sourceIdFilter,
+  });
+  const eligiblePageTypes = extractableTypesFromPack(activePack.manifest);
+  const eligibleLabel = [...eligiblePageTypes].sort().join(', ') || '(none)';
+
   if (!dryRun && !skipConfirm) {
     process.stderr.write(
-      `[takes extract] sends concept/atom/lore/briefing/writing/originals page content to the configured model.\n` +
+      `[takes extract] sends ${eligibleLabel} pages from source '${sourceIdFilter}' to the configured model.\n` +
       `Pass --yes to proceed (or --dry-run to preview).\n`,
     );
     process.exit(1);
@@ -607,6 +624,7 @@ async function cmdExtract(engine: BrainEngine, rest: string[]): Promise<void> {
     bootstrapEnabled: true,
     dryRun,
     sourceIdFilter,
+    eligiblePageTypes,
     maxPages,
     holder,
     model,
