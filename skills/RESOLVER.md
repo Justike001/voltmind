@@ -41,6 +41,7 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | Teams/Outlook attachment, SharePoint/OneDrive path, RaiDrive/SMB/shared-drive path, `Z:\...`, or external file reference | `skills/ingest/SKILL.md` (use `search_file_refs` / `attach_file_refs`; materialize only on explicit request) |
 | Analyze a referenced SharePoint/OneDrive or mapped shared-drive file, or refresh an extracted artifact | `skills/ingest/SKILL.md` (`file_ref_materialize` after connector/local extraction) |
 | "configure shared drive", "configure RaiDrive", "map Z drive", "配置共享盘", "映射 Z 盘" | `skills/ingest/SKILL.md` (`client-roots` runs only on the thin-client workstation) |
+| "long-running project tracking", "project tracking", "tracking binding", "bind source to project", "project tracking review", "长期项目追踪", "项目追踪", "绑定项目来源" | `skills/project/SKILL.md` |
 
 
 ## Operational
@@ -75,6 +76,7 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | "Now what?", "fill my brain", "cold start", "bootstrap", "import my data", "what should I import first" | `skills/cold-start/SKILL.md` |
 | "Migrate from Obsidian/Notion/Logseq" | `skills/migrate/SKILL.md` |
 | Brain health check, maintenance run | `skills/maintain/SKILL.md` |
+| "project tracking health", "failed tracking receipts", "reconcile project tracking", "项目追踪健康", "修复项目追踪" | `skills/maintain/SKILL.md` (Host status/reconcile operations; binding edits stay in `skills/project/SKILL.md`) |
 | "backfill file references", "index legacy file links", "scrub open paths", "remove stored drive paths" | `skills/maintain/SKILL.md` |
 | "Extract links", "build link graph", "populate timeline" | `skills/maintain/SKILL.md` (extraction sections) |
 | "Run dream", "process today's session", "synthesize my conversations", "consolidate yesterday's conversations", "what patterns did you see", "did the dream cycle run" | `skills/maintain/SKILL.md` (dream cycle section) |

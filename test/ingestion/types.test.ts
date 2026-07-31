@@ -80,6 +80,14 @@ describe('validateIngestionEvent — happy path', () => {
     expect(validateIngestionEvent(ev)).toBeNull();
   });
 
+  test('accepts stable tracking references and evidence type', () => {
+    const ev = makeEvent({
+      tracking_refs: [{ provider: 'teams', resource: 'conversation', id: 'chat-1' }],
+      evidence_type: 'teams_thread',
+    });
+    expect(validateIngestionEvent(ev)).toBeNull();
+  });
+
   test('accepts events with untrusted_payload true', () => {
     expect(validateIngestionEvent(makeEvent({ untrusted_payload: true }))).toBeNull();
   });
@@ -175,6 +183,18 @@ describe('validateIngestionEvent — rejection cases', () => {
     const ev = { ...makeEvent(), metadata: [1, 2, 3] };
     const err = validateIngestionEvent(ev);
     expect(err?.field).toBe('metadata');
+  });
+
+  test('rejects malformed tracking references', () => {
+    const ev = makeEvent({ tracking_refs: [{ provider: 'teams', resource: '', id: 'chat-1' }] });
+    const err = validateIngestionEvent(ev);
+    expect(err?.field).toBe('tracking_refs.resource');
+  });
+
+  test('rejects unknown evidence type', () => {
+    const ev = makeEvent({ evidence_type: 'chat_message' as never });
+    const err = validateIngestionEvent(ev);
+    expect(err?.field).toBe('evidence_type');
   });
 });
 

@@ -1,7 +1,7 @@
 ---
 name: project
 version: 1.0.0
-description: Maintain project context, open threads, actions, commitments, risks, and timelines.
+description: Maintain durable project/workstream context and long-running source bindings, review tracking candidates, inspect tracking status, and reconcile evidence after binding changes. Use for project updates, tracking bindings, unresolved project evidence, or long-running project tracking.
 triggers:
   - "project update"
   - "update project page"
@@ -9,6 +9,14 @@ triggers:
   - "open threads"
   - "项目更新"
   - "项目上下文"
+  - "long-running project tracking"
+  - "project tracking"
+  - "tracking binding"
+  - "bind source to project"
+  - "project tracking review"
+  - "长期项目追踪"
+  - "项目追踪"
+  - "绑定项目来源"
 tools:
   - search
   - query
@@ -16,6 +24,8 @@ tools:
   - put_page
   - get_backlinks
   - get_timeline
+  - get_project_tracking_status
+  - reconcile_project_tracking
 mutating: true
 writes_pages: true
 writes_to:
@@ -68,9 +78,11 @@ owned by the company-server tracking worker.
 
 When `state/indexes/project-tracking-review` contains a candidate, review the
 evidence, add the chosen binding to the canonical page Frontmatter, then run
+the Host operation `reconcile_project_tracking`. With a trusted shell directly
+on the company server, the equivalent command is
 `VOLTMIND_RUNTIME_ROLE=company-server voltmind projects tracking reconcile
---source-id <company-source>` on the company server, or wait for the next
-ingest retry.
+--source-id <company-source>`. Use `get_project_tracking_status` before and
+after reconciliation. Neither operation adds or removes bindings.
 
 Write additively and preserve existing user prose. If a project update could become shared team context, create a local `contribution/candidates/` draft for user review; do not publish externally in Phase 1.
 

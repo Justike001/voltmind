@@ -6,7 +6,7 @@ description: |
   stale info detection, orphan pages, external-file-reference backfill/path
   cleanup, and benchmarks. Use when asked to check brain health, run
   maintenance, audit quality, index legacy file links, or remove stored local
-  drive paths.
+  drive paths, or diagnose/reconcile long-running project tracking receipts.
 triggers:
   - "brain health"
   - "check backlinks"
@@ -32,6 +32,11 @@ triggers:
   - "remove stored drive paths"
   - "补录文件引用"
   - "清理本地文件路径"
+  - "project tracking health"
+  - "failed tracking receipts"
+  - "reconcile project tracking"
+  - "项目追踪健康"
+  - "修复项目追踪"
 tools:
   - get_health
   - get_page
@@ -43,6 +48,8 @@ tools:
   - search_file_refs
   - backfill_file_refs
   - scrub_file_ref_open_paths
+  - get_project_tracking_status
+  - reconcile_project_tracking
 mutating: true
 ---
 
@@ -62,6 +69,21 @@ This skill guarantees:
   state, invalid bindings, and unresolved candidates.
 
 ## Phases
+
+### Long-running project tracking health
+
+1. Call `get_project_tracking_status` on the company Host source.
+2. Review failed/stalled receipts and `state/indexes/project-tracking-review`.
+3. Correct bindings only in project/workstream Frontmatter through the project
+   workflow; maintenance must not invent or silently change bindings.
+4. Call `reconcile_project_tracking` after a binding correction or recoverable
+   failure, then verify status again. This Host operation queues the protected
+   worker; it does not grant the client direct project-page write access.
+
+For a trusted shell on the company server, use `voltmind projects tracking
+status --source-id <company-source>` and, with
+`VOLTMIND_RUNTIME_ROLE=company-server`, `voltmind projects tracking reconcile
+--source-id <company-source>`.
 
 ### External file-reference maintenance
 

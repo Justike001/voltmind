@@ -1,6 +1,6 @@
 ---
 name: ingest
-description: Route content and external file references into VoltMind. Use for ingestion, Teams/Outlook attachments, SharePoint/OneDrive links, mapped shared drives, or materializing a referenced file.
+description: Route content and external file references into VoltMind, including normalized Teams/meeting/email evidence for server-side long-running project tracking. Use for ingestion, tracking-aware evidence submission, Teams/Outlook attachments, SharePoint/OneDrive links, mapped shared drives, or materializing a referenced file.
 triggers:
   - "ingest this"
   - "save this to brain"
@@ -16,6 +16,9 @@ triggers:
   - "配置共享盘"
   - "配置 raidrive"
   - "映射 z 盘"
+  - "submit tracked evidence"
+  - "ingest project progress"
+  - "提交项目进展证据"
 tools:
   - search
   - get_page
@@ -27,6 +30,7 @@ tools:
   - list_page_file_refs
   - attach_file_refs
   - file_ref_materialize
+  - submit_ingestion_event
 mutating: true
 writes_pages: true
 writes_to:
@@ -134,8 +138,10 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
    resolve explicit `tracking_refs` against existing `tracking_bindings`. Never
    create a new project merely because a new source event arrived; unresolved or
    ambiguous matches go to `state/indexes/project-tracking-review`. For remote
-   company evidence, forward the normalized event to `POST /ingest/events`;
-   local Markdown writes plus `voltmind sync` do not execute project tracking.
+   company evidence, call the Host operation `submit_ingestion_event` with
+   stable `tracking_refs` and `evidence_type`. Connector relays may use
+   `POST /ingest/events` as the transport-specific alternative. Local Markdown
+   writes plus `voltmind sync` do not execute project tracking.
 6. **Append to entity timelines.** Add timeline entries only to page types listed
    in this skill's `writes_to`. Never use the generic timeline tool to bypass
    the server runtime for a project, workstream, or canonical state object.

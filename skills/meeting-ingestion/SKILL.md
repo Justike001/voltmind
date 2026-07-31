@@ -4,12 +4,16 @@ version: 1.0.0
 description: |
   Ingest meeting transcripts into brain pages with attendee enrichment, entity
   propagation, and timeline merge. A meeting is NOT fully ingested until the
-  enrich skill has processed every entity.
+  enrich skill has processed every entity. Use submit_ingestion_event for
+  normalized meeting evidence that may advance bound projects/workstreams.
 triggers:
   - "meeting transcript"
   - "process this meeting"
   - "meeting notes"
   - meeting transcript received
+  - "meeting project progress"
+  - "submit meeting evidence"
+  - "会议项目进展"
 tools:
   - search
   - query
@@ -17,6 +21,7 @@ tools:
   - put_page
   - add_link
   - add_timeline_entry
+  - submit_ingestion_event
 mutating: true
 writes_pages: true
 writes_to:
@@ -120,11 +125,12 @@ Acme Corp, the event goes on Alice's page, Bob's page, AND Acme Corp's page.
 ### Long-running project tracking
 
 Do not create or update a project/workstream page during meeting ingestion.
-Submit the normalized event, including stable `tracking_refs` and
-`evidence_type`, to the company server's `POST /ingest/events`. The server
-persists raw evidence and then queues `project_track_progress`; a local
-`voltmind sync` alone does not trigger tracking. Review unbound or ambiguous
-candidates in `state/indexes/project-tracking-review`.
+Call the company Host's `submit_ingestion_event` operation with the normalized
+event, stable `tracking_refs`, and `evidence_type: meeting_transcript`.
+Connector relays may use `POST /ingest/events` instead. The server persists raw
+evidence and then queues `project_track_progress`; local `voltmind sync` alone
+does not trigger tracking. Review unbound or ambiguous candidates in
+`state/indexes/project-tracking-review`.
 
 ## Output Format
 

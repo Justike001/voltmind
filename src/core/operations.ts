@@ -46,6 +46,16 @@ import * as db from './db.ts';
 import { VERSION } from '../version.ts';
 import { hasScope } from './scope.ts';
 import {
+  getProjectTrackingStatus,
+  reconcileProjectTracking,
+  submitTrackedIngestionEvent,
+} from './project-tracking-runtime.ts';
+import type {
+  IngestionContentType,
+  SourceEvidenceType,
+  TrackingReference,
+} from './ingestion/types.ts';
+import {
   GET_RECENT_SALIENCE_DESCRIPTION,
   FIND_ANOMALIES_DESCRIPTION,
   FIND_EXPERTS_DESCRIPTION,
@@ -2978,6 +2988,114 @@ const file_ref_materialize: Operation = {
 
 // --- Jobs (Minions) ---
 
+const submit_ingestion_event: Operation = {
+  name: 'submit_ingestion_event',
+  description: 'Persist a normalized source event through the server ingestion queue. Use for Teams, meetings, email, calendar, and other connector evidence that may carry tracking_refs. The OAuth-bound source is authoritative; this operation never creates or directly edits a project/workstream.',
+  params: {
+    source_kind: { type: 'string', required: true, description: 'Connector/source kind, for example teams-connector or meeting-ingestion.' },
+    source_uri: { type: 'string', required: true, description: 'Stable evidence URI or provider identifier.' },
+    content: { type: 'string', required: true, description: 'Raw evidence content to persist before tracking.' },
+    content_type: { type: 'string', enum: ['text/markdown', 'text/plain', 'text/html', 'application/json'], description: 'Text content type (default: text/markdown).' },
+    event_id: { type: 'string', description: 'Stable provider event/thread/meeting identity.' },
+    event_version: { type: 'string', description: 'Provider revision, modified timestamp, or eTag.' },
+    occurred_at: { type: 'string', description: 'ISO timestamp for the evidence; defaults to server receipt time.' },
+    tracking_refs: {
+      type: 'array',
+      items: { type: 'object' },
+      description: 'Normalized bindings: [{provider, resource, id}]. These are matched only within the authorized source.',
+    },
+    evidence_type: { type: 'string', enum: ['teams_thread', 'meeting_transcript', 'email', 'calendar_event', 'other'], description: 'Evidence filing category.' },
+    page_metadata: { type: 'object', description: 'Allow-listed routing hints such as team_name, channel_name, workstream, or project_name.' },
+    slug: { type: 'string', description: 'Optional evidence page slug. Omit to use the stable inbox fallback.' },
+  },
+  mutating: true,
+  scope: 'write',
+  handler: async (ctx, p) => {
+    if (process.env.VOLTMIND_RUNTIME_ROLE !== 'company-server') {
+      throw new OperationError(
+        'permission_denied',
+        'submit_ingestion_event is company-server-only; call the company Host instead of a client runtime',
+      );
+    }
+    if (ctx.engine.kind !== 'postgres') {
+      throw new OperationError('permission_denied', 'submit_ingestion_event requires the company-brain Postgres engine');
+    }
+    const requireString = (key: string, max: number): string => {
+      const value = p[key];
+      if (typeof value !== 'string' || value.length === 0 || value.length > max) {
+        throw new OperationError('invalid_params', `${key} must be a non-empty string of at most ${max} characters`);
+      }
+      return value;
+    };
+    const sourceId = resolveWriteSourceId(ctx);
+    const sourceKind = requireString('source_kind', 256);
+    const sourceUri = requireString('source_uri', 4096);
+    const content = requireString('content', 500_000);
+    if (p.occurred_at !== undefined
+      && (typeof p.occurred_at !== 'string' || !Number.isFinite(Date.parse(p.occurred_at)))) {
+      throw new OperationError('invalid_params', 'occurred_at must be an ISO timestamp');
+    }
+    if (p.slug !== undefined) validatePageSlug(p.slug as string);
+    if (p.tracking_refs !== undefined && !Array.isArray(p.tracking_refs)) {
+      throw new OperationError('invalid_params', 'tracking_refs must be an array');
+    }
+    try {
+      return await submitTrackedIngestionEvent(ctx.engine, sourceId, {
+        source_kind: sourceKind,
+        source_uri: sourceUri,
+        content,
+        content_type: p.content_type as IngestionContentType | undefined,
+        event_id: p.event_id as string | undefined,
+        event_version: p.event_version as string | undefined,
+        occurred_at: p.occurred_at as string | undefined,
+        tracking_refs: p.tracking_refs as TrackingReference[] | undefined,
+        evidence_type: p.evidence_type as SourceEvidenceType | undefined,
+        page_metadata: p.page_metadata as Record<string, unknown> | undefined,
+        slug: p.slug as string | undefined,
+        untrusted_payload: ctx.remote !== false,
+      });
+    } catch (error) {
+      if (error instanceof OperationError) throw error;
+      throw new OperationError('invalid_params', error instanceof Error ? error.message : String(error));
+    }
+  },
+};
+
+const get_project_tracking_status: Operation = {
+  name: 'get_project_tracking_status',
+  description: 'Inspect source-scoped long-running project tracking receipts, review backlog, failures, and server worker jobs. Use before maintenance or reconciliation.',
+  params: {},
+  scope: 'read',
+  handler: async (ctx) => {
+    try {
+      return await getProjectTrackingStatus(ctx.engine, resolveWriteSourceId(ctx));
+    } catch (error) {
+      throw new OperationError('storage_error', error instanceof Error ? error.message : String(error));
+    }
+  },
+};
+
+const reconcile_project_tracking: Operation = {
+  name: 'reconcile_project_tracking',
+  description: 'On the company server, resubmit already-persisted source evidence with tracking_refs to the protected project tracking worker. Use after adding/fixing Frontmatter bindings or recovering failed receipts; this does not bind, unbind, or create projects.',
+  params: {},
+  mutating: true,
+  scope: 'admin',
+  handler: async (ctx) => {
+    if (process.env.VOLTMIND_RUNTIME_ROLE !== 'company-server') {
+      throw new OperationError(
+        'permission_denied',
+        'reconcile_project_tracking is company-server-only; call the company Host instead of a client runtime',
+      );
+    }
+    try {
+      return await reconcileProjectTracking(ctx.engine, resolveWriteSourceId(ctx));
+    } catch (error) {
+      throw new OperationError('storage_error', error instanceof Error ? error.message : String(error));
+    }
+  },
+};
+
 const submit_job: Operation = {
   name: 'submit_job',
   description: 'Submit a background job to the Minions queue. Built-in types: sync, embed, lint, import, extract, backlinks, autopilot-cycle. The `shell` type is CLI-only and rejected over MCP.',
@@ -5584,6 +5702,8 @@ export const operations: Operation[] = [
   // Files
   file_list, file_upload, file_url, search_file_refs, list_page_file_refs, attach_file_refs,
   backfill_file_refs, scrub_file_ref_open_paths, file_ref_materialize,
+  // Long-running project tracking: normalized evidence submission + source-scoped maintenance.
+  submit_ingestion_event, get_project_tracking_status, reconcile_project_tracking,
   // Jobs (Minions)
   submit_job, get_job, list_jobs, cancel_job, retry_job, get_job_progress,
   get_job_failure_report, get_job_checkpoints, get_job_undo_report, plan_job_batch,
