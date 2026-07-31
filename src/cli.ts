@@ -2270,6 +2270,10 @@ INGESTION
   sync [--repo <path>] [flags]       Git-to-brain incremental sync
   embed [<slug>|--all|--stale]       Generate/refresh embeddings
 
+SKILL DISCOVERY
+  skills                              List Host workspace skills
+  skill <name>                        Read one Host skill workflow
+
 FILES
   files mirror <dir> [--dry-run]     Mirror raw files to configured storage
   files redirect <dir> [--dry-run]   Replace mirrored files with pointers

@@ -243,6 +243,13 @@ export interface VoltMindConfig {
     oauth_client_secret?: string;
   };
 
+  /** Host-side publication of agent skill prose over MCP. Default OFF. */
+  mcp?: {
+    publish_skills?: boolean;
+    /** Optional explicit Host skills directory; DB key: mcp.skills_dir. */
+    skills_dir?: string;
+  };
+
   /**
    * Client-local mappings for shared filesystem roots. This file-plane field
    * is intentionally never merged from the DB or sent to the host: drive
@@ -655,6 +662,9 @@ export const KNOWN_CONFIG_KEYS: readonly string[] = [
   'sync',
   'sync.repo_path',
   'sync.last_commit',
+  // Host skill publication over MCP (remote default OFF).
+  'mcp.publish_skills',
+  'mcp.skills_dir',
   // DB-plane (v0.32.3 search modes + related)
   'search.mode',
   'search.cache.enabled',
@@ -742,6 +752,7 @@ export const KNOWN_CONFIG_KEY_PREFIXES: readonly string[] = [
   'content_sanity.',    // v0.41 content-sanity tunables
   'self_upgrade.',      // invocation-riding self-upgrade state
   'enrich.',            // MVP signal enrichment
+  'mcp.',               // Host skill publication settings
 ];
 
 export function saveConfig(config: VoltMindConfig): void {

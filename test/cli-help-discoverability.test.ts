@@ -74,6 +74,8 @@ describe('VoltMind main `voltmind --help` surface', () => {
     expect(stdout).toMatch(/^\s*calibration\s/m);
     expect(stdout).toMatch(/^\s*extract\s/m);
     expect(stdout).toMatch(/^\s*extract-conversation-facts\s/m);
+    expect(stdout).toMatch(/^\s*skills\s/m);
+    expect(stdout).toMatch(/^\s*skill <name>\s/m);
     expect(stdout).toMatch(/^\s*files mirror\s/m);
     expect(stdout).toMatch(/^\s*transcripts recent\s/m);
     expect(stdout).toMatch(/^\s*takes\s/m);

@@ -188,6 +188,40 @@ or host-maintenance surface area.
 | `write` | `put_page`, `delete_page`, `add_link`, `add_timeline_entry` |
 | `admin` | Client management, token revocation, sweep, local-only ops |
 
+### 5. Publish Host skills (optional)
+
+Remote skill publication is **off by default**. The `list_skills` and `get_skill`
+tools are still discoverable, but calls fail with `permission_denied` until the
+Host operator explicitly enables publication:
+
+```bash
+voltmind config set mcp.publish_skills true
+```
+
+VoltMind resolves the Host workspace's `skills/manifest.json`, validates every
+published `SKILL.md` with realpath confinement and a prose-size limit, and never
+installs a skill on the client. `get_skill` returns the skill body, a restricted
+frontmatter view, and which declared tools the caller's OAuth scopes can use.
+Both operations require the `read` scope.
+
+If the service working directory cannot locate the intended workspace, pin the
+catalog root explicitly:
+
+```bash
+voltmind config set mcp.skills_dir /absolute/path/to/workspace/skills
+```
+
+Database-backed config is read for every call, so changing these keys does not
+require a restart. Disable publication again with:
+
+```bash
+voltmind config set mcp.publish_skills false
+```
+
+After enabling it, verify with an authenticated MCP client: `tools/list` should
+include `list_skills` and `get_skill`; then call `list_skills` followed by
+`get_skill` with a manifest skill name such as `project`.
+
 ## Legacy Bearer Token Setup
 
 Keep using pre-v0.26 bearer tokens if you aren't ready to migrate. They

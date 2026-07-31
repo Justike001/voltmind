@@ -31,6 +31,7 @@ import { join } from 'path';
 export interface ManifestEntry {
   name: string;
   path: string; // relative to skillsDir, e.g. "query/SKILL.md"
+  description?: string;
 }
 
 export interface ManifestLoadResult {
@@ -130,7 +131,8 @@ export function loadOrDeriveManifest(skillsDir: string): ManifestLoadResult {
             typeof s === 'object' &&
             s !== null &&
             typeof (s as ManifestEntry).name === 'string' &&
-            typeof (s as ManifestEntry).path === 'string'
+            typeof (s as ManifestEntry).path === 'string' &&
+            ((s as ManifestEntry).description === undefined || typeof (s as ManifestEntry).description === 'string')
         );
         if (valid) {
           return { skills: skills as ManifestEntry[], derived: false };

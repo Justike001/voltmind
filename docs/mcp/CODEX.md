@@ -51,9 +51,9 @@ Call get_brain_identity, then search my brain for [topic].
 `get_brain_identity` confirms whose brain you're connected to; `list_skills` shows
 everything it can do.
 
-> **`list_skills` empty?** It's gated by `mcp.publish_skills` on the host (default
-> ON for `voltmind init` brains, OFF for brains upgraded from older releases). Enable
-> it on the host: `voltmind config set mcp.publish_skills true`. The core tools
+> **`list_skills` returns `permission_denied`?** Host skill publication is off by
+> default. Enable it on the host with
+> `voltmind config set mcp.publish_skills true`. The core tools
 > (search, query, get_page, put_page, think, find_experts) work regardless.
 > `capture` is CLI-only, not an MCP tool — write over MCP with `put_page`.
 

@@ -56,6 +56,11 @@ import type {
   TrackingReference,
 } from './ingestion/types.ts';
 import {
+  getPublishedSkill,
+  listPublishedSkills,
+  SkillCatalogError,
+} from './skill-catalog.ts';
+import {
   GET_RECENT_SALIENCE_DESCRIPTION,
   FIND_ANOMALIES_DESCRIPTION,
   FIND_EXPERTS_DESCRIPTION,
@@ -5575,6 +5580,57 @@ const run_onboard: Operation = {
   },
 };
 
+function rethrowSkillCatalogError(error: unknown): never {
+  if (error instanceof SkillCatalogError) {
+    throw new OperationError(error.code, error.message);
+  }
+  throw error;
+}
+
+const list_skills: Operation = {
+  name: 'list_skills',
+  description: 'List Host-published agent skills. Remote access is default-off and requires mcp.publish_skills=true; fetch a selected skill with get_skill before following its workflow.',
+  params: {},
+  scope: 'read',
+  localOnly: false,
+  cliHints: { name: 'skills' },
+  handler: async (ctx) => {
+    try {
+      return await listPublishedSkills({
+        engine: ctx.engine,
+        config: ctx.config,
+        remote: ctx.remote,
+        grantedScopes: ctx.auth?.scopes,
+      });
+    } catch (error) {
+      rethrowSkillCatalogError(error);
+    }
+  },
+};
+
+const get_skill: Operation = {
+  name: 'get_skill',
+  description: 'Fetch one Host-published SKILL.md by manifest name, including safe frontmatter and which declared VoltMind tools this caller can use. Names are manifest keys, never filesystem paths.',
+  params: {
+    name: { type: 'string', required: true, description: 'Published lowercase kebab-case skill name from list_skills.' },
+  },
+  scope: 'read',
+  localOnly: false,
+  cliHints: { name: 'skill', positional: ['name'] },
+  handler: async (ctx, p) => {
+    try {
+      return await getPublishedSkill({
+        engine: ctx.engine,
+        config: ctx.config,
+        remote: ctx.remote,
+        grantedScopes: ctx.auth?.scopes,
+      }, p.name as string, operations);
+    } catch (error) {
+      rethrowSkillCatalogError(error);
+    }
+  },
+};
+
 // P1 skill-platform diagnostics. These are intentionally admin-scoped and
 // read-only: remote callers may inspect the server workspace but never modify
 // skills, frontmatter, registries, or local files through MCP.
@@ -5754,6 +5810,7 @@ export const operations: Operation[] = [
   // v0.41.18.0 (T16, A7, codex #5)
   run_onboard,
   // P1 skill platform diagnostics (remote-safe, admin scoped)
+  list_skills, get_skill,
   skillify_check, list_skillpack_skills, get_skillpack_health, diff_skillpack_skill,
   check_skill_tree, evaluate_skill_routing, list_resolvers, describe_resolver, audit_frontmatter,
 ];
