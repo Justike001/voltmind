@@ -126,10 +126,7 @@ function validateRedirectUri(uri: string): void {
   } catch {
     throw new Error(`Invalid redirect_uri: not a parseable URL: ${uri}`);
   }
-  const isLoopback = parsed.hostname === 'localhost'
-    || parsed.hostname === '127.0.0.1'
-    || parsed.hostname === '[::1]'
-    || parsed.hostname === '::1';
+  const isLoopback = LOOPBACK_HOSTS.has(parsed.hostname) || parsed.hostname === '::1';
   if (parsed.protocol === 'https:') return;
   if (parsed.protocol === 'http:' && isLoopback) return;
   throw new Error(
@@ -972,4 +969,49 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
 
     return result;
   }
+}
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * Match an OAuth redirect URI, including the callback-id suffix Codex adds to
+ * native loopback callbacks. The suffix relaxation is deliberately limited to
+ * loopback URIs; public redirect URIs remain exact-match only.
+ *
+ * RFC 8252 already permits a native app to choose an ephemeral loopback port.
+ * Codex additionally uses `/callback/<callback-id>` while registering the
+ * stable `/callback` base path.
+ */
+export function matchesLoopbackCallbackRedirect(requested: string, registered: string): boolean {
+  if (requested === registered) return true;
+
+  let requestedUrl: URL;
+  let registeredUrl: URL;
+  try {
+    requestedUrl = new URL(requested);
+    registeredUrl = new URL(registered);
+  } catch {
+    return false;
+  }
+
+  if (!LOOPBACK_HOSTS.has(requestedUrl.hostname) || !LOOPBACK_HOSTS.has(registeredUrl.hostname)) {
+    return false;
+  }
+
+  // Only the port and one Codex callback-id path segment may vary.
+  if (
+    requestedUrl.protocol !== registeredUrl.protocol
+    || requestedUrl.hostname !== registeredUrl.hostname
+    || requestedUrl.search !== registeredUrl.search
+    || requestedUrl.hash !== registeredUrl.hash
+  ) {
+    return false;
+  }
+
+  const basePath = registeredUrl.pathname.endsWith('/')
+    ? registeredUrl.pathname.slice(0, -1)
+    : registeredUrl.pathname;
+  if (!basePath || !requestedUrl.pathname.startsWith(`${basePath}/`)) return false;
+
+  const callbackId = requestedUrl.pathname.slice(basePath.length + 1);
+  return /^[A-Za-z0-9_-]{1,128}$/.test(callbackId);
 }

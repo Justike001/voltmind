@@ -29,7 +29,11 @@ import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middlew
 import type { BrainEngine } from '../core/engine.ts';
 import { operations, OperationError, validatePageSlug } from '../core/operations.ts';
 import type { OperationContext, AuthInfo } from '../core/operations.ts';
-import { VoltMindOAuthProvider, validateTokenEndpointAuthMethod } from '../core/oauth-provider.ts';
+import {
+  VoltMindOAuthProvider,
+  matchesLoopbackCallbackRedirect,
+  validateTokenEndpointAuthMethod,
+} from '../core/oauth-provider.ts';
 import type { SqlQuery } from '../core/oauth-provider.ts';
 import { hasScope, filterOperationsForScopes, ALLOWED_SCOPES_LIST, normalizeScopesInput } from '../core/scope.ts';
 import { summarizeMcpParams, dispatchToolCall } from '../mcp/dispatch.ts';
@@ -1060,6 +1064,75 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     }
   });
 
+  // Codex Desktop registers a stable loopback callback, then appends a
+  // per-login callback id to the path (for example, /callback/abc123). The
+  // MCP SDK intentionally requires exact paths, so handle only this narrowly
+  // scoped native-app variant here and leave all other requests to the SDK.
+  const loopbackAuthorizeRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'too_many_requests', error_description: 'Rate limit exceeded. Try again in 15 minutes.' },
+  });
+
+  app.use('/authorize', loopbackAuthorizeRateLimiter, express.urlencoded({ extended: false }), async (req, res, next) => {
+    const params = (req.method === 'POST' ? req.body : req.query) as Record<string, unknown>;
+    const clientId = typeof params?.client_id === 'string' ? params.client_id : undefined;
+    const redirectUri = typeof params?.redirect_uri === 'string' ? params.redirect_uri : undefined;
+    if (!clientId || !redirectUri) {
+      next();
+      return;
+    }
+
+    const client = await oauthProvider.clientsStore.getClient(clientId);
+    const hasDynamicLoopbackMatch = Boolean(
+      client
+      && client.grant_types?.includes('authorization_code')
+      && client.redirect_uris.some(registered =>
+        redirectUri !== registered && matchesLoopbackCallbackRedirect(redirectUri, registered)),
+    );
+    if (!hasDynamicLoopbackMatch) {
+      next();
+      return;
+    }
+
+    const value = (key: string): string | undefined =>
+      typeof params[key] === 'string' ? params[key] as string : undefined;
+    const responseType = value('response_type');
+    const codeChallenge = value('code_challenge');
+    const codeChallengeMethod = value('code_challenge_method');
+    if (responseType !== 'code' || !codeChallenge || codeChallengeMethod !== 'S256') {
+      res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'response_type=code, code_challenge, and code_challenge_method=S256 are required',
+      });
+      return;
+    }
+
+    const resourceValue = value('resource');
+    let resource: URL | undefined;
+    if (resourceValue !== undefined) {
+      try {
+        resource = new URL(resourceValue);
+      } catch {
+        res.status(400).json({ error: 'invalid_request', error_description: 'resource must be a valid URL' });
+        return;
+      }
+    }
+
+    try {
+      await oauthProvider.authorize(client!, {
+        state: value('state'),
+        scopes: (value('scope') || '').split(/\s+/).filter(Boolean),
+        redirectUri,
+        codeChallenge,
+        resource,
+      }, res);
+    } catch (error) {
+      next(error);
+    }
+  });
   // ---------------------------------------------------------------------------
   // v0.37.7.0 #1166: Custom authorization_code + refresh_token handler for
   // CONFIDENTIAL clients. The MCP SDK's clientAuth middleware does plaintext

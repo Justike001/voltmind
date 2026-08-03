@@ -4,6 +4,7 @@ import { vector } from '@electric-sql/pglite/vector';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import {
   VoltMindOAuthProvider,
+  matchesLoopbackCallbackRedirect,
   coerceTimestamp,
   ALLOWED_TOKEN_ENDPOINT_AUTH_METHODS,
   validateTokenEndpointAuthMethod,
@@ -12,6 +13,36 @@ import {
 import { hashToken, generateToken } from '../src/core/utils.ts';
 import { PGLITE_SCHEMA_SQL } from '../src/core/pglite-schema.ts';
 import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
+describe('loopback callback redirect matching', () => {
+  test('accepts the registered URI exactly', () => {
+    expect(matchesLoopbackCallbackRedirect(
+      'http://127.0.0.1:1455/callback',
+      'http://127.0.0.1:1455/callback',
+    )).toBe(true);
+  });
+
+  test('accepts Codex callback ids and RFC 8252 loopback ports', () => {
+    expect(matchesLoopbackCallbackRedirect(
+      'http://127.0.0.1:49821/callback/abc-123_X',
+      'http://127.0.0.1:1455/callback',
+    )).toBe(true);
+  });
+
+  test('rejects callback ids on non-loopback or with altered URI components', () => {
+    expect(matchesLoopbackCallbackRedirect(
+      'https://example.test/callback/abc123',
+      'https://example.test/callback',
+    )).toBe(false);
+    expect(matchesLoopbackCallbackRedirect(
+      'http://127.0.0.1:1455/callback/abc123/extra',
+      'http://127.0.0.1:1455/callback',
+    )).toBe(false);
+    expect(matchesLoopbackCallbackRedirect(
+      'http://127.0.0.1:1455/callback/abc123?changed=1',
+      'http://127.0.0.1:1455/callback?changed=2',
+    )).toBe(false);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Test setup: in-memory PGLite with OAuth tables
