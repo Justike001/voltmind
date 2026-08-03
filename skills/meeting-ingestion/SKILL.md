@@ -4,8 +4,8 @@ version: 1.0.0
 description: |
   Ingest meeting transcripts into brain pages with attendee enrichment, entity
   propagation, and timeline merge. A meeting is NOT fully ingested until the
-  enrich skill has processed every entity. Use submit_ingestion_event for
-  normalized meeting evidence that may advance bound projects/workstreams.
+  enrich skill has processed every entity. Use register_tracking_evidence after
+  the client has written normalized evidence and any bound project/workstream updates.
 triggers:
   - "meeting transcript"
   - "process this meeting"
@@ -21,13 +21,19 @@ tools:
   - put_page
   - add_link
   - add_timeline_entry
-  - submit_ingestion_event
+  - register_tracking_evidence
 mutating: true
 writes_pages: true
 writes_to:
   - meetings/
   - people/
   - companies/
+  - projects/
+  - workstreams/
+  - state/actions/
+  - state/decisions/
+  - state/commitments/
+  - state/risks/
 ---
 
 # Meeting Ingestion Skill
@@ -108,10 +114,14 @@ For each company or concept discussed:
 3. Add timeline entry referencing the meeting
 4. Back-link from entity page to meeting page
 
-Project and workstream mentions are evidence links only in this skill. Do not
-`put_page` or `timeline-add` under `projects/`, `workstreams/`, or
-`state/{actions,decisions,commitments,risks}/`. Those mutations belong to the
-company-server tracking worker after the raw event is durable.
+Project and workstream mentions are not evidence-only. After the meeting
+source page is durable, run Brain-First Lookup against existing bindings,
+titles, aliases, backlinks, and Timeline. Update every unique bound target;
+create a project when goal/owner/scope/status/completion condition are explicit;
+create a workstream only for a durable responsibility domain without a fixed
+end date. Ambiguous candidates go to `state/indexes/project-tracking-review`.
+Use `put_page`/`add_timeline_entry` directly for project/workstream and canonical
+state pages, preserving user prose and adding evidence citations.
 
 ### Phase 5: Timeline merge
 
@@ -124,13 +134,14 @@ Acme Corp, the event goes on Alice's page, Bob's page, AND Acme Corp's page.
 
 ### Long-running project tracking
 
-Do not create or update a project/workstream page during meeting ingestion.
-Call the company Host's `submit_ingestion_event` operation with the normalized
-event, stable `tracking_refs`, and `evidence_type: meeting_transcript`.
-Connector relays may use `POST /ingest/events` instead. The server persists raw
-evidence and then queues `project_track_progress`; local `voltmind sync` alone
-does not trigger tracking. Review unbound or ambiguous candidates in
-`state/indexes/project-tracking-review`.
+Write the canonical transcript under the active `sources/meetings/` filing
+directory first, preserving stable calendar/series identity. Then update or
+create the directly affected project/workstream/state pages and call
+`register_tracking_evidence` with `event_id`, `event_version`,
+`evidence_type: meeting_transcript`, `tracking_refs`, `client_outcome`, and the
+actual `affected_pages`. Register `no_signal` when the meeting has no durable
+project signal. The company-server Dream cycle audits the receipt later and
+queues generic repair only for incomplete or ambiguous records.
 
 ## Output Format
 
@@ -144,5 +155,5 @@ updated, {N} action items captured."
 - Not merging timelines across all mentioned entities
 - Creating attendee stubs without meaningful content
 - Filing meeting pages without cross-linking to all participants
-- Calling `put_page` or `timeline-add` for a project/workstream/state object
-  from this skill
+- Writing a project/workstream/state object before the canonical source evidence
+- Calling `register_tracking_evidence` with pages that were not actually changed

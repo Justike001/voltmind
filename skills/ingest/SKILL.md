@@ -1,6 +1,6 @@
 ---
 name: ingest
-description: Route content and external file references into VoltMind, including normalized Teams/meeting/email evidence for server-side long-running project tracking. Use for ingestion, tracking-aware evidence submission, Teams/Outlook attachments, SharePoint/OneDrive links, mapped shared drives, or materializing a referenced file.
+description: Route content and external file references into VoltMind, including normalized Teams/meeting/email evidence and client-authored long-running project tracking. Use for ingestion, tracking-aware evidence submission, Teams/Outlook attachments, SharePoint/OneDrive links, mapped shared drives, or materializing a referenced file.
 triggers:
   - "ingest this"
   - "save this to brain"
@@ -31,6 +31,7 @@ tools:
   - attach_file_refs
   - file_ref_materialize
   - submit_ingestion_event
+  - register_tracking_evidence
 mutating: true
 writes_pages: true
 writes_to:
@@ -40,6 +41,12 @@ writes_to:
   - concepts/
   - meetings/
   - sources/
+  - projects/
+  - workstreams/
+  - state/actions/
+  - state/decisions/
+  - state/commitments/
+  - state/risks/
 ---
 
 # Ingest Skill
@@ -69,9 +76,11 @@ Ingest meetings, articles, media, documents, and conversations into the brain.
 - Structured events may carry `tracking_refs` and `evidence_type`; preserve
   these fields when forwarding events so runtime can reconcile existing
   project/workstream pages.
-- Automatic ingest is not authorized to write `projects/`, `workstreams/`, or
-  canonical action/decision/commitment/risk pages. It must submit the event to
-  the company server; only the server tracking worker performs those writes.
+- Client-agent ingest may write `projects/`, `workstreams/`, and canonical
+  action/decision/commitment/risk pages after Brain-First Lookup. Write raw
+  source evidence first, preserve user prose via managed blocks, cite the
+  evidence page, then call `register_tracking_evidence`. The server never
+  repeats this semantic write on the ingest hot path.
 
 > **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
 
@@ -134,17 +143,20 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
    - Read the entity's page from voltmind to check if it exists
    - If exists: update compiled_truth (rewrite State section with new info, don't append)
    - If new: check notability gate, then store the page in voltmind with the appropriate type and slug
-5. **Long-running tracking.** Persist raw evidence first, then let the runtime
-   resolve explicit `tracking_refs` against existing `tracking_bindings`. Never
-   create a new project merely because a new source event arrived; unresolved or
-   ambiguous matches go to `state/indexes/project-tracking-review`. For remote
-   company evidence, call the Host operation `submit_ingestion_event` with
-   stable `tracking_refs` and `evidence_type`. Connector relays may use
-   `POST /ingest/events` as the transport-specific alternative. Local Markdown
-   writes plus `voltmind sync` do not execute project tracking.
-6. **Append to entity timelines.** Add timeline entries only to page types listed
-   in this skill's `writes_to`. Never use the generic timeline tool to bypass
-   the server runtime for a project, workstream, or canonical state object.
+5. **Long-running tracking.** Persist canonical raw evidence first. Then run
+   Brain-First Lookup over `projects/`, `workstreams/`, bindings, aliases,
+   backlinks, and Timeline. A unique match is updated; an unbound event may
+   create a project when goal/owner/scope/status/completion condition are clear,
+   or a workstream when it is a durable responsibility domain with no fixed end
+   date. Multiple candidates go to `state/indexes/project-tracking-review`.
+   One evidence event may update multiple targets. Update Timeline, managed
+   current state, and canonical state objects with evidence links and
+   `[Source: ...]`; then call `register_tracking_evidence` with the actual
+   `client_outcome` and `affected_pages` (including `no_signal`).
+6. **Append to entity timelines.** Add timeline entries to all relevant pages,
+   including directly-bound projects/workstreams and canonical state objects.
+   Do not use `submit_ingestion_event` for this client-authored path; that
+   operation remains a server raw-ingest compatibility route.
 7. **Create cross-reference links.** Link entities in voltmind for every entity pair mentioned together, using the appropriate relationship type.
 8. **Back-link all entities.** Update EVERY mentioned entity's page with a back-link to this page (Iron Law).
 9. **Timeline merge.** The same event appears on ALL mentioned entities' timelines. If Alice met Bob at Acme Corp, the event goes on Alice's page, Bob's page, and Acme Corp's page.
@@ -428,8 +440,10 @@ up 100 bad pages is enormous.
 - **Skipping raw source preservation.** Every ingested item must have its raw source preserved. A brain page without provenance is unverifiable.
 - **Bulk processing without sample test.** Test on 3-5 items first. Fix quality issues in the approach, not via one-off patches.
 - **Paraphrasing the user's original thinking.** The user's exact language IS the insight. Capture verbatim phrasing for ideas, theses, and frameworks.
-- **Writing project tracking state from the client skill.** Preserve and submit
-  evidence; the company-server worker owns project/workstream/state mutations.
+- **Writing project tracking state.** The client agent is the primary semantic
+  writer: evidence first, then direct `put_page` updates/creates for bound
+  projects, workstreams, and canonical state objects, followed by
+  `register_tracking_evidence`. Server Dream only audits and repairs anomalies.
 
 ## Output Format
 

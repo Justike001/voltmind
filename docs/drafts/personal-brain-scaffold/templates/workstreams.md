@@ -26,7 +26,7 @@ tags: []
 <!-- voltmind:tracking-state:begin -->
 ## Tracked Current State
 
-Runtime-maintained directional progress appears here after an explicitly bound source is ingested.
+Client-agent maintained directional progress appears here after an explicitly bound source is ingested; company-server Dream audits and repairs anomalies.
 <!-- voltmind:tracking-state:end -->
 
 ## State

@@ -22,10 +22,12 @@ tools:
   - query
   - get_page
   - put_page
+  - add_timeline_entry
   - get_backlinks
   - get_timeline
   - get_project_tracking_status
   - reconcile_project_tracking
+  - register_tracking_evidence
 mutating: true
 writes_pages: true
 writes_to:
@@ -65,24 +67,28 @@ tracking_bindings:
 tracking_aliases: [optional human name, short code]
 ```
 
-Bindings are the only automatic-write authorization. A source may be listed on
-multiple project/workstream pages. Runtime updates managed tracking state and
-Timeline blocks, preserves user-authored prose, and creates canonical
-action/decision/commitment/risk pages from structured progress signals. It never
-creates a project/workstream from an unbound event.
+Bindings are the only automatic-write authorization for existing objects. A
+source may be listed on multiple project/workstream pages. The client agent is
+the primary semantic writer: after canonical source evidence is written, it
+updates managed tracking state and Timeline, preserves user-authored prose, and
+creates/updates canonical action/decision/commitment/risk pages. A new project
+requires goal, owner, scope, status, and completion condition; a new workstream
+requires a durable responsibility domain with no fixed end date. Ambiguous
+matches go to the review index. The server does not repeat this work during
+ingest.
 
-This skill may edit project/workstream state only when the user explicitly
-invokes a project-maintenance workflow. It is not called as a write-capable
-sub-step of `ingest` or `meeting-ingestion`; automatic evidence processing is
-owned by the company-server tracking worker.
+After every client write, call `register_tracking_evidence` with the event
+identity, client outcome, and actual affected page slugs. Company-server Dream
+audits receipts and repairs only anomalies through the generic subagent.
 
 When `state/indexes/project-tracking-review` contains a candidate, review the
 evidence, add the chosen binding to the canonical page Frontmatter, then run
-the Host operation `reconcile_project_tracking`. With a trusted shell directly
+the Host operation `reconcile_project_tracking` to request a Dream maintenance
+pass. With a trusted shell directly
 on the company server, the equivalent command is
 `VOLTMIND_RUNTIME_ROLE=company-server voltmind projects tracking reconcile
 --source-id <company-source>`. Use `get_project_tracking_status` before and
-after reconciliation. Neither operation adds or removes bindings.
+after reconciliation. Neither runtime operation adds or removes bindings.
 
 Write additively and preserve existing user prose. If a project update could become shared team context, create a local `contribution/candidates/` draft for user review; do not publish externally in Phase 1.
 

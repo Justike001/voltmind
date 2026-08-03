@@ -318,8 +318,8 @@ function enrichTrackingTemplate(entry: ScaffoldEntry): string {
     content = content.replace(anchor, `${anchor}${marker}`);
   }
   const state = entry.path === 'templates/projects.md'
-    ? '\n<!-- voltmind:tracking-state:begin -->\n## Tracked Current State\n\nRuntime-maintained progress appears here after an explicitly bound source is ingested.\n<!-- voltmind:tracking-state:end -->\n'
-    : '\n<!-- voltmind:tracking-state:begin -->\n## Tracked Current State\n\nRuntime-maintained directional progress appears here after an explicitly bound source is ingested.\n<!-- voltmind:tracking-state:end -->\n';
+    ? '\n<!-- voltmind:tracking-state:begin -->\n## Tracked Current State\n\nClient-agent maintained progress appears here after an explicitly bound source is ingested; company-server Dream audits and repairs anomalies.\n<!-- voltmind:tracking-state:end -->\n'
+    : '\n<!-- voltmind:tracking-state:begin -->\n## Tracked Current State\n\nClient-agent maintained directional progress appears here after an explicitly bound source is ingested; company-server Dream audits and repairs anomalies.\n<!-- voltmind:tracking-state:end -->\n';
   if (!content.includes('voltmind:tracking-state:begin')) content = content.replace('\n## State\n', `${state}\n## State\n`);
   return content;
 }

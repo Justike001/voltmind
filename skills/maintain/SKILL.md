@@ -50,6 +50,7 @@ tools:
   - scrub_file_ref_open_paths
   - get_project_tracking_status
   - reconcile_project_tracking
+  - register_tracking_evidence
 mutating: true
 ---
 
@@ -384,22 +385,25 @@ VOLTMIND_RUNTIME_ROLE=company-server \
   voltmind projects tracking reconcile --source-id <company-source>
 ```
 
-The status view is source-scoped. Reconcile replays durable evidence through
-the receipt gate; it never invents a new project/workstream and never modifies
-`tracking_bindings`.
+The status view is source-scoped. Reconcile requests a
+`tracking_maintenance` Dream phase; it audits client registrations and queues
+the generic subagent only for incomplete/ambiguous records. It never modifies
+`tracking_bindings` and does not replay the removed real-time worker.
 
 Also verify:
 
 - the server uses Postgres and runs either
   `voltmind autopilot --runtime-role company-server` or
   `voltmind jobs work --runtime-role company-server`;
-- no failed/dead `project_track_progress` jobs are stranded;
+- no failed/dead `tracking_maintenance` or compatibility `project_track_progress`
+  jobs are stranded;
 - the last successful receipt is at least as new as the latest bound evidence;
 - `tracking_bindings` still refer to live connector resources;
 - `state/indexes/project-tracking-review` candidates are being reviewed.
 
-Dream/synthesis is not the project-tracking executor. It may consume already
-tracked state, but must not be relied on to repair an absent server worker.
+Company-server Dream is the repair/audit executor after client writes. It does
+not replace client semantic classification; it only repairs receipt anomalies
+and records source-scoped maintenance outcomes.
 
 ## Benchmark Testing
 

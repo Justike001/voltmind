@@ -1,16 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 
 describe('client skill project tracking boundary', () => {
-  test('meeting ingestion forbids direct project/workstream writes', async () => {
+  test('meeting ingestion keeps direct project/workstream writes in the client flow', async () => {
     const skill = await Bun.file('skills/meeting-ingestion/SKILL.md').text();
-    expect(skill).toContain('Do not create or update a project/workstream page during meeting ingestion');
-    expect(skill).toContain('submit_ingestion_event');
-    expect(skill).toContain('does not trigger tracking');
+    expect(skill).toContain('register_tracking_evidence');
+    expect(skill).toContain('create a project when goal/owner/scope/status/completion condition are explicit');
+    expect(skill).not.toContain('Do not create or update a project/workstream page during meeting ingestion');
   });
 
-  test('generic ingest delegates automatic project writes to the company server', async () => {
+  test('generic ingest keeps ordinary put_page and client tracking writes', async () => {
     const skill = await Bun.file('skills/ingest/SKILL.md').text();
-    expect(skill).toContain('Automatic ingest is not authorized to write `projects/`');
-    expect(skill).toContain('only the server tracking worker performs those writes');
+    expect(skill).toContain('Client-agent ingest may write `projects/`');
+    expect(skill).toContain('register_tracking_evidence');
+    expect(skill).not.toContain('only the server tracking worker performs those writes');
   });
 });
