@@ -43,11 +43,13 @@ export const PROTECTED_JOB_NAMES: ReadonlySet<string> = new Set([
   // no remote / MCP / autopilot path can bulk-extract takes without
   // explicit operator intent.
   'extract-takes-from-pages',
-  // Project tracking mutates durable project/workstream pages and canonical
-  // state objects from remotely supplied evidence. Only the trusted
-  // ingest-capture path on a company-server worker may enqueue it; remote
-  // submit_job callers must never choose its target event/source payload.
+  // Legacy queue name retained only to drain pre-client-tracking jobs. The
+  // compatibility handler is non-writing, but keeping it protected prevents
+  // remote callers from manufacturing maintenance records.
   'project_track_progress',
+  // Dream tracking maintenance may enqueue generic subagent repair jobs and
+  // therefore remains company-server/trusted-worker only.
+  'tracking_maintenance',
 ]);
 
 /** Check a job name against the protected set. Normalizes whitespace first. */

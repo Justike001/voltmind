@@ -51,6 +51,7 @@ export interface IngestCaptureResult {
   untrusted_payload: boolean;
   source_kind: string;
   source_uri: string;
+  /** Deprecated compatibility fields; ingest no longer fills these. */
   tracking_job_id?: number;
   tracking_error?: string;
 }
@@ -71,7 +72,7 @@ function eventVersionIsOlder(incoming: string, current: string): boolean {
   return incoming < current;
 }
 
-export function makeIngestCaptureHandler(engine: BrainEngine, queue?: IngestCaptureQueue) {
+export function makeIngestCaptureHandler(engine: BrainEngine, _queue?: IngestCaptureQueue) {
   return async function ingestCaptureHandler(job: MinionJobContext): Promise<IngestCaptureResult> {
     const data = job.data as { event?: unknown; slug?: unknown };
     const event = data.event as IngestionEvent | undefined;
@@ -96,104 +97,15 @@ export function makeIngestCaptureHandler(engine: BrainEngine, queue?: IngestCapt
       slug = defaultSlugForEvent(event);
     }
 
-    // Resolve the page source before idempotency handling. A same-version
-    // delivery may be the retry that repairs a previously failed tracking
-    // enqueue, so the skipped-import path must still submit tracking.
+    // Resolve the page source before idempotency handling. Unregistered source
+    // emitters retain the legacy default evidence source, but never become a
+    // project-tracking target. Client agents register their already-written
+    // canonical evidence through register_tracking_evidence instead.
     const sourceRows = await engine.executeRaw<{ id: string }>(
       'SELECT id FROM sources WHERE id = $1 LIMIT 1',
       [event.source_id],
     );
     const pageSourceId = sourceRows.length > 0 ? event.source_id : 'default';
-    const enqueueTracking = async (): Promise<{ id?: number; error?: string }> => {
-      if (!queue) return {};
-      try {
-        const trackingJob = await queue.add('project_track_progress', {
-          event,
-          evidence_slug: slug,
-          page_source_id: pageSourceId,
-        }, {
-          // Event revisions are distinct jobs. The receipt layer performs
-          // target-level idempotency; this key only deduplicates an identical
-          // delivery/retry.
-          idempotency_key: [
-            'project-track',
-            event.source_id,
-            event.source_kind,
-            event.event_id ?? event.content_hash,
-            event.event_version ?? 'unversioned',
-          event.content_hash,
-          ].join(':'),
-        }, { allowProtectedSubmit: true });
-        // A retry may be repairing a prior queue outage. Clear only the
-        // dispatch-health receipt; target receipts are owned by the tracking
-        // handler and remain untouched.
-        try {
-          await engine.executeRaw(
-            `DELETE FROM project_tracking_receipts
-             WHERE page_source_id=$1 AND event_source_id=$2 AND event_kind=$3
-               AND event_key=$4 AND target_type='review'
-               AND target_slug='state/indexes/project-tracking-dispatch-health'
-               AND outcome='failed'`,
-            [pageSourceId, event.source_id, event.source_kind, event.event_id?.trim() || event.content_hash],
-          );
-        } catch {
-          // A stale dispatch-health row is preferable to reporting a
-          // successfully queued job as failed.
-        }
-        return { id: trackingJob.id };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        // Raw evidence is already durable. Persist a source-scoped health
-        // signal so maintenance can find the missing dispatch even if the
-        // connector never retries; a later same-version replay clears it.
-        try {
-          const key = event.event_id?.trim() || event.content_hash;
-          const details = JSON.stringify({
-            dispatch_status: 'failed',
-            tracking_refs: event.tracking_refs ?? [],
-            evidence_type: event.evidence_type ?? null,
-          });
-          await engine.executeRaw(
-            `INSERT INTO project_tracking_receipts
-              (page_source_id, event_source_id, event_kind, event_key, target_type,
-               target_slug, event_version, content_hash, evidence_slug, outcome,
-               matched_by, details, last_error, updated_at)
-             VALUES ($1,$2,$3,$4,'review',$5,$6,$7,$8,'failed','dispatch',
-               $9::text::jsonb,$10,now())
-             ON CONFLICT (
-               page_source_id, event_source_id, event_kind, event_key,
-               target_type, target_slug
-             ) DO UPDATE SET event_version=EXCLUDED.event_version,
-               content_hash=EXCLUDED.content_hash, evidence_slug=EXCLUDED.evidence_slug,
-               outcome='failed', matched_by='dispatch', details=EXCLUDED.details,
-               last_error=EXCLUDED.last_error, updated_at=now()`,
-            [pageSourceId, event.source_id, event.source_kind, key,
-              'state/indexes/project-tracking-dispatch-health',
-              event.event_version ?? null, event.content_hash, slug, details, message],
-          );
-          await engine.executeRaw(
-            `INSERT INTO project_tracking_receipt_history
-              (page_source_id, event_source_id, event_kind, event_key, target_type,
-               target_slug, event_version, content_hash, evidence_slug, outcome,
-               matched_by, details, last_error)
-             VALUES ($1,$2,$3,$4,'review',$5,$6,$7,$8,'failed','dispatch',
-               $9::text::jsonb,$10)
-             ON CONFLICT (
-               page_source_id, event_source_id, event_kind, event_key,
-               target_type, target_slug, content_hash
-             ) DO NOTHING`,
-            [pageSourceId, event.source_id, event.source_kind, key,
-              'state/indexes/project-tracking-dispatch-health',
-              event.event_version ?? null, event.content_hash, slug, details, message],
-          );
-        } catch {
-          // The import result still reports tracking_error when DB health
-          // recording itself is unavailable.
-        }
-        return { error: message };
-      }
-    };
-
     if (event.event_id && event.event_version) {
       const state = await engine.executeRaw<{ event_version: string | null }>(
         `SELECT event_version FROM ingestion_event_state
@@ -203,7 +115,6 @@ export function makeIngestCaptureHandler(engine: BrainEngine, queue?: IngestCapt
       const currentVersion = state[0]?.event_version;
       if (currentVersion && (eventVersionIsOlder(event.event_version, currentVersion)
         || event.event_version === currentVersion)) {
-        const tracking = await enqueueTracking();
         return {
           slug,
           status: 'skipped',
@@ -211,8 +122,6 @@ export function makeIngestCaptureHandler(engine: BrainEngine, queue?: IngestCapt
           untrusted_payload: event.untrusted_payload === true,
           source_kind: event.source_kind,
           source_uri: event.source_uri,
-          ...(tracking.id !== undefined ? { tracking_job_id: tracking.id } : {}),
-          ...(tracking.error ? { tracking_error: tracking.error } : {}),
         };
       }
     }
@@ -282,12 +191,27 @@ export function makeIngestCaptureHandler(engine: BrainEngine, queue?: IngestCapt
       } : {}),
     });
 
-    let trackingJobId: number | undefined;
-    let trackingError: string | undefined;
-    if (queue && result.status === 'imported') {
-      const tracking = await enqueueTracking();
-      trackingJobId = tracking.id;
-      trackingError = tracking.error;
+    // Server-side raw-ingest compatibility: make the durable evidence visible
+    // to Dream without interpreting it. Client-authored pages use the narrow
+    // register_tracking_evidence operation instead, which upgrades this
+    // pending receipt to registered/verified and records affected pages.
+    if (result.status === 'imported' && pageSourceId === event.source_id && event.event_id && event.evidence_type) {
+      const details = JSON.stringify({
+        tracking_refs: event.tracking_refs ?? [],
+        evidence_type: event.evidence_type,
+        raw_ingest: true,
+      });
+      await engine.executeRaw(
+        `INSERT INTO project_tracking_receipts
+          (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,evidence_slug,outcome,matched_by,details,updated_at)
+         VALUES ($1,$2,$3,$4,'evidence',$5,$6,$7,$5,'pending','raw_ingest',$8::text::jsonb,now())
+         ON CONFLICT (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug)
+         DO UPDATE SET event_version=EXCLUDED.event_version, content_hash=EXCLUDED.content_hash,
+           evidence_slug=EXCLUDED.evidence_slug, details=EXCLUDED.details, updated_at=now()
+           WHERE project_tracking_receipts.outcome NOT IN ('registered','verified')`,
+        [pageSourceId, event.source_id, event.source_kind, event.event_id, slug,
+          event.event_version ?? null, event.content_hash, details],
+      );
     }
 
     return {
@@ -297,8 +221,6 @@ export function makeIngestCaptureHandler(engine: BrainEngine, queue?: IngestCapt
       untrusted_payload: untrustedPayload,
       source_kind: event.source_kind,
       source_uri: event.source_uri,
-      ...(trackingJobId !== undefined ? { tracking_job_id: trackingJobId } : {}),
-      ...(trackingError ? { tracking_error: trackingError } : {}),
     };
   };
 }

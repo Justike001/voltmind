@@ -449,6 +449,8 @@ export interface SubagentHandlerData {
    * and direct CLI submitters set it.
    */
   allowed_slug_prefixes?: string[];
+  /** OAuth/source scope for tracking maintenance and other server jobs. */
+  source_id?: string;
   /**
    * v0.41 Approach C: opt out of the auto-generated tool-usage preamble
    * that `buildSystemPrompt()` splices into `system`. Default behavior

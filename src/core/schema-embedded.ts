@@ -797,8 +797,8 @@ CREATE TABLE IF NOT EXISTS project_tracking_receipts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (page_source_id, event_source_id, event_kind, event_key, target_type, target_slug),
-  CHECK (target_type IN ('project', 'workstream', 'review')),
-  CHECK (outcome IN ('applied', 'candidate', 'skipped', 'failed'))
+  CHECK (target_type IN ('project', 'workstream', 'review', 'evidence')),
+  CHECK (outcome IN ('applied', 'candidate', 'skipped', 'failed', 'pending', 'registered', 'verified', 'repairing', 'review_needed', 'conflict'))
 );
 CREATE INDEX IF NOT EXISTS project_tracking_receipts_source_idx ON project_tracking_receipts(page_source_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS project_tracking_receipts_target_idx ON project_tracking_receipts(page_source_id, target_slug, updated_at DESC);
@@ -820,8 +820,8 @@ CREATE TABLE IF NOT EXISTS project_tracking_receipt_history (
   last_error TEXT,
   supersedes_content_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (target_type IN ('project', 'workstream', 'review')),
-  CHECK (outcome IN ('applied', 'candidate', 'skipped', 'failed')),
+  CHECK (target_type IN ('project', 'workstream', 'review', 'evidence')),
+  CHECK (outcome IN ('applied', 'candidate', 'skipped', 'failed', 'pending', 'registered', 'verified', 'repairing', 'review_needed', 'conflict')),
   UNIQUE (page_source_id, event_source_id, event_kind, event_key, target_type, target_slug, content_hash)
 );
 CREATE INDEX IF NOT EXISTS project_tracking_receipt_history_source_idx ON project_tracking_receipt_history(page_source_id, created_at DESC);

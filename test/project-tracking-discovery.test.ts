@@ -8,10 +8,12 @@ import type { BrainEngine } from '../src/core/engine.ts';
 const read = (path: string) => readFileSync(path, 'utf8');
 
 describe('long-running project tracking capability injection', () => {
-  test('operation contract and generated MCP tools expose the three runtime entrypoints', () => {
+  test('operation contract and generated MCP tools expose client registration and maintenance entrypoints', () => {
     expect(operationsByName.submit_ingestion_event?.scope).toBe('write');
     expect(operationsByName.get_project_tracking_status?.scope).toBe('read');
     expect(operationsByName.reconcile_project_tracking?.scope).toBe('admin');
+    expect(operationsByName.register_tracking_evidence?.scope).toBe('write');
+    expect(operationsByName.register_tracking_evidence?.params).not.toHaveProperty('source_id');
     expect(operationsByName.submit_ingestion_event?.params).not.toHaveProperty('source_id');
     expect(operationsByName.submit_ingestion_event?.params).toHaveProperty('file_refs');
 
@@ -20,6 +22,7 @@ describe('long-running project tracking capability injection', () => {
       'submit_ingestion_event',
       'get_project_tracking_status',
       'reconcile_project_tracking',
+      'register_tracking_evidence',
     ]) {
       expect(tools.some(tool => tool.name === name)).toBe(true);
     }
@@ -33,13 +36,13 @@ describe('long-running project tracking capability injection', () => {
     const resolver = read('skills/RESOLVER.md');
 
     expect(ingest).toContain('  - submit_ingestion_event');
-    expect(meeting).toContain('  - submit_ingestion_event');
+    expect(meeting).toContain('  - register_tracking_evidence');
     expect(project).toContain('  - get_project_tracking_status');
     expect(project).toContain('  - reconcile_project_tracking');
     expect(maintain).toContain('  - get_project_tracking_status');
     expect(maintain).toContain('  - reconcile_project_tracking');
-    expect(ingest).toContain('company-server worker owns project/workstream/state mutations');
-    expect(meeting).toContain('Do not create or update a project/workstream page during meeting ingestion.');
+    expect(ingest).toContain('Client-agent ingest may write `projects/`');
+    expect(meeting).toContain('register_tracking_evidence');
     expect(resolver).toContain('"long-running project tracking", "project tracking", "tracking binding"');
     expect(resolver).toContain('"project tracking health", "failed tracking receipts", "reconcile project tracking"');
   });

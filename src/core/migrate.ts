@@ -5664,6 +5664,42 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 119,
+    name: 'client_tracking_evidence_receipts',
+    sql: `
+      ALTER TABLE project_tracking_receipts
+        DROP CONSTRAINT IF EXISTS project_tracking_receipts_target_type_check;
+      ALTER TABLE project_tracking_receipts
+        DROP CONSTRAINT IF EXISTS project_tracking_receipts_outcome_check;
+      ALTER TABLE project_tracking_receipts
+        ADD CONSTRAINT project_tracking_receipts_target_type_check
+        CHECK (target_type IN ('project','workstream','review','evidence'));
+      ALTER TABLE project_tracking_receipts
+        ADD CONSTRAINT project_tracking_receipts_outcome_check
+        CHECK (outcome IN ('applied','candidate','skipped','failed','pending','registered','verified','repairing','review_needed','conflict'));
+      ALTER TABLE project_tracking_receipt_history
+        DROP CONSTRAINT IF EXISTS project_tracking_receipt_history_target_type_check;
+      ALTER TABLE project_tracking_receipt_history
+        DROP CONSTRAINT IF EXISTS project_tracking_receipt_history_outcome_check;
+      ALTER TABLE project_tracking_receipt_history
+        ADD CONSTRAINT project_tracking_receipt_history_target_type_check
+        CHECK (target_type IN ('project','workstream','review','evidence'));
+      ALTER TABLE project_tracking_receipt_history
+        ADD CONSTRAINT project_tracking_receipt_history_outcome_check
+        CHECK (outcome IN ('applied','candidate','skipped','failed','pending','registered','verified','repairing','review_needed','conflict'));
+      CREATE INDEX IF NOT EXISTS project_tracking_receipts_evidence_idx
+        ON project_tracking_receipts(page_source_id, target_type, updated_at DESC);
+    `,
+    idempotent: true,
+    handler: async (engine) => {
+      if (engine.kind !== 'postgres') return;
+      await engine.executeRaw(`
+        ALTER TABLE project_tracking_receipts ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE project_tracking_receipt_history ENABLE ROW LEVEL SECURITY;
+      `);
+    },
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS.length > 0

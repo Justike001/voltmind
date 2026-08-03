@@ -6,6 +6,7 @@ import { PROTECTED_JOB_NAMES } from '../src/core/minions/protected-names.ts';
 describe('project tracking runtime boundary', () => {
   test('tracking job is protected from remote submitters', () => {
     expect(PROTECTED_JOB_NAMES.has('project_track_progress')).toBe(true);
+    expect(PROTECTED_JOB_NAMES.has('tracking_maintenance')).toBe(true);
   });
 
   test('workers default to client and require an explicit company-server role', () => {

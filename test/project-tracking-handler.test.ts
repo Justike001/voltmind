@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { makeProjectTrackProgressHandler } from '../src/core/minions/handlers/project-track-progress.ts';
+import { registerTrackingEvidence } from '../src/core/project-tracking-runtime.ts';
 import { computeContentHash, type IngestionEvent } from '../src/core/ingestion/types.ts';
 import type { MinionJobContext } from '../src/core/minions/types.ts';
 import { resetPgliteState } from './helpers/reset-pglite.ts';
@@ -30,6 +31,13 @@ beforeEach(async () => {
         { provider: 'teams', resource: 'conversation', id: 'chat-1' },
       ],
     },
+  }, { sourceId: 'default' });
+  await engine.putPage('sources/teams/chat-1', {
+    type: 'source_teams',
+    title: 'Teams chat 1',
+    compiled_truth: 'Canonical transcript.',
+    timeline: '',
+    frontmatter: { evidence_type: 'teams_thread' },
   }, { sourceId: 'default' });
 });
 
@@ -70,8 +78,8 @@ function job(value: IngestionEvent, pageSourceId = 'default'): MinionJobContext 
   };
 }
 
-describe('project_track_progress handler', () => {
-  test('updates an exact bound project and canonical state object', async () => {
+describe('project_track_progress compatibility handler', () => {
+  test('acknowledges legacy jobs without mutating project or state pages', async () => {
     const handler = makeProjectTrackProgressHandler(engine);
     const input = event(`
 # Update
@@ -80,19 +88,17 @@ describe('project_track_progress handler', () => {
 ## Decisions
 - Keep automatic tracking on the server
 `);
-    await handler(job(input));
+    const result = await handler(job(input));
 
     const project = await engine.getPage('projects/connector-rollout', { sourceId: 'default' });
     expect(project?.compiled_truth).toContain('User-authored project context.');
-    expect(project?.compiled_truth).toContain('voltmind:tracking-state:begin');
-    expect(project?.timeline).toContain('sources/teams/chat-1');
     const actions = await engine.listPages({
       sourceId: 'default',
       slugPrefix: 'state/actions/',
       sort: 'slug',
     });
-    expect(actions).toHaveLength(1);
-    expect(actions[0]?.frontmatter?.owner).toBe('Alice');
+    expect(actions).toHaveLength(0);
+    expect(result.outcome).toBe('deprecated');
 
     const receipts = await engine.executeRaw<{ count: string }>(
       'SELECT count(*)::text AS count FROM project_tracking_receipt_history',
@@ -100,28 +106,48 @@ describe('project_track_progress handler', () => {
     expect(receipts[0]?.count).toBe('1');
   });
 
-  test('same revision is idempotent and a new revision preserves history', async () => {
+  test('legacy jobs without a canonical evidence page remain review-needed', async () => {
     const handler = makeProjectTrackProgressHandler(engine);
     const first = event('- action: Ship connector');
-    await handler(job(first));
-    await handler(job(first));
-    const second = event('- action: Verify connector', '2026-07-31T11:00:00Z');
-    await handler(job(second));
-
-    const project = await engine.getPage('projects/connector-rollout', { sourceId: 'default' });
-    expect(project?.timeline.match(/microsoft-connector-relay/g)?.length).toBe(2);
-    expect(project?.timeline).toContain('supersedes');
-    const history = await engine.executeRaw<{ count: string }>(
-      'SELECT count(*)::text AS count FROM project_tracking_receipt_history',
-    );
-    expect(history[0]?.count).toBe('2');
+    const result = await handler(job(first));
+    expect(result.outcome).toBe('deprecated');
+    expect(result.review_needed).toBe(true);
   });
 
-  test('rejects a missing or unregistered page source', async () => {
+  test('does not throw for an old job with a missing page source', async () => {
     const handler = makeProjectTrackProgressHandler(engine);
     const missing = job(event('- action: Do not write'), 'missing-source');
-    await expect(handler(missing)).rejects.toThrow(/not registered/);
+    const result = await handler(missing);
+    expect(result.review_needed).toBe(true);
     missing.data = { ...(missing.data as Record<string, unknown>), page_source_id: undefined };
-    await expect(handler(missing)).rejects.toThrow(/page_source_id is required/);
+    expect((await handler(missing)).review_needed).toBe(true);
+  });
+});
+
+describe('register_tracking_evidence', () => {
+  test('records an idempotent client revision without changing target pages', async () => {
+    const result = await registerTrackingEvidence(engine, 'default', {
+      evidence_slug: 'sources/teams/chat-1',
+      event_id: 'message-1',
+      event_version: '1',
+      evidence_type: 'teams_thread',
+      tracking_refs: [{ provider: 'teams', resource: 'conversation', id: 'chat-1' }],
+      client_outcome: 'applied',
+      affected_pages: ['projects/connector-rollout'],
+    });
+    expect(result.status).toBe('registered');
+    const duplicate = await registerTrackingEvidence(engine, 'default', {
+      evidence_slug: 'sources/teams/chat-1',
+      event_id: 'message-1',
+      event_version: '1',
+      evidence_type: 'teams_thread',
+      client_outcome: 'applied',
+      affected_pages: ['projects/connector-rollout'],
+    });
+    expect(duplicate.status).toBe('duplicate');
+    const receipt = await engine.executeRaw<{ target_type: string; outcome: string }>(
+      `SELECT target_type, outcome FROM project_tracking_receipts WHERE target_type='evidence'`,
+    );
+    expect(receipt).toEqual([{ target_type: 'evidence', outcome: 'registered' }]);
   });
 });

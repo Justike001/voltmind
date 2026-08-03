@@ -47,6 +47,7 @@ import { VERSION } from '../version.ts';
 import { hasScope } from './scope.ts';
 import {
   getProjectTrackingStatus,
+  registerTrackingEvidence,
   reconcileProjectTracking,
   submitTrackedIngestionEvent,
 } from './project-tracking-runtime.ts';
@@ -3092,9 +3093,41 @@ const get_project_tracking_status: Operation = {
   },
 };
 
+const register_tracking_evidence: Operation = {
+  name: 'register_tracking_evidence',
+  description: 'Register a client-authored source evidence revision for server-side dream/maintain auditing. The operation never copies Markdown, calls an LLM, or edits project/workstream pages.',
+  params: {
+    evidence_slug: { type: 'string', required: true, description: 'Canonical source evidence page already written with put_page.' },
+    event_id: { type: 'string', required: true, description: 'Stable provider event/thread/meeting identity.' },
+    event_version: { type: 'string', description: 'Provider revision, modified timestamp, or eTag.' },
+    evidence_type: { type: 'string', required: true, enum: ['teams_thread', 'meeting_transcript', 'email', 'calendar_event', 'other'], description: 'Evidence filing category.' },
+    tracking_refs: { type: 'array', items: { type: 'object' }, description: 'Provider-owned tracking references used by the client.' },
+    client_outcome: { type: 'string', required: true, enum: ['applied', 'created', 'review_needed', 'no_signal', 'partial'], description: 'What the client agent actually did.' },
+    affected_pages: { type: 'array', items: { type: 'string' }, description: 'Project/workstream/state pages the client actually changed or created.' },
+  },
+  mutating: true,
+  scope: 'write',
+  handler: async (ctx, p) => {
+    const sourceId = resolveWriteSourceId(ctx);
+    try {
+      return await registerTrackingEvidence(ctx.engine, sourceId, {
+        evidence_slug: String(p.evidence_slug ?? ''),
+        event_id: String(p.event_id ?? ''),
+        event_version: p.event_version as string | undefined,
+        evidence_type: p.evidence_type as SourceEvidenceType,
+        tracking_refs: p.tracking_refs as TrackingReference[] | undefined,
+        client_outcome: p.client_outcome as 'applied' | 'created' | 'review_needed' | 'no_signal' | 'partial',
+        affected_pages: Array.isArray(p.affected_pages) ? p.affected_pages as string[] : [],
+      });
+    } catch (error) {
+      throw new OperationError('invalid_params', error instanceof Error ? error.message : String(error));
+    }
+  },
+};
+
 const reconcile_project_tracking: Operation = {
   name: 'reconcile_project_tracking',
-  description: 'On the company server, resubmit already-persisted source evidence with tracking_refs to the protected project tracking worker. Use after adding/fixing Frontmatter bindings or recovering failed receipts; this does not bind, unbind, or create projects.',
+  description: 'On the company server, request a source-scoped tracking maintenance pass. It audits client registrations and queues generic subagent repair only for anomalies.',
   params: {},
   mutating: true,
   scope: 'admin',
@@ -5775,7 +5808,7 @@ export const operations: Operation[] = [
   file_list, file_upload, file_url, search_file_refs, list_page_file_refs, attach_file_refs,
   backfill_file_refs, scrub_file_ref_open_paths, file_ref_materialize,
   // Long-running project tracking: normalized evidence submission + source-scoped maintenance.
-  submit_ingestion_event, get_project_tracking_status, reconcile_project_tracking,
+  submit_ingestion_event, register_tracking_evidence, get_project_tracking_status, reconcile_project_tracking,
   // Jobs (Minions)
   submit_job, get_job, list_jobs, cancel_job, retry_job, get_job_progress,
   get_job_failure_report, get_job_checkpoints, get_job_undo_report, plan_job_batch,
