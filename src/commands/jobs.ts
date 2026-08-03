@@ -22,9 +22,9 @@ function hasFlag(args: string[], flag: string): boolean {
 export type VoltMindRuntimeRole = 'client' | 'company-server';
 
 /**
- * Project tracking is a company-brain server capability, not a generic
- * worker capability. Requiring an explicit role prevents a Windows client
- * that happens to share the Postgres queue from claiming tracking mutations.
+ * Tracking maintenance is a company-brain server capability, not a generic
+ * client worker capability. Client agents perform semantic page writes; the
+ * explicit role prevents a Windows worker from claiming Dream repair jobs.
  */
 export function resolveRuntimeRole(
   args: string[],
@@ -1510,7 +1510,7 @@ export async function registerBuiltinHandlers(
   if (options.runtimeRole === 'company-server') {
     const { makeProjectTrackProgressHandler } = await import('../core/minions/handlers/project-track-progress.ts');
     worker.register('project_track_progress', makeProjectTrackProgressHandler(engine));
-    process.stderr.write('[minion worker] company-server project tracking enabled\n');
+    process.stderr.write('[minion worker] company-server tracking compatibility drain enabled\n');
   }
 
   // ============================================================
@@ -1601,6 +1601,9 @@ export async function registerBuiltinHandlers(
   worker.register('synthesize', makePhaseHandler('synthesize'));
   worker.register('patterns', makePhaseHandler('patterns'));
   worker.register('consolidate', makePhaseHandler('consolidate'));
+  if (options.runtimeRole === 'company-server') {
+    worker.register('tracking_maintenance', makePhaseHandler('tracking_maintenance'));
+  }
 
   // Open — DB writes only, no LLM spend
   worker.register('extract_facts', makePhaseHandler('extract_facts'));

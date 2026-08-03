@@ -105,6 +105,9 @@ async function withoutAnthropicKey<T>(body: () => Promise<T>): Promise<T> {
 //   v0.29   — added `recompute_emotional_weight` between patterns and embed
 //   v0.31   — added `consolidate` between recompute_emotional_weight and embed
 //   v0.33   — added `resolve_symbol_edges` between extract and patterns
+//   v0.41   — added `extract_atoms`, `synthesize_concepts`, and
+//              `conversation_facts_backfill`
+//   v0.42   — added source-scoped `tracking_maintenance` after extract_facts
 type CyclePhase = (typeof ALL_PHASES)[number];
 const EXPECTED_PHASES: CyclePhase[] = [
   'lint',
@@ -113,13 +116,17 @@ const EXPECTED_PHASES: CyclePhase[] = [
   'synthesize',
   'extract',
   'extract_facts',               // v0.32.2 — reconcile fence → DB facts index
+  'tracking_maintenance',        // v0.42 — company-server receipt audit/repair
+  'extract_atoms',               // v0.41.2 — lens atom extraction
   'resolve_symbol_edges',       // v0.33.3 — within-file symbol resolution
   'patterns',
+  'synthesize_concepts',         // v0.41.2 — lens concept synthesis
   'recompute_emotional_weight', // v0.29
   'consolidate',                // v0.31
   'propose_takes',              // v0.36.1.0 — hindsight calibration wave
   'grade_takes',                // v0.36.1.0
   'calibration_profile',        // v0.36.1.0
+  'conversation_facts_backfill', // v0.41.11.0
   'embed',
   'orphans',
   'schema-suggest',              // v0.39.0.0 — passive schema-suggest after orphans

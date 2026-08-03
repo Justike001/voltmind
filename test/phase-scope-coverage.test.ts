@@ -41,14 +41,15 @@ describe('PHASE_SCOPE coverage', () => {
     expect(invalid).toEqual([]);
   });
 
-  test('all 20 phases covered (regression on accidental omission)', () => {
+  test('all 21 phases covered (regression on accidental omission)', () => {
     // Pin the count so a future PR that adds a phase to ALL_PHASES
     // without updating PHASE_SCOPE notices here too. The v0.39.1.0
     // master merge brought in the 17th phase (`schema-suggest`); v0.41
     // adds 'extract_atoms' + 'synthesize_concepts' (T9 lens packs) +
-    // 'conversation_facts_backfill' (v0.41.11.0) for a total of 20.
-    expect(ALL_PHASES.length).toBe(20);
-    expect(Object.keys(PHASE_SCOPE).length).toBe(20);
+    // 'conversation_facts_backfill' (v0.41.11.0) plus the source-scoped
+    // 'tracking_maintenance' audit phase for a total of 21.
+    expect(ALL_PHASES.length).toBe(21);
+    expect(Object.keys(PHASE_SCOPE).length).toBe(21);
   });
 
   test('embed remains global (the headline brain-wide phase)', () => {

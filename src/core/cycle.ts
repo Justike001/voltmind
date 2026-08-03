@@ -57,6 +57,7 @@ import { isRecoverableConnectionError, reconnectEngine } from './connection-erro
 
 export type CyclePhase =
   | 'lint' | 'backlinks' | 'sync' | 'synthesize' | 'extract' | 'extract_facts'
+  | 'tracking_maintenance'
   | 'resolve_symbol_edges'
   | 'patterns' | 'recompute_emotional_weight' | 'consolidate'
   // v0.36.1.0 Hindsight calibration wave:
@@ -100,6 +101,10 @@ export const ALL_PHASES: CyclePhase[] = [
   // The empty-fence guard refuses to run if pre-v51 legacy facts are
   // pending the v0_32_2 backfill (Codex R2-#7).
   'extract_facts',
+  // Client agents write tracking pages immediately. This company-server-only
+  // phase audits their evidence receipts and queues generic repair only for
+  // anomalies; client runtimes return a deterministic skipped result.
+  'tracking_maintenance',
   // v0.41 T9 — atom extraction (per-source, pack-gated). Runs AFTER
   // extract_facts so the Haiku 3-check has fresh fact context, BEFORE
   // resolve_symbol_edges so new atom pages don't interrupt the symbol
@@ -188,6 +193,7 @@ export const PHASE_SCOPE: Record<CyclePhase, PhaseScope> = {
   synthesize: 'mixed',
   extract: 'source',
   extract_facts: 'source',
+  tracking_maintenance: 'source',
   resolve_symbol_edges: 'global',
   patterns: 'mixed',
   recompute_emotional_weight: 'source',
@@ -227,6 +233,7 @@ const NEEDS_LOCK_PHASES: ReadonlySet<CyclePhase> = new Set([
   'extract',
   // v0.32.2 — wipes + re-inserts facts per affected page.
   'extract_facts',
+  'tracking_maintenance',
   // v0.33.3 W0c — writes code_edges_symbol.edge_metadata + content_chunks.edges_backfilled_at.
   'resolve_symbol_edges',
   'patterns',
@@ -1567,6 +1574,36 @@ export async function runCycle(
         const xfSourceId = (await resolveSourceForDir(engine, opts.brainDir)) ?? 'default';
         const { result, duration_ms } = await timePhase(() =>
           runPhaseExtractFacts(engine, opts.brainDir, xfSourceId, dryRun, syncPagesAffected));
+        result.duration_ms = duration_ms;
+        phaseResults.push(result);
+        progress.finish();
+      }
+      await safeYield(opts.yieldBetweenPhases);
+    }
+
+    // ── Client-authored project tracking maintenance ─────────────
+    // Runs only on the company-server role. It verifies registration receipts
+    // deterministically and submits the existing generic subagent for
+    // anomalies; it never reinterprets every source page on the hot ingest
+    // path.
+    if (phases.includes('tracking_maintenance')) {
+      checkAborted(opts.signal);
+      if (!engine) {
+        phaseResults.push({
+          phase: 'tracking_maintenance',
+          status: 'skipped',
+          duration_ms: 0,
+          summary: 'no database connected',
+          details: { reason: 'no_database' },
+        });
+      } else {
+        progress.start('cycle.tracking_maintenance');
+        const { runTrackingMaintenance } = await import('./cycle/tracking-maintenance.ts');
+        const trackingSourceId = (await resolveSourceForDir(engine, opts.brainDir)) ?? opts.sourceId ?? 'default';
+        const { result, duration_ms } = await timePhase(() => runTrackingMaintenance(engine, {
+          sourceId: trackingSourceId,
+          dryRun,
+        }));
         result.duration_ms = duration_ms;
         phaseResults.push(result);
         progress.finish();
