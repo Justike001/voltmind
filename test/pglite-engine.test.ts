@@ -1255,6 +1255,17 @@ describe('PGLiteEngine: getHealth graph metrics', () => {
     expect(h.link_coverage).toBeCloseTo(1 / 3, 2);
   });
 
+  test('uses requested entity types for schema-aware health coverage', async () => {
+    await engine.putPage('projects/atlas', { ...testPage, type: 'project', title: 'Atlas' });
+    await engine.addLink('people/alice', 'projects/atlas', '', 'mentions');
+    await engine.addTimelineEntry('projects/atlas', { date: '2026-01-15', summary: 'Started' });
+
+    const h = await engine.getHealth({ entityTypes: ['project'] });
+    expect(h.link_coverage).toBe(1);
+    expect(h.timeline_coverage).toBe(1);
+    expect(h.most_connected).toContainEqual(expect.objectContaining({ slug: 'projects/atlas' }));
+  });
+
   test('timeline_coverage = % with >= 1 timeline entry', async () => {
     await engine.addTimelineEntry('people/alice', { date: '2026-01-15', summary: 'Joined' });
     const h = await engine.getHealth();
