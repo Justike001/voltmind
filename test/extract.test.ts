@@ -85,6 +85,18 @@ describe('extractLinksFromFile', () => {
     expect(links).toEqual([]);
   });
 
+  it('extracts nested related_entities and related_people frontmatter', async () => {
+    const content = '---\ntype: action\nrelated_people: [alice]\nrelated_entities: [projects/tooling, state/risks/api-key]\n---\nContent.';
+    const allSlugs = new Set(['state/actions/follow-up', 'people/alice', 'projects/tooling', 'state/risks/api-key']);
+    const links = await extractLinksFromFile(content, 'state/actions/follow-up.md', allSlugs, { includeFrontmatter: true });
+
+    expect(links).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from_slug: 'state/actions/follow-up', to_slug: 'people/alice', link_type: 'mentions' }),
+      expect.objectContaining({ from_slug: 'state/actions/follow-up', to_slug: 'projects/tooling', link_type: 'related_to' }),
+      expect.objectContaining({ from_slug: 'state/actions/follow-up', to_slug: 'state/risks/api-key', link_type: 'related_to' }),
+    ]));
+  });
+
   it('infers link type from directory structure', async () => {
     const content = 'See [Brex](../companies/brex.md).';
     const allSlugs = new Set(['people/pedro', 'companies/brex']);
@@ -135,7 +147,14 @@ describe('extractTimelineFromContent', () => {
     const entries = extractTimelineFromContent(content, 'test');
     expect(entries).toHaveLength(1);
   });
+
+
+  it('skips dated backlink maintenance entries', () => {
+    const content = '- **2026-07-17** | Referenced in [Weekly](../meetings/weekly.md) — backlink';
+    expect(extractTimelineFromContent(content, 'people/test')).toEqual([]);
+  });
 });
+
 
 describe('walkMarkdownFiles', () => {
   it('is a function', () => {

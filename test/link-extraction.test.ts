@@ -416,6 +416,17 @@ describe('parseTimelineEntries', () => {
     expect(parseTimelineEntries('Just some plain text.')).toEqual([]);
   });
 
+
+  test('skips backlink maintenance entries', () => {
+    const content = [
+      '- **2026-07-17** | Referenced in [3D Department Weekly](../meetings/2026-06-08.md)',
+      '- **2026-06-16** | Resolved the Unity packaging lock issue',
+    ].join('\n');
+
+    expect(parseTimelineEntries(content)).toEqual([
+      expect.objectContaining({ date: '2026-06-16', summary: 'Resolved the Unity packaging lock issue' }),
+    ]);
+  });
   test('handles mixed content (timeline lines interspersed with prose)', () => {
     const content = `Some intro paragraph.
 
