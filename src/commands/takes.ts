@@ -580,7 +580,9 @@ async function cmdExtract(engine: BrainEngine, rest: string[]): Promise<void> {
   const maxPagesRaw = maxIdx >= 0 ? rest[maxIdx + 1] : undefined;
   const maxPages = maxPagesRaw ? Math.max(1, Math.min(1000, parseInt(maxPagesRaw, 10) || 50)) : 50;
   const holderIdx = rest.indexOf('--holder');
-  const holder = holderIdx >= 0 ? rest[holderIdx + 1] : 'system';
+  // Omitted means per-claim LLM attribution. --holder remains an explicit
+  // operator override for sources with a known single author.
+  const holder = holderIdx >= 0 ? rest[holderIdx + 1] : undefined;
   const modelIdx = rest.indexOf('--model');
   const explicitModel = modelIdx >= 0 ? rest[modelIdx + 1] : undefined;
 

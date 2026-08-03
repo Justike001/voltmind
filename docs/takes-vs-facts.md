@@ -42,6 +42,14 @@ page_types:
 - Matching uses canonical frontmatter `type` values (for example `original`),
   never directory names (for example `originals`). An `atom` declaration
   also covers `type: atom, subtype: lore`.
+- Bootstrap attribution is per claim. The model must choose `world`, `brain`,
+  or a canonical `people/<slug>` / `companies/<slug>` holder that appears
+  verbatim in the page. The parser rejects missing, `system`, invalid, or
+  ungrounded holders.
+- Holder is the source of a belief, never the subject of the sentence.
+- `--holder <id>` is an explicit operator override for known single-author
+  sources; without it, the extractor never applies one holder to the whole run.
+- Obvious page creation/import/sync provenance is filtered as bookkeeping.
 - Missing `takes_bootstrap`, an empty eligible set, a failed pack resolution,
   or zero matching pages all fail closed before an LLM call.
 
