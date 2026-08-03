@@ -57,7 +57,9 @@ beforeEach(async () => {
 
 // Tiny gazetteer builder for pure-fn cases that don't need engine.
 function gazetteerFromEntries(entries: Omit<GazetteerEntry, 'tokens'>[]): Gazetteer {
-  const TOKEN_RE = /[a-zA-Z0-9]+/g;
+  // Mirror the production tokenizer (ASCII runs + individual CJK ideographs)
+  // so pure-fn CJK cases exercise the same maximal-munch path as buildGazetteer.
+  const TOKEN_RE = /[a-zA-Z0-9]+|[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/g;
   const tokenize = (s: string): string[] => {
     TOKEN_RE.lastIndex = 0;
     const out: string[] = [];
@@ -260,6 +262,70 @@ describe('findMentionedEntities — pure cases', () => {
 });
 
 // ============================================================
+// CJK (Chinese) support — pure unit tests
+// ============================================================
+
+describe('findMentionedEntities — CJK cases', () => {
+  test('CJK multi-char entity matched in Chinese prose (no spaces)', () => {
+    const g = gazetteerFromEntries([
+      { slug: 'people/zhang-san', source_id: 'default', title: '张三' },
+    ]);
+    // No spaces around the name — maximal-munch reassembles ['张','三'].
+    const mentions = findMentionedEntities('张三加入字节跳动。', g, {
+      fromSlug: 'writing/log-1', fromSourceId: 'default',
+    });
+    expect(mentions).toHaveLength(1);
+    expect(mentions[0]!.slug).toBe('people/zhang-san');
+    expect(mentions[0]!.name).toBe('张三');
+  });
+
+  test('CJK maximal-munch — longer name wins over shorter shared-prefix name', () => {
+    const g = gazetteerFromEntries([
+      { slug: 'companies/byte', source_id: 'default', title: '字节' },
+      { slug: 'companies/bytedance', source_id: 'default', title: '字节跳动' },
+    ]);
+    const mentions = findMentionedEntities('他加入了字节跳动。', g, {
+      fromSlug: 'writing/log-1', fromSourceId: 'default',
+    });
+    expect(mentions).toHaveLength(1);
+    expect(mentions[0]!.slug).toBe('companies/bytedance'); // longest match wins
+  });
+
+  test('CJK + ASCII mixed prose — both entity kinds matched', () => {
+    const g = gazetteerFromEntries([
+      { slug: 'people/zhang-san', source_id: 'default', title: '张三' },
+      { slug: 'companies/acme', source_id: 'default', title: 'Acme' },
+    ]);
+    const mentions = findMentionedEntities('张三加入了Acme公司。', g, {
+      fromSlug: 'writing/log-1', fromSourceId: 'default',
+    });
+    const slugs = mentions.map(m => m.slug);
+    expect(slugs).toContain('people/zhang-san');
+    expect(slugs).toContain('companies/acme');
+  });
+
+  test('CJK first-mention-only cap — repeated name → 1 link', () => {
+    const g = gazetteerFromEntries([
+      { slug: 'people/zhang-san', source_id: 'default', title: '张三' },
+    ]);
+    const mentions = findMentionedEntities('张三来了。张三走了。张三又回来了。', g, {
+      fromSlug: 'writing/log-1', fromSourceId: 'default',
+    });
+    expect(mentions).toHaveLength(1);
+  });
+
+  test('CJK self-link guard — entity page mentioning own name skips', () => {
+    const g = gazetteerFromEntries([
+      { slug: 'people/zhang-san', source_id: 'default', title: '张三' },
+    ]);
+    const mentions = findMentionedEntities('张三是创始人。', g, {
+      fromSlug: 'people/zhang-san', fromSourceId: 'default',
+    });
+    expect(mentions).toEqual([]);
+  });
+});
+
+// ============================================================
 // buildGazetteer — engine-backed tests
 // ============================================================
 
@@ -365,5 +431,23 @@ describe('buildGazetteer — engine integration', () => {
     // Regression: if anyone changes the hardcoded type list, this test
     // forces a deliberate change (and a corresponding test update).
     expect(LINKABLE_ENTITY_TYPES).toEqual(['person', 'company', 'organization', 'entity']);
+  });
+
+  test('CJK relaxed min-length — 2-char Chinese name “张三” included', async () => {
+    await engine.putPage('people/zhang-san', {
+      type: 'person', title: '张三', compiled_truth: 'b', timeline: '', frontmatter: {},
+    });
+    const g = await buildGazetteer(engine);
+    // ASCII min-length is 4, but CJK min-length is 2 → 张三 included.
+    expect(g.has('张')).toBe(true);
+  });
+
+  test('CJK single-char name still filtered (too ambiguous)', async () => {
+    await engine.putPage('people/zhao', {
+      type: 'person', title: '赵', compiled_truth: 'b', timeline: '', frontmatter: {},
+    });
+    const g = await buildGazetteer(engine);
+    // Single CJK char = single token of length 1 → dropped by single-token gate.
+    expect(g.has('赵')).toBe(false);
   });
 });
