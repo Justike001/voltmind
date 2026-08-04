@@ -2,6 +2,8 @@ import type { BrainEngine } from '../engine.ts';
 import { computeContentHash } from '../ingestion/types.ts';
 import { MinionQueue } from '../minions/queue.ts';
 import type { CyclePhase, PhaseResult } from '../cycle.ts';
+import { sweepUnregisteredTrackingEvidence } from './tracking-evidence-sweep.ts';
+import type { TrackingQueue } from '../project-tracking-runtime.ts';
 
 const MAX_DEFAULT = 10;
 const TRACKING_REPAIR_PREFIXES = [
@@ -34,7 +36,7 @@ function parseDetails(value: unknown): Record<string, unknown> {
  */
 export async function runTrackingMaintenance(
   engine: BrainEngine,
-  opts: { sourceId?: string; dryRun?: boolean; maxEvents?: number } = {},
+  opts: { sourceId?: string; dryRun?: boolean; maxEvents?: number; queue?: TrackingQueue } = {},
 ): Promise<PhaseResult> {
   const phase: CyclePhase = 'tracking_maintenance';
   if (process.env.VOLTMIND_RUNTIME_ROLE !== 'company-server') {
@@ -45,6 +47,11 @@ export async function runTrackingMaintenance(
     return { phase, status: 'skipped', duration_ms: 0, summary: 'no source resolved', details: { reason: 'no_source' } };
   }
   const limit = Math.max(1, Math.min(opts.maxEvents ?? MAX_DEFAULT, MAX_DEFAULT));
+  const evidenceSweep = await sweepUnregisteredTrackingEvidence(engine, {
+    sourceId,
+    maxPages: limit,
+    dryRun: opts.dryRun,
+  });
   const rows = await engine.executeRaw<ReceiptRow>(
     `SELECT DISTINCT ON (event_source_id,event_kind,event_key)
         event_source_id,event_kind,event_key,event_version,content_hash,evidence_slug,outcome,details
@@ -57,7 +64,7 @@ export async function runTrackingMaintenance(
   let verified = 0;
   let queued = 0;
   let failed = 0;
-  const queue = new MinionQueue(engine);
+  const queue = opts.queue ?? new MinionQueue(engine);
   for (const row of rows) {
     const details = parseDetails(row.details);
     const affected = Array.isArray(details.affected_pages) ? details.affected_pages.filter((v): v is string => typeof v === 'string') : [];
@@ -116,9 +123,10 @@ export async function runTrackingMaintenance(
           'If a unique existing project/workstream matches, preserve user prose and repair the timeline/managed state/canonical state objects with evidence citations.',
           'If there is no match but the evidence clearly defines a project (goal, owner, scope, status, completion condition) or a durable workstream, create it. If ambiguous, write state/indexes/project-tracking-review.',
           'If there is no actionable signal, finish with the exact sentinel TRACKING_NO_SIGNAL.',
+          'After verifying or repairing the target pages, call register_tracking_evidence with the actual client_outcome and affected_pages so this receipt can close. Do not copy raw Markdown into another page.',
         ].join('\n'),
         allowed_slug_prefixes: [...TRACKING_REPAIR_PREFIXES],
-        allowed_tools: ['search', 'query', 'get_page', 'list_pages', 'put_page'],
+        allowed_tools: ['search', 'query', 'get_page', 'list_pages', 'put_page', 'register_tracking_evidence'],
         max_turns: 8,
       }, {
         idempotency_key: `tracking-repair:${sourceId}:${row.event_source_id}:${row.event_kind}:${row.event_key}:${row.content_hash ?? 'none'}`,
@@ -138,6 +146,13 @@ export async function runTrackingMaintenance(
     status: failed > 0 ? 'warn' : 'ok',
     duration_ms: 0,
     summary: `${verified} verified, ${queued} repair jobs queued`,
-    details: { source_id: sourceId, scanned: rows.length, verified, repair_jobs: queued, failed },
+    details: {
+      source_id: sourceId,
+      scanned: rows.length,
+      verified,
+      repair_jobs: queued,
+      failed,
+      evidence_sweep: evidenceSweep,
+    },
   };
 }

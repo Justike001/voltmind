@@ -9,7 +9,7 @@ Windows client / connector
   -> remote put_page canonical source evidence
   -> remote put_page project/workstream/state pages
   -> register_tracking_evidence (hash/version/affected pages)
-  -> company-server Dream audits receipts and repairs anomalies
+  -> company-server Dream sweeps evidence pages, audits receipts, and repairs anomalies
 ```
 
 Client `ingest` and `meeting-ingestion` retain their ordinary `put_page` and
@@ -32,8 +32,18 @@ voltmind jobs work --runtime-role company-server
 ```
 
 `company-server` autopilot runs the `tracking_maintenance` phase by default.
-It verifies complete receipts without LLM calls and submits only anomalous
-records to the existing generic subagent. The phase is skipped on thin clients.
+It first performs a source-scoped deterministic sweep of canonical
+`sources/teams/`, `sources/meetings/`, `sources/emails/`, and
+`sources/calendar/` pages. If a page has stable event identity in Frontmatter
+but no matching receipt, it records a pending `registration_missing` audit
+receipt. It then verifies complete receipts without LLM calls and submits only
+anomalous records to the existing generic subagent. The phase is skipped on
+thin clients.
+
+Canonical evidence Frontmatter must retain `event_id` (or
+`tracking_event_id`), `event_version` (or `tracking_event_version`),
+`evidence_type`, and `tracking_refs`. The sweep uses these fields and the page
+content hash only; it never classifies transcript text or copies Markdown.
 
 The legacy `project_track_progress` handler remains only to drain old jobs and
 never writes project pages. `tracking_maintenance` is protected, source-scoped,
@@ -63,4 +73,6 @@ VOLTMIND_RUNTIME_ROLE=company-server \
 Reconcile requests a source-scoped Dream maintenance pass with revision-aware
 idempotency. It does not add/remove Frontmatter bindings; direct creation by
 the client or Dream repair is allowed only when the project/workstream
-definition is explicit and unambiguous.
+definition is explicit and unambiguous. A client registration remains the
+normal fast path; the evidence sweep is the reliability fallback for crashes or
+network failures between the page write and registration.

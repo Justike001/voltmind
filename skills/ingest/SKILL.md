@@ -76,6 +76,12 @@ Ingest meetings, articles, media, documents, and conversations into the brain.
 - Structured events may carry `tracking_refs` and `evidence_type`; preserve
   these fields when forwarding events so runtime can reconcile existing
   project/workstream pages.
+- Canonical source evidence MUST retain stable identity in Frontmatter before
+  any tracking write: `event_id` (or `tracking_event_id`),
+  `event_version` (or `tracking_event_version`), `evidence_type`, and
+  `tracking_refs`. The company-server evidence sweep uses only these fields to
+  find a client crash or network failure between `put_page` and registration;
+  it does not infer identity from transcript text.
 - Client-agent ingest may write `projects/`, `workstreams/`, and canonical
   action/decision/commitment/risk pages after Brain-First Lookup. Write raw
   source evidence first, preserve user prose via managed blocks, cite the
@@ -143,7 +149,8 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
    - Read the entity's page from voltmind to check if it exists
    - If exists: update compiled_truth (rewrite State section with new info, don't append)
    - If new: check notability gate, then store the page in voltmind with the appropriate type and slug
-5. **Long-running tracking.** Persist canonical raw evidence first. Then run
+5. **Long-running tracking.** Persist canonical raw evidence first. The source
+   page must carry the stable event identity fields described above. Then run
    Brain-First Lookup over `projects/`, `workstreams/`, bindings, aliases,
    backlinks, and Timeline. A unique match is updated; an unbound event may
    create a project when goal/owner/scope/status/completion condition are clear,

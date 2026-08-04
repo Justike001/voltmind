@@ -127,10 +127,14 @@ export async function registerTrackingEvidence(
   if (prior && prior.target_slug !== evidenceSlug) {
     throw new Error(`event ${eventId} is already registered to evidence page ${prior.target_slug}`);
   }
-  if (prior && prior.content_hash === contentHash && prior.event_version === (input.event_version ?? null)) {
+  const sameRevision = !!prior
+    && prior.content_hash === contentHash
+    && prior.event_version === (input.event_version ?? null);
+  const recovered = sameRevision && prior?.outcome !== 'registered' && prior?.outcome !== 'verified';
+  if (sameRevision && !recovered) {
     return { status: 'duplicate', source_id: sourceId, evidence_slug: evidenceSlug, content_hash: contentHash };
   }
-  const conflict = !!prior && prior.event_version === (input.event_version ?? null) && prior.content_hash !== contentHash;
+  const conflict = !!prior && !sameRevision && prior.event_version === (input.event_version ?? null) && prior.content_hash !== contentHash;
   const supersedes = prior?.content_hash && prior.content_hash !== contentHash ? prior.content_hash : null;
   const outcome = conflict ? 'conflict' : 'registered';
   const details = JSON.stringify({
@@ -139,6 +143,7 @@ export async function registerTrackingEvidence(
     client_outcome: input.client_outcome,
     affected_pages: affectedPages,
     registration: outcome,
+    ...(recovered ? { recovered_from: prior?.outcome ?? 'pending' } : {}),
   });
   await engine.executeRaw(
     `INSERT INTO project_tracking_receipts
@@ -150,6 +155,16 @@ export async function registerTrackingEvidence(
     [sourceId, sourceId, input.evidence_type, eventId, evidenceSlug, input.event_version ?? null, contentHash, evidenceSlug,
       outcome, details, conflict ? 'same event version has a different evidence hash' : null],
   );
+  if (recovered) {
+    await engine.executeRaw(
+      `UPDATE project_tracking_receipt_history
+          SET outcome='registered', matched_by='client', details=$8::text::jsonb, last_error=NULL
+        WHERE page_source_id=$1 AND event_source_id=$2 AND event_kind=$3 AND event_key=$4
+          AND target_type='evidence' AND target_slug=$5 AND event_version IS NOT DISTINCT FROM $6
+          AND content_hash=$7 AND outcome IN ('pending','repairing','review_needed','failed')`,
+      [sourceId, sourceId, input.evidence_type, eventId, evidenceSlug, input.event_version ?? null, contentHash, details],
+    );
+  }
   await engine.executeRaw(
     `INSERT INTO project_tracking_receipt_history
       (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,evidence_slug,outcome,matched_by,details,last_error,supersedes_content_hash)
@@ -158,7 +173,14 @@ export async function registerTrackingEvidence(
     [sourceId, sourceId, input.evidence_type, eventId, evidenceSlug, input.event_version ?? null, contentHash, evidenceSlug,
       outcome, details, conflict ? 'same event version has a different evidence hash' : null, supersedes],
   );
-  return { status: outcome, source_id: sourceId, evidence_slug: evidenceSlug, content_hash: contentHash, supersedes_content_hash: supersedes };
+  return {
+    status: outcome,
+    source_id: sourceId,
+    evidence_slug: evidenceSlug,
+    content_hash: contentHash,
+    supersedes_content_hash: supersedes,
+    ...(recovered ? { recovered: true } : {}),
+  };
 }
 
 export async function submitTrackedIngestionEvent(

@@ -135,13 +135,16 @@ Acme Corp, the event goes on Alice's page, Bob's page, AND Acme Corp's page.
 ### Long-running project tracking
 
 Write the canonical transcript under the active `sources/meetings/` filing
-directory first, preserving stable calendar/series identity. Then update or
+directory first, preserving stable calendar/series identity in Frontmatter
+(`event_id`/`tracking_event_id`, `event_version`/`tracking_event_version`,
+`evidence_type`, and `tracking_refs`). Then update or
 create the directly affected project/workstream/state pages and call
 `register_tracking_evidence` with `event_id`, `event_version`,
 `evidence_type: meeting_transcript`, `tracking_refs`, `client_outcome`, and the
 actual `affected_pages`. Register `no_signal` when the meeting has no durable
-project signal. The company-server Dream cycle audits the receipt later and
-queues generic repair only for incomplete or ambiguous records.
+project signal. The company-server Dream cycle audits the receipt later,
+sweeps evidence pages missing a receipt, and queues generic repair only for
+incomplete or ambiguous records.
 
 ## Output Format
 

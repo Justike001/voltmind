@@ -451,6 +451,8 @@ export interface SubagentHandlerData {
   allowed_slug_prefixes?: string[];
   /** OAuth/source scope for tracking maintenance and other server jobs. */
   source_id?: string;
+  /** Internal marker allowing a maintenance repair to close its receipt. */
+  tracking_maintenance?: boolean;
   /**
    * v0.41 Approach C: opt out of the auto-generated tool-usage preamble
    * that `buildSystemPrompt()` splices into `system`. Default behavior

@@ -93,6 +93,7 @@ export const BRAIN_TOOL_USAGE_HINTS: Readonly<Record<string, string>> = {
   get_recent_salience: 'Read pages ranked by emotional + activity salience over a recency window. Use for "what\'s been on my mind lately".',
   find_anomalies: 'Read cohort-level activity outliers (e.g. tag-cohort or type-cohort with unusual recent volume). Use for "what\'s unusual lately".',
   get_recent_transcripts: 'Read recent raw conversation transcript summaries for retrieval grounding. Read-only; does not import or synthesize.',
+  register_tracking_evidence: 'Only for source-scoped tracking maintenance repair: record the already-existing evidence page revision and affected pages after verifying or repairing them. Never copy raw Markdown.',
 };
 
 /** Matches Anthropic's tool-name constraint. No dots. */
@@ -190,6 +191,8 @@ export interface BuildBrainToolsOpts {
   allowedSlugPrefixes?: readonly string[];
   /** Source scope for every read/write operation issued by the subagent. */
   sourceId?: string;
+  /** Only the source-scoped tracking maintenance repair may close a receipt. */
+  allowTrackingRegistration?: boolean;
 }
 
 interface OpContextDeps {
@@ -233,9 +236,12 @@ function buildOpContext(deps: OpContextDeps): OperationContext {
  * subagentId + engine handle, so it's not shareable across jobs.
  */
 export function buildBrainTools(opts: BuildBrainToolsOpts): ToolDef[] {
-  const filter = opts.allowedNames ?? BRAIN_TOOL_ALLOWLIST;
+  const allowlist = opts.allowTrackingRegistration
+    ? new Set([...BRAIN_TOOL_ALLOWLIST, 'register_tracking_evidence'])
+    : BRAIN_TOOL_ALLOWLIST;
+  const filter = opts.allowedNames ?? allowlist;
   const picked: Operation[] = operations.filter(
-    op => BRAIN_TOOL_ALLOWLIST.has(op.name) && filter.has(op.name),
+    op => allowlist.has(op.name) && filter.has(op.name),
   );
 
   return picked.map<ToolDef>(op => {

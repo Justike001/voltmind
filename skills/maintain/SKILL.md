@@ -387,7 +387,12 @@ VOLTMIND_RUNTIME_ROLE=company-server \
 
 The status view is source-scoped. Reconcile requests a
 `tracking_maintenance` Dream phase; it audits client registrations and queues
-the generic subagent only for incomplete/ambiguous records. It never modifies
+the generic subagent only for incomplete/ambiguous records. Before receipt
+audit it deterministically sweeps canonical `sources/teams/`,
+`sources/meetings/`, `sources/emails/`, and `sources/calendar/` pages for
+stable evidence identities with no matching receipt, records a pending
+`registration_missing` audit reason, and then routes that anomaly through the
+same repair path. It never modifies
 `tracking_bindings` and does not replay the removed real-time worker.
 
 Also verify:
