@@ -454,6 +454,33 @@ up 100 bad pages is enormous.
 
 ## Output Format
 
+### Client/server route selection for Teams evidence (additive)
+
+The existing server relay remains available for company-server raw-ingest
+compatibility. A client-first run uses the client agent for the semantic path:
+
+1. Read Teams messages with the client connector.
+2. Write canonical evidence with `put_page`, preserving `event_id` (or
+   `tracking_event_id`), `event_version`, `evidence_type`, and `tracking_refs`.
+3. Run Brain-First Lookup and update only the project/workstream/state pages the
+   client actually changed.
+4. Call `register_tracking_evidence` with the same `event_id`,
+   `event_version`, and `evidence_type`.
+
+Do not use `submit_ingestion_event` for this client-authored path; that operation
+remains company-server-only raw-ingest compatibility. The shared remote repo
+does not change this ownership boundary: runtime role and client tool bindings
+decide which path is allowed.
+
+For Teams incremental reads, keep one checkpoint per `chat_id` and query with
+`sent_after = checkpoint - overlap`; deduplicate by `message_id`. The connector
+result cap is 99 messages. A result count below 99 may advance the checkpoint
+only after every event in the batch has been registered. A result count of 99 is
+`saturated`: freeze the checkpoint, report partial coverage, and retry later.
+Do not claim a complete historical window or perform a one-shot 30-day backfill
+for a high-volume chat while the connector exposes neither an upper time bound
+nor a continuation/delta cursor.
+
 ```
 INGESTED: [title]
 ==================
