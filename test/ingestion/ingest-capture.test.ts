@@ -17,6 +17,7 @@ import {
 } from '../../src/core/ingestion/types.ts';
 import type { MinionJobContext } from '../../src/core/minions/types.ts';
 import { operationsByName, type OperationContext } from '../../src/core/operations.ts';
+import { registerTrackingEvidence } from '../../src/core/project-tracking-runtime.ts';
 
 let engine: PGLiteEngine;
 
@@ -550,6 +551,35 @@ describe('ingest_capture handler — integration with importFromContent', () => 
 
     expect(calls).toHaveLength(0);
     expect((await handler(makeJob({ event: first, slug: 'sources/teams/tracking-versioned' }))).status).toBe('skipped');
+  });
+
+  test("teams connector raw receipt uses evidence identity and client registration is one-row pending-to-registered", async () => {
+    const handler = makeIngestCaptureHandler(engine);
+    const input = makeEvent({
+      source_kind: "teams-connector",
+      event_id: "teams-event-same-1",
+      event_version: "2026-05-20T12:00:00Z",
+      evidence_type: "teams_thread",
+      source_id: "default",
+      content: "# Teams evidence",
+    });
+    const slug = "sources/teams/teams-event-same-1";
+    expect((await handler(makeJob({ event: input, slug }))).status).toBe("imported");
+    const pending = await engine.executeRaw<{ count: number; event_kind: string; outcome: string }>("SELECT count(*)::int AS count, max(event_kind) AS event_kind, max(outcome) AS outcome FROM project_tracking_receipts WHERE page_source_id=$1 AND event_source_id=$1 AND event_key=$2 AND target_slug=$3", ["default", input.event_id!, slug]);
+    expect(pending).toEqual([{ count: 1, event_kind: "teams_thread", outcome: "pending" }]);
+    const provenance = await engine.executeRaw<{ source_kind: string }>("SELECT details->>'source_kind' AS source_kind FROM project_tracking_receipts WHERE page_source_id=$1 AND event_source_id=$1 AND event_key=$2 AND target_slug=$3", ["default", input.event_id!, slug]);
+    expect(provenance).toEqual([{ source_kind: "teams-connector" }]);
+    const registered = await registerTrackingEvidence(engine, "default", {
+      evidence_slug: slug,
+      event_id: input.event_id!,
+      event_version: input.event_version,
+      evidence_type: "teams_thread",
+      client_outcome: "no_signal",
+      affected_pages: [],
+    });
+    expect(registered.status).toBe("registered");
+    const finalRows = await engine.executeRaw<{ count: number; event_kind: string; outcome: string }>("SELECT count(*)::int AS count, max(event_kind) AS event_kind, max(outcome) AS outcome FROM project_tracking_receipts WHERE page_source_id=$1 AND event_source_id=$1 AND event_key=$2 AND target_slug=$3", ["default", input.event_id!, slug]);
+    expect(finalRows).toEqual([{ count: 1, event_kind: "teams_thread", outcome: "registered" }]);
   });
 
   test('queue argument is ignored so ingest success is independent of tracking maintenance', async () => {

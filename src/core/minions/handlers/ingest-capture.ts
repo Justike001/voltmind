@@ -195,10 +195,14 @@ export function makeIngestCaptureHandler(engine: BrainEngine, _queue?: IngestCap
     // to Dream without interpreting it. Client-authored pages use the narrow
     // register_tracking_evidence operation instead, which upgrades this
     // pending receipt to registered/verified and records affected pages.
+    // Tracking identity is evidence_type; source_kind remains provenance only.
     if (result.status === 'imported' && pageSourceId === event.source_id && event.event_id && event.evidence_type) {
+      const trackingPage = await engine.getPage(slug, { sourceId: pageSourceId });
+      const trackingContentHash = trackingPage?.content_hash ?? event.content_hash;
       const details = JSON.stringify({
         tracking_refs: event.tracking_refs ?? [],
         evidence_type: event.evidence_type,
+        source_kind: event.source_kind,
         raw_ingest: true,
       });
       await engine.executeRaw(
@@ -209,8 +213,8 @@ export function makeIngestCaptureHandler(engine: BrainEngine, _queue?: IngestCap
          DO UPDATE SET event_version=EXCLUDED.event_version, content_hash=EXCLUDED.content_hash,
            evidence_slug=EXCLUDED.evidence_slug, details=EXCLUDED.details, updated_at=now()
            WHERE project_tracking_receipts.outcome NOT IN ('registered','verified')`,
-        [pageSourceId, event.source_id, event.source_kind, event.event_id, slug,
-          event.event_version ?? null, event.content_hash, details],
+        [pageSourceId, event.source_id, event.evidence_type ?? event.source_kind, event.event_id, slug,
+          event.event_version ?? null, trackingContentHash, details],
       );
     }
 
