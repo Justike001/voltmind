@@ -2253,6 +2253,19 @@ export type ChatBlock =
   | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }
   | { type: 'tool-result'; toolCallId: string; toolName: string; output: unknown; isError?: boolean };
 
+function gatewayToolResultOutput(output: unknown, isError = false): unknown {
+  if (isError) {
+    const value = typeof output === 'string' ? output : (JSON.stringify(output) ?? String(output));
+    return { type: 'error-text', value };
+  }
+  if (typeof output === 'string') return { type: 'text', value: output };
+  try {
+    return { type: 'json', value: JSON.parse(JSON.stringify(output ?? null)) };
+  } catch {
+    return { type: 'text', value: String(output) };
+  }
+}
+
 export interface ChatMessage {
   role: ChatRole;
   content: string | ChatBlock[];
@@ -2770,7 +2783,7 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
           type: 'tool-result',
           toolCallId: call.toolCallId,
           toolName: call.toolName,
-          output: `tool "${call.toolName}" is not in the registry for this subagent`,
+          output: gatewayToolResultOutput("tool " + call.toolName + " is not in the registry for this subagent", true),
           isError: true,
         });
         opts.onHeartbeat?.('tool_failed', { turn_idx: turnIdx, tool_name: call.toolName, error: 'not_registered' });
@@ -2796,7 +2809,7 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
           type: 'tool-result',
           toolCallId: call.toolCallId,
           toolName: call.toolName,
-          output: prior.output,
+          output: gatewayToolResultOutput(prior.output),
         });
         opts.onHeartbeat?.('tool_replay_complete', { turn_idx: turnIdx, tool_name: call.toolName });
         continue;
@@ -2806,7 +2819,7 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
           type: 'tool-result',
           toolCallId: call.toolCallId,
           toolName: call.toolName,
-          output: prior.error ?? 'tool failed',
+          output: gatewayToolResultOutput(prior.error ?? 'tool failed', true),
           isError: true,
         });
         opts.onHeartbeat?.('tool_replay_failed', { turn_idx: turnIdx, tool_name: call.toolName });
@@ -2830,7 +2843,7 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
           type: 'tool-result',
           toolCallId: call.toolCallId,
           toolName: call.toolName,
-          output,
+          output: gatewayToolResultOutput(output),
         });
         opts.onHeartbeat?.('tool_result', { turn_idx: turnIdx, tool_name: call.toolName });
       } catch (err) {
@@ -2840,7 +2853,7 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
           type: 'tool-result',
           toolCallId: call.toolCallId,
           toolName: call.toolName,
-          output: errMsg,
+          output: gatewayToolResultOutput(errMsg, true),
           isError: true,
         });
         opts.onHeartbeat?.('tool_failed', { turn_idx: turnIdx, tool_name: call.toolName, error: errMsg });
@@ -2849,10 +2862,13 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
 
     if (stopReason === 'aborted') break;
 
-    // Feed all tool results back as a single user message.
+    // Feed all tool results back as a native tool message. Vercel AI SDK's
+    // ModelMessage schema requires role='tool' for tool-result blocks;
+    // role='user' may be tolerated by some providers but is rejected by
+    // strict OpenAI-compatible endpoints such as OpenRouter/GLM.
     const userMessageIdx = messageIdx++;
     void userMessageIdx;
-    messages.push({ role: 'user', content: toolResultBlocks });
+    messages.push({ role: 'tool', content: toolResultBlocks });
 
     turnIdx++;
   }
