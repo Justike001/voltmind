@@ -41,6 +41,7 @@ writes_to:
   - sources/
   - projects/
   - concepts/
+  - state/indexes/
 ---
 
 # Cold Start — Microsoft-First Day-One Brain Bootstrapping
@@ -68,8 +69,8 @@ to get you from zero to useful in one session.
   markdown directories through the public VoltMind import/write surface.
 - Each phase is independently valuable — the user can stop after any phase and
   still have a useful brain.
-- Progress is tracked in `VOLTMIND_HOME/cold-start-state.json` so interrupted
-  sessions can resume.
+- Progress is tracked in one local Markdown manifest under `state/indexes/` so
+  interrupted sessions can resume without a competing JSON cursor.
 - Entity detection and cross-linking run on every import, not as a separate
   pass.
 - Teams and Outlook imports retain every validated SharePoint/OneDrive or
@@ -307,21 +308,27 @@ Use the Teams connector only. Recommended starting scope:
 
 ### Fetch loop for active chats
 
-The Microsoft Teams MCP message listing surface may return at most `top=100`
-messages per call. A single `top=100` response is not enough evidence that a
-busy chat, group chat, or channel is complete.
+The Microsoft Teams MCP message listing surface may cap high-volume history
+reads. A single response is not enough evidence that a busy chat, group chat,
+or channel is complete.
 
 For every approved chat/group chat/channel:
 
-1. Walk the target history in bounded windows: default `day=5`, `top=100`.
-2. Continue the loop until the requested date range is covered, or until the
-   user-approved stop condition is reached.
-3. If a 5-day window returns exactly or nearly 100 messages, treat that window
-   as saturated. Use connector pagination when available; otherwise shrink the
-   next pass to smaller date windows before declaring the window complete.
-4. Deduplicate by Teams message id, chat/channel id, timestamp, and sender.
-5. Persist per-chat progress in `VOLTMIND_HOME/cold-start-state.json` so an
-   interrupted run resumes from the next unfinished window.
+1. For a source range longer than seven days, create or resume the local
+   cold-start manifest before any connector call. Record the approved scope,
+   connector capabilities, and phase progress in its frontmatter.
+2. Walk history in bounded `[start, end)` windows: default one day and
+   `top=50`. Start with half-day or hourly windows for known high-volume rooms.
+3. Before each read, select the next eligible manifest work unit and set it to
+   `reading`. Persist raw evidence before marking the unit `captured`.
+4. If a window reaches the observed result cap (currently 99), mark it
+   `saturated`, preserve its coverage boundary, and create smaller child
+   windows. Do not declare that parent window complete.
+5. Deduplicate by the stable key `teams:<container-id>:<message-id>`.
+6. On HTTP 429, set the work unit to `rate_limited`, record the retry time, and
+   continue with unrelated eligible work. Do not classify it as `no_signal`.
+7. Continue until the manifest records the requested date range as covered, or
+   until the user-approved stop condition is reached.
 
 The loop is mandatory for high-frequency chats and group chats, including cold
 start. Do not rely on a single recent-message sample for active rooms.
@@ -586,32 +593,19 @@ voltmind search "<topic from the imported data>"
 - Start embeddings only after approval/provider readiness:
   `voltmind embed --stale`
 
-> **Track progress** by writing `cold-start-state.json` under
-> `VOLTMIND_HOME` or the default `~/.voltmind` directory. Use the unified
-> schema below so resume picks up correctly:
-> ```json
-> {
->   "started": "2026-06-11T10:00:00+08:00",
->   "phases_completed": [0, 6],
->   "phases_skipped": [],
->   "total_pages_created": 0,
->   "total_pages_updated": 0,
->   "total_entities_linked": 0,
->   "next_phase": 1
-> }
-> ```
+> **Track progress** in one `state/indexes/teams-outlook-coldstart-<start>-to-<end>.md`
+> manifest. The vault template `templates/cold-start-ingest-manifest.md` is the
+> required scaffold. Its frontmatter holds the macro cold-start phase state;
+> its ledger and container details hold the micro ingestion state. Do not write
+> a second state file for the same run.
 
 Set `next_phase` to the first missing approved phase id. Use `null` only when
-there are no remaining approved phases to run.
-
-Note: every phase writes the **same** file with an appended `phases_completed`
-entry and an updated numeric `next_phase`. Do not use a separate
-`phase_N_complete` field anywhere; that fragments state and lets two phases
-clobber each other.
+there are no remaining approved phases to run. The manifest is updated after
+every phase and every attempted Teams/Outlook window.
 
 ### Phase state ids
 
-Use one numbering convention in `cold-start-state.json`:
+Use one numbering convention in manifest frontmatter:
 
 | Phase id | Meaning |
 |----------|---------|
@@ -625,9 +619,7 @@ Use one numbering convention in `cold-start-state.json`:
 
 `phases_completed` and `phases_skipped` are arrays of these numeric ids.
 `next_phase` is the next numeric id to run, or `null` when cold start is done.
-Do not write older string values such as `"cross_source_reconciliation"` into
-`next_phase`; the resume protocol should map any legacy string it encounters to
-the numeric id once, then rewrite the state file in the unified schema.
+Do not write string phase names into `next_phase`.
 
 
 ## Post-Bootstrap Checklist
@@ -664,44 +656,10 @@ After completing available phases:
    voltmind embed --stale
    ```
 
-5. **Track state** (write the unified state file once, after all phases; resume
-   reads the same file):
-
-   ```json
-   {
-     "started": "2026-06-11T10:00:00+08:00",
-     "phases_completed": [0, 1, 2, 3, 4, 5, 6],
-     "phases_skipped": [],
-     "calendar_window_days": 90,
-     "email_strategy": "sent_flagged_active_threads",
-     "teams_fetch": {
-       "window_days": 30,
-       "chunk_days": 5,
-       "top": 100,
-       "completed_chats": [],
-       "next_windows": {
-         "chat-or-channel-id": {
-           "next_start": "2026-06-01T00:00:00+08:00",
-           "next_end": "2026-06-06T00:00:00+08:00"
-         }
-       }
-     },
-     "teams_profiles_completed": [],
-     "total_pages_created": 0,
-     "total_pages_updated": 0,
-     "total_entities_linked": 0,
-     "next_phase": null
-   }
-   ```
-
-   This is the same file written after every phase (just with the smaller
-   `phases_completed` subset and the current numeric `next_phase`). The older
-   string-style `next_phase` and source-specific nested progress blocks are not
-   redundant with `phases_completed`: `phases_completed` decides which phases
-   are done, while nested blocks such as `teams_fetch` carry intra-phase resume
-   cursors. Keep those nested cursors only for phases that need them, and keep
-   `next_phase` numeric. VoltMind cold start uses Microsoft connectors directly;
-   there is no external orchestration field here.
+5. **Close the manifest:** set `next_phase: null`, summarize coverage, and
+   ensure each Teams/Outlook ledger row is either complete, skipped,
+   review-required, or explicitly blocked. Do not overwrite a raw-evidence or
+   retry record merely to mark the overall phase complete.
 
 6. **Tell the user what to do next:**
 
@@ -739,13 +697,15 @@ After completing available phases:
 
 If the session is interrupted:
 
-1. Read `VOLTMIND_HOME/cold-start-state.json`.
+1. Find the active local cold-start manifest under `state/indexes/` and read it.
 2. Skip any phase whose number is already in `phases_completed`; skip any phase
    listed in `phases_skipped`.
 3. Resume from numeric `next_phase`, or compute the first missing phase id when
    `next_phase` is null or absent.
-4. For Teams, resume each approved chat/channel from `teams_fetch.next_windows`
-   and skip participants listed in `teams_profiles_completed`.
+4. For Teams/Outlook, select the next eligible manifest work unit: due
+   `rate_limited`, then saturated child windows, then captured semantic work,
+   then the oldest pending window. Treat `reading` records older than 20 minutes
+   as interrupted and rerun idempotently.
 5. Re-check user consent before reading any new mailbox, calendar, chat, or
    channel scope.
 6. Run `voltmind status`, `voltmind health`, and `voltmind stats` before

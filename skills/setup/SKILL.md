@@ -610,10 +610,9 @@ If the user says yes (or anything affirmative):
 just print a reference — actually run the cold-start skill.
 
 If the user says no or wants to stop:
-→ Record in `~/.voltmind/cold-start-state.json`:
-```json
-{"deferred": true, "deferred_at": "ISO-timestamp", "phases_completed": []}
-```
+→ Create a deferred cold-start manifest under `brain/state/indexes/` from
+`templates/cold-start-ingest-manifest.md`, with `status: deferred`,
+`next_phase: 0`, and the deferral timestamp in its run summary.
 → Tell them: "You can run cold-start anytime by asking me to 'fill my brain'
 or 'cold start'."
 

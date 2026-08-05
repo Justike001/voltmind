@@ -89,6 +89,7 @@ Ingest meetings, articles, media, documents, and conversations into the brain.
   repeats this semantic write on the ingest hot path.
 
 > **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
+> **Convention:** See `skills/conventions/page-template-contract.md` for the canonical draft-backed write format.
 
 Every mention of a person or company with a brain page MUST create a back-link
 FROM that entity's page TO the page mentioning them. An unlinked mention is a
@@ -191,6 +192,104 @@ The managed `voltmind:file-refs` block is searchable content. Human-authored
 content and non-relay references must remain untouched when a relay refreshes
 the block. `search_file_refs` is preferred for exact path, item ID, service, or
 MIME queries; normal `search`/`query` results also carry hydrated `file_refs`.
+
+### Outlook Email And Calendar Signal Policy
+
+When an ingest event comes from Outlook Email or Outlook Calendar, apply the
+same signal/noise policy used by cold start. Do not treat every connector event
+as a durable brain item. Filter low-signal records before creating pages, while
+still preserving stable event identity for idempotency and later reconciliation.
+
+#### Outlook Email
+
+Classify each message or thread as one of:
+
+- `email_thread` — a human conversation with durable context;
+- `decision` — a decision, approval, or strategy change;
+- `commitment` — an owner, obligation, or deadline;
+- `project_update` — meaningful project, customer, partner, vendor, or candidate
+  progress;
+- `relationship_signal` — a durable change in role, relationship, or
+  communication pattern;
+- `automated_notification` — system, marketing, or utility mail;
+- `duplicate_or_represented` — content already represented by Calendar, Teams,
+  or another event with the same stable identity.
+
+**Auto-skip unless the user explicitly requests it:**
+
+- `noreply@`, `no-reply@`, `notifications@`, `support@`, and
+  `mailer-daemon@` senders;
+- newsletters, marketing mail, vendor drip campaigns, and unsubscribe-heavy
+  senders;
+- GitHub, Jira, Linear, Instagram, and other system notifications;
+- raw calendar invitations already represented by a Calendar event;
+- Teams reminders already represented by Teams data;
+- routine announcements such as new-hire, work-anniversary, birthday,
+  promotion, employee-spotlight, and similar status mail.
+
+**Always import or review:**
+
+- direct mail from people already present in the brain;
+- mail sent by the user containing decisions, strategy, original thinking, or
+  commitments;
+- flagged, starred, or important threads;
+- threads naming projects, customers, partners, candidates, vendors, or
+  deadlines;
+- threads with attachments or SharePoint/OneDrive/mapped-drive references.
+
+For selected threads, extract the thread summary, entities, commitments and
+actions, relationship context, project changes, and only notable timeline
+entries. Cite every durable fact as `[Source: email from {name} re: {subject},
+YYYY-MM-DD]`.
+
+#### Outlook Calendar
+
+Classify each event as one of:
+
+- `meeting` — a meeting with attendees and durable context;
+- `recurring_one_on_one` — a recurring 1:1 whose relationship or cadence
+  matters;
+- `project_meeting` — a board, customer, partner, hiring, planning, or
+  incident meeting;
+- `decision_or_deadline` — an event whose subject or body reveals a decision,
+  deadline, or project milestone;
+- `utility_event` — a reminder, focus block, lunch, travel buffer, holiday, or
+  other scheduling utility;
+- `duplicate_or_represented` — an event already captured as a meeting or from
+  another source.
+
+**Auto-skip unless the user explicitly requests it:**
+
+- holidays, reminders, focus blocks, lunch, travel buffers, and private
+  personal events without approval;
+- events with no attendees and no useful context;
+- recurring utility blocks that do not reveal relationships or projects;
+- duplicate events or raw invites already represented elsewhere.
+
+**Always consider for import or review:**
+
+- events with external attendees;
+- meetings with three or more attendees;
+- recurring 1:1s;
+- board, customer, partner, hiring, planning, and incident meetings;
+- subjects that reveal a project, decision, deadline, or relationship.
+
+For selected events, extract the subject, time, organizer, attendees, location,
+online meeting link, body preview when available, entities, project context,
+and notable timeline entries. Cite durable facts as
+`[Source: Outlook Calendar, {event title}, YYYY-MM-DD]`.
+
+#### Shared ingest behavior
+
+1. Apply the source-specific classification before writing a page.
+2. Preserve `event_id`, `event_version`, `evidence_type`, and `tracking_refs`
+   when supplied by a connector relay.
+3. Deduplicate cross-source representations before creating a second page or
+   timeline entry.
+4. Route selected signal through the normal Brain-First Lookup, entity
+   classification, project tracking, citation, and back-linking phases.
+5. Keep validated Outlook attachments and file links as metadata references;
+   materialize or analyze the file only after an explicit user request.
 
 ### Mapped shared-drive reference ingest
 
@@ -480,6 +579,107 @@ only after every event in the batch has been registered. A result count of 99 is
 Do not claim a complete historical window or perform a one-shot 30-day backfill
 for a high-volume chat while the connector exposes neither an upper time bound
 nor a continuation/delta cursor.
+
+### Teams bounded-window and rate-limit behavior (client connector)
+
+The client Teams connector is an official OAuth-bound connector; the agent does
+not modify its request schema or transport behavior. Skill rules therefore
+control call shape, pacing, and completeness claims only.
+
+- Prefer `top=50` or a smaller value for channel/chat history reads. Do not
+  probe larger values to work around the connector cap.
+- A one-day or half-day window is a useful bounded-read strategy when the
+  returned count stays comfortably below 99. It reduces saturation risk but does
+  not remove the need for `message_id` deduplication, raw-source persistence,
+  and a per-window completion record. If a bounded window returns 99, split it
+  again (for example, half-day to hourly windows) and keep the window partial.
+- When the connector exposes only `sent_after`, fetch from the window start and
+  post-filter by the intended end time. Do not call that window complete if the
+  response is saturated, because later messages may have displaced earlier
+  ones.
+- On HTTP 429, do not immediately repeat the same call. Honor `Retry-After`
+  when available; otherwise use bounded exponential backoff (30s, 60s, 120s,
+  300s) with a maximum retry budget. Keep the affected chat/channel in a
+  `rate_limited` or `blocked` state and do not classify it as `no_signal`.
+- Rate-limit retries per chat/channel, keep unrelated chats progressing, and
+  avoid concurrent history reads for high-volume channels. If the connector
+  does not expose `Retry-After` or retry metadata, record the observed 429 and
+  the next retry time in the ingest status/manifest rather than fabricating
+  completion.
+- For recurring ingest, persist a lightweight per-container manifest (whether
+  in connector state or a local `state/indexes/` page) containing the window,
+  checkpoint, returned count, saturation flag, retry count, and completion
+  status. For a one-off bounded batch this can be one line per window; it need
+  not become a semantic project page.
+
+#### Local cold-start ingest manifest contract
+
+For a Teams/Outlook cold start longer than seven days, create or resume one
+local Markdown manifest under `state/indexes/` before the first connector read.
+The manifest is the durable client-side control plane for both cold-start phase
+progress and per-container ingestion; do not maintain a competing JSON cursor.
+Write observed results only—never create a completion record from an assumption.
+
+Use independent records for every chat/channel and time window `[start, end)`.
+The run manifest frontmatter records the requested scope, connector capability
+limits, and `phases_completed` / `next_phase`. Its ledger records the work
+units. Use two statuses because raw capture and semantic routing are separate:
+
+```yaml
+container_kind: chat # chat | channel
+container_id: <stable-chat-or-channel-id>
+team_id: null # required for a channel
+channel_id: null # required for a channel
+window_start: 2026-07-01T00:00:00Z
+window_end: 2026-07-02T00:00:00Z
+acquisition_status: pending # pending | reading | captured | saturated | rate_limited | blocked | failed | interrupted
+semantic_status: pending # pending | complete | no_signal | review_required | skipped
+returned_count: 0
+accepted_count: 0
+saturated: false
+oldest_returned_at: null
+newest_returned_at: null
+first_message_id: null # diagnostic only
+last_message_id: null # diagnostic only
+attempt_count: 0
+last_attempt_at: null
+retry_after: null
+last_error: null
+source_pages: []
+next_action: read_window
+updated_at: 2026-08-05T00:00:00Z
+```
+
+The canonical deduplication key is `teams:<container_id>:<message_id>`.
+`first_message_id` and `last_message_id` help diagnose a window but do not
+replace per-message deduplication. Preserve complete message identity in raw
+evidence pages or the local index, not in the manifest.
+
+State transitions are deliberately conservative:
+
+1. Select the next eligible work unit from the manifest: due `rate_limited`,
+   then children of `saturated`, then `captured` with semantic work pending,
+   then the oldest `pending` window. Do not repeatedly call `blocked` windows.
+2. Set `acquisition_status: reading` and increment `attempt_count` immediately
+   before a connector read.
+3. Persist raw evidence first. Deduplicate by `message_id`, then write returned
+   bounds/counts and source-page links into the manifest.
+4. Set `captured` only when raw evidence is durable and the result is not
+   saturated. Set `semantic_status` separately after routing has reached
+   `complete`, `no_signal`, `review_required`, or `skipped`.
+5. If the result is saturated, retain the parent as `saturated`, do not advance
+   a checkpoint, and create smaller child windows with `next_action: split_window`.
+6. If the connector returns HTTP 429, set `rate_limited`, preserve the prior
+   coverage, record `retry_after` / `last_error`, and set
+   `next_action: retry_after_backoff`.
+7. Treat `reading` records older than 20 minutes as `interrupted`; rerun them
+   idempotently from raw evidence and message IDs.
+8. Mark a window fully complete only when the requested interval is covered,
+   raw evidence is durable, and no saturation, retry, or write failure remains.
+
+The manifest is operational state, not semantic truth. Project, person, action,
+decision, and risk pages must cite raw evidence pages and must not be created
+merely because a manifest says a window was read.
 
 ```
 INGESTED: [title]

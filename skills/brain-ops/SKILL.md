@@ -33,6 +33,7 @@ flows through in both directions.
 
 > **Convention:** See `skills/conventions/brain-first.md` for the 5-step lookup protocol.
 > **Convention:** See `skills/conventions/quality.md` for citation and back-link rules.
+> **Convention:** See `skills/conventions/page-template-contract.md` for the canonical draft-backed write format.
 
 ## Contract
 
