@@ -5,17 +5,20 @@ audit/repair workflow:
 
 ```text
 Windows client / connector
-  -> Brain-First Lookup + client LLM classification
+  -> local canonical source Markdown
+  -> Brain-First Lookup + local project/workstream/state or review candidate
+  -> local validation + manifest update
   -> remote put_page canonical source evidence
   -> remote put_page project/workstream/state pages
-  -> register_tracking_evidence (hash/version/affected pages)
+  -> register_tracking_evidence (hash/version/actual affected pages)
   -> company-server Dream sweeps evidence pages, audits receipts, and repairs anomalies
 ```
 
 Client `ingest` and `meeting-ingestion` retain their ordinary `put_page` and
 Timeline capabilities and may write bound projects/workstreams/state pages. A
-local Markdown write is tracked when the client registers the already-written
-canonical source evidence; the server never reparses the transcript on ingest.
+local Markdown write remains authoritative if remote synchronization fails:
+record `local_written_remote_pending` and retry idempotently from the file.
+The server never reparses the transcript on ingest.
 
 ## Server requirement
 

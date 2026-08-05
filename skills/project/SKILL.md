@@ -77,9 +77,13 @@ requires a durable responsibility domain with no fixed end date. Ambiguous
 matches go to the review index. The server does not repeat this work during
 ingest.
 
-After every client write, call `register_tracking_evidence` with the event
-identity, client outcome, and actual affected page slugs. Company-server Dream
-audits receipts and repairs only anomalies through the generic subagent.
+After every client write, validate the local vault, synchronize the exact local
+source and derived Markdown with remote `put_page`, then call
+`register_tracking_evidence` with the event identity, client outcome, and
+actual affected project/workstream/state page slugs. A review-index-only
+candidate is `review_needed` with an empty `affected_pages` list.
+Company-server Dream audits receipts and repairs only anomalies through the
+generic subagent.
 
 When `state/indexes/project-tracking-review` contains a candidate, review the
 evidence, add the chosen binding to the canonical page Frontmatter, then run

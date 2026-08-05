@@ -51,6 +51,9 @@ This skill guarantees:
 - Back-links created bidirectionally
 - Preserve stable calendar/series/thread identity as `tracking_refs` when
   available so runtime can reconcile the meeting to existing projects/workstreams.
+- Use the local vault as the write-ahead source: write and validate canonical
+  transcript and derived pages locally before remote `put_page` and receipt
+  registration.
 
 > **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
 
@@ -122,6 +125,8 @@ create a workstream only for a durable responsibility domain without a fixed
 end date. Ambiguous candidates go to `state/indexes/project-tracking-review`.
 Use `put_page`/`add_timeline_entry` directly for project/workstream and canonical
 state pages, preserving user prose and adding evidence citations.
+Candidates are appended to `state/indexes/project-tracking-review` immediately;
+they do not delay meeting ingest or remain session-only.
 
 ### Phase 5: Timeline merge
 
@@ -134,15 +139,17 @@ Acme Corp, the event goes on Alice's page, Bob's page, AND Acme Corp's page.
 
 ### Long-running project tracking
 
-Write the canonical transcript under the active `sources/meetings/` filing
-directory first, preserving stable calendar/series identity in Frontmatter
+Write the canonical transcript under the active local `sources/meetings/`
+filing directory first, preserving stable calendar/series identity in Frontmatter
 (`event_id`/`tracking_event_id`, `event_version`/`tracking_event_version`,
-`evidence_type`, and `tracking_refs`). Then update or
-create the directly affected project/workstream/state pages and call
+`evidence_type`, and `tracking_refs`). Then update or create the directly
+affected local project/workstream/state pages, validate all local Markdown,
+synchronize source then derived pages with remote `put_page`, and call
 `register_tracking_evidence` with `event_id`, `event_version`,
 `evidence_type: meeting_transcript`, `tracking_refs`, `client_outcome`, and the
-actual `affected_pages`. Register `no_signal` when the meeting has no durable
-project signal. The company-server Dream cycle audits the receipt later,
+actual `affected_pages`. A review-index-only candidate uses
+`client_outcome: review_needed` with empty `affected_pages`. Register
+`no_signal` when the meeting has no durable project signal. The company-server Dream cycle audits the receipt later,
 sweeps evidence pages missing a receipt, and queues generic repair only for
 incomplete or ambiguous records.
 

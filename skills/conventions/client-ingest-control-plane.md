@@ -1,0 +1,105 @@
+# Client Ingest Control Plane
+
+This convention applies to every client-authored Teams, Outlook, meeting, or
+external-file ingest. The local vault is the write-ahead truth surface; the
+remote brain is its synchronized index, graph, and audit surface.
+
+## Required order
+
+1. Read the active schema and perform Brain-First Lookup.
+2. Create or resume a durable local ingest manifest before connector reads.
+3. Write raw evidence to the local vault first, with stable event identity.
+4. Route semantic signal locally: update confirmed canonical pages or append
+   ambiguity to `state/indexes/project-tracking-review`.
+5. Validate local Markdown: frontmatter, source links, citations, file-ref
+   shape, and diff scope.
+6. Send `put_page` for the exact local evidence and semantic Markdown; source
+   evidence is sent before the derived pages.
+7. Call `register_tracking_evidence` only after the corresponding remote
+   evidence write succeeds.
+8. Record remote success, failure, or retry state in the local manifest.
+
+Never write remote-only semantic state for a client ingest. A remote failure
+leaves the local vault authoritative and the manifest in
+`local_written_remote_pending`; retry synchronization idempotently from the
+local file. Never advance a coverage checkpoint because a connector read
+returned data but local persistence, remote synchronization, or registration
+failed.
+
+## Evidence identity and coverage
+
+- Evidence frontmatter must include `event_id`, `event_version` when
+  available, `evidence_type`, and `tracking_refs`.
+- Deduplicate Teams by `teams:<container_id>:<message_id>`.
+- Keep one checkpoint and one manifest ledger per chat/channel. A 99-message
+  result is `saturated`, never complete; a 429 is `rate_limited`, never
+  `no_signal`.
+- Preserve raw text, attachment markers, and message IDs. Do not invent
+  meaning from opaque artifacts.
+
+## File-reference contract
+
+External files are references by default, not copied artifacts. Attach an
+`ExternalFileReferenceV1` with at least:
+
+```yaml
+schema_version: 1
+provider: microsoft
+service: sharepoint
+tenant_id: <tenant>
+drive_id: <drive>
+item_id: <item>
+name: <file name>
+web_url: <canonical link>
+mime_type: <MIME type>
+availability: accessible | unavailable | unknown
+occurrence:
+  platform: outlook | teams
+  relation: attachment | inline_link | hosted_content
+  conversation_id: <stable non-empty id>
+  message_id: <stable non-empty id>
+  source_uri: <stable non-empty source uri>
+```
+
+Keep `display_path`, `size_bytes`, `last_modified_at`, and `e_tag` when
+the connector supplies them. Do not synthesize an eTag. Fetch or materialize
+binary content only after an explicit user request; a readable-text capability
+does not authorize copying or semantically summarizing the file.
+
+## Non-blocking candidate queue
+
+Ambiguous project/workstream signals are appended immediately to
+`state/indexes/project-tracking-review`; they never remain only in a session
+and never block raw capture or the rest of the batch. Each candidate records:
+
+- source pages and message/event IDs;
+- observed facts with citations;
+- proposed route and the missing criterion;
+- `pending_review`, `accepted`, `rejected`, or `superseded`;
+- the resolution target and date once reviewed.
+
+Only `accepted` candidates may create or alter a project, workstream, or
+canonical state object. The queue index is operational metadata, not an
+`affected_pages` target for `register_tracking_evidence`. For an
+evidence-only candidate, register `client_outcome: review_needed` with an
+empty `affected_pages` array.
+
+## Semantic and privacy gate
+
+Create/alter a project only when goal, owner, scope, status, and completion
+condition are explicit. Create/alter a workstream only when a durable
+responsibility domain is explicit. Keep one-off support, ambiguous chats, and
+incomplete meeting artifacts in evidence or the review queue.
+
+Raw evidence may be private and minimally transformed. Canonical semantic pages
+must not propagate passwords, OTPs, API keys, access tokens, personal phone
+numbers, or detailed internal network identifiers. Preserve only the
+non-sensitive fact needed to explain impact, status, and mitigation.
+
+## Completion
+
+An ingest unit is complete only when its coverage status, raw evidence,
+semantic route, remote synchronization, and receipt are all durable. Report
+the remaining state explicitly: `saturated`, `rate_limited`,
+`review_needed`, or `local_written_remote_pending`—never a generic
+success.

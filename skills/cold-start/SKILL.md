@@ -314,24 +314,37 @@ or channel is complete.
 
 For every approved chat/group chat/channel:
 
-1. For a source range longer than seven days, create or resume the local
-   cold-start manifest before any connector call. Record the approved scope,
-   connector capabilities, and phase progress in its frontmatter.
-2. Walk history in bounded `[start, end)` windows: default one day and
-   `top=50`. Start with half-day or hourly windows for known high-volume rooms.
+1. Create or resume the local cold-start manifest before any connector call.
+   Record the approved scope, connector capabilities, and phase progress in
+   its frontmatter.
+2. Read the newest available batch with `top=50` (or lower) and treat any
+   `[start, end)` values as manifest bookkeeping, not as a connector-enforced
+   historical query, unless the connector exposes a verified upper time bound
+   or continuation cursor.
 3. Before each read, select the next eligible manifest work unit and set it to
    `reading`. Persist raw evidence before marking the unit `captured`.
-4. If a window reaches the observed result cap (currently 99), mark it
-   `saturated`, preserve its coverage boundary, and create smaller child
-   windows. Do not declare that parent window complete.
+4. If a read reaches the observed result cap (currently 99), preserve the
+   newest captured batch, mark the older logical range `blocked` with
+   `last_error: blocked_by_connector_pagination`, and do not declare that
+   history complete. Do not create smaller historical child windows: a
+   newest-first capped API with only `sent_after` cannot be paged backwards.
 5. Deduplicate by the stable key `teams:<container-id>:<message-id>`.
 6. On HTTP 429, set the work unit to `rate_limited`, record the retry time, and
    continue with unrelated eligible work. Do not classify it as `no_signal`.
-7. Continue until the manifest records the requested date range as covered, or
-   until the user-approved stop condition is reached.
+7. Continue across approved containers until each has either a newest batch
+   captured, is rate-limited, or is explicitly blocked by pagination. Do not
+   claim the requested historical range is covered when a container saturated.
+8. Transition each captured container to ongoing incremental ingest. Set its
+   `incremental_high_watermark` to the newest durably captured message time and
+   use `sent_after = incremental_high_watermark - overlap` on later reads.
+   If a later read saturates, record the unrecoverable gap and move the high
+   watermark to the newest returned message so the feed remains live; do not
+   attempt historical recovery.
 
-The loop is mandatory for high-frequency chats and group chats, including cold
-start. Do not rely on a single recent-message sample for active rooms.
+For a capped newest-first connector, cold start is a latest-available sample,
+not historical recovery. The manifest must make this explicit for every active
+room. Ongoing incremental ingest—not cold-start backfill—is the reliable path
+for subsequently arriving messages.
 
 ### Participant profile enrichment
 
@@ -703,9 +716,9 @@ If the session is interrupted:
 3. Resume from numeric `next_phase`, or compute the first missing phase id when
    `next_phase` is null or absent.
 4. For Teams/Outlook, select the next eligible manifest work unit: due
-   `rate_limited`, then saturated child windows, then captured semantic work,
-   then the oldest pending window. Treat `reading` records older than 20 minutes
-   as interrupted and rerun idempotently.
+   `rate_limited`, then captured semantic work, then the next pending container.
+   Do not re-read `blocked_by_connector_pagination` history. Treat `reading`
+   records older than 20 minutes as interrupted and rerun idempotently.
 5. Re-check user consent before reading any new mailbox, calendar, chat, or
    channel scope.
 6. Run `voltmind status`, `voltmind health`, and `voltmind stats` before

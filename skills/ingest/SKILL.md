@@ -87,9 +87,16 @@ Ingest meetings, articles, media, documents, and conversations into the brain.
   source evidence first, preserve user prose via managed blocks, cite the
   evidence page, then call `register_tracking_evidence`. The server never
   repeats this semantic write on the ingest hot path.
+- Client-authored ingest is **local-vault first**: write raw and derived
+  Markdown locally, validate it, then synchronize the exact files with remote
+  `put_page` and register receipts. A remote write is not a substitute for a
+  durable local source page.
 
 > **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
 > **Convention:** See `skills/conventions/page-template-contract.md` for the canonical draft-backed write format.
+> **Convention:** See `skills/conventions/client-ingest-control-plane.md` for
+> local-first synchronization, coverage, file references, candidate routing,
+> and receipt rules.
 
 Every mention of a person or company with a brain page MUST create a back-link
 FROM that entity's page TO the page mentioning them. An unlinked mention is a
@@ -120,8 +127,10 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
    The thin client converts a user's `Z:\...` or username-specific UNC path to
    that logical locator before sending it; new events must omit `open_path`.
    Search and query can then find the file by name or logical path without
-   copying it. Use `file_ref_materialize` only after a user explicitly requests
-   file analysis.
+   copying it. Include `schema_version: 1` and the non-empty occurrence
+   identity required by the control-plane convention; a malformed file reference
+   is a retryable write error, not a reason to drop the reference. Use
+   `file_ref_materialize` only after a user explicitly requests file analysis.
 3. **Classify each new entity before writing:**
    - Check for an existing page by stable external identity before using a name
      match. For Teams data, prefer `conversation_id`, then `team_id + channel_id`,
@@ -156,7 +165,9 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
    backlinks, and Timeline. A unique match is updated; an unbound event may
    create a project when goal/owner/scope/status/completion condition are clear,
    or a workstream when it is a durable responsibility domain with no fixed end
-   date. Multiple candidates go to `state/indexes/project-tracking-review`.
+   date. Multiple candidates are appended immediately to
+   `state/indexes/project-tracking-review`; this is non-blocking and must not
+   be held only in the current session.
    One evidence event may update multiple targets. Update Timeline, managed
    current state, and canonical state objects with evidence links and
    `[Source: ...]`; then call `register_tracking_evidence` with the actual
@@ -553,18 +564,23 @@ up 100 bad pages is enormous.
 
 ## Output Format
 
-### Client/server route selection for Teams evidence (additive)
+### Client-first local write and remote synchronization (MANDATORY)
 
 The existing server relay remains available for company-server raw-ingest
-compatibility. A client-first run uses the client agent for the semantic path:
+compatibility. A client-authored run follows this order:
 
-1. Read Teams messages with the client connector.
-2. Write canonical evidence with `put_page`, preserving `event_id` (or
-   `tracking_event_id`), `event_version`, `evidence_type`, and `tracking_refs`.
-3. Run Brain-First Lookup and update only the project/workstream/state pages the
-   client actually changed.
-4. Call `register_tracking_evidence` with the same `event_id`,
-   `event_version`, and `evidence_type`.
+1. Read Teams/Outlook evidence with the client connector and persist the raw
+   source Markdown to the local vault.
+2. Run Brain-First Lookup; write the confirmed semantic pages or durable review
+   candidate locally. Do not wait for a human review to continue ingest.
+3. Validate the local files and manifest. If validation fails, retain
+   `local_written_remote_pending` and do not claim completion.
+4. Call remote `put_page` with the exact local source page, followed by the
+   exact derived pages.
+5. Call `register_tracking_evidence` only after the remote source write
+   succeeds. Pass only actual project/workstream/state slugs in
+   `affected_pages`; review-index-only evidence uses `review_needed` with
+   an empty list.
 
 Do not use `submit_ingestion_event` for this client-authored path; that operation
 remains company-server-only raw-ingest compatibility. The shared remote repo
@@ -573,9 +589,12 @@ decide which path is allowed.
 
 For Teams incremental reads, keep one checkpoint per `chat_id` and query with
 `sent_after = checkpoint - overlap`; deduplicate by `message_id`. The connector
-result cap is 99 messages. A result count below 99 may advance the checkpoint
-only after every event in the batch has been registered. A result count of 99 is
-`saturated`: freeze the checkpoint, report partial coverage, and retry later.
+result cap is 99 messages. The checkpoint is a **high watermark**: the newest
+durably captured message timestamp, never the oldest message in a batch. A
+result count below 99 may advance it to `newest_returned_at` only after every
+event in the batch has been registered. A result count at the cap is
+`saturated`: it proves an interval may have been lost; it cannot be replayed
+with this connector.
 Do not claim a complete historical window or perform a one-shot 30-day backfill
 for a high-volume chat while the connector exposes neither an upper time bound
 nor a continuation/delta cursor.
@@ -588,15 +607,17 @@ control call shape, pacing, and completeness claims only.
 
 - Prefer `top=50` or a smaller value for channel/chat history reads. Do not
   probe larger values to work around the connector cap.
-- A one-day or half-day window is a useful bounded-read strategy when the
-  returned count stays comfortably below 99. It reduces saturation risk but does
-  not remove the need for `message_id` deduplication, raw-source persistence,
-  and a per-window completion record. If a bounded window returns 99, split it
-  again (for example, half-day to hourly windows) and keep the window partial.
-- When the connector exposes only `sent_after`, fetch from the window start and
-  post-filter by the intended end time. Do not call that window complete if the
-  response is saturated, because later messages may have displaced earlier
-  ones.
+- A one-day or half-day *logical* window is useful only while the returned count
+  stays comfortably below 99. It reduces saturation risk but does not remove the
+  need for `message_id` deduplication, raw-source persistence, and a completion
+  record. It is not a server-enforced `[start, end)` query when the connector
+  exposes only `sent_after`.
+- When the connector exposes only `sent_after`, post-filtering by an intended
+  end time cannot recover messages displaced by a newest-first capped response.
+  If the result is saturated, do not split and retry historical child windows:
+  mark the logical range `blocked` with
+  `last_error: blocked_by_connector_pagination`, retain the newest captured
+  batch, and do not call the older history covered.
 - On HTTP 429, do not immediately repeat the same call. Honor `Retry-After`
   when available; otherwise use bounded exponential backoff (30s, 60s, 120s,
   300s) with a maximum retry budget. Keep the affected chat/channel in a
@@ -614,8 +635,8 @@ control call shape, pacing, and completeness claims only.
 
 #### Local cold-start ingest manifest contract
 
-For a Teams/Outlook cold start longer than seven days, create or resume one
-local Markdown manifest under `state/indexes/` before the first connector read.
+For every Teams/Outlook cold-start run, create or resume one local Markdown
+manifest under `state/indexes/` before the first connector read.
 The manifest is the durable client-side control plane for both cold-start phase
 progress and per-container ingestion; do not maintain a competing JSON cursor.
 Write observed results only—never create a completion record from an assumption.
@@ -667,8 +688,14 @@ State transitions are deliberately conservative:
 4. Set `captured` only when raw evidence is durable and the result is not
    saturated. Set `semantic_status` separately after routing has reached
    `complete`, `no_signal`, `review_required`, or `skipped`.
-5. If the result is saturated, retain the parent as `saturated`, do not advance
-   a checkpoint, and create smaller child windows with `next_action: split_window`.
+5. If the result is saturated, retain the logical range as `saturated` and set
+   `next_action: blocked_by_connector_pagination`. Do not create historical
+   child windows unless the connector has a verified upper-time-bound or
+   continuation cursor. For an ongoing incremental feed, record an explicit
+   `unrecoverable_gap` from the prior high watermark to `oldest_returned_at`,
+   then advance a separate `incremental_high_watermark` to
+   `newest_returned_at` so future messages can still be captured. Never label
+   the gap covered.
 6. If the connector returns HTTP 429, set `rate_limited`, preserve the prior
    coverage, record `retry_after` / `last_error`, and set
    `next_action: retry_after_backoff`.
