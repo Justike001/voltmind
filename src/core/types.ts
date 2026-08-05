@@ -79,6 +79,10 @@ export interface Page {
   timeline: string;
   frontmatter: Record<string, unknown>;
   content_hash?: string;
+  /** Source-owned event payload hash; distinct from the page render hash in content_hash. */
+  source_payload_hash?: string | null;
+  /** Hash of the normalized file-reference page projection. */
+  file_refs_projection_hash?: string | null;
   /** v0.29 — deterministic 0..1 score; populated by the recompute_emotional_weight cycle phase. */
   emotional_weight?: number;
   created_at: Date;
@@ -208,6 +212,10 @@ export interface PageInput {
   timeline?: string;
   frontmatter?: Record<string, unknown>;
   content_hash?: string;
+  /** Source-owned event payload hash; distinct from the page render hash. */
+  source_payload_hash?: string | null;
+  /** Hash of the normalized file-reference page projection. */
+  file_refs_projection_hash?: string | null;
   /**
    * v0.19.0: distinguishes markdown vs code pages at the DB level. Defaults
    * to 'markdown' when omitted so existing callers work unchanged. Set to
@@ -1054,7 +1062,12 @@ export interface PageVersion {
   id: number;
   page_id: number;
   compiled_truth: string;
+  timeline: string;
   frontmatter: Record<string, unknown>;
+  content_hash: string | null;
+  source_payload_hash: string | null;
+  file_refs_projection_hash: string | null;
+  snapshot_kind: 'source_ingest' | 'file_ref_projection' | 'client_semantic_update' | 'conflict_observation';
   snapshot_at: Date;
 }
 

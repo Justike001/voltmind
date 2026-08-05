@@ -126,7 +126,7 @@ export function normalizeExternalFileRefs(input: unknown): ExternalFileReference
   if (!Array.isArray(input)) throw new Error('file_refs must be an array');
   if (input.length > MAX_REFS_PER_EVENT) throw new Error(`file_refs may contain at most ${MAX_REFS_PER_EVENT} items`);
 
-  return input.map((raw, index) => {
+  const refs = input.map((raw, index) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
       throw new Error(`file_refs[${index}] must be an object`);
     }
@@ -219,7 +219,26 @@ export function normalizeExternalFileRefs(input: unknown): ExternalFileReference
       item_id: nonEmpty(r.item_id, `file_refs[${index}].item_id`, 512),
       web_url: parsed.toString(),
     };
-  });
+  }) as ExternalFileReferenceV1[];
+  // A single provider item can arrive through several Teams/SharePoint URL
+  // variants. Keep one deterministic logical ref so projection changes do
+  // not manufacture duplicate identities.
+  const deduped = new Map<string, ExternalFileReferenceV1>();
+  for (const ref of refs) {
+    const key = ref.provider === 'microsoft'
+      ? `${ref.provider}:${ref.service}:${ref.tenant_id}:${ref.drive_id}:${ref.item_id}`
+      : `${ref.provider}:${ref.root_key}:${ref.file_id ? `id:${ref.file_id}` : `path:${ref.relative_path.toLowerCase()}`}`;
+    const previous = deduped.get(key);
+    if (ref.provider === 'filesystem') {
+      // Filesystem observations may intentionally retain two path variants;
+      // their stable identity is resolved by the persisted index. Microsoft
+      // provider items, however, are merged by tenant/drive/item identity.
+      deduped.set(`${key}:${deduped.size}`, ref);
+    } else if (!previous || (previous.provider === 'microsoft' && ref.web_url < previous.web_url)) {
+      deduped.set(key, ref);
+    }
+  }
+  return [...deduped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, ref]) => ref);
 }
 
 /** Rehydrate the compact frontmatter projection back into the V1 shape. */

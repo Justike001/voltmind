@@ -38,6 +38,7 @@ import {
   withExternalFileRefsProjection,
   type ExternalFileReferenceV1,
 } from './external-file-refs.ts';
+import { computeFileRefsProjectionHash } from './tracking-hashes.ts';
 
 /**
  * v0.20.0 Cathedral II Layer 8 D2 — markdown fence extraction helper.
@@ -260,6 +261,9 @@ export async function importFromContent(
     source_kind?: string | null;
     source_uri?: string | null;
     ingested_via?: string | null;
+    sourcePayloadHash?: string | null;
+    fileRefsProjectionHash?: string | null;
+    snapshotKind?: 'source_ingest' | 'file_ref_projection' | 'client_semantic_update' | 'conflict_observation';
     externalFileRefs?: ExternalFileReferenceV1[];
     /** Rebuild page projection/frontmatter without creating association rows. */
     skipExternalFileRefPersistence?: boolean;
@@ -271,6 +275,8 @@ export async function importFromContent(
       eventVersion?: string | null;
       jobId?: number | null;
       contentHash?: string | null;
+      sourcePayloadHash?: string | null;
+      fileRefsProjectionHash?: string | null;
     };
   } = {},
 ): Promise<ImportResult> {
@@ -327,6 +333,9 @@ export async function importFromContent(
   if (externalFileRefs.length > 0) {
     parsed.frontmatter = { ...parsed.frontmatter, ...fileRefsFrontmatter(externalFileRefs) };
   }
+  const fileRefsProjectionHash = externalFileRefs.length > 0
+    ? computeFileRefsProjectionHash(externalFileRefs)
+    : opts.fileRefsProjectionHash ?? null;
 
   // v0.41 content-sanity gate. Runs AFTER parseMarkdown so the assessor
   // sees the parsed body (compiled_truth + timeline), title, and
@@ -646,7 +655,7 @@ export async function importFromContent(
   // for single-source callers.
   const txOpts = sourceId ? { sourceId } : undefined;
   await engine.transaction(async (tx) => {
-    if (existing) await tx.createVersion(slug, txOpts);
+    if (existing) await tx.createVersion(slug, { ...txOpts, snapshotKind: opts.snapshotKind ?? 'client_semantic_update' });
 
     // v0.29.1 — compute effective_date from frontmatter precedence chain.
     // Filename comes from importFromFile path (basename) or the slug tail
@@ -672,6 +681,8 @@ export async function importFromContent(
       timeline: parsed.timeline || '',
       frontmatter: parsed.frontmatter,
       content_hash: hash,
+      source_payload_hash: opts.ingestionEventState?.sourcePayloadHash ?? opts.sourcePayloadHash ?? null,
+      file_refs_projection_hash: fileRefsProjectionHash,
       effective_date: effectiveDate,
       effective_date_source: effectiveDateSource,
       import_filename: filenameForChain,
@@ -702,15 +713,21 @@ export async function importFromContent(
       );
       await tx.executeRaw(
         `INSERT INTO ingestion_event_state
-          (source_id, source_kind, event_id, event_version, slug, page_id, content_hash, job_id, processed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+          (source_id, source_kind, event_id, event_version, slug, page_id, content_hash, source_payload_hash, file_refs_projection_hash, hash_scheme, job_id, processed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
          ON CONFLICT (source_id, source_kind, event_id)
          DO UPDATE SET event_version = EXCLUDED.event_version, slug = EXCLUDED.slug,
            page_id = EXCLUDED.page_id, content_hash = EXCLUDED.content_hash,
+           source_payload_hash = EXCLUDED.source_payload_hash,
+           file_refs_projection_hash = EXCLUDED.file_refs_projection_hash,
+           hash_scheme = EXCLUDED.hash_scheme,
            job_id = EXCLUDED.job_id, processed_at = now()`,
         [opts.ingestionEventState.sourceId, opts.ingestionEventState.sourceKind,
           opts.ingestionEventState.eventId, opts.ingestionEventState.eventVersion ?? null, slug,
           statePageRows[0]?.id ?? null, opts.ingestionEventState.contentHash ?? hash,
+          opts.ingestionEventState.sourcePayloadHash ?? null,
+          opts.ingestionEventState.fileRefsProjectionHash ?? fileRefsProjectionHash,
+          opts.ingestionEventState.sourcePayloadHash ? 'v2' : 'legacy',
           opts.ingestionEventState.jobId ?? null],
       );
     }

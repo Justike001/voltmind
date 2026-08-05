@@ -107,11 +107,15 @@ export interface IngestionEvent {
    *  For binary types (image/audio/video/pdf), this is an absolute path or
    *  a data URI; the processor reads from there. */
   content: string;
-  /** SHA-256 hex of `content`. Daemon dedups on (source_kind, content_hash)
-   *  within a 24h window before queueing. Computing this is the source's
-   *  responsibility because the source knows whether content is text or
-   *  a path-pointer. */
+  /** Compatibility event hash. New events set this equal to
+   *  source_payload_hash; legacy sources may use their historical scheme. */
   content_hash: string;
+  /** v2 source-owned payload hash; absent on legacy events. */
+  source_payload_hash?: string;
+  /** v2 hash of the normalized file-reference projection; absent when refs were not supplied. */
+  file_refs_projection_hash?: string;
+  /** Explicitly identifies whether the event uses the v2 or compatibility hash model. */
+  hash_scheme?: 'v2' | 'legacy';
   /** Optional stable identity for a source event (message/thread/episode). */
   event_id?: string;
   /** Optional source revision (modified timestamp, version, or eTag). */
@@ -334,6 +338,16 @@ export function validateIngestionEvent(event: unknown): IngestionEventError | nu
       `must be 64 lowercase hex characters (SHA-256); got '${hash.slice(0, 16)}...'`,
       e as Partial<IngestionEvent>,
     );
+  }
+
+  for (const field of ['source_payload_hash', 'file_refs_projection_hash'] as const) {
+    const value = e[field];
+    if (value !== undefined && (typeof value !== 'string' || !/^[0-9a-f]{64}$/i.test(value))) {
+      return new IngestionEventError(field, 'must be a 64-character SHA-256 hex string when present', e as Partial<IngestionEvent>);
+    }
+  }
+  if (e.hash_scheme !== undefined && e.hash_scheme !== 'v2' && e.hash_scheme !== 'legacy') {
+    return new IngestionEventError('hash_scheme', 'must be v2 or legacy when present', e as Partial<IngestionEvent>);
   }
 
   // untrusted_payload is optional but must be boolean if present.

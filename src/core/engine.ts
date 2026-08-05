@@ -1575,7 +1575,10 @@ export interface BrainEngine {
    * without it the bare-slug lookup snapshots whichever row Postgres returns
    * first when the slug exists across multiple sources.
    */
-  createVersion(slug: string, opts?: { sourceId?: string }): Promise<PageVersion>;
+  createVersion(slug: string, opts?: {
+    sourceId?: string;
+    snapshotKind?: PageVersion['snapshot_kind'];
+  }): Promise<PageVersion>;
   /**
    * v0.31.8 (D12 + D16): `opts.sourceId` source-scopes the page-id lookup.
    * When omitted, returns versions for every same-slug page across sources

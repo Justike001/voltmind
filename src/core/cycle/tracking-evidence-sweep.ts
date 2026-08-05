@@ -2,6 +2,8 @@ import type { BrainEngine } from '../engine.ts';
 import { computeContentHash, type SourceEvidenceType, type TrackingReference } from '../ingestion/types.ts';
 import type { Page } from '../types.ts';
 import { resolveSourceEvidenceDirectory } from '../source-routing.ts';
+import { computeFileRefsProjectionHash } from '../tracking-hashes.ts';
+import { normalizeExternalFileRefs } from '../external-file-refs.ts';
 
 const EVIDENCE_TYPES: readonly SourceEvidenceType[] = [
   'teams_thread',
@@ -23,6 +25,8 @@ interface ReceiptMatch {
   outcome: string;
   event_version: string | null;
   content_hash: string | null;
+  source_payload_hash: string | null;
+  render_hash: string | null;
 }
 
 export interface TrackingEvidenceSweepResult {
@@ -67,6 +71,16 @@ function pageHash(page: Page): string {
   return page.content_hash ?? computeContentHash(`${page.compiled_truth}\n\n${page.timeline}`);
 }
 
+function pageSourcePayloadHash(page: Page): string | null {
+  return page.source_payload_hash ?? null;
+}
+
+function pageFileRefsHash(page: Page): string | null {
+  if (page.file_refs_projection_hash) return page.file_refs_projection_hash;
+  if (!Array.isArray(page.frontmatter.file_refs)) return null;
+  try { return computeFileRefsProjectionHash(normalizeExternalFileRefs(page.frontmatter.file_refs)); } catch { return null; }
+}
+
 async function findReceipt(
   engine: BrainEngine,
   sourceId: string,
@@ -74,7 +88,7 @@ async function findReceipt(
   eventId: string,
 ): Promise<ReceiptMatch | null> {
   const rows = await engine.executeRaw<ReceiptMatch>(
-    `SELECT outcome,event_version,content_hash
+    `SELECT outcome,event_version,content_hash,source_payload_hash,render_hash
        FROM project_tracking_receipts
       WHERE page_source_id=$1 AND event_source_id=$1 AND target_type='evidence'
         AND evidence_slug=$2 AND event_key=$3
@@ -154,17 +168,17 @@ export async function sweepUnregisteredTrackingEvidence(
       });
       await engine.executeRaw(
         `INSERT INTO project_tracking_receipts
-          (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,evidence_slug,outcome,matched_by,details,updated_at)
-         VALUES ($1,$1,$2,$3,'evidence',$4,$5,$6,$4,'pending','evidence_sweep',$7::text::jsonb,now())
+          (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,source_payload_hash,render_hash,file_refs_projection_hash,evidence_slug,outcome,matched_by,details,updated_at)
+         VALUES ($1,$1,$2,$3,'evidence',$4,$5,$6,$7,$6,$8,$4,'pending','evidence_sweep',$9::text::jsonb,now())
          ON CONFLICT (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug) DO NOTHING`,
-        [opts.sourceId, actualType, eventId, page.slug, eventVersion, pageHash(page), details],
+        [opts.sourceId, actualType, eventId, page.slug, eventVersion, pageHash(page), pageSourcePayloadHash(page), pageFileRefsHash(page), details],
       );
       await engine.executeRaw(
         `INSERT INTO project_tracking_receipt_history
-          (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,evidence_slug,outcome,matched_by,details)
-         VALUES ($1,$1,$2,$3,'evidence',$4,$5,$6,$4,'pending','evidence_sweep',$7::text::jsonb)
+          (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,source_payload_hash,render_hash,file_refs_projection_hash,snapshot_kind,evidence_slug,outcome,matched_by,details)
+         VALUES ($1,$1,$2,$3,'evidence',$4,$5,$6,$7,$6,$8,'source_ingest',$4,'pending','evidence_sweep',$9::text::jsonb)
          ON CONFLICT (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,content_hash) DO NOTHING`,
-        [opts.sourceId, actualType, eventId, page.slug, eventVersion, pageHash(page), details],
+        [opts.sourceId, actualType, eventId, page.slug, eventVersion, pageHash(page), pageSourcePayloadHash(page), pageFileRefsHash(page), details],
       );
       result.inserted_receipts++;
     }

@@ -17,6 +17,8 @@ interface ReceiptRow {
   event_key: string;
   event_version: string | null;
   content_hash: string | null;
+  source_payload_hash: string | null;
+  render_hash: string | null;
   evidence_slug: string | null;
   outcome: string;
   details: unknown;
@@ -54,7 +56,7 @@ export async function runTrackingMaintenance(
   });
   const rows = await engine.executeRaw<ReceiptRow>(
     `SELECT DISTINCT ON (event_source_id,event_kind,event_key)
-        event_source_id,event_kind,event_key,event_version,content_hash,evidence_slug,outcome,details
+        event_source_id,event_kind,event_key,event_version,content_hash,source_payload_hash,render_hash,evidence_slug,outcome,details
        FROM project_tracking_receipts
       WHERE page_source_id=$1 AND target_type='evidence'
       ORDER BY event_source_id,event_kind,event_key,updated_at DESC
@@ -71,9 +73,11 @@ export async function runTrackingMaintenance(
     const diagnostics: string[] = [];
     const evidencePage = row.evidence_slug ? await engine.getPage(row.evidence_slug, { sourceId }) : null;
     if (!evidencePage) diagnostics.push('evidence_page_missing');
-    else if (row.content_hash) {
+    else if (row.source_payload_hash) {
+      if (evidencePage.source_payload_hash !== row.source_payload_hash) diagnostics.push('source_payload_hash_mismatch');
+    } else if (row.render_hash ?? row.content_hash) {
       const currentHash = evidencePage.content_hash ?? computeContentHash(`${evidencePage.compiled_truth}\n\n${evidencePage.timeline}`);
-      if (currentHash !== row.content_hash) diagnostics.push('evidence_hash_mismatch');
+      if (currentHash !== (row.render_hash ?? row.content_hash)) diagnostics.push('evidence_render_hash_mismatch');
     }
     for (const slug of affected) {
       if (!await engine.getPage(slug, { sourceId })) diagnostics.push(`affected_page_missing:${slug}`);
@@ -91,8 +95,8 @@ export async function runTrackingMaintenance(
         );
         await engine.executeRaw(
           `INSERT INTO project_tracking_receipt_history
-             (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,evidence_slug,outcome,matched_by,details,last_error)
-           SELECT page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,evidence_slug,'verified',matched_by,details,last_error
+             (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,source_payload_hash,render_hash,file_refs_projection_hash,snapshot_kind,evidence_slug,outcome,matched_by,details,last_error)
+           SELECT page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,source_payload_hash,render_hash,file_refs_projection_hash,'source_ingest',evidence_slug,'verified',matched_by,details,last_error
              FROM project_tracking_receipts
             WHERE page_source_id=$1 AND event_source_id=$2 AND event_kind=$3 AND event_key=$4 AND target_type='evidence'
            ON CONFLICT (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,content_hash) DO NOTHING`,

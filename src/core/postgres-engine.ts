@@ -847,7 +847,7 @@ export class PostgresEngine implements BrainEngine {
     const sourceCondition = sourceId ? sql`AND source_id = ${sourceId}` : sql``;
     const deletedCondition = includeDeleted ? sql`` : sql`AND deleted_at IS NULL`;
     const rows = await sql`
-      SELECT id, source_id, slug, type, title, compiled_truth, timeline, frontmatter, content_hash, created_at, updated_at, deleted_at,
+      SELECT id, source_id, slug, type, title, compiled_truth, timeline, frontmatter, content_hash, source_payload_hash, file_refs_projection_hash, created_at, updated_at, deleted_at,
              source_kind, source_uri, ingested_via, ingested_at
       FROM pages
       WHERE slug = ${slug} ${sourceCondition} ${deletedCondition}
@@ -906,6 +906,8 @@ export class PostgresEngine implements BrainEngine {
     // v0.32.7 CJK wave: chunker_version + source_path columns.
     const chunkerVersion = page.chunker_version ?? null;
     const sourcePath = page.source_path ?? null;
+    const sourcePayloadHash = page.source_payload_hash ?? null;
+    const fileRefsProjectionHash = page.file_refs_projection_hash ?? null;
     // v0.39.3.0 provenance write-through (WARN-8 + CV12). Server stamps
     // `ingested_at = now()` ONLY when any provenance is being written —
     // null `source_kind` / `source_uri` / `ingested_via` means no provenance
@@ -916,8 +918,8 @@ export class PostgresEngine implements BrainEngine {
     const ingestedVia = page.ingested_via ?? null;
     const ingestedAt = (sourceKind || sourceUri || ingestedVia) ? new Date() : null;
     const rows = await sql`
-      INSERT INTO pages (source_id, slug, type, page_kind, title, compiled_truth, timeline, frontmatter, content_hash, updated_at, effective_date, effective_date_source, import_filename, chunker_version, source_path, source_kind, source_uri, ingested_via, ingested_at)
-      VALUES (${sourceId}, ${slug}, ${page.type}, ${pageKind}, ${page.title}, ${page.compiled_truth}, ${page.timeline || ''}, ${sql.json(frontmatter as Parameters<typeof sql.json>[0])}, ${hash}, now(), ${effectiveDate}, ${effectiveDateSource}, ${importFilename}, COALESCE(${chunkerVersion}::smallint, 1), ${sourcePath}, ${sourceKind}, ${sourceUri}, ${ingestedVia}, ${ingestedAt})
+      INSERT INTO pages (source_id, slug, type, page_kind, title, compiled_truth, timeline, frontmatter, content_hash, source_payload_hash, file_refs_projection_hash, updated_at, effective_date, effective_date_source, import_filename, chunker_version, source_path, source_kind, source_uri, ingested_via, ingested_at)
+      VALUES (${sourceId}, ${slug}, ${page.type}, ${pageKind}, ${page.title}, ${page.compiled_truth}, ${page.timeline || ''}, ${sql.json(frontmatter as Parameters<typeof sql.json>[0])}, ${hash}, ${sourcePayloadHash}, ${fileRefsProjectionHash}, now(), ${effectiveDate}, ${effectiveDateSource}, ${importFilename}, COALESCE(${chunkerVersion}::smallint, 1), ${sourcePath}, ${sourceKind}, ${sourceUri}, ${ingestedVia}, ${ingestedAt})
       ON CONFLICT (source_id, slug) DO UPDATE SET
         type = EXCLUDED.type,
         page_kind = EXCLUDED.page_kind,
@@ -926,6 +928,8 @@ export class PostgresEngine implements BrainEngine {
         timeline = EXCLUDED.timeline,
         frontmatter = EXCLUDED.frontmatter,
         content_hash = EXCLUDED.content_hash,
+        source_payload_hash = COALESCE(EXCLUDED.source_payload_hash, pages.source_payload_hash),
+        file_refs_projection_hash = COALESCE(EXCLUDED.file_refs_projection_hash, pages.file_refs_projection_hash),
         updated_at = now(),
         effective_date        = COALESCE(EXCLUDED.effective_date,        pages.effective_date),
         effective_date_source = COALESCE(EXCLUDED.effective_date_source, pages.effective_date_source),
@@ -936,7 +940,7 @@ export class PostgresEngine implements BrainEngine {
         source_uri            = COALESCE(EXCLUDED.source_uri,            pages.source_uri),
         ingested_via          = COALESCE(EXCLUDED.ingested_via,          pages.ingested_via),
         ingested_at           = COALESCE(EXCLUDED.ingested_at,           pages.ingested_at)
-      RETURNING id, source_id, slug, type, title, compiled_truth, timeline, frontmatter, content_hash, created_at, updated_at, effective_date, effective_date_source, import_filename, source_kind, source_uri, ingested_via, ingested_at
+      RETURNING id, source_id, slug, type, title, compiled_truth, timeline, frontmatter, content_hash, source_payload_hash, file_refs_projection_hash, created_at, updated_at, effective_date, effective_date_source, import_filename, source_kind, source_uri, ingested_via, ingested_at
     `;
     return rowToPage(rows[0]);
   }
@@ -4153,12 +4157,13 @@ export class PostgresEngine implements BrainEngine {
   }
 
   // Versions
-  async createVersion(slug: string, opts?: { sourceId?: string }): Promise<PageVersion> {
+  async createVersion(slug: string, opts?: { sourceId?: string; snapshotKind?: PageVersion['snapshot_kind'] }): Promise<PageVersion> {
     const sql = this.sql;
     const sourceId = opts?.sourceId ?? 'default';
+    const snapshotKind = opts?.snapshotKind ?? 'client_semantic_update';
     const rows = await sql`
-      INSERT INTO page_versions (page_id, compiled_truth, frontmatter)
-      SELECT id, compiled_truth, frontmatter
+      INSERT INTO page_versions (page_id, compiled_truth, timeline, frontmatter, content_hash, source_payload_hash, file_refs_projection_hash, snapshot_kind)
+      SELECT id, compiled_truth, timeline, frontmatter, content_hash, source_payload_hash, file_refs_projection_hash, ${snapshotKind}
       FROM pages WHERE slug = ${slug} AND source_id = ${sourceId}
       RETURNING *
     `;

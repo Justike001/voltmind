@@ -5700,6 +5700,49 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 120,
+    name: 'tracking_hash_separation_and_page_snapshots',
+    sql: `
+      ALTER TABLE pages ADD COLUMN IF NOT EXISTS source_payload_hash TEXT;
+      ALTER TABLE pages ADD COLUMN IF NOT EXISTS file_refs_projection_hash TEXT;
+
+      ALTER TABLE ingestion_event_state ADD COLUMN IF NOT EXISTS source_payload_hash TEXT;
+      ALTER TABLE ingestion_event_state ADD COLUMN IF NOT EXISTS file_refs_projection_hash TEXT;
+      ALTER TABLE ingestion_event_state ADD COLUMN IF NOT EXISTS hash_scheme TEXT;
+
+      ALTER TABLE project_tracking_receipts ADD COLUMN IF NOT EXISTS source_payload_hash TEXT;
+      ALTER TABLE project_tracking_receipts ADD COLUMN IF NOT EXISTS render_hash TEXT;
+      ALTER TABLE project_tracking_receipts ADD COLUMN IF NOT EXISTS file_refs_projection_hash TEXT;
+      ALTER TABLE project_tracking_receipts ADD COLUMN IF NOT EXISTS conflict_kind TEXT;
+
+      ALTER TABLE project_tracking_receipt_history ADD COLUMN IF NOT EXISTS source_payload_hash TEXT;
+      ALTER TABLE project_tracking_receipt_history ADD COLUMN IF NOT EXISTS render_hash TEXT;
+      ALTER TABLE project_tracking_receipt_history ADD COLUMN IF NOT EXISTS file_refs_projection_hash TEXT;
+      ALTER TABLE project_tracking_receipt_history ADD COLUMN IF NOT EXISTS snapshot_kind TEXT NOT NULL DEFAULT 'source_ingest';
+      ALTER TABLE project_tracking_receipt_history ADD COLUMN IF NOT EXISTS conflict_kind TEXT;
+
+      ALTER TABLE page_versions ADD COLUMN IF NOT EXISTS timeline TEXT NOT NULL DEFAULT '';
+      ALTER TABLE page_versions ADD COLUMN IF NOT EXISTS content_hash TEXT;
+      ALTER TABLE page_versions ADD COLUMN IF NOT EXISTS source_payload_hash TEXT;
+      ALTER TABLE page_versions ADD COLUMN IF NOT EXISTS file_refs_projection_hash TEXT;
+      ALTER TABLE page_versions ADD COLUMN IF NOT EXISTS snapshot_kind TEXT NOT NULL DEFAULT 'client_semantic_update';
+
+      CREATE INDEX IF NOT EXISTS project_tracking_receipts_hash_idx
+        ON project_tracking_receipts(page_source_id, source_payload_hash, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS project_tracking_receipt_history_hash_idx
+        ON project_tracking_receipt_history(page_source_id, source_payload_hash, created_at DESC);
+    `,
+    idempotent: true,
+    handler: async (engine) => {
+      if (engine.kind !== 'postgres') return;
+      await engine.executeRaw(`
+        ALTER TABLE project_tracking_receipts ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE project_tracking_receipt_history ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE page_versions ENABLE ROW LEVEL SECURITY;
+      `);
+    },
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS.length > 0

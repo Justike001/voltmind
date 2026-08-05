@@ -96,6 +96,8 @@ CREATE TABLE IF NOT EXISTS pages (
   timeline      TEXT    NOT NULL DEFAULT '',
   frontmatter   JSONB   NOT NULL DEFAULT '{}',
   content_hash  TEXT,
+  source_payload_hash TEXT,
+  file_refs_projection_hash TEXT,
   -- v0.29: deterministic 0..1 score (tag emotion + take density + Garry-as-holder ratio).
   -- Populated by the \`recompute_emotional_weight\` cycle phase. Default 0.0 so freshly
   -- imported pages don't pollute salience ranking before the cycle has run.
@@ -449,7 +451,12 @@ CREATE TABLE IF NOT EXISTS page_versions (
   id             SERIAL PRIMARY KEY,
   page_id        INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
   compiled_truth TEXT    NOT NULL,
+  timeline       TEXT    NOT NULL DEFAULT '',
   frontmatter    JSONB   NOT NULL DEFAULT '{}',
+  content_hash   TEXT,
+  source_payload_hash TEXT,
+  file_refs_projection_hash TEXT,
+  snapshot_kind  TEXT NOT NULL DEFAULT 'client_semantic_update',
   snapshot_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -773,6 +780,9 @@ CREATE TABLE IF NOT EXISTS ingestion_event_state (
   slug            TEXT,
   page_id         INTEGER REFERENCES pages(id) ON DELETE SET NULL,
   content_hash    TEXT,
+  source_payload_hash TEXT,
+  file_refs_projection_hash TEXT,
+  hash_scheme     TEXT,
   job_id          INTEGER,
   received_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   processed_at    TIMESTAMPTZ,
@@ -789,6 +799,10 @@ CREATE TABLE IF NOT EXISTS project_tracking_receipts (
   target_slug TEXT NOT NULL,
   event_version TEXT,
   content_hash TEXT,
+  source_payload_hash TEXT,
+  render_hash TEXT,
+  file_refs_projection_hash TEXT,
+  conflict_kind TEXT,
   evidence_slug TEXT,
   outcome TEXT NOT NULL,
   matched_by TEXT,
@@ -813,6 +827,11 @@ CREATE TABLE IF NOT EXISTS project_tracking_receipt_history (
   target_slug TEXT NOT NULL,
   event_version TEXT,
   content_hash TEXT NOT NULL,
+  source_payload_hash TEXT,
+  render_hash TEXT,
+  file_refs_projection_hash TEXT,
+  snapshot_kind TEXT NOT NULL DEFAULT 'source_ingest',
+  conflict_kind TEXT,
   evidence_slug TEXT,
   outcome TEXT NOT NULL,
   matched_by TEXT,

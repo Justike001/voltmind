@@ -111,6 +111,8 @@ export function rowToPage(row: Record<string, unknown>): Page {
     timeline: row.timeline as string,
     frontmatter: (typeof row.frontmatter === 'string' ? JSON.parse(row.frontmatter) : row.frontmatter) as Record<string, unknown>,
     content_hash: row.content_hash as string | undefined,
+    source_payload_hash: row.source_payload_hash as string | null | undefined,
+    file_refs_projection_hash: row.file_refs_projection_hash as string | null | undefined,
     // v0.29 (column added in migration v40). Old brains pre-migration return undefined.
     emotional_weight: row.emotional_weight == null ? undefined : Number(row.emotional_weight),
     created_at: new Date(row.created_at as string),

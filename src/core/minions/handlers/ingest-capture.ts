@@ -187,8 +187,13 @@ export function makeIngestCaptureHandler(engine: BrainEngine, _queue?: IngestCap
           eventVersion: event.event_version,
           jobId: job.id,
           contentHash: event.content_hash,
+          sourcePayloadHash: event.source_payload_hash,
+          fileRefsProjectionHash: event.file_refs_projection_hash,
         },
       } : {}),
+      ...(event.source_payload_hash ? { sourcePayloadHash: event.source_payload_hash } : {}),
+      ...(event.file_refs_projection_hash ? { fileRefsProjectionHash: event.file_refs_projection_hash } : {}),
+      snapshotKind: 'source_ingest',
     });
 
     // Server-side raw-ingest compatibility: make the durable evidence visible
@@ -198,23 +203,35 @@ export function makeIngestCaptureHandler(engine: BrainEngine, _queue?: IngestCap
     // Tracking identity is evidence_type; source_kind remains provenance only.
     if (result.status === 'imported' && pageSourceId === event.source_id && event.event_id && event.evidence_type) {
       const trackingPage = await engine.getPage(slug, { sourceId: pageSourceId });
-      const trackingContentHash = trackingPage?.content_hash ?? event.content_hash;
+      const trackingRenderHash = trackingPage?.content_hash ?? event.content_hash;
+      const trackingSourcePayloadHash = event.source_payload_hash ?? null;
+      const trackingFileRefsProjectionHash = event.file_refs_projection_hash ?? trackingPage?.file_refs_projection_hash ?? null;
       const details = JSON.stringify({
         tracking_refs: event.tracking_refs ?? [],
         evidence_type: event.evidence_type,
         source_kind: event.source_kind,
+        hash_scheme: event.hash_scheme ?? (event.source_payload_hash ? 'v2' : 'legacy'),
         raw_ingest: true,
       });
       await engine.executeRaw(
         `INSERT INTO project_tracking_receipts
-          (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,evidence_slug,outcome,matched_by,details,updated_at)
-         VALUES ($1,$2,$3,$4,'evidence',$5,$6,$7,$5,'pending','raw_ingest',$8::text::jsonb,now())
+          (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,source_payload_hash,render_hash,file_refs_projection_hash,evidence_slug,outcome,matched_by,details,updated_at)
+         VALUES ($1,$2,$3,$4,'evidence',$5,$6,$7,$8,$9,$10,$5,'pending','raw_ingest',$11::text::jsonb,now())
          ON CONFLICT (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug)
          DO UPDATE SET event_version=EXCLUDED.event_version, content_hash=EXCLUDED.content_hash,
+           source_payload_hash=EXCLUDED.source_payload_hash, render_hash=EXCLUDED.render_hash,
+           file_refs_projection_hash=EXCLUDED.file_refs_projection_hash,
            evidence_slug=EXCLUDED.evidence_slug, details=EXCLUDED.details, updated_at=now()
-           WHERE project_tracking_receipts.outcome NOT IN ('registered','verified')`,
+           WHERE project_tracking_receipts.outcome NOT IN ('registered','verified')
+             AND (project_tracking_receipts.event_version IS DISTINCT FROM EXCLUDED.event_version
+               OR (project_tracking_receipts.source_payload_hash IS NOT NULL
+                   AND project_tracking_receipts.source_payload_hash = EXCLUDED.source_payload_hash)
+               OR (project_tracking_receipts.source_payload_hash IS NULL
+                   AND EXCLUDED.source_payload_hash IS NULL
+                   AND project_tracking_receipts.content_hash = EXCLUDED.content_hash))`,
         [pageSourceId, event.source_id, event.evidence_type ?? event.source_kind, event.event_id, slug,
-          event.event_version ?? null, trackingContentHash, details],
+          event.event_version ?? null, trackingRenderHash, trackingSourcePayloadHash, trackingRenderHash,
+          trackingFileRefsProjectionHash, details],
       );
     }
 

@@ -47,7 +47,9 @@ import { VERSION } from '../version.ts';
 import { hasScope } from './scope.ts';
 import {
   getProjectTrackingStatus,
+  listProjectTrackingReceipts,
   registerTrackingEvidence,
+  reconcileTrackingProjection,
   reconcileProjectTracking,
   submitTrackedIngestionEvent,
 } from './project-tracking-runtime.ts';
@@ -743,6 +745,68 @@ const put_page: Operation = {
       // Pack load failed; fall through to legacy inferType behavior.
       activePack = undefined;
     }
+
+    // Canonical Personal Brain page-format gate. The draft document is the
+    // single source of truth for required frontmatter and body headings. The
+    // default is strict whenever a local vault is configured; DB-only callers
+    // can opt in explicitly with writer.template_contract=strict, while
+    // migration workflows can use off or warn.
+    let templateValidation:
+      | { mode: 'warn'; type: string; section: string; findings: Array<{ code: string; message: string; field?: string; heading?: string }> }
+      | undefined;
+    try {
+      const {
+        resolveTemplateContractMode,
+        validateCanonicalPageTemplate,
+      } = await import('./page-template-contract.ts');
+      const templateMode = await resolveTemplateContractMode(ctx.engine);
+      if (templateMode !== 'off') {
+        let validation;
+        try {
+          validation = validateCanonicalPageTemplate(slug, p.content as string, activePack);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (templateMode === 'strict') {
+            throw new OperationError(
+              'template_contract_unavailable',
+              `Cannot enforce canonical page template for '${slug}': ${message}`,
+              'Set VOLTMIND_PAGE_TEMPLATE_DRAFT or configure writer.template_contract=warn/off for migration-only writes.',
+            );
+          }
+          templateValidation = {
+            mode: 'warn',
+            type: 'unknown',
+            section: 'canonical draft',
+            findings: [{ code: 'DRAFT_UNAVAILABLE', message }],
+          };
+          validation = null;
+        }
+        if (validation && validation.findings.length > 0) {
+          const summary = validation.findings
+            .slice(0, 8)
+            .map((finding) => finding.message)
+            .join('; ');
+          if (templateMode === 'strict') {
+            throw new OperationError(
+              'template_contract_violation',
+              `Canonical page template violation for '${slug}' (${validation.type}/${validation.section}): ${summary}`,
+              `Read ${validation.draftPath}, then rewrite the page using the '${validation.section}' template.`,
+            );
+          }
+          templateValidation = {
+            mode: 'warn',
+            type: validation.type,
+            section: validation.section,
+            findings: validation.findings,
+          };
+        }
+      }
+    } catch (error) {
+      // Preserve OperationError's structured failure. Unexpected validator
+      // bugs remain non-blocking for legacy callers until they are diagnosed.
+      if (error instanceof OperationError) throw error;
+      ctx.logger.warn(`[put_page] canonical template validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
     // v0.42: keep the write-through target and pages.source_path identical.
     let writeThroughSourcePath: string | undefined;
     try {
@@ -1040,6 +1104,7 @@ const put_page: Operation = {
       chunks: result.chunks,
       ...(autoLinks ? { auto_links: autoLinks } : {}),
       ...(autoTimeline ? { auto_timeline: autoTimeline } : {}),
+      ...(templateValidation ? { template_validation: templateValidation } : {}),
       ...(writerLint ? { writer_lint: writerLint } : {}),
       ...(factsQueued ? { facts_backstop: factsQueued } : {}),
       ...(signalEnrichment ? { signal_enrichment: signalEnrichment } : {}),
@@ -2734,6 +2799,7 @@ const attach_file_refs: Operation = {
       source_uri: page.source_uri ?? null,
       ingested_via: 'attach_file_refs',
       externalFileRefs: refs,
+      snapshotKind: 'file_ref_projection',
     });
     return { slug, source_id: sourceId, refs_attached: refs.length, status: result.status };
   },
@@ -3089,6 +3155,64 @@ const get_project_tracking_status: Operation = {
       return await getProjectTrackingStatus(ctx.engine, resolveWriteSourceId(ctx));
     } catch (error) {
       throw new OperationError('storage_error', error instanceof Error ? error.message : String(error));
+    }
+  },
+};
+
+const list_project_tracking_receipts: Operation = {
+  name: 'list_project_tracking_receipts',
+  description: 'List source-scoped current project-tracking evidence receipts with optional hashes and history for safe audit.',
+  params: {
+    source_id: { type: 'string', description: 'Optional source id; remote callers may only select their authorized write source.' },
+    evidence_slug: { type: 'string', description: 'Optional evidence page slug.' },
+    outcome: { type: 'string', description: 'Optional current receipt outcome.' },
+    include_history: { type: 'boolean', description: 'Include receipt history rows.' },
+    include_hashes: { type: 'boolean', description: 'Include source/render/file-reference hashes.' },
+  },
+  scope: 'read',
+  handler: async (ctx, p) => {
+    try {
+      return await listProjectTrackingReceipts(ctx.engine, resolveWriteSourceId(ctx, p.source_id as string | undefined), {
+        evidenceSlug: p.evidence_slug as string | undefined,
+        outcome: p.outcome as string | undefined,
+        includeHistory: p.include_history === true,
+        includeHashes: p.include_hashes === true,
+      });
+    } catch (error) {
+      throw new OperationError('storage_error', error instanceof Error ? error.message : String(error));
+    }
+  },
+};
+
+const reconcile_tracking_projection: Operation = {
+  name: 'reconcile_tracking_projection',
+  description: 'Safely reconcile a file-reference-only tracking projection drift when a pre-projection page snapshot proves the source payload is unchanged.',
+  params: {
+    evidence_slug: { type: 'string', required: true },
+    event_id: { type: 'string', required: true },
+    event_version: { type: 'string', required: true },
+    old_render_hash: { type: 'string', required: true },
+    new_render_hash: { type: 'string', required: true },
+    old_file_refs_hash: { type: 'string', required: true },
+    new_file_refs_hash: { type: 'string', required: true },
+    reason: { type: 'string', required: true, enum: ['file_ref_projection_only'] },
+  },
+  mutating: true,
+  scope: 'write',
+  handler: async (ctx, p) => {
+    try {
+      return await reconcileTrackingProjection(ctx.engine, resolveWriteSourceId(ctx), {
+        evidence_slug: String(p.evidence_slug ?? ''),
+        event_id: String(p.event_id ?? ''),
+        event_version: String(p.event_version ?? ''),
+        old_render_hash: String(p.old_render_hash ?? ''),
+        new_render_hash: String(p.new_render_hash ?? ''),
+        old_file_refs_hash: String(p.old_file_refs_hash ?? ''),
+        new_file_refs_hash: String(p.new_file_refs_hash ?? ''),
+        reason: 'file_ref_projection_only',
+      });
+    } catch (error) {
+      throw new OperationError('invalid_params', error instanceof Error ? error.message : String(error));
     }
   },
 };
@@ -5808,7 +5932,8 @@ export const operations: Operation[] = [
   file_list, file_upload, file_url, search_file_refs, list_page_file_refs, attach_file_refs,
   backfill_file_refs, scrub_file_ref_open_paths, file_ref_materialize,
   // Long-running project tracking: normalized evidence submission + source-scoped maintenance.
-  submit_ingestion_event, register_tracking_evidence, get_project_tracking_status, reconcile_project_tracking,
+  submit_ingestion_event, register_tracking_evidence, get_project_tracking_status, list_project_tracking_receipts,
+  reconcile_tracking_projection, reconcile_project_tracking,
   // Jobs (Minions)
   submit_job, get_job, list_jobs, cancel_job, retry_job, get_job_progress,
   get_job_failure_report, get_job_checkpoints, get_job_undo_report, plan_job_batch,
