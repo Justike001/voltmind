@@ -962,6 +962,36 @@ const put_page: Operation = {
     if (ctx.remote !== false && !trustedWorkspace) {
       autoLinks = { skipped: 'remote' };
       autoTimeline = { skipped: 'remote' };
+      // v0.43 (L2): remote put_page deliberately skips auto-link/timeline for
+      // security, but those edges still need materializing. Enqueue a bounded,
+      // per-slug extract so the page's links/timeline are reconciled from its
+      // write-through checkout file without waiting for the next autopilot tick,
+      // and without running auto-link inline on untrusted content. Best-effort
+      // and non-blocking: the durable MinionQueue job is idempotent and retried
+      // by the worker; if there's no on-disk write-through, extract finds nothing
+      // and no-ops. L1 (sync working-tree detection) remains the backstop.
+      void (async () => {
+        try {
+          if (writeThroughTarget.kind === 'file') {
+            const sourceId = ctx.sourceId ?? 'default';
+            const { MinionQueue } = await import('./minions/queue.ts');
+            const queue = new MinionQueue(ctx.engine);
+            await queue.add(
+              'extract',
+              { mode: 'all', dir: writeThroughTarget.base, slugs: [slug], sourceId },
+              {
+                queue: 'default',
+                idempotency_key: `put-page-extract:${sourceId}:${slug}`,
+                max_attempts: 2,
+                timeout_ms: 300_000,
+                maxWaiting: 1,
+              },
+            );
+          }
+        } catch {
+          // Best-effort; L1 + autopilot cover drift if enqueue fails.
+        }
+      })();
     } else if (result.parsedPage) {
       try {
         const enabled = await isAutoLinkEnabled(ctx.engine);

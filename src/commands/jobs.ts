@@ -1343,7 +1343,20 @@ export async function registerBuiltinHandlers(
     const dir = typeof job.data.dir === 'string'
       ? job.data.dir
       : (await engine.getConfig('sync.repo_path')) ?? '.';
-    return await runExtractCore(engine, { mode, dir, dryRun: !!job.data.dryRun });
+    // v0.43 (L2): optional per-slug incremental extract (put_page fire-and-
+    // forget after a remote write skips auto-link/timeline) + explicit source
+    // so extracted edges carry the right source_id in multi-source brains.
+    const slugs = Array.isArray(job.data.slugs)
+      ? job.data.slugs.filter((s: unknown): s is string => typeof s === 'string')
+      : undefined;
+    const sourceId = typeof job.data.sourceId === 'string' ? job.data.sourceId : undefined;
+    return await runExtractCore(engine, {
+      mode,
+      dir,
+      dryRun: !!job.data.dryRun,
+      ...(slugs && slugs.length > 0 ? { slugs } : {}),
+      ...(sourceId ? { sourceId } : {}),
+    });
   });
 
   worker.register('backlinks', async (job) => {
