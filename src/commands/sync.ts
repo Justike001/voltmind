@@ -354,7 +354,7 @@ function unique<T>(items: T[]): T[] {
   return [...new Set(items)];
 }
 
-function buildDetachedWorkingTreeManifest(repoPath: string): SyncManifest {
+function buildWorkingTreeManifest(repoPath: string): SyncManifest {
   const manifest = buildSyncManifest(git(repoPath, ['diff', '--name-status', '-M', 'HEAD']));
   const untracked = git(repoPath, ['ls-files', '--others', '--exclude-standard'])
     .split('\n')
@@ -1131,14 +1131,29 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
   const currentVersion = String(CHUNKER_VERSION);
   const versionMismatch = storedVersion !== null && storedVersion !== currentVersion;
   const versionNeverSet = storedVersion === null && opts.sourceId !== undefined;
-  const detachedWorkingTreeManifest = detachedHead ? buildDetachedWorkingTreeManifest(repoPath) : null;
-  const hasDetachedWorkingTreeChanges = detachedWorkingTreeManifest !== null &&
-    (detachedWorkingTreeManifest.added.length > 0 ||
-      detachedWorkingTreeManifest.modified.length > 0 ||
-      detachedWorkingTreeManifest.deleted.length > 0 ||
-      detachedWorkingTreeManifest.renamed.length > 0);
+  // v0.43 (L1): detect uncommitted working-tree changes on ALL checkouts —
+  // not just detached HEAD. put_page / capture write-through leaves brand-new
+  // pages uncommitted in the checkout; a git-anchored diff lastCommit..headCommit
+  // can't see them, so the cycle's incremental extract (which scopes on these
+  // same pagesAffected) would silently skip their link/timeline. We only count
+  // *syncable* working-tree changes (filtered through isSyncable) so a permanent
+  // db_only/raw outbox like `.sources/` never makes a healthy repo perpetually
+  // "dirty" and defeats the up_to_date short-circuit.
+  const syncOpts = opts.strategy ? { strategy: opts.strategy } : undefined;
+  const rawWorkingTree = buildWorkingTreeManifest(repoPath);
+  const workingTree: SyncManifest = {
+    added: rawWorkingTree.added.filter(p => isSyncable(p, syncOpts)),
+    modified: rawWorkingTree.modified.filter(p => isSyncable(p, syncOpts)),
+    deleted: rawWorkingTree.deleted.filter(p => isSyncable(p, syncOpts)),
+    renamed: rawWorkingTree.renamed.filter(r => isSyncable(r.to, syncOpts)),
+  };
+  const hasWorkingTreeChanges =
+    workingTree.added.length > 0 ||
+    workingTree.modified.length > 0 ||
+    workingTree.deleted.length > 0 ||
+    workingTree.renamed.length > 0;
 
-  if (lastCommit === headCommit && !versionMismatch && !versionNeverSet && !hasDetachedWorkingTreeChanges) {
+  if (lastCommit === headCommit && !versionMismatch && !versionNeverSet && !hasWorkingTreeChanges) {
     // rev-parse succeeded and the bookmark already matches HEAD, so a prior
     // open HEAD-verification failure is now positively resolved. Do not touch
     // file failures here: no file was re-read in this no-op path.
@@ -1167,15 +1182,14 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
   // Diff using git diff (net result, not per-commit)
   const diffOutput = git(repoPath, ['diff', '--name-status', '-M', `${lastCommit}..${headCommit}`]);
   const manifest = buildSyncManifest(diffOutput);
-  if (detachedWorkingTreeManifest) {
-    manifest.added = unique([...manifest.added, ...detachedWorkingTreeManifest.added]);
-    manifest.modified = unique([...manifest.modified, ...detachedWorkingTreeManifest.modified]);
-    manifest.deleted = unique([...manifest.deleted, ...detachedWorkingTreeManifest.deleted]);
-    manifest.renamed = [...manifest.renamed, ...detachedWorkingTreeManifest.renamed];
+  if (hasWorkingTreeChanges) {
+    manifest.added = unique([...manifest.added, ...workingTree.added]);
+    manifest.modified = unique([...manifest.modified, ...workingTree.modified]);
+    manifest.deleted = unique([...manifest.deleted, ...workingTree.deleted]);
+    manifest.renamed = [...manifest.renamed, ...workingTree.renamed];
   }
 
   // Filter to syncable files (strategy-aware)
-  const syncOpts = opts.strategy ? { strategy: opts.strategy } : undefined;
   const filtered: SyncManifest = {
     added: manifest.added.filter(p => isSyncable(p, syncOpts)),
     modified: manifest.modified.filter(p => isSyncable(p, syncOpts)),

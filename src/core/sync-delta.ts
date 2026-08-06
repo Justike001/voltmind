@@ -7,7 +7,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { buildSyncManifest, type SyncManifest } from './sync.ts';
+import { buildSyncManifest, isSyncable, type SyncManifest, type SyncStrategy } from './sync.ts';
 
 export type GitRunner = (repoPath: string, args: string[]) => string;
 
@@ -42,6 +42,35 @@ export function buildDetachedWorkingTreeManifest(
     deleted: unique(manifest.deleted),
     renamed: manifest.renamed,
   };
+}
+
+/**
+ * True when the working tree holds any UNCOMMITTED change that is syncable
+ * under `strategy` (default markdown). Used by the cycle as a safety net:
+ * when sync (git-anchored) reports an empty pagesAffected, a syncable
+ * uncommitted page can still exist (put_page/capture write-through), and its
+ * link/timeline edges must not be silently skipped.
+ *
+ * Filtered through isSyncable so a permanent db_only/raw outbox (e.g. a
+ * leading-dot `.sources/` capture dir) never counts as drift.
+ */
+export function hasSyncableWorkingTreeDrift(
+  repoPath: string,
+  strategy: SyncStrategy = 'markdown',
+  run: GitRunner = gitRunner,
+): boolean {
+  try {
+    const wt = buildDetachedWorkingTreeManifest(repoPath, run);
+    const opts = { strategy };
+    return (
+      wt.added.some(p => isSyncable(p, opts)) ||
+      wt.modified.some(p => isSyncable(p, opts)) ||
+      wt.deleted.some(p => isSyncable(p, opts)) ||
+      wt.renamed.some(r => isSyncable(r.to, opts))
+    );
+  } catch {
+    return false;
+  }
 }
 
 export type SyncDeltaResult =

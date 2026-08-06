@@ -1537,8 +1537,22 @@ export async function runCycle(
         // Pass changed slugs from sync for incremental extract.
         // If sync didn't run (phases exclude it) or failed, syncPagesAffected
         // is undefined → extract falls back to full walk (safe default).
+        //
+        // v0.43 safety net: even when sync reported NO committed changes
+        // (empty array), the working tree may hold uncommitted write-through
+        // pages (put_page/capture) whose link/timeline edges still need
+        // materializing. Fall back to a full walk so we never silently skip
+        // them. (L1 in sync surfaces these in pagesAffected too; this guards
+        // the case where that path is missed.)
+        let extractSlugs = syncPagesAffected;
+        if (syncPagesAffected !== undefined && syncPagesAffected.length === 0) {
+          const { hasSyncableWorkingTreeDrift } = await import('./sync-delta.ts');
+          if (opts.brainDir && hasSyncableWorkingTreeDrift(opts.brainDir)) {
+            extractSlugs = undefined; // full walk
+          }
+        }
         progress.start('cycle.extract');
-        const { result, duration_ms } = await timePhase(() => runPhaseExtract(engine, opts.brainDir, dryRun, syncPagesAffected));
+        const { result, duration_ms } = await timePhase(() => runPhaseExtract(engine, opts.brainDir, dryRun, extractSlugs));
         result.duration_ms = duration_ms;
         phaseResults.push(result);
         progress.finish();

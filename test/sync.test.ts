@@ -539,6 +539,75 @@ describe('performSync dry-run never writes', () => {
     expect(page).not.toBeNull();
     expect(page!.title).toBe('Detached NoPull');
   });
+
+  test('L1: non-detached uncommitted syncable file is detected (put_page write-through)', async () => {
+    const { performSync } = await import('../src/commands/sync.ts');
+    const seeded = await performSync(engine, {
+      repoPath,
+      sourceId: 'default',
+      noPull: true,
+      noEmbed: true,
+      noExtract: true,
+    });
+    expect(seeded.status).toBe('first_sync');
+
+    // put_page-style: write a NEW page to the checkout WITHOUT committing.
+    writeFileSync(join(repoPath, 'people/uncommitted.md'), [
+      '---',
+      'type: person',
+      'title: Uncommitted',
+      '---',
+      '',
+      'Uncommitted person page with a [link](./alice.md).',
+    ].join('\n'));
+
+    const result = await performSync(engine, {
+      repoPath,
+      sourceId: 'default',
+      noPull: true,
+      noEmbed: true,
+      noExtract: true,
+    });
+    expect(result.status).toBe('synced');
+    expect(result.added).toBe(1);
+    expect(result.pagesAffected).toContain('people/uncommitted');
+    const page = await engine.getPage('people/uncommitted');
+    expect(page).not.toBeNull();
+  });
+
+  test('L1: db_only .sources untracked file does NOT dirty sync or import a page', async () => {
+    const { performSync } = await import('../src/commands/sync.ts');
+    const seeded = await performSync(engine, {
+      repoPath,
+      sourceId: 'default',
+      noPull: true,
+      noEmbed: true,
+      noExtract: true,
+    });
+    expect(seeded.status).toBe('first_sync');
+
+    // Capture-style raw outbox: leading-dot dir → pruned by isSyncable.
+    mkdirSync(join(repoPath, '.sources', 'vault', 'people'), { recursive: true });
+    writeFileSync(join(repoPath, '.sources', 'vault', 'people', 'raw.md'), [
+      '---',
+      'type: person',
+      'title: Raw',
+      '---',
+      '',
+      'raw body',
+    ].join('\n'));
+
+    const result = await performSync(engine, {
+      repoPath,
+      sourceId: 'default',
+      noPull: true,
+      noEmbed: true,
+      noExtract: true,
+    });
+    expect(result.status).toBe('up_to_date');
+    expect(result.added).toBe(0);
+    expect(await engine.getPage('vault/people/raw')).toBeNull();
+  });
 });
 
 describe('sync regression — #132 nested transaction deadlock', () => {
@@ -618,6 +687,34 @@ describe('resolveSlugByPathOrSourcePath (CJK wave v0.32.7, codex F4)', () => {
     );
     expect(await resolveSlugByPathOrSourcePath(pgEngine, '🚀.md', 'source-a')).toBe('slug-a/page');
     expect(await resolveSlugByPathOrSourcePath(pgEngine, '🚀.md', 'source-b')).toBe('slug-b/page');
+  });
+});
+
+describe('hasSyncableWorkingTreeDrift', () => {
+  test('true only for syncable uncommitted files (.sources pruned)', async () => {
+    const { hasSyncableWorkingTreeDrift } = await import('../src/core/sync-delta.ts');
+    const repoPath = mkdtempSync(join(tmpdir(), 'voltmind-drift-'));
+    try {
+      execSync('git init', { cwd: repoPath, stdio: 'pipe' });
+      mkdirSync(join(repoPath, 'people'), { recursive: true });
+      writeFileSync(join(repoPath, 'people/a.md'), '---\ntype: person\ntitle: A\n---\na\n');
+      execSync('git add -A && git commit -m "init"', { cwd: repoPath, stdio: 'pipe' });
+
+      // clean tree → no drift
+      expect(hasSyncableWorkingTreeDrift(repoPath)).toBe(false);
+
+      // uncommitted syncable file → drift
+      writeFileSync(join(repoPath, 'people/b.md'), '---\ntype: person\ntitle: B\n---\nb\n');
+      expect(hasSyncableWorkingTreeDrift(repoPath)).toBe(true);
+
+      // remove b, add only .sources (leading-dot, pruned) → no drift
+      rmSync(join(repoPath, 'people/b.md'));
+      mkdirSync(join(repoPath, '.sources', 'v'), { recursive: true });
+      writeFileSync(join(repoPath, '.sources', 'v', 'c.md'), 'c');
+      expect(hasSyncableWorkingTreeDrift(repoPath)).toBe(false);
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
   });
 });
 
