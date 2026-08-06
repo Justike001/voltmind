@@ -73,3 +73,5 @@ meetings/transcripts/
 .understand-anything/
 state/
 .omo/
+.deploy/
+.tools/

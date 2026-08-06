@@ -51,6 +51,11 @@ beforeEach(async () => {
   fs.mkdirSync(brainDir, { recursive: true });
   // Wire sync.repo_path so write-through can find the repo.
   await engine.setConfig('sync.repo_path', brainDir);
+  // These tests cover write-through / trust-gating mechanics, not canonical
+  // template contracts. With a repo_path configured, template enforcement
+  // defaults to strict and rejects the minimal inbox fixtures; disable it so
+  // the harness stays focused on the behavior under test.
+  await engine.setConfig('writer.template_contract', 'off');
 });
 
 afterEach(() => {

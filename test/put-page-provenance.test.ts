@@ -27,6 +27,7 @@ import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { operations } from '../src/core/operations.ts';
 import type { OperationContext } from '../src/core/operations.ts';
 import { OperationError } from '../src/core/operations.ts';
+import { resetGateway } from '../src/core/ai/gateway.ts';
 
 const putPageOp = operations.find((o) => o.name === 'put_page')!;
 
@@ -43,6 +44,10 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  // Reset the AI gateway so embedding is unavailable (noEmbed=true): these
+  // tests cover provenance audit columns, not embedding, and would otherwise
+  // hit a real embedding provider 403 over the network in CI/sandbox.
+  resetGateway();
   // Wipe pages so each test starts from a known empty state. We use
   // executeRaw rather than a TRUNCATE-by-name sweep because this file
   // only touches one table.
