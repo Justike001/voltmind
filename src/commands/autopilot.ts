@@ -788,13 +788,40 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
         const FULL_CYCLE_FLOOR_MIN = 60;
         const minutesSinceLastFull = (Date.now() - lastFullCycleAt) / 60000;
 
-        const shouldFullCycle =
-          (score >= 95 && plan.length === 0 && minutesSinceLastFull >= FULL_CYCLE_FLOOR_MIN) ||
-          plan.length > 3 ||
-          estTotal >= 300 ||
-          score < 70;
+        // #1171 — feed "no successful full cycle" back into the dispatch gate.
+        // The readiness probe (`readBusinessReadiness`) only counts a completed
+        // `autopilot-cycle` minion_job as a full cycle. Pre-fix, the 60-min
+        // floor was gated behind `score>=95 && plan.length===0`, so a score~85
+        // brain with a recurring 2-step targeted plan (sync+extract) ran
+        // targeted jobs forever and NEVER dispatched an `autopilot-cycle` →
+        // minion_jobs had no completed row → the probe permanently reported
+        // `no_successful_full_cycle` / degraded even though targeted work ran.
+        // Fix (see shouldRunFullCycle):
+        //   (1) the 60-min floor no longer requires score>=95 + empty plan;
+        //   (2) if minion_jobs has never recorded a successful autopilot-cycle,
+        //       force a full cycle regardless of plan/score so the probe can
+        //       observe one (retries each tick until one actually succeeds).
+        let neverHadFullCycle = false;
+        try {
+          neverHadFullCycle = !(await minionHasSuccessfulCycle(engine));
+        } catch (e) {
+          // Fail-open: a probe error must never wedge dispatch on a stale read.
+          logError('dispatch.full-cycle-probe', e);
+        }
+        const shouldFullCycle = shouldRunFullCycle({
+          neverHadFullCycle,
+          minutesSinceLastFull,
+          score,
+          planLength: plan.length,
+          estTotal,
+          fullCycleFloorMin: FULL_CYCLE_FLOOR_MIN,
+        });
 
-        const shouldSleep = score >= 95 && plan.length === 0 && minutesSinceLastFull < FULL_CYCLE_FLOOR_MIN;
+        // Don't sleep while we still have no recorded successful full cycle —
+        // the probe needs the probe-side evidence the daemon has never produced.
+        const shouldSleep = !neverHadFullCycle
+          ? false
+          : (score >= 95 && plan.length === 0 && minutesSinceLastFull < FULL_CYCLE_FLOOR_MIN);
 
         if (shouldSleep) {
           if (jsonMode) {
@@ -1570,6 +1597,66 @@ type BusinessReadiness = {
   consecutive_cycle_skips: number | null;
   last_successful_cycle_at: string | null;
 };
+
+/**
+ * Pure decision rule for "should this tick dispatch a full autopilot-cycle".
+ *
+ * Extracted from the inline dispatch gate so it is unit-testable without a
+ * full engine. Pre-#1171 the 60-min floor required `score>=95 && plan empty`,
+ * so a persistent small targeted plan (sync+extract at score~85) starved the
+ * autopilot of full cycles forever — which in turn kept the readiness probe
+ * (`readBusinessReadiness`) stuck on `no_successful_full_cycle` / degraded.
+ *
+ * A full cycle is needed when ANY of:
+ *   - minion_jobs has never recorded a successful `autopilot-cycle`
+ *     (`neverHadFullCycle`) so the probe has evidence to observe;
+ *   - it has been >= `fullCycleFloorMin` minutes since the last full cycle
+ *     (the 60-min phase-coupling floor, now independent of score/plan);
+ *   - the remediation plan is large (>3 steps) or slow (>=300s) — the
+ *     classic hammer; or
+ *   - the brain score is critically low (<70).
+ */
+export function shouldRunFullCycle(opts: {
+  neverHadFullCycle: boolean;
+  minutesSinceLastFull: number;
+  score: number;
+  planLength: number;
+  estTotal: number;
+  fullCycleFloorMin?: number;
+}): boolean {
+  const floor = opts.fullCycleFloorMin ?? 60;
+  return (
+    opts.neverHadFullCycle ||
+    opts.minutesSinceLastFull >= floor ||
+    opts.planLength > 3 ||
+    opts.estTotal >= 300 ||
+    opts.score < 70
+  );
+}
+
+/**
+ * True when `minion_jobs` holds a successfully completed `autopilot-cycle`
+ * (result.status is 'ok' or 'clean'). Mirrors the successful-cycle detection
+ * in `readBusinessReadiness` so the daemon's dispatch gate and the status
+ * probe agree on what counts as a full cycle. Fail-closed on unparseable
+ * result; any query error is surfaced to the caller (which fails open).
+ */
+export async function minionHasSuccessfulCycle(engine: BrainEngine): Promise<boolean> {
+  const rows = await engine.executeRaw<{ result: unknown }>(
+    `SELECT result FROM minion_jobs
+        WHERE name = 'autopilot-cycle' AND status = 'completed'
+        ORDER BY COALESCE(finished_at, created_at) DESC
+        LIMIT 1`,
+  );
+  if (!rows || rows.length === 0) return false;
+  const raw = rows[0].result;
+  const obj =
+    typeof raw === 'string'
+      ? (() => { try { return JSON.parse(raw) as Record<string, unknown>; } catch { return {}; } })()
+      : (raw as Record<string, unknown> | null | undefined) ?? {};
+  const status = obj.status;
+  return status === 'ok' || status === 'clean';
+}
 
 /**
  * Runtime liveness alone is not proof that the worker is consuming useful
