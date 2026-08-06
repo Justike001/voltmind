@@ -12,7 +12,7 @@ import type { PageType } from './types.ts';
 import { importFromContent } from './import-file.ts';
 import { serializePageToMarkdown, resolvePageFilePath } from './markdown.ts';
 import { mkdirSync, writeFileSync, existsSync, statSync } from 'fs';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
 import { hybridSearch, hybridSearchCached } from './search/hybrid.ts';
 import { expandQuery } from './search/expansion.ts';
 import { dedupResults } from './search/dedup.ts';
@@ -22,6 +22,7 @@ import { extractPageLinks, isAutoLinkEnabled, isAutoTimelineEnabled, parseTimeli
 import { isFactsBackstopEligible } from './facts/eligibility.ts';
 import { stripTakesFence } from './takes-fence.ts';
 import { stripFactsFence } from './facts-fence.ts';
+import { lookupSourceLocalPath } from './facts/fence-write.ts';
 import { bumpLastRetrievedAt } from './last-retrieved.ts';
 import { CJK_SLUG_CHARS } from './cjk.ts';
 import { readoutProvenance, withReadoutProvenance } from './readout-provenance.ts';
@@ -632,6 +633,71 @@ const get_page: Operation = {
   cliHints: { name: 'get', positional: ['slug'] },
 };
 
+type WriteThroughTarget =
+  | { kind: 'file'; base: string; filePath: string; sourceRel: string }
+  | { kind: 'skip'; skip: string };
+
+/**
+ * Resolve the filesystem target for put_page's write-through, routing by
+ * the source's OWN checkout (`sources.local_path[source_id]`) instead of
+ * the global `sync.repo_path`.
+ *
+ * Multi-source write-through fix:
+ *   1. If the source has a `sources.local_path` resolving to a real
+ *      directory, that checkout is authoritative — put_page writes into
+ *      the source's own repo, NOT the global sync.repo_path. The file is
+ *      written at `<local_path>/<slug>.md` (the source root), which is
+ *      exactly where that source's sync will find it.
+ *   2. Otherwise fall back to `sync.repo_path` ONLY for the legacy
+ *      single-source / default-source scenario (sourceId === 'default';
+ *      pre-v0.18 brains where the seeded default row has no local_path).
+ *      A non-default source without a usable local_path must NOT be
+ *      misrouted into the global repo's checkout — it stays DB-only
+ *      (that source's real checkout is pulled by sync later).
+ *
+ * The SAME resolved target drives both the DB `pages.source_path` and the
+ * on-disk write so they never drift (v0.42 invariant).
+ */
+async function resolveWriteThroughTarget(
+  engine: BrainEngine,
+  slug: string,
+  sourceId: string,
+): Promise<WriteThroughTarget> {
+  const sourceLocalPath = await lookupSourceLocalPath(engine, sourceId);
+  // 1. Source-owned checkout is authoritative whenever it exists.
+  if (typeof sourceLocalPath === 'string' && sourceLocalPath.length > 0) {
+    if (existsSync(sourceLocalPath) && statSync(sourceLocalPath).isDirectory()) {
+      const filePath = join(sourceLocalPath, `${slug}.md`);
+      return { kind: 'file', base: sourceLocalPath, filePath, sourceRel: `${slug}.md` };
+    }
+    // Source checkout is configured but missing/unreadable. For a
+    // non-default source this is NOT a reason to fall back to the global
+    // repo — a broken checkout must surface as DB-only, not a misroute.
+    if (sourceId !== 'default') {
+      return { kind: 'skip', skip: 'source_checkout_not_found' };
+    }
+    // default falls through to the sync.repo_path compat path below.
+  }
+  // 2. Legacy single-source / default-source compat fallback.
+  if (sourceId === 'default') {
+    const repoPath = await engine.getConfig('sync.repo_path');
+    if (!repoPath) return { kind: 'skip', skip: 'no_repo_configured' };
+    if (!existsSync(repoPath) || !statSync(repoPath).isDirectory()) {
+      return { kind: 'skip', skip: 'repo_not_found' };
+    }
+    const filePath = resolvePageFilePath(repoPath, slug, sourceId);
+    return {
+      kind: 'file',
+      base: repoPath,
+      filePath,
+      sourceRel: relative(repoPath, filePath).split(sep).join('/'),
+    };
+  }
+  // Non-default source with no local_path configured (thin-client /
+  // remote brain): nothing to write through to; stay DB-only.
+  return { kind: 'skip', skip: 'no_local_path' };
+}
+
 const put_page: Operation = {
   name: 'put_page',
   description: 'Write/update a page (markdown with frontmatter). Chunks, embeds, reconciles tags, and (when auto_link/auto_timeline are enabled) extracts + reconciles graph links and timeline entries. For large content on Windows (pipe-buffer limit ~45KB) or any file-as-input workflow, use `voltmind capture --file PATH --slug SLUG` — capture reads the file as a Buffer with a binary-NUL guard and adds provenance write-through (v0.39.3.0).',
@@ -808,22 +874,21 @@ const put_page: Operation = {
       ctx.logger.warn(`[put_page] canonical template validation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     // v0.42: keep the write-through target and pages.source_path identical.
-    let writeThroughSourcePath: string | undefined;
+    // v0.43: route the write-through checkout by sources.local_path[source_id]
+    // instead of the global sync.repo_path so multi-source brains don't
+    // miswrite into the default repo's checkout.
+    const writeThroughSourceId = ctx.sourceId ?? 'default';
+    let writeThroughTarget: WriteThroughTarget;
     try {
-      const configuredRepoPath = await ctx.engine.getConfig('sync.repo_path');
-      if (
-        typeof configuredRepoPath === 'string' &&
-        existsSync(configuredRepoPath) &&
-        statSync(configuredRepoPath).isDirectory()
-      ) {
-        const sourceId = ctx.sourceId ?? 'default';
-        const filePath = resolvePageFilePath(configuredRepoPath, slug, sourceId);
-        if (isWriteTargetContained(filePath, configuredRepoPath)) {
-          writeThroughSourcePath = relative(configuredRepoPath, filePath).split(sep).join('/');
-        }
-      }
-    } catch {
+      writeThroughTarget = await resolveWriteThroughTarget(ctx.engine, slug, writeThroughSourceId);
+    } catch (e) {
       // Best-effort; the non-blocking write-through response remains unchanged.
+      ctx.logger.warn(`[put_page] write-through target resolution failed: ${e instanceof Error ? e.message : String(e)}`);
+      writeThroughTarget = { kind: 'skip', skip: 'target_resolution_error' };
+    }
+    let writeThroughSourcePath: string | undefined;
+    if (writeThroughTarget.kind === 'file' && isWriteTargetContained(writeThroughTarget.filePath, writeThroughTarget.base)) {
+      writeThroughSourcePath = writeThroughTarget.sourceRel;
     }
     const result = await importFromContent(ctx.engine, slug, p.content as string, {
       noEmbed,
@@ -880,10 +945,11 @@ const put_page: Operation = {
     }
 
     // v0.38 put_page write-through (ingestion cathedral):
-    // After importFromContent succeeds, if `sync.repo_path` resolves to a
-    // real directory, persist the markdown file to disk alongside the DB
-    // row. Failures non-fatal — DB write is durable; subsequent sync
-    // reconciles drift.
+    // After importFromContent succeeds, if the source's checkout
+    // (sources.local_path[source_id], else sync.repo_path for the default/
+    // legacy case) resolves to a real directory, persist the markdown file
+    // to disk alongside the DB row. Failures non-fatal — DB write is
+    // durable; subsequent sync reconciles drift.
     //
     // Trust gating:
     //   - Subagent sandbox (viaSubagent without allowedSlugPrefixes) → DB-only.
@@ -893,16 +959,12 @@ const put_page: Operation = {
       && !(Array.isArray(ctx.allowedSlugPrefixes) && ctx.allowedSlugPrefixes.length > 0);
     if (!ctx.dryRun && result.status !== 'error' && !isSandboxSubagent) {
       try {
-        const repoPath = await ctx.engine.getConfig('sync.repo_path');
-        if (!repoPath) {
-          writeThrough = { written: false, skipped: 'no_repo_configured' };
-        } else if (!existsSync(repoPath) || !statSync(repoPath).isDirectory()) {
-          writeThrough = { written: false, skipped: 'repo_not_found' };
+        if (writeThroughTarget.kind === 'skip') {
+          writeThrough = { written: false, skipped: writeThroughTarget.skip };
         } else {
-          const sourceId = ctx.sourceId ?? 'default';
-          const writtenPage = await ctx.engine.getPage(result.slug, { sourceId });
+          const writtenPage = await ctx.engine.getPage(result.slug, { sourceId: writeThroughSourceId });
           if (writtenPage) {
-            const tags = await ctx.engine.getTags(result.slug, { sourceId });
+            const tags = await ctx.engine.getTags(result.slug, { sourceId: writeThroughSourceId });
             const provenanceVia = ctx.remote === false ? 'put_page' : 'mcp:put_page';
             const md = serializePageToMarkdown(writtenPage, tags, {
               frontmatterOverrides: {
@@ -911,8 +973,8 @@ const put_page: Operation = {
                 source_kind: provenanceVia,
               },
             });
-            const filePath = resolvePageFilePath(repoPath as string, result.slug, sourceId);
-            if (!isWriteTargetContained(filePath, repoPath as string)) {
+            const filePath = writeThroughTarget.filePath;
+            if (!isWriteTargetContained(filePath, writeThroughTarget.base)) {
               throw new Error(`write-through target escapes repo path: ${filePath}`);
             }
             mkdirSync(dirname(filePath), { recursive: true });

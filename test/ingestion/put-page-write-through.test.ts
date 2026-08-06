@@ -217,11 +217,16 @@ describe('put_page write-through — config edge cases', () => {
 });
 
 describe('put_page write-through — multi-source filing', () => {
-  test('non-default source lands at brainDir/.sources/<id>/<slug>.md', async () => {
-    // Create a non-default source row first. Schema fields: id (PK),
-    // name (UNIQUE), plus the v0.26.5 archive columns with defaults.
+  test('non-default source WITH local_path writes into ITS OWN checkout, not the global repo', async () => {
+    // Register a source whose checkout is a separate directory. This is
+    // the defect being fixed: before routing by sources.local_path, put_page
+    // wrote into the global sync.repo_path's .sources/<id>/ dir instead of
+    // the source's real checkout.
+    const sourceCheckout = path.join(tmpRoot, 'team-x-checkout');
+    fs.mkdirSync(sourceCheckout, { recursive: true });
     await engine.executeRaw(
-      "INSERT INTO sources (id, name) VALUES ('team-x', 'team-x')",
+      "INSERT INTO sources (id, name, local_path) VALUES ('team-x', 'team-x', $1)",
+      [sourceCheckout],
     );
     const ctx = makeCtx({ sourceId: 'team-x' });
     const result = (await putPage.handler(ctx, {
@@ -229,17 +234,59 @@ describe('put_page write-through — multi-source filing', () => {
       content: '---\ntitle: X\n---\n\nbody',
     })) as { write_through?: { written: boolean; path?: string } };
     expect(result.write_through?.written).toBe(true);
-    expect(result.write_through?.path).toBe(path.join(brainDir, '.sources/team-x/shared/page.md'));
-    expect(fs.existsSync(result.write_through!.path!)).toBe(true);
+    const expectedPath = path.join(sourceCheckout, 'shared/page.md');
+    expect(result.write_through?.path).toBe(expectedPath);
+    expect(fs.existsSync(expectedPath)).toBe(true);
+    // It must NOT land inside the global repo.
+    expect(fs.existsSync(path.join(brainDir, '.sources/team-x/shared/page.md'))).toBe(false);
     const rows = await engine.executeRaw<{ source_path: string | null }>(
       'SELECT source_path FROM pages WHERE source_id = $1 AND slug = $2',
       ['team-x', 'shared/page'],
     );
-    expect(rows[0]?.source_path).toBe('.sources/team-x/shared/page.md');
+    // source_path is relative to the source's OWN checkout root.
+    expect(rows[0]?.source_path).toBe('shared/page.md');
     const { resolveSlugByPathOrSourcePath } = await import('../../src/commands/sync.ts');
     await expect(
-      resolveSlugByPathOrSourcePath(engine, '.sources/team-x/shared/page.md', 'team-x'),
+      resolveSlugByPathOrSourcePath(engine, 'shared/page.md', 'team-x'),
     ).resolves.toBe('shared/page');
+  });
+
+  test('non-default source WITHOUT local_path stays DB-only (no misroute to global repo)', async () => {
+    // Thin-client / remote source with no checkout: put_page must NOT fall
+    // back to the global sync.repo_path (the old .sources/<id>/ misroute).
+    await engine.executeRaw(
+      "INSERT INTO sources (id, name) VALUES ('remote-x', 'remote-x')",
+    );
+    const ctx = makeCtx({ sourceId: 'remote-x' });
+    const result = (await putPage.handler(ctx, {
+      slug: 'shared/remote-page',
+      content: '---\ntitle: R\n---\n\nbody',
+    })) as { write_through?: { written: boolean; skipped?: string } };
+    expect(result.write_through?.written).toBe(false);
+    expect(result.write_through?.skipped).toBe('no_local_path');
+    expect(fs.existsSync(path.join(brainDir, 'shared/remote-page.md'))).toBe(false);
+    expect(fs.existsSync(path.join(brainDir, '.sources/remote-x/shared/remote-page.md'))).toBe(false);
+    // DB row still landed.
+    const page = await engine.getPage('shared/remote-page', { sourceId: 'remote-x' });
+    expect(page).not.toBeNull();
+  });
+
+  test('non-default source with dead local_path stays DB-only (source_checkout_not_found)', async () => {
+    // local_path is configured but the directory is gone — do NOT fall back
+    // to the global repo.
+    const deadPath = path.join(tmpRoot, 'team-y-checkout');
+    await engine.executeRaw(
+      "INSERT INTO sources (id, name, local_path) VALUES ('team-y', 'team-y', $1)",
+      [deadPath],
+    );
+    const ctx = makeCtx({ sourceId: 'team-y' });
+    const result = (await putPage.handler(ctx, {
+      slug: 'shared/y',
+      content: '---\ntitle: Y\n---\n\nbody',
+    })) as { write_through?: { written: boolean; skipped?: string } };
+    expect(result.write_through?.written).toBe(false);
+    expect(result.write_through?.skipped).toBe('source_checkout_not_found');
+    expect(fs.existsSync(path.join(brainDir, '.sources/team-y/shared/y.md'))).toBe(false);
   });
 });
 
