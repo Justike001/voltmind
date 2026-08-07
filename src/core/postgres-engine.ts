@@ -1,4 +1,5 @@
 import postgres from 'postgres';
+import { todayISO } from './date-util.ts';
 import type {
   BrainEngine,
   BatchOpts,
@@ -4958,7 +4959,7 @@ export class PostgresEngine implements BrainEngine {
     const sigma = opts.sigma ?? 3.0;
     const lookbackDays = Math.max(1, opts.lookback_days ?? 30);
     // Boundaries: today's window is [since, since+1day); baseline is [since-lookback, since).
-    const sinceIso = (opts.since ?? new Date().toISOString().slice(0, 10)); // YYYY-MM-DD
+    const sinceIso = (opts.since ?? todayISO()); // YYYY-MM-DD
     const sinceDate = new Date(sinceIso + 'T00:00:00Z');
     const sinceEnd = new Date(sinceDate.getTime() + 86400000);
     const baselineStart = new Date(sinceDate.getTime() - lookbackDays * 86400000);

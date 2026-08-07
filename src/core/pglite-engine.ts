@@ -1,4 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
+import { todayISO } from './date-util.ts';
 import { vector } from '@electric-sql/pglite/vector';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import type { Transaction } from '@electric-sql/pglite';
@@ -4934,7 +4935,7 @@ export class PGLiteEngine implements BrainEngine {
   async findAnomalies(opts: AnomaliesOpts): Promise<AnomalyResult[]> {
     const sigma = opts.sigma ?? 3.0;
     const lookbackDays = Math.max(1, opts.lookback_days ?? 30);
-    const sinceIso = (opts.since ?? new Date().toISOString().slice(0, 10));
+    const sinceIso = (opts.since ?? todayISO());
     const sinceDate = new Date(sinceIso + 'T00:00:00Z');
     const sinceEnd = new Date(sinceDate.getTime() + 86400000);
     const baselineStart = new Date(sinceDate.getTime() - lookbackDays * 86400000);

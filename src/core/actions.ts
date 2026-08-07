@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'crypto';
+import { todayISO } from './date-util.ts';
 import { existsSync } from 'fs';
 import { mkdir, readFile, readdir, writeFile } from 'fs/promises';
 import { basename, dirname, join, relative } from 'path';
@@ -1695,13 +1696,13 @@ async function updateActionMarkdownStatus(filePath: string, status: string, note
   const raw = await readFile(filePath, 'utf-8');
   const doc = matter(raw);
   doc.data.status = status;
-  doc.data.updated = new Date().toISOString().slice(0, 10);
+  doc.data.updated = todayISO();
   const timeline = [
     doc.content.trimEnd(),
     '',
     '<!-- timeline -->',
     '',
-    `- ${new Date().toISOString().slice(0, 10)} | VoltMind - Status set to ${status}${note ? `: ${note}` : ''}.`,
+    `- ${todayISO()} | VoltMind - Status set to ${status}${note ? `: ${note}` : ''}.`,
     '',
   ].join('\n');
   await mkdir(dirname(filePath), { recursive: true });
@@ -1725,7 +1726,7 @@ async function updateActionMarkdownDue(filePath: string, dueAt: string | null): 
     delete automation.run_at;
     doc.data.automation = automation;
   }
-  doc.data.updated = new Date().toISOString().slice(0, 10);
+  doc.data.updated = todayISO();
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, matter.stringify(doc.content, doc.data), 'utf-8');
 }
@@ -1737,7 +1738,7 @@ async function updateActionMarkdownMode(filePath: string, mode: ActionMode): Pro
   automation.mode = mode;
   if (mode === 'manual') automation.trigger = automation.trigger || 'manual_checkbox';
   doc.data.automation = automation;
-  doc.data.updated = new Date().toISOString().slice(0, 10);
+  doc.data.updated = todayISO();
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, matter.stringify(doc.content, doc.data), 'utf-8');
 }
@@ -1747,7 +1748,7 @@ async function updateActionMarkdownPriority(filePath: string, priority: string |
   const doc = matter(raw);
   if (priority) doc.data.priority = priority;
   else delete doc.data.priority;
-  doc.data.updated = new Date().toISOString().slice(0, 10);
+  doc.data.updated = todayISO();
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, matter.stringify(doc.content, doc.data), 'utf-8');
 }
@@ -1757,7 +1758,7 @@ async function updateActionMarkdownTools(filePath: string, allowedTools: string[
   const doc = matter(raw);
   doc.data.allowed_tools = allowedTools;
   doc.data.blocked_tools = blockedTools;
-  doc.data.updated = new Date().toISOString().slice(0, 10);
+  doc.data.updated = todayISO();
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, matter.stringify(doc.content, doc.data), 'utf-8');
 }

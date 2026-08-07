@@ -33,6 +33,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { todayISO } from '../date-util.ts';
 import { join } from 'node:path';
 
 import type { BrainEngine } from '../engine.ts';
@@ -64,9 +65,7 @@ interface SourceRow {
 
 /** Format today's date as 'YYYY-MM-DD' UTC. Matches extract-from-fence's helper. */
 function todayUtc(): string {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-    .toISOString().slice(0, 10);
+  return todayISO();
 }
 
 /**

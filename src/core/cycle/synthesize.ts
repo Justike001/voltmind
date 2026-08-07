@@ -27,6 +27,7 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
+import { todayISO } from '../date-util.ts';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { chat as gatewayChat, type ChatResult } from '../ai/gateway.ts';
 import { resolveRecipe } from '../ai/model-resolver.ts';
@@ -1206,7 +1207,7 @@ function loadAdHocTranscript(
 }
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 function ok(summary: string, details: Record<string, unknown> = {}): PhaseResult {

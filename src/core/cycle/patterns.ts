@@ -19,6 +19,7 @@
  */
 
 import { join, dirname } from 'node:path';
+import { todayISO } from '../date-util.ts';
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import type { BrainEngine } from '../engine.ts';
 import type { PhaseResult, PhaseError } from '../cycle.ts';
@@ -190,7 +191,7 @@ async function gatherReflections(
 // ── Prompt ────────────────────────────────────────────────────────────
 
 function buildPatternsPrompt(reflections: ReflectionRef[], minEvidence: number): string {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const corpus = reflections
     .map((r, i) => `### ${i + 1}. [[${r.slug}]] — ${r.title}\n${r.excerpt}`)
     .join('\n\n---\n\n');

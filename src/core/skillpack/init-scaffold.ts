@@ -14,6 +14,7 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { todayISO } from '../date-util.ts';
 import { join } from 'path';
 
 import { SKILLPACK_API_VERSION, type SkillpackManifest } from './manifest-v1.ts';
@@ -96,7 +97,7 @@ export function runInitScaffold(opts: InitScaffoldOptions): InitScaffoldResult {
 
   // Plan the writes.
   const plan: Array<{ path: string; content: string }> = [];
-  const dateIso = new Date().toISOString().slice(0, 10);
+  const dateIso = todayISO();
 
   plan.push({
     path: join(opts.targetDir, 'skillpack.json'),

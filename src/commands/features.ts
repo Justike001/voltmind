@@ -6,6 +6,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { todayISO } from '../core/date-util.ts';
 import { join } from 'path';
 import type { BrainEngine } from '../core/engine.ts';
 import { VERSION } from '../version.ts';
@@ -240,7 +241,7 @@ export async function runFeatures(engine: BrainEngine, args: string[]) {
     if (autoFix) {
       for (const rec of pitchable.filter(r => r.auto_fixable)) {
         fixResults[rec.id] = await executeAutoFix(rec, engine);
-        offers.accepted[rec.id] = { at: new Date().toISOString().slice(0, 10), version: scan.version };
+        offers.accepted[rec.id] = { at: todayISO(), version: scan.version };
       }
     }
     console.log(JSON.stringify({ ...scan, recommendations: pitchable, auto_fix_results: autoFix ? fixResults : undefined }, null, 2));
@@ -279,7 +280,7 @@ export async function runFeatures(engine: BrainEngine, args: string[]) {
     for (const rec of pitchable.filter(r => r.auto_fixable)) {
       const result = await executeAutoFix(rec, engine);
       console.log(`  ${result.success ? 'OK' : 'FAIL'}: ${rec.title} — ${result.output}`);
-      offers.accepted[rec.id] = { at: new Date().toISOString().slice(0, 10), version: scan.version };
+      offers.accepted[rec.id] = { at: todayISO(), version: scan.version };
     }
   } else if (process.stdin.isTTY) {
     console.log(`Run 'voltmind features --auto-fix' to fix all auto-fixable issues.`);

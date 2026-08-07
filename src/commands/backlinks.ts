@@ -11,6 +11,7 @@
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, lstatSync, existsSync } from 'fs';
+import { todayISO } from '../core/date-util.ts';
 import { join, relative, basename } from 'path';
 import { extractEntityRefs as canonicalExtractEntityRefs } from '../core/link-extraction.ts';
 import { createProgress, startHeartbeat } from '../core/progress.ts';
@@ -134,7 +135,7 @@ export function findBacklinkGaps(brainDir: string): BacklinkGap[] {
 
 /** Fix back-link gaps by appending timeline entries to target pages */
 export function fixBacklinkGaps(brainDir: string, gaps: BacklinkGap[], dryRun: boolean = false): number {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   let fixed = 0;
 
   // Group gaps by target page to batch writes

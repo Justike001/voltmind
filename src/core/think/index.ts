@@ -18,6 +18,7 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
+import { todayISO } from '../date-util.ts';
 import type { BrainEngine, SynthesisEvidenceInput } from '../engine.ts';
 import { runGather, renderPagesBlock, takesHitToTakeForPrompt } from './gather.ts';
 import { renderTakesBlock } from './sanitize.ts';
@@ -487,7 +488,7 @@ export async function persistSynthesis(
   engine: BrainEngine,
   result: ThinkResult,
 ): Promise<{ slug: string; evidenceInserted: number; warnings: string[] }> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const slugSafe = result.question
     .toLowerCase()
     .replace(/[^a-z0-9\s]+/g, '')

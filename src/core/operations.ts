@@ -4,6 +4,7 @@
  */
 
 import { lstatSync, realpathSync } from 'fs';
+import { toISODate } from './date-util.ts';
 import { resolve, relative, sep } from 'path';
 import type { BrainEngine } from './engine.ts';
 import { clampSearchLimit } from './engine.ts';
@@ -2166,7 +2167,7 @@ const add_timeline_entry: Operation = {
     }
     // Round-trip through Date to catch e.g. Feb 30.
     const parsed = new Date(date);
-    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    if (Number.isNaN(parsed.getTime()) || toISODate(parsed) !== date) {
       throw new Error(`Invalid calendar date "${date}"`);
     }
     // v0.31.8 (D7): thread ctx.sourceId.
@@ -4318,7 +4319,7 @@ const find_trajectory: Operation = {
     // client think, founder-scorecard) see the event-shaped rows.
     const wirePoints = points.map(pt => ({
       fact_id: pt.fact_id,
-      valid_from: pt.valid_from.toISOString().slice(0, 10),
+      valid_from: toISODate(pt.valid_from),
       metric: pt.metric,
       value: pt.value,
       unit: pt.unit,

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'crypto';
+import { toISODate } from './date-util.ts';
 import type { Page, PageInput, PageType, Chunk, SearchResult } from './types.ts';
 import type { Take, TakeKind } from './engine.ts';
 
@@ -292,7 +293,7 @@ export function rowToSearchResult(row: Record<string, unknown>): SearchResult {
     if (raw === null) {
       result.effective_date = null;
     } else if (raw instanceof Date) {
-      result.effective_date = raw.toISOString().slice(0, 10);
+      result.effective_date = toISODate(raw);
     } else if (typeof raw === 'string' && raw) {
       // Postgres TIMESTAMPTZ already serializes as "YYYY-MM-DD ..." — slice
       // the date portion. PGLite returns the same shape via its parser.
@@ -324,7 +325,7 @@ export function takeRowToTake(row: Record<string, unknown>): Take {
   // partial dates like '2017-01' that the spec uses).
   const dateOrNull = (v: unknown): string | null => {
     if (v == null) return null;
-    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    if (v instanceof Date) return toISODate(v);
     return String(v);
   };
   return {

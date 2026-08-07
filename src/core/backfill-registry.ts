@@ -13,6 +13,7 @@
  */
 
 import type { BrainEngine } from './engine.ts';
+import { toISODate } from './date-util.ts';
 import type { BackfillSpec } from './backfill-base.ts';
 import { computeEffectiveDate } from './effective-date.ts';
 import { computeEmotionalWeight } from './cycle/emotional-weight.ts';
@@ -101,7 +102,7 @@ function effectiveDateBackfill(): RegisteredBackfill {
             updates.push({
               id: r.id,
               updates: {
-                effective_date: result.date.toISOString().slice(0, 10),
+                effective_date: toISODate(result.date),
                 effective_date_source: result.source,
               },
             });

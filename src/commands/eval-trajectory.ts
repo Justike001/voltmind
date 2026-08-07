@@ -14,6 +14,7 @@
  */
 
 import type { BrainEngine } from '../core/engine.ts';
+import { toISODate } from '../core/date-util.ts';
 import { loadConfig, isThinClient } from '../core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../core/mcp-client.ts';
 import {
@@ -144,7 +145,7 @@ export async function runEvalTrajectory(engine: BrainEngine, args: string[]): Pr
     result = {
       points: points.map(p => ({
         fact_id: p.fact_id,
-        valid_from: p.valid_from.toISOString().slice(0, 10),
+        valid_from: toISODate(p.valid_from),
         metric: p.metric,
         value: p.value,
         unit: p.unit,

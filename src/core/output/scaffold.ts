@@ -17,6 +17,7 @@
  */
 
 import type { ResolverResult } from '../resolvers/interface.ts';
+import { todayISO, toISODate } from '../date-util.ts';
 
 // ---------------------------------------------------------------------------
 // Tweet citations
@@ -98,7 +99,7 @@ export function sourceCitation(
   result: Pick<ResolverResult<unknown>, 'source' | 'fetchedAt'>,
   opts?: { url?: string; label?: string },
 ): string {
-  const date = result.fetchedAt.toISOString().slice(0, 10);
+  const date = toISODate(result.fetchedAt);
   const label = opts?.label ?? result.source;
   if (opts?.url) {
     return `[Source: [${label}, ${date}](${opts.url})]`;
@@ -223,7 +224,7 @@ function assertNonEmpty(s: unknown, field: string): asserts s is string {
 // ---------------------------------------------------------------------------
 
 function isoDateToday(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 /** Trim, strip newlines/brackets that would break markdown, cap length. */

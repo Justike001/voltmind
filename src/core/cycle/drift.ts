@@ -16,6 +16,7 @@
  */
 
 import type { BrainEngine } from '../engine.ts';
+import { toISODate } from '../date-util.ts';
 import { BudgetMeter } from './budget-meter.ts';
 import { resolveModel } from '../model-config.ts';
 import type { DreamPhaseResult } from './auto-think.ts';
@@ -67,7 +68,7 @@ async function findDriftCandidates(
   lookbackDays: number,
 ): Promise<DriftCandidate[]> {
   const cutoffMs = Date.now() - lookbackDays * 86_400_000;
-  const cutoffIso = new Date(cutoffMs).toISOString().slice(0, 10);
+  const cutoffIso = toISODate(new Date(cutoffMs));
   // Only consider takes with weight in the "soft" middle band (0.3..0.85)
   // — facts (1.0) don't drift, very-low hunches (<0.3) aren't actionable yet.
   const rows = await engine.executeRaw<{

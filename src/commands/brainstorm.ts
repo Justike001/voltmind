@@ -13,6 +13,7 @@
  */
 
 import type { BrainEngine } from '../core/engine.ts';
+import { todayISO } from '../core/date-util.ts';
 import {
   runBrainstorm,
   formatBrainstormMarkdown,
@@ -336,7 +337,7 @@ async function runBrainstormCli(
 
 /** Slugify the question for the saved page path. Capped + collision-resistant via date prefix. */
 function buildIdeaSlug(question: string, label: 'brainstorm' | 'lsd'): string {
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayISO();
   const stem = question
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')

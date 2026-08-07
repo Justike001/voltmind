@@ -24,6 +24,7 @@
  */
 
 import type { BrainEngine } from '../engine.ts';
+import { todayISO, toISODate } from '../date-util.ts';
 import type { HybridSearchMeta } from '../types.ts';
 
 interface Bucket {
@@ -265,7 +266,7 @@ export async function readSearchStats(
   opts: { days?: number } = {},
 ): Promise<StatsWindow> {
   const days = Math.max(1, Math.min(365, opts.days ?? 7));
-  const cutoffDate = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const cutoffDate = toISODate(new Date(Date.now() - days * 86_400_000));
 
   try {
     const rows = await engine.executeRaw<{
@@ -352,7 +353,7 @@ export async function readSearchStats(
 }
 
 function nowDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 /** Test-only — reset the module-level singleton between test cases. */

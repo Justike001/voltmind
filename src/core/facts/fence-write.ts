@@ -34,6 +34,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, appendFileSync } from 'node:fs';
+import { toISODate } from '../date-util.ts';
 import { join, dirname } from 'node:path';
 
 import type { BrainEngine, NewFact, FactVisibility } from '../engine.ts';
@@ -215,7 +216,7 @@ export async function writeFactsToFence(
       //    monotonically increases (max-existing + 1 per call, append-only).
       const assignedRowNums: number[] = [];
       for (const f of facts) {
-        const validFromStr = (f.validFrom ?? new Date()).toISOString().slice(0, 10);
+        const validFromStr = toISODate(f.validFrom ?? new Date());
         const { body: updated, rowNum } = upsertFactRow(body, {
           claim:       f.fact,
           kind:        (f.kind ?? 'fact') as 'fact' | 'event' | 'preference' | 'commitment' | 'belief',

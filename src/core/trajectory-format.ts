@@ -30,6 +30,7 @@
  */
 
 import type { TrajectoryPoint } from './engine.ts';
+import { toISODate } from './date-util.ts';
 import { INJECTION_PATTERNS } from './think/sanitize.ts';
 
 export type TrajectoryIntent = 'temporal' | 'knowledge_update' | 'other';
@@ -92,7 +93,7 @@ function groupKey(p: TrajectoryPoint): string | null {
  * sets `valid_from` to a Date instance.
  */
 function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return toISODate(d);
 }
 
 /**

@@ -40,6 +40,7 @@
  */
 
 import type { BrainEngine, Take, TrajectoryPoint } from '../core/engine.ts';
+import { toISODate } from '../core/date-util.ts';
 import { loadConfig, isThinClient } from '../core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../core/mcp-client.ts';
 import {
@@ -244,8 +245,8 @@ export async function runFounder(engine: BrainEngine, args: string[]): Promise<v
   const now = new Date();
   const oneYearAgo = new Date(now);
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-  const windowSince = parsed.since ?? oneYearAgo.toISOString().slice(0, 10);
-  const windowUntil = parsed.until ?? now.toISOString().slice(0, 10);
+  const windowSince = parsed.since ?? toISODate(oneYearAgo);
+  const windowUntil = parsed.until ?? toISODate(now);
 
   let scorecard: FounderScorecard;
   const cfg = loadConfig();

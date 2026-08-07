@@ -10,6 +10,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { todayISO } from '../core/date-util.ts';
 import { join, dirname } from 'node:path';
 import type { BrainEngine, TakeKind } from '../core/engine.ts';
 import {
@@ -375,7 +376,7 @@ async function cmdResolve(engine: BrainEngine, args: string[]): Promise<void> {
                        : finalQuality === 'correct' ? true : false;
     const updated = {
       ...target,
-      resolvedAt: new Date().toISOString().slice(0, 10),
+      resolvedAt: todayISO(),
       resolvedQuality: finalQuality,
       resolvedOutcome: finalOutcome,
       resolvedEvidence: source,

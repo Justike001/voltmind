@@ -16,6 +16,7 @@
  */
 
 import type { BrainEngine } from '../core/engine.ts';
+import { todayISO } from '../core/date-util.ts';
 import { loadConfig, isThinClient } from '../core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../core/mcp-client.ts';
 
@@ -94,7 +95,7 @@ export async function runAnomalies(engine: BrainEngine, args: string[]): Promise
     console.log('(no anomalies for this window)');
     return;
   }
-  console.log(`${rows.length} anomalous cohort(s) for ${parsed.since ?? new Date().toISOString().slice(0, 10)}:\n`);
+  console.log(`${rows.length} anomalous cohort(s) for ${parsed.since ?? todayISO()}:\n`);
   rows.forEach(r => {
     const baselineMean = r.baseline_mean.toFixed(2);
     const baselineStd = r.baseline_stddev.toFixed(2);

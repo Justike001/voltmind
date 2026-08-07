@@ -32,6 +32,7 @@
  */
 
 import type { BrainEngine } from '../engine.ts';
+import { todayISO } from '../date-util.ts';
 import { chat as defaultChat, embedQuery, type ChatResult, type ChatOpts } from '../ai/gateway.ts';
 import { hybridSearch, hybridSearchCached } from '../search/hybrid.ts';
 import { fetchFar, type CloseRef, type FarPage } from './domain-bank.ts';
@@ -1027,7 +1028,7 @@ export function formatBrainstormMarkdown(
 
 /** Frontmatter for a saved brainstorm/lsd page. */
 export function buildBrainstormFrontmatter(result: BrainstormResult, opts: { slug: string }): string {
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayISO();
   const judgeFailed = result.judge_failed ? '\njudge_failed: true' : '';
   const unscored = result.judge_failed ? '\nunscored: true' : '';
   return `---

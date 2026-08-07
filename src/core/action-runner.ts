@@ -12,6 +12,7 @@
  */
 
 import { existsSync } from 'fs';
+import { todayISO } from './date-util.ts';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname } from 'path';
 import matter from 'gray-matter';
@@ -521,7 +522,7 @@ export async function writeOutcome(
       const raw = await readFile(action.file_path, 'utf-8');
       const doc = matter(raw);
       doc.data.status = dbStatus;
-      doc.data.updated = new Date().toISOString().slice(0, 10);
+      doc.data.updated = todayISO();
 
       const artifactLines = outcome.artifactRefs.length
         ? '\n\nArtifacts:\n' + outcome.artifactRefs.map(r => '- ' + r).join('\n')

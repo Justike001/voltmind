@@ -21,6 +21,7 @@
  */
 
 import type { TrajectoryPoint } from './engine.ts';
+import { toISODate } from './date-util.ts';
 
 /** Default regression threshold (10% drop). Locked decision D-ENG-2. */
 export const DEFAULT_REGRESSION_THRESHOLD = 0.10;
@@ -53,10 +54,6 @@ export function resolveRegressionThreshold(): number {
   const n = parseFloat(raw);
   if (!Number.isFinite(n) || n <= 0 || n >= 1) return DEFAULT_REGRESSION_THRESHOLD;
   return n;
-}
-
-function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
 }
 
 /**

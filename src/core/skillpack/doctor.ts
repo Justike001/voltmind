@@ -21,6 +21,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
+import { todayISO } from '../date-util.ts';
 import { join, dirname } from 'path';
 
 import { loadSkillpackManifest } from './manifest-v1.ts';
@@ -199,7 +200,7 @@ async function applyAutoFixes(
       }
       case 'changelog_present_and_current': {
         const path = join(packRoot, manifest.changelog ?? 'CHANGELOG.md');
-        const date = new Date().toISOString().slice(0, 10);
+        const date = todayISO();
         let content = '';
         if (existsSync(path)) {
           content = readFileSync(path, 'utf-8');

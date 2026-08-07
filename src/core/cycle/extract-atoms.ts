@@ -45,6 +45,7 @@
 // which made the NOT EXISTS guard ineffective on federated brains.
 
 import type { BrainEngine } from '../engine.ts';
+import { todayISO } from '../date-util.ts';
 import type { PhaseResult } from '../cycle.ts';
 import type { VoltMindConfig } from '../config.ts';
 import { chat as gatewayChat } from '../ai/gateway.ts';
@@ -527,7 +528,7 @@ export function parseAtomsResponse(raw: string): ExtractedAtom[] {
 }
 
 function todayDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 function slugify(s: string): string {

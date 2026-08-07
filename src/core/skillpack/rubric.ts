@@ -12,6 +12,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { todayISO } from '../date-util.ts';
 import { join, relative } from 'path';
 
 import { parseMarkdown } from '../markdown.ts';
@@ -225,7 +226,7 @@ const DIMENSIONS: Array<
         return {
           passed: false,
           detail: `CHANGELOG.md has no entry matching ## [${input.manifest.version}]`,
-          fix_hint: `Add a top-level entry: \`## [${input.manifest.version}] - ${new Date().toISOString().slice(0, 10)}\` followed by bullet-list notes.`,
+          fix_hint: `Add a top-level entry: \`## [${input.manifest.version}] - ${todayISO()}\` followed by bullet-list notes.`,
         };
       }
       return { passed: true, detail: `CHANGELOG.md references ${input.manifest.version}`, fix_hint: null };

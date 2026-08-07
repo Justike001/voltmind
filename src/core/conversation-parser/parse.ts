@@ -25,6 +25,8 @@
  * test-isolatable.
  */
 
+import { toISODate } from '../date-util.ts';
+
 import {
   BUILTIN_PATTERNS,
   cleanSpeaker,
@@ -98,7 +100,7 @@ export function deriveDateContext(opts: ParseConversationOpts): DateContext {
   }
   if (page?.effective_date) {
     return {
-      fallbackDate: page.effective_date.toISOString().slice(0, 10),
+      fallbackDate: toISODate(page.effective_date),
       timezone: extractTimezone(page),
       source: 'effective_date',
     };
