@@ -355,6 +355,7 @@ describe('performSync dry-run never writes', () => {
     try {
       const result = await performSync(engine, {
         repoPath,
+        sourceId: 'default',
         noEmbed: true,
       });
       expect(result.status).toBe('first_sync');
@@ -372,6 +373,7 @@ describe('performSync dry-run never writes', () => {
     // First do a real sync to seed the bookmark.
     const real = await performSync(engine, {
       repoPath,
+      sourceId: 'default',
       noPull: true,
       noEmbed: true,
     });
@@ -417,7 +419,7 @@ describe('performSync dry-run never writes', () => {
   test('full-sync (--full) dry-run does NOT write to DB or advance the bookmark', async () => {
     const { performSync } = await import('../src/commands/sync.ts');
     // Seed the bookmark so we hit the full-sync-with-bookmark path when --full is set.
-    await performSync(engine, { repoPath, noPull: true, noEmbed: true });
+    await performSync(engine, { repoPath, sourceId: 'default', noPull: true, noEmbed: true });
     // Clear DB so we can observe that a --full dry-run doesn't re-import.
     await (engine as any).db.exec(`DELETE FROM content_chunks; DELETE FROM pages;`);
     const bookmarkBefore = await engine.getConfig('sync.last_commit');
@@ -460,6 +462,7 @@ describe('performSync dry-run never writes', () => {
     const { performSync } = await import('../src/commands/sync.ts');
     const seeded = await performSync(engine, {
       repoPath,
+      sourceId: 'default',
       noPull: true,
       noEmbed: true,
       noExtract: true,
@@ -485,6 +488,7 @@ describe('performSync dry-run never writes', () => {
     try {
       const result = await performSync(engine, {
         repoPath,
+        sourceId: 'default',
         noEmbed: true,
         noExtract: true,
       });
@@ -508,6 +512,7 @@ describe('performSync dry-run never writes', () => {
     const { performSync } = await import('../src/commands/sync.ts');
     const seeded = await performSync(engine, {
       repoPath,
+      sourceId: 'default',
       noPull: true,
       noEmbed: true,
       noExtract: true,
@@ -526,6 +531,7 @@ describe('performSync dry-run never writes', () => {
 
     const result = await performSync(engine, {
       repoPath,
+      sourceId: 'default',
       noPull: true,
       noEmbed: true,
       noExtract: true,
