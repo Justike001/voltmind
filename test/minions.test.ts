@@ -1388,6 +1388,37 @@ describe('MinionQueue: Idempotency', () => {
     expect(j2.id).toBe(j1.id);
     expect(j2.data).toEqual({ v: 1 }); // first wins
   });
+
+  test('completed job with same idempotency_key queues a NEW job (terminal rows release the key)', async () => {
+    // Regression: a content-stable idempotency_key (e.g. remediation
+    // `extract.all`) must NOT permanently pin the first-ever finished job.
+    // Otherwise every re-run would return the old completed job and never
+    // queue fresh work — the standalone remed/doctor fix path goes dead.
+    const j1 = await queue.add('extract', { mode: 'all' }, { idempotency_key: 'default:extract:abc12345' });
+    await queue.claim('tok1', 30000, 'default', ['extract']);
+    await queue.completeJob(j1.id, 'tok1', { links: 5 });
+
+    const j2 = await queue.add('extract', { mode: 'all' }, { idempotency_key: 'default:extract:abc12345' });
+    // Fresh job is created — different id, waiting, not a dedup to #1551.
+    expect(j2.id).not.toBe(j1.id);
+    expect(j2.status).toBe('waiting');
+    const rows = await engine.executeRaw<{ count: string }>(
+      `SELECT count(*)::text as count FROM minion_jobs WHERE idempotency_key = 'default:extract:abc12345'`
+    );
+    expect(parseInt(rows[0].count, 10)).toBe(1); // only the NEW row holds the key
+    expect((await queue.getJob(j1.id))!.idempotency_key).toBeNull(); // old row released it
+  });
+
+  test('failed/dead terminal job with same idempotency_key also re-queues', async () => {
+    const j1 = await queue.add('sync', {}, { idempotency_key: 'k-dead', max_attempts: 1 });
+    await queue.claim('tok1', 30000, 'default', ['sync']);
+    await queue.failJob(j1.id, 'tok1', 'boom', 'dead');
+    expect((await queue.getJob(j1.id))!.status).toBe('dead');
+
+    const j2 = await queue.add('sync', {}, { idempotency_key: 'k-dead' });
+    expect(j2.id).not.toBe(j1.id);
+    expect(j2.status).toBe('waiting');
+  });
 });
 
 // --- v7 child_done auto-post ---

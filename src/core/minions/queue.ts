@@ -33,6 +33,11 @@ const DEFAULT_MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MiB
 
 const TERMINAL_STATUSES = ['completed', 'failed', 'dead', 'cancelled'] as const;
 
+/** True when a job status is terminal (no further worker will ever pick it up). */
+function isTerminalStatus(status: string): boolean {
+  return (TERMINAL_STATUSES as readonly string[]).includes(status);
+}
+
 export class MinionQueue {
   readonly maxSpawnDepth: number;
   readonly maxAttachmentBytes: number;
@@ -121,15 +126,35 @@ export class MinionQueue {
     const maxSpawnDepth = opts?.max_spawn_depth ?? this.maxSpawnDepth;
 
     return this.engine.transaction(async (tx) => {
-      // 1. Idempotency fast path — if a row already exists for this key, return it
-      //    without doing any other work. The unique partial index guarantees
-      //    no second row can be inserted with the same non-null key.
+      // 1. Idempotency fast path — if a row already exists for this key AND is
+      //    still in flight (non-terminal), return it without doing any other work.
+      //    The unique partial index guarantees no second row can be inserted with
+      //    the same non-null key.
+      //
+      //    Terminal rows (completed/failed/dead/cancelled) must NOT pin the key.
+      //    Otherwise a content-stable key — e.g. remediation `extract.all`
+      //    (`default:extract:<hash>`), or `put-page-extract:<sourceId>:<slug>` —
+      //    would forever re-return the first-ever finished job and never queue a
+      //    fresh one, silently killing the standalone re-run path. Idempotency is
+      //    a dedup against work *already in the queue*, not a permanent
+      //    canonicalization of every historical run. When the existing row is
+      //    terminal we RELEASE the key (NULL it) so the new submission inserts a
+      //    brand-new row; the whole branch is inside this transaction, so a throw
+      //    anywhere below rolls the release back.
       if (opts?.idempotency_key) {
         const existing = await tx.executeRaw<Record<string, unknown>>(
           `SELECT * FROM minion_jobs WHERE idempotency_key = $1`,
           [opts.idempotency_key]
         );
-        if (existing.length > 0) return rowToMinionJob(existing[0]);
+        if (existing.length > 0) {
+          const row = rowToMinionJob(existing[0]);
+          if (!isTerminalStatus(row.status)) return row;
+          await tx.executeRaw(
+            `UPDATE minion_jobs SET idempotency_key = NULL, updated_at = now()
+             WHERE id = $1 AND idempotency_key = $2`,
+            [row.id, opts.idempotency_key]
+          );
+        }
       }
 
       // 1b. Submission-time backpressure for high-frequency named jobs.
