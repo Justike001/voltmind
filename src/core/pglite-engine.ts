@@ -4285,12 +4285,22 @@ export class PGLiteEngine implements BrainEngine {
         -- Navigation, policy, and template documents are deliberately sparse.
         -- Excluding them prevents their lack of timelines/links from lowering
         -- content-page scores without hiding index health.
+        -- Also excluded: the db_only / raw evidence tier (sources/, inbox/,
+        -- private/, archive/, daily/, state/indexes/). Those are ingested for
+        -- retrieval but are not curated truth pages — counting them (they have
+        -- no links/timelines by nature) would penalize timeline + orphan scores.
         SELECT id FROM pages
         WHERE deleted_at IS NULL
           AND slug NOT IN ('index', 'schema', 'resolver')
           AND slug NOT LIKE '%/readme'
           AND slug NOT LIKE 'templates/%'
           AND slug NOT LIKE 'policy/%'
+          AND slug NOT LIKE 'sources/%'
+          AND slug NOT LIKE 'inbox/%'
+          AND slug NOT LIKE 'private/%'
+          AND slug NOT LIKE 'archive/%'
+          AND slug NOT LIKE 'daily/%'
+          AND slug NOT LIKE 'state/indexes/%'
       )
       SELECT
         (SELECT count(*) FROM pages WHERE deleted_at IS NULL) as page_count,

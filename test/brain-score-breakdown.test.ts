@@ -155,6 +155,40 @@ describe('Bug 11 — orphan_pages is "no inbound links"', () => {
     // source has no inbound (but has outbound) → not orphan under new definition.
     expect(h.orphan_pages).toBe(0);
   });
+
+  test('v0.43: db_only raw tier (sources/, inbox/, state/indexes/) is excluded from scoring', async () => {
+    // Raw / db_only evidence pages are ingested for retrieval but are not
+    // curated truth pages. They have no links/timelines by nature, so counting
+    // them as scored content would inflate orphan_pages and dilute timeline
+    // coverage. They must be excluded from the scored set.
+    for (const slug of [
+      'sources/teams/2026-01-01-abc',
+      'inbox/2026-01-01-xyz',
+      'state/indexes/teams-review',
+    ]) {
+      await engine.putPage(slug, { type: 'note', title: slug, compiled_truth: `raw ${slug}`, frontmatter: {} });
+    }
+    // Genuine curated content pages: 'notes/a' is link-less (orphan);
+    // 'notes/b' → 'notes/c' gives both of them a link (neither orphan).
+    await engine.putPage('notes/a', { type: 'note', title: 'A', compiled_truth: 'a', frontmatter: {} });
+    await engine.putPage('notes/b', { type: 'note', title: 'B', compiled_truth: 'b', frontmatter: {} });
+    await engine.putPage('notes/c', { type: 'note', title: 'C', compiled_truth: 'c', frontmatter: {} });
+    const bId = (await (engine as any).db.query(`SELECT id FROM pages WHERE slug='notes/b'`)).rows[0].id;
+    const cId = (await (engine as any).db.query(`SELECT id FROM pages WHERE slug='notes/c'`)).rows[0].id;
+    await (engine as any).db.query(
+      `INSERT INTO links (from_page_id, to_page_id, link_type) VALUES ($1, $2, 'mentions')`,
+      [bId, cId],
+    );
+
+    const h = await engine.getHealth();
+    expect(h.page_count).toBe(6);
+    // Scored set = {notes/a, notes/b, notes/c}; the 3 db_only pages are excluded.
+    // Of the scored set, only notes/a (no links at all) is an orphan → 1
+    // (without the fix the 3 db_only page would count too → orphan_pages=4).
+    expect(h.orphan_pages).toBe(1);
+    // 1 orphan of 3 scored → no_orphans_score = round(15 * 2/3) = 10 (not 3-4).
+    expect(h.no_orphans_score).toBeGreaterThan(3);
+  });
 });
 
 describe('Bug 11 — doctor renders brain_score breakdown', () => {
