@@ -4287,15 +4287,18 @@ export class PGLiteEngine implements BrainEngine {
         -- Excluding them prevents their lack of timelines/links from lowering
         -- content-page scores without hiding index health.
         -- Also excluded: the db_only / raw evidence tier (sources/, inbox/,
-        -- private/, archive/, daily/, state/indexes/). Those are ingested for
-        -- retrieval but are not curated truth pages — counting them (they have
-        -- no links/timelines by nature) would penalize timeline + orphan scores.
+        -- private/, archive/, daily/, state/indexes/) and rules metafiles
+        -- (*/rules). Those are ingested for retrieval or are governance pages,
+        -- not curated truth pages — counting them (they have no links/timelines
+        -- by nature, or are intentional sparse governance) would penalize
+        -- timeline + orphan scores.
         SELECT id FROM pages
         WHERE deleted_at IS NULL
           AND slug NOT IN ('index', 'schema', 'resolver')
           AND slug NOT LIKE '%/readme'
           AND slug NOT LIKE 'templates/%'
           AND slug NOT LIKE 'policy/%'
+          AND slug NOT LIKE '%/rules'
           AND slug NOT LIKE 'sources/%'
           AND slug NOT LIKE 'inbox/%'
           AND slug NOT LIKE 'private/%'

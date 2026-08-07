@@ -157,14 +157,12 @@ describe('Bug 11 — orphan_pages is "no inbound links"', () => {
   });
 
   test('v0.43: db_only raw tier (sources/, inbox/, state/indexes/) is excluded from scoring', async () => {
-    // Raw / db_only evidence pages are ingested for retrieval but are not
-    // curated truth pages. They have no links/timelines by nature, so counting
-    // them as scored content would inflate orphan_pages and dilute timeline
-    // coverage. They must be excluded from the scored set.
+    // db_only / raw evidence pages (ingested for retrieval, not curated truth).
     for (const slug of [
       'sources/teams/2026-01-01-abc',
       'inbox/2026-01-01-xyz',
       'state/indexes/teams-review',
+      'contribution/rules', // rules metafile → excluded like policy/templates
     ]) {
       await engine.putPage(slug, { type: 'note', title: slug, compiled_truth: `raw ${slug}`, frontmatter: {} });
     }
@@ -181,10 +179,10 @@ describe('Bug 11 — orphan_pages is "no inbound links"', () => {
     );
 
     const h = await engine.getHealth();
-    expect(h.page_count).toBe(6);
-    // Scored set = {notes/a, notes/b, notes/c}; the 3 db_only pages are excluded.
-    // Of the scored set, only notes/a (no links at all) is an orphan → 1
-    // (without the fix the 3 db_only page would count too → orphan_pages=4).
+    expect(h.page_count).toBe(7);
+    // Scored set = {notes/a, notes/b, notes/c}; the 4 excluded pages don't count.
+    // Only notes/a (no links at all) is an orphan → 1 (without the fix the
+    // excluded pages would count too → orphan_pages=5).
     expect(h.orphan_pages).toBe(1);
     // 1 orphan of 3 scored → no_orphans_score = round(15 * 2/3) = 10 (not 3-4).
     expect(h.no_orphans_score).toBeGreaterThan(3);
