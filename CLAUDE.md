@@ -686,3 +686,17 @@ into the CHANGELOG or PR body.
 Applies retroactively: if you see a prior CHANGELOG entry naming attack-surface
 specifics, scrub it as a small cleanup commit, the same way a stale your downstream agent
 reference gets swept.
+
+## Agent skills
+
+### Issue tracker
+
+Work is tracked as GitHub issues in this repo, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles map to GitHub labels of the same names. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
