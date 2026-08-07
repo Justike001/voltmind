@@ -608,6 +608,44 @@ describe('performSync dry-run never writes', () => {
     expect(result.added).toBe(0);
     expect(await engine.getPage('vault/people/raw')).toBeNull();
   });
+
+  test('D17 freshness: no-op up_to_date sync refreshes last_sync_at (stops no-op spin)', async () => {
+    const { performSync } = await import('../src/commands/sync.ts');
+    const seeded = await performSync(engine, {
+      repoPath,
+      sourceId: 'default',
+      noPull: true,
+      noEmbed: true,
+      noExtract: true,
+    });
+    expect(seeded.status).toBe('first_sync');
+
+    const readLastSync = async () => {
+      const rows = await engine.executeRaw<{ last_sync_at: string | Date | null }>(
+        `SELECT last_sync_at FROM sources WHERE id = 'default'`,
+      );
+      const v = rows[0]?.last_sync_at;
+      return v ? new Date(v as any).getTime() : 0;
+    };
+    const beforeMs = await readLastSync();
+    expect(beforeMs).toBeGreaterThan(0);
+
+    // HEAD unchanged since first_sync with no syncable drift and no chunker
+    // version bump — this is exactly autopilot's path-1 no-op up_to_date. It
+    // must refresh last_sync_at so the D17 freshness gate sees a successful
+    // probe and stops re-dispatching a no-op 'sync' job every interval.
+    const result = await performSync(engine, {
+      repoPath,
+      sourceId: 'default',
+      noPull: true,
+      noEmbed: true,
+      noExtract: true,
+    });
+    expect(result.status).toBe('up_to_date');
+
+    const afterMs = await readLastSync();
+    expect(afterMs).toBeGreaterThan(beforeMs);
+  });
 });
 
 describe('sync regression — #132 nested transaction deadlock', () => {

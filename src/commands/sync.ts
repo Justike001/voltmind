@@ -415,6 +415,29 @@ async function writeSyncAnchor(
 }
 
 /**
+ * Refresh a source's sync-freshness bookmark without touching its commit
+ * anchor. Used on the no-op `up_to_date` path (HEAD unchanged, no syncable
+ * drift): last_sync_at must still advance so callers that key staleness off
+ * it — e.g. autopilot's D17 per-source freshness gate — see a successful
+ * sync and stop re-dispatching a no-op 'sync' job every interval. Before
+ * this, the freshness gate spun forever on an idle source because path-1
+ * `up_to_date` never bumped last_sync_at (only last_commit advances did).
+ *
+ * No-op for non-source (global-config) syncs, which track last_run, not
+ * last_sync_at.
+ */
+async function refreshLastSyncAt(
+  engine: BrainEngine,
+  sourceId: string | undefined,
+): Promise<void> {
+  if (!sourceId) return;
+  await engine.executeRaw(
+    `UPDATE sources SET last_sync_at = now() WHERE id = $1`,
+    [sourceId],
+  );
+}
+
+/**
  * v0.20.0 Cathedral II Layer 12 (SP-1 fix) — read/write the chunker version
  * last used to sync a given source. When it mismatches CURRENT_CHUNKER_VERSION,
  * `performSync` forces a full walk regardless of git HEAD equality. Without
@@ -1158,6 +1181,16 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
     // open HEAD-verification failure is now positively resolved. Do not touch
     // file failures here: no file was re-read in this no-op path.
     clearConfirmedSyncFailures([SYNC_HEAD_FAILURE_PATH]);
+    // D17 freshness gate: even a no-op sync is a successful freshness probe —
+    // refresh last_sync_at so the autopilot freshness gate doesn't re-dispatch
+    // a no-op 'sync' job every interval on an idle source (last_commit can't
+    // move here; only last_sync_at should). Best-effort; a write failure must
+    // not change the up_to_date result.
+    try {
+      await refreshLastSyncAt(engine, opts.sourceId);
+    } catch (e) {
+      slog(`[sync] failed to refresh last_sync_at on up_to_date: ${e instanceof Error ? e.message : String(e)}`);
+    }
     return {
       status: 'up_to_date',
       fromCommit: lastCommit,
