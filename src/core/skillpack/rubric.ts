@@ -390,7 +390,6 @@ const DIMENSIONS: Array<
 function listGlobMatches(packRoot: string, globs: string[]): string[] {
   const matches = new Set<string>();
   for (const g of globs) {
-    matches.forEach.bind(matches); // (silence unused warning for empty loop body)
     for (const found of walkGlob(packRoot, g)) {
       matches.add(found);
     }

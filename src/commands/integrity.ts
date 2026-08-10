@@ -610,12 +610,8 @@ async function repairBareTweet(args: RepairArgs): Promise<void> {
     return;
   }
 
-  // Read current, append citation to the flagged line, write back through
-  // BrainWriter so the transaction is atomic and the writer's grandfather
-  // opt-out can be cleared if validators pass post-repair.
-  const current = await (args.writer as unknown as { engine: BrainEngine })['engine']?.getPage?.(slug);
-  // fall back: use a direct engine handle via writer's internal ref is ugly;
-  // instead, use writer.transaction and read/write inside
+  // Append a cited timeline entry through BrainWriter so the transaction is
+  // atomic. The flagged prose is intentionally left unchanged.
   await writer.transaction(async (tx) => {
     // We can't read inside a transaction without engine access; set-wise,
     // we fetch via the outer engine reference captured on the writer.
@@ -642,8 +638,6 @@ async function repairBareTweet(args: RepairArgs): Promise<void> {
   });
 
   console.log(`repaired ${slug}:${hit.line} → ${cite}`);
-  // Silence unused var from earlier refactor
-  void current;
 }
 
 // ---------------------------------------------------------------------------
