@@ -604,7 +604,9 @@ const get_page: Operation = {
     // remote MCP caller could otherwise call `get_page <slug>` and
     // recover every fence row verbatim.
     //
-    // v0.32.2 (Codex R2-#5): the strip trigger is now `ctx.remote === true`
+    // v0.32.2 (Codex R2-#5): the strip trigger is fail-closed: every caller
+    // except an explicitly trusted local CLI (`ctx.remote === false`) is
+    // treated as untrusted.
     // rather than the takes-holders-allow-list flag (which subagent paths
     // didn't set, leaving a pre-existing privacy hole). Subagent + remote
     // MCP + scope-restricted-token callers all get the strip; local CLI
@@ -618,7 +620,7 @@ const get_page: Operation = {
     //  - stripFactsFence({keepVisibility: ['world']}): keeps world rows,
     //    drops private. World facts are public knowledge by definition;
     //    untrusted readers see them. Private facts never cross the boundary.
-    const isUntrustedReader = ctx.remote === true;
+    const isUntrustedReader = ctx.remote !== false;
     const visibleBody = isUntrustedReader
       ? {
           ...page,
@@ -1560,7 +1562,7 @@ const search: Operation = {
           results,
           meta: { vector_enabled: false, detail_resolved: null, expansion_applied: false },
           latency_ms,
-          remote: ctx.remote ?? false,
+          remote: ctx.remote !== false,
           expand_enabled: null,
           detail: null,
           job_id: ctx.jobId ?? null,
@@ -1643,7 +1645,7 @@ const query: Operation = {
       description:
         "v0.36 cross-modal search routing.\n" +
         "  'text' (default for non-image-intent queries) — text-only path, no behavior change vs v0.35.\n" +
-        "  'image' — route the query through Voyage multimodal-3 + the embedding_image column. Best for 'show me photos of...' phrasings.\n" +
+        "  'image' — route the query through Qwen3-VL 2048d + the embedding_image column. Best for 'show me photos of...' phrasings.\n" +
         "  'both' — run text AND image searches in parallel; merge via weighted RRF.\n" +
         "  'auto' — same effect as omitting the field; intent classifier decides based on query phrasing.",
     },
@@ -1673,13 +1675,13 @@ const query: Operation = {
     // Direct image path bypasses hybridSearch, so resolve the same unified
     // routing flag explicitly before choosing its vector column.
     if (imageData) {
-      const { embedMultimodal } = await import('./ai/gateway.ts');
+      const { embedMultimodal, DEFAULT_EMBEDDING_MODEL } = await import('./ai/gateway.ts');
       const { loadSearchModeConfig, resolveSearchMode } = await import('./search/mode.ts');
       const modeInput = await loadSearchModeConfig(ctx.engine);
       const mode = resolveSearchMode({ mode: modeInput.mode, overrides: modeInput.overrides });
       const [vec] = await embedMultimodal([
         { kind: 'image_base64', data: imageData, mime: imageMime },
-      ]);
+      ], { embeddingModel: DEFAULT_EMBEDDING_MODEL });
       // v0.34.1 (#861 F2 — 6th leak surface): the image path bypasses
       // hybridSearch and calls searchVector directly, so it needs its
       // own thread of the source scope. Pre-fix, this branch leaked
@@ -1760,7 +1762,7 @@ const query: Operation = {
           results,
           meta,
           latency_ms,
-          remote: ctx.remote ?? false,
+          remote: ctx.remote !== false,
           expand_enabled: expand,
           detail: detail ?? null,
           job_id: ctx.jobId ?? null,
@@ -1936,7 +1938,7 @@ const think: Operation = {
       takesHoldersAllowList: ctx.takesHoldersAllowList,
       ...(scope.sourceId !== undefined ? { sourceId: scope.sourceId } : {}),
       ...(scope.sourceIds !== undefined ? { allowedSources: scope.sourceIds } : {}),
-      remote: ctx.remote === true,
+      remote: ctx.remote !== false,
     });
 
     // Persist if --save was passed locally
@@ -4301,7 +4303,7 @@ const find_trajectory: Operation = {
     const points = await ctx.engine.findTrajectory({
       entitySlug: p.entity_slug,
       ...scope,
-      remote: ctx.remote === true,
+      remote: ctx.remote !== false,
       metric,
       kind,
       since,
@@ -4866,8 +4868,12 @@ const forget_fact: Operation = {
     if (ctx.dryRun) return { dry_run: true, action: 'forget_fact', id: p.id };
     const id = p.id as number;
     const reason = typeof p.reason === 'string' ? p.reason : undefined;
+    const expectedSourceId = resolveWriteSourceId(ctx);
     const { forgetFactInFence } = await import('./facts/forget.ts');
-    const result = await forgetFactInFence(ctx.engine, id, { reason });
+    const result = await forgetFactInFence(ctx.engine, id, {
+      reason,
+      expectedSourceId,
+    });
     if (!result.ok && result.path === 'not_found') {
       throw new OperationError('fact_not_found', `Fact id ${id} not found.`);
     }
@@ -4883,20 +4889,39 @@ const preview_forget_fact: Operation = {
   description: 'Preview a controlled fact forget. Does not mutate DB or markdown.',
   params: {
     id: { type: 'number', required: true, description: 'Fact id to preview.' },
+    source_id: { type: 'string', required: false, description: 'Optional source id to narrow the preview.' },
   },
   scope: 'read',
   handler: async (ctx, p) => {
     const id = p.id as number;
+    const requestedSourceId = typeof p.source_id === 'string' ? p.source_id.trim() : undefined;
+    const scope = resolveReadSourceScope(ctx, requestedSourceId || undefined);
+    const queryParams: unknown[] = [id];
+    let sourcePredicate = '';
+    if (scope.sourceId !== undefined) {
+      queryParams.push(scope.sourceId);
+      sourcePredicate = 'AND source_id = $2';
+    } else if (scope.sourceIds !== undefined) {
+      if (scope.sourceIds.length === 0) {
+        throw new OperationError('fact_not_found', `Fact id ${id} not found.`);
+      }
+      const placeholders = scope.sourceIds.map((sourceId, index) => {
+        queryParams.push(sourceId);
+        return `$${index + 2}`;
+      });
+      sourcePredicate = `AND source_id IN (${placeholders.join(', ')})`;
+    }
     const rows = await ctx.engine.executeRaw<Record<string, unknown>>(
       `SELECT id, source_id, entity_slug, fact, kind, visibility, source, source_session,
               confidence, row_num, source_markdown_slug, expired_at
          FROM facts
         WHERE id = $1
-          ${ctx.remote === true ? "AND visibility = 'world'" : ''}`,
-      [id],
+          ${sourcePredicate}
+          ${ctx.remote !== false ? "AND visibility = 'world'" : ''}`,
+      queryParams,
     );
-    if (rows.length === 0) throw new OperationError('fact_not_found', `Fact id ${id} not found.`);
-    const row = rows[0]!;
+    const row = rows[0];
+    if (!row) throw new OperationError('fact_not_found', `Fact id ${id} not found.`);
     const alreadyExpired = row.expired_at !== null && row.expired_at !== undefined;
     return {
       id,
@@ -4948,9 +4973,9 @@ const apply_forget_fact: Operation = {
     if (!citation) throw new OperationError('invalid_params', 'apply_forget_fact requires citation.');
     if (ctx.dryRun) return { dry_run: true, action: 'apply_forget_fact', id };
 
-    const preview = await preview_forget_fact.handler(ctx, { id }) as Record<string, unknown>;
+    const preview = await preview_forget_fact.handler(ctx, { id, source_id: sourceId }) as Record<string, unknown>;
     const { forgetFactInFence } = await import('./facts/forget.ts');
-    const result = await forgetFactInFence(ctx.engine, id, { reason });
+    const result = await forgetFactInFence(ctx.engine, id, { reason, expectedSourceId: sourceId });
     if (!result.ok && result.path === 'not_found') {
       throw new OperationError('fact_not_found', `Fact id ${id} not found.`);
     }
@@ -5332,7 +5357,7 @@ const search_by_image: Operation = {
     // D18 P0 — remote callers cannot pass image_path. Rejecting at handler
     // entry, before any file I/O fires. validateParams catches it too at the
     // dispatch layer; this is defense-in-depth.
-    if (ctx.remote === true && imagePath) {
+    if (ctx.remote !== false && imagePath) {
       throw new Error(
         'permission_denied: image_path is not permitted for remote callers (D18). ' +
         'Use image_url or image_data instead.',
@@ -5346,20 +5371,11 @@ const search_by_image: Operation = {
       throw new Error('search_by_image accepts only one of: image_path, image_url, image_data');
     }
 
-    // D23-#6 — pre-flight daily-budget check for remote OAuth clients.
-    // Local CLI callers (ctx.remote=false) bypass the cap (clientId="").
-    const clientId = (ctx.remote === true ? (ctx.auth?.clientId ?? '') : '');
-    if (clientId) {
-      const budgetUsd = await getDailyImageBudgetUsd(ctx.engine);
-      const { checkBudget } = await import('./spend-log.ts');
-      await checkBudget(ctx.engine, clientId, Math.round(budgetUsd * 100));
-    }
-
     // Resolve image bytes via the SSRF-defended loader. For remote callers,
     // tighter byte cap.
     const remoteCap = await getRemoteMaxBytes(ctx.engine);
     const localCap = await getLocalMaxBytes(ctx.engine);
-    const cap = ctx.remote === true ? remoteCap : localCap;
+    const cap = ctx.remote !== false ? remoteCap : localCap;
     const { loadImageInput } = await import('./search/image-loader.ts');
     const loaded = await loadImageInput(
       (imagePath ?? imageUrl ?? `data:${imageMime ?? 'image/png'};base64,${imageData}`)!,
@@ -5367,12 +5383,7 @@ const search_by_image: Operation = {
     );
 
     // Resolve source-scope (D5 canonical thread).
-    const resolvedSourceId =
-      sourceIdParam !== undefined
-        ? sourceIdParam === '__all__'
-          ? undefined
-          : sourceIdParam
-        : ctx.sourceId;
+    const resolvedScope = resolveReadSourceScope(ctx, sourceIdParam);
 
     const { searchByImage } = await import('./search/by-image.ts');
     const results = await searchByImage(
@@ -5382,43 +5393,14 @@ const search_by_image: Operation = {
         limit: (p.limit as number) || 20,
         offset: (p.offset as number) || 0,
         query: queryRefinement,
-        sourceId: resolvedSourceId,
-        ...sourceScopeOpts(ctx),
+        ...resolvedScope,
       },
     );
-
-    // D23-#6 — record successful Voyage call. Best-effort; failures don't
-    // block the response.
-    if (clientId) {
-      const { recordSpend, VOYAGE_MULTIMODAL_3_PER_IMAGE_CENTS } = await import('./spend-log.ts');
-      // Approximate: 1 image embed + (query ? 1 text embed : 0). Both are
-      // billed at the same per-call rate by Voyage.
-      const calls = 1 + (queryRefinement ? 1 : 0);
-      void recordSpend(ctx.engine, {
-        clientId,
-        tokenName: ctx.auth?.clientName ?? null,
-        operation: 'search_by_image',
-        spendCents: VOYAGE_MULTIMODAL_3_PER_IMAGE_CENTS * calls,
-        provider: 'voyage',
-        model: 'voyage-multimodal-3',
-      });
-    }
 
     return results;
   },
   cliHints: { name: 'search-by-image' },
 };
-
-async function getDailyImageBudgetUsd(engine: BrainEngine): Promise<number> {
-  try {
-    const v = await engine.getConfig('search.image_query.daily_budget_usd_per_client');
-    if (v == null) return 5; // default $5
-    const n = parseFloat(v);
-    return Number.isFinite(n) && n > 0 ? n : 5;
-  } catch {
-    return 5;
-  }
-}
 
 async function getLocalMaxBytes(engine: BrainEngine): Promise<number> {
   try {
@@ -6056,10 +6038,11 @@ const audit_frontmatter: Operation = {
   scope: 'admin',
   localOnly: false,
   handler: async (ctx, p) => {
-    const sourceId = (p.source_id as string | undefined) ?? ctx.sourceId;
-    const allowed = ctx.auth?.allowedSources;
-    if (ctx.remote !== false && allowed && allowed.length > 0 && !allowed.includes(sourceId)) {
-      throw new OperationError('permission_denied', `source '${sourceId}' is outside your granted sources.`);
+    const requestedSourceId = (p.source_id as string | undefined) ?? ctx.sourceId;
+    const scope = resolveReadSourceScope(ctx, requestedSourceId);
+    const sourceId = scope.sourceId;
+    if (!sourceId) {
+      throw new OperationError('invalid_params', 'audit_frontmatter requires one concrete source_id.');
     }
     return auditFrontmatter(ctx.engine, sourceId);
   },

@@ -82,14 +82,27 @@ function todayUtc(): string {
 export async function forgetFactInFence(
   engine: BrainEngine,
   factId: number,
-  opts: { reason?: string } = {},
+  opts: { reason?: string; expectedSourceId: string },
 ): Promise<ForgetFactResult> {
   const reason = opts.reason ?? 'forgotten';
+  const expectedSourceId = opts.expectedSourceId;
+
+  const expireScopedFact = async (): Promise<boolean> => {
+    const updated = await engine.executeRaw<{ id: string }>(
+      `UPDATE facts
+          SET expired_at = now()
+        WHERE id = $1 AND source_id = $2 AND expired_at IS NULL
+        RETURNING id`,
+      [factId, expectedSourceId],
+    );
+    return updated.length > 0;
+  };
 
   const rows = await engine.executeRaw<FactDbRow>(
     `SELECT id, source_id, entity_slug, row_num, source_markdown_slug, expired_at
-       FROM facts WHERE id = $1`,
-    [factId],
+       FROM facts
+      WHERE id = $1 AND source_id = $2`,
+    [factId, expectedSourceId],
   );
   if (rows.length === 0) {
     return { ok: false, path: 'not_found', reason };
@@ -108,7 +121,7 @@ export async function forgetFactInFence(
 
   if (!canFence) {
     // Legacy path — DB-only forget. Doesn't survive `voltmind rebuild`.
-    const ok = await engine.expireFact(factId); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
+    const ok = await expireScopedFact(); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
     return { ok, path: 'legacy_db', reason };
   }
 
@@ -119,7 +132,7 @@ export async function forgetFactInFence(
   );
   const localPath = sources[0]?.local_path ?? null;
   if (!localPath) {
-    const ok = await engine.expireFact(factId); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
+    const ok = await expireScopedFact(); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
     return { ok, path: 'legacy_db', reason };
   }
 
@@ -132,7 +145,7 @@ export async function forgetFactInFence(
     // File deleted out from under us — only the DB has the row.
     // Legacy path is the safe behavior; the operator can fix the
     // tree mismatch separately.
-    const ok = await engine.expireFact(factId); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
+    const ok = await expireScopedFact(); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
     return { ok, path: 'legacy_db', reason };
   }
 
@@ -146,7 +159,7 @@ export async function forgetFactInFence(
       // Fence is missing the row — DB drifted from markdown. Fall
       // through to legacy expire so the user's intent succeeds; doctor
       // surfaces the drift separately.
-      const ok = await engine.expireFact(factId); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
+      const ok = await expireScopedFact(); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
       return { ok, path: 'legacy_db', reason };
     }
 
@@ -178,7 +191,7 @@ export async function forgetFactInFence(
     if (begin === -1 || end === -1) {
       // Race / corruption: fence disappeared between parse and render.
       // Legacy fallback.
-      const ok = await engine.expireFact(factId); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
+      const ok = await expireScopedFact(); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
       return { ok, path: 'legacy_db', reason };
     }
     const newBody = body.slice(0, begin) + newFence + body.slice(end + '<!--- voltmind:facts:end -->'.length);
@@ -189,7 +202,7 @@ export async function forgetFactInFence(
     if (validate.warnings.length > 0) {
       // Quarantine .tmp; leave the canonical file alone; fall back to
       // DB expire so the user's forget intent still succeeds.
-      const ok = await engine.expireFact(factId); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
+      const ok = await expireScopedFact(); // voltmind-allow-direct-insert: legacy fallback path inside forgetFactInFence — fence rewrite not possible (pre-v51 row / missing local_path / file deleted / row_num drift)
       return { ok, path: 'legacy_db', reason };
     }
     renameSync(tmpPath, filePath);
@@ -199,9 +212,9 @@ export async function forgetFactInFence(
     // accurate the moment the forget commits, without waiting for the
     // next extract_facts cycle phase to reconcile.
     await engine.executeRaw(
-      `UPDATE facts SET valid_until = $1, expired_at = now()
-       WHERE id = $2 AND expired_at IS NULL`,
-      [today, factId],
+      `UPDATE facts SET valid_until = $3, expired_at = now()
+       WHERE id = $1 AND source_id = $2 AND expired_at IS NULL`,
+      [factId, expectedSourceId, today],
     );
 
     return { ok: true, path: 'fence', reason };
