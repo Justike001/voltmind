@@ -4597,6 +4597,81 @@ const sources_status: Operation = {
   cliHints: { name: 'sources_status', hidden: true },
 };
 
+const provision_personal_source: Operation = {
+  name: 'provision_personal_source',
+  description:
+    'Admin: derive a personal DB source from a company email (deterministic — one ' +
+    'email always maps to exactly one source, so re-provisioning never duplicates), ' +
+    'optionally git-checkout the user\u2019s knowledge repo, and mint a source-scoped ' +
+    'OAuth client for a thin client. Host-operator/agent use; requires the `admin` scope. ' +
+    'SSH checkout is an ADMIN-only capability, confined to the company Gogs host ' +
+    '(VOLTMIND_GOGS_SSH_HOST); non-admin users can never invoke it.',
+  params: {
+    email: {
+      type: 'string',
+      required: true,
+      description: 'Company email, eg alice-example@company.example → source personal-alice-example.',
+    },
+    repo_url: {
+      type: 'string',
+      description:
+        'Git URL to checkout into the source (https, or ssh://git@host/org/repo.git / ' +
+        'git@host:org/repo.git for the Host Gogs admin SSH key).',
+    },
+    allow_ssh: {
+      type: 'boolean',
+      description: 'Use SSH checkout (admin-only; confined to the company Gogs host).',
+    },
+    federated: {
+      type: 'boolean',
+      description: 'Isolated by default (false) — the personal KB never leaks into shared search.',
+    },
+    scopes: {
+      type: 'string',
+      description: 'Thin-client OAuth scopes (default "read write").',
+    },
+  },
+  mutating: true,
+  scope: 'admin',
+  handler: async (ctx, p) => {
+    const email = p.email as string;
+    const repoUrl = p.repo_url as string | undefined;
+    // SSH checkout is an ADMIN privilege: only a caller with `admin` scope (the
+    // Host agent / operator) may clone over SSH. Non-admin users never reach
+    // this op. The core Gogs-host allowlist (VOLTMIND_GOGS_SSH_HOST) still
+    // confines the Host key to the company Gogs server, so even an admin cannot
+    // point it at arbitrary internal hosts.
+    const isAdmin = hasScope(ctx.auth?.scopes ?? [], 'admin');
+    const allowSsh =
+      isAdmin &&
+      (p.allow_ssh === true ||
+        (repoUrl?.startsWith('ssh://') ?? false) ||
+        /^[^@/\s]+@[^:\s]+:/.test(repoUrl ?? ''));
+    const { provisionPersonalSource, SshHostNotAllowedError } =
+      await import('./personal-provision.ts');
+    const { sqlQueryForEngine } = await import('./sql-query.ts');
+    const sql = sqlQueryForEngine(ctx.engine);
+    try {
+      return await provisionPersonalSource(ctx.engine, sql, {
+        email,
+        repoUrl,
+        allowSsh,
+        federated: p.federated as boolean | undefined,
+        scopes: p.scopes as string | undefined,
+      });
+    } catch (e) {
+      if (e instanceof OperationError) throw e;
+      // Map the company-Gogs allowlist rejection to a structured error code so
+      // agents can branch on it instead of a generic internal_error.
+      if (e instanceof SshHostNotAllowedError) {
+        throw new OperationError('ssh_host_not_allowlisted', e.message);
+      }
+      throw e;
+    }
+  },
+  cliHints: { name: 'provision_personal_source', hidden: true },
+};
+
 // ============================================================
 // v0.31 — Hot memory ops: extract_facts / recall / forget_fact
 // ============================================================
@@ -6045,6 +6120,8 @@ export const operations: Operation[] = [
   takes_scorecard, takes_calibration,
   // v0.28: whoami + scoped sources management
   whoami, sources_add, sources_list, sources_remove, sources_status,
+  // v0.43: personal-KB provisioning (admin-scoped; host agent self-service)
+  provision_personal_source,
   // v0.29: Salience + anomalies + recent transcripts
   get_recent_salience, find_anomalies, get_recent_transcripts,
   // v0.31: hot memory (facts table)

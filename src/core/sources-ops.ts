@@ -143,6 +143,17 @@ export interface AddSourceOpts {
    * Only honored when remoteUrl is set.
    */
   cloneDir?: string;
+  /**
+   * Extra keys merged into the `config` JSONB (e.g. `owner_email` for
+   * personal-source management). Written with the same encoding the rest of
+   * addSource uses, so readers via parseConfig stay consistent.
+   */
+  extraConfig?: Record<string, unknown>;
+  /**
+   * Accept SSH remote URLs (ssh:// or git@host:path). Host-side provision
+   * only; public/remote sources_add never sets this (https-only SSRF gate).
+   */
+  allowSsh?: boolean;
 }
 
 export interface RemoveSourceOpts {
@@ -280,7 +291,7 @@ export async function addSource(
   let parsedUrl: { url: string; hostname: string } | null = null;
   if (opts.remoteUrl) {
     try {
-      parsedUrl = parseRemoteUrl(opts.remoteUrl);
+      parsedUrl = parseRemoteUrl(opts.remoteUrl, { allowSsh: opts.allowSsh === true });
     } catch (e) {
       if (e instanceof RemoteUrlError) {
         throw new SourceOpError('invalid_remote_url', e.message, e);
@@ -329,7 +340,7 @@ export async function addSource(
       throw e;
     }
 
-    const config: Record<string, unknown> = { remote_url: parsedUrl.url };
+    const config: Record<string, unknown> = { ...opts.extraConfig, remote_url: parsedUrl.url };
     if (opts.federated !== null && opts.federated !== undefined) {
       config.federated = opts.federated;
     }
@@ -377,7 +388,7 @@ export async function addSource(
     }
   } else {
     // ── Path B: --path or no path (existing behavior, pre-v0.28) ─────────
-    const config: Record<string, unknown> = {};
+    const config: Record<string, unknown> = { ...(opts.extraConfig ?? {}) };
     if (opts.federated !== null && opts.federated !== undefined) {
       config.federated = opts.federated;
     }

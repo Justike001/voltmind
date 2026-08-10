@@ -60,7 +60,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'source-audit', 'import', 'export', 'files', 'file-refs', 'client-roots', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages', 'projects']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'source-audit', 'import', 'export', 'files', 'file-refs', 'client-roots', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'provision-personal', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages', 'projects']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'extract',
@@ -1003,6 +1003,11 @@ async function handleCliOnly(command: string, args: string[]) {
     await runReinitPglite(args);
     return;
   }
+  if (command === 'provision-personal') {
+    const { runProvisionPersonal } = await import('./commands/provision-personal.ts');
+    await runProvisionPersonal(args);
+    return;
+  }
   if (command === 'auth') {
     const { runAuth } = await import('./commands/auth.ts');
     await runAuth(args);
@@ -1044,6 +1049,11 @@ async function handleCliOnly(command: string, args: string[]) {
     const { runProviders } = await import('./commands/providers.ts');
     const [sub, ...rest] = args;
     await runProviders(sub, rest);
+    return;
+  }
+  if (command === 'provision-personal') {
+    const { runProvisionPersonal } = await import('./commands/provision-personal.ts');
+    await runProvisionPersonal(args);
     return;
   }
   if (command === 'auth') {

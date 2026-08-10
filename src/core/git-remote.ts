@@ -74,31 +74,56 @@ export interface ParsedRemoteUrl {
   hostname: string;
 }
 
+export interface ParseUrlOpts {
+  /**
+   * Accept SSH remote forms (`ssh://git@host/org/repo.git` or scp-style
+   * `git@host:org/repo.git`). Opt-in: only the HOST-side trusted provision
+   * path sets this — public/remote `sources_add` stays https-only so the
+   * SSRF surface isn't widened for untrusted callers. The operator's SSH
+   * key (already on the Host) authorizes the clone; no password prompt.
+   */
+  allowSsh?: boolean;
+}
+
 /**
- * Validate a remote git URL for clone safety. https:// only.
- * Rejects: non-https schemes, embedded credentials, path traversal, and
- * internal/private targets via isInternalUrl.
- *
- * VOLTMIND_ALLOW_PRIVATE_REMOTES=1 lets the URL through with a stderr warning.
- * Needed for self-hosted git over Tailscale (CGNAT 100.64/10) and similar.
+ * Validate a remote git URL for clone safety. https:// by default; with
+ * `allowSsh` also accepts ssh:// and scp-style git@host:path forms.
+ * Rejects: unsupported schemes, embedded credentials (https), path
+ * traversal, and internal/private targets (unless VOLTMIND_ALLOW_PRIVATE_REMOTES=1).
  */
-export function parseRemoteUrl(s: string): ParsedRemoteUrl {
+export function parseRemoteUrl(s: string, opts: ParseUrlOpts = {}): ParsedRemoteUrl {
   if (!s || typeof s !== 'string') {
     throw new RemoteUrlError('invalid_url', 'URL is empty or not a string');
   }
+
+  // scp-style SSH form:  git@host:org/repo.git
+  const scp = /^([^@/\s]+)@([^:\s]+):(.+)$/.exec(s);
   let url: URL;
-  try {
-    url = new URL(s);
-  } catch {
-    throw new RemoteUrlError('invalid_url', `URL malformed: ${s}`);
+  let hostname: string;
+  if (scp && opts.allowSsh) {
+    hostname = scp[2];
+    url = new URL(`ssh://${scp[1]}@${scp[2]}/${scp[3]}`);
+  } else {
+    try {
+      url = new URL(s);
+    } catch {
+      throw new RemoteUrlError('invalid_url', `URL malformed: ${s}`);
+    }
+    hostname = url.hostname;
   }
-  if (url.protocol !== 'https:') {
+
+  const proto = url.protocol;
+  const isHttps = proto === 'https:';
+  const isSsh = opts.allowSsh === true && (proto === 'ssh:' || Boolean(scp));
+  if (!isHttps && !isSsh) {
     throw new RemoteUrlError(
       'unsupported_scheme',
-      `URL scheme not supported (https:// only): ${url.protocol}`,
+      `URL scheme not supported (https:// only${opts.allowSsh ? ', or ssh:// / git@host:path' : ''}): ${proto}`,
     );
   }
-  if (url.username || url.password) {
+  // Embedded credentials are never allowed. SSH uses the operator's key, not
+  // a password in the URL; https must be password-free (key/token via env/helper).
+  if (isHttps && (url.username || url.password)) {
     throw new RemoteUrlError(
       'embedded_credentials',
       'URL must not contain embedded credentials (https://user:pass@host)',
@@ -110,17 +135,17 @@ export function parseRemoteUrl(s: string): ParsedRemoteUrl {
   if (isInternalUrl(s)) {
     if (process.env.VOLTMIND_ALLOW_PRIVATE_REMOTES === '1') {
       console.error(
-        `[voltmind] WARN: VOLTMIND_ALLOW_PRIVATE_REMOTES=1, accepting internal/private URL: ${url.hostname}`,
+        `[voltmind] WARN: VOLTMIND_ALLOW_PRIVATE_REMOTES=1, accepting internal/private URL: ${hostname}`,
       );
     } else {
       throw new RemoteUrlError(
         'internal_target',
-        `URL targets internal/private network: ${url.hostname} ` +
+        `URL targets internal/private network: ${hostname} ` +
           `(set VOLTMIND_ALLOW_PRIVATE_REMOTES=1 for self-hosted git over Tailscale or similar)`,
       );
     }
   }
-  return { url: s, hostname: url.hostname };
+  return { url: s, hostname };
 }
 
 export interface CloneOpts {
@@ -184,11 +209,21 @@ export function cloneRepo(url: string, destDir: string, opts: CloneOpts = {}): v
   }
   args.push(url, destDir);
 
+  const isSsh = url.startsWith('ssh://') || /^[^@/\s]+@[^:\s]+:/.test(url);
+  const sshEnv = isSsh
+    ? {
+        // Use the operator's key (already on the Host for the Gogs admin
+        // account). BatchMode avoids keyboard-interactive; accept-new records
+        // the internal Gogs host key on first contact without a prompt.
+        GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new',
+      }
+    : {};
+
   try {
     execFileSync('git', args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: opts.timeoutMs ?? 600_000,
-      env: { ...process.env, ...GIT_ENV },
+      env: { ...process.env, ...GIT_ENV, ...sshEnv },
     });
   } catch (e) {
     throw new GitOperationError(

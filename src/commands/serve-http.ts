@@ -2257,6 +2257,45 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     }
   });
 
+  // Personal-knowledge-base provisioning (v0.43). Agent-callable with the
+  // bootstrap token: derive a personal source from the company email (dedup
+  // by email — one email always maps to one source), checkout the optional
+  // knowledge repo, and mint a source-scoped thin-client credential.
+  app.post('/admin/api/provision-personal-source', requireAdmin, express.json(), async (req: Request, res: Response) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const email = body.email;
+      const repoUrlRaw = body.repoUrl;
+      const federated = body.federated;
+      const scopes = body.scopes;
+      if (!email || typeof email !== 'string') {
+        res.status(400).json({ error: 'email required (string)' });
+        return;
+      }
+      const federatedVal = typeof federated === 'boolean' ? federated : undefined;
+      const { provisionPersonalSource } =
+        await import('../core/personal-provision.ts');
+      const repoUrl = typeof repoUrlRaw === 'string' ? repoUrlRaw : undefined;
+      // SSH checkout is honored here because this endpoint is admin-authenticated
+      // (bootstrap token) — i.e. the Host operator/agent, not a user. The core
+      // Gogs-host allowlist (VOLTMIND_GOGS_SSH_HOST) still confines the key.
+      const allowSsh =
+        body.allowSsh === true ||
+        (repoUrl?.startsWith('ssh://') ?? false) ||
+        /^[^@/\s]+@[^:\s]+:/.test(repoUrl ?? '');
+      const result = await provisionPersonalSource(engine, sql, {
+        email,
+        repoUrl,
+        federated: federatedVal,
+        allowSsh,
+        scopes: typeof scopes === 'string' ? scopes : undefined,
+      });
+      res.json(result);
+    } catch (e) {
+      res.status(400).json({ error: 'provision_failed', message: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
   // ---------------------------------------------------------------------------
   // SSE live activity feed
   // ---------------------------------------------------------------------------

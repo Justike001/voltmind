@@ -196,6 +196,35 @@ describe('parseRemoteUrl — rejection cases', () => {
   });
 });
 
+// v0.43 — SSH remote forms, opt-in via `allowSsh` (Host-side provision only).
+describe('parseRemoteUrl — allowSsh', () => {
+  test('accepts ssh:// with allowSsh (private net allowed via env)', () => {
+    withEnv({ VOLTMIND_ALLOW_PRIVATE_REMOTES: '1' }, () => {
+      const r = parseRemoteUrl('ssh://git@gogs.internal.example/example-org/kb.git', { allowSsh: true });
+      expect(r.hostname).toBe('gogs.internal.example');
+    });
+  });
+
+  test('accepts scp-style git@host:path with allowSsh', () => {
+    withEnv({ VOLTMIND_ALLOW_PRIVATE_REMOTES: '1' }, () => {
+      const r = parseRemoteUrl('git@gogs.internal.example:example-org/alice-example-kb.git', { allowSsh: true });
+      expect(r.hostname).toBe('gogs.internal.example');
+      expect(r.url).toBe('git@gogs.internal.example:example-org/alice-example-kb.git');
+    });
+  });
+
+  test('still rejects ssh by default (allowSsh off)', () => {
+    expect(() => parseRemoteUrl('ssh://git@github.com/a/b.git')).toThrow(/scheme not supported/i);
+    expect(() => parseRemoteUrl('git@example.com:a/b.git')).toThrow(RemoteUrlError);
+  });
+
+  test('rejects ssh to private net without the env override', () => {
+    expect(() =>
+      parseRemoteUrl('ssh://git@gogs.internal.example/example-org/kb.git', { allowSsh: true }),
+    ).toThrow(/internal/i);
+  });
+});
+
 // T3 — Tailscale CGNAT regression cases.
 describe('parseRemoteUrl — CGNAT 100.64/10 (Tailscale)', () => {
   test('rejected by default', async () => {

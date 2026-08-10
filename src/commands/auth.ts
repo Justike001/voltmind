@@ -174,28 +174,74 @@ async function permissions(name: string, action: string, value: string | undefin
 
 async function list() {
   await withConfiguredSql(async (sql) => {
+    // ---- Legacy bearer tokens (access_tokens table) ----
     const rows = await sql`
       SELECT name, scopes, created_at, last_used_at, revoked_at
       FROM access_tokens
       ORDER BY created_at DESC
     `;
-    if (rows.length === 0) {
-      console.log('No tokens found. Create one: voltmind auth create "my-client"');
+
+    // ---- OAuth 2.1 clients + their issued token count ----
+    // Guarded: oauth_clients may be absent on a very old / partially
+    // migrated brain, so a missing table/column degrades to "no clients"
+    // instead of killing the whole list command.
+    let clients: Record<string, unknown>[] = [];
+    try {
+      clients = await sql`
+        SELECT c.client_id, c.client_name, c.source_id, c.federated_read,
+               c.grant_types, c.scope, c.token_endpoint_auth_method,
+               c.created_at, c.deleted_at,
+               (SELECT count(*) FROM oauth_tokens t
+                 WHERE t.client_id = c.client_id) AS token_count
+        FROM oauth_clients c
+        ORDER BY c.created_at DESC
+      `;
+    } catch (err) {
+      // oauth_clients / oauth_tokens missing or not yet migrated — show only
+      // legacy tokens rather than failing the whole listing.
+      clients = [];
+    }
+
+    if (rows.length === 0 && clients.length === 0) {
+      console.log('No auth entries found.');
+      console.log('  - legacy bearer token:  voltmind auth create "my-client"');
+      console.log('  - OAuth 2.1 client:     voltmind auth register-client "my-client"');
       return;
     }
-    console.log('Name                  Scopes               Created              Last Used            Status');
-    console.log('─'.repeat(100));
-    for (const r of rows) {
-      const name = (r.name as string).padEnd(20);
-      // v0.42 #7: surface the persisted scope set. NULL (pre-v113 brain or
-      // a token created before scopes were persisted) renders as '(admin)'
-      // since verifyAccessToken falls back to read+write+admin for NULL.
-      const scopesArr = (r.scopes as string[] | null) ?? ['read', 'write', 'admin'];
-      const scopes = (scopesArr.length > 0 ? scopesArr.join(' ') : '(none)').padEnd(20);
-      const created = new Date(r.created_at as string).toISOString().slice(0, 19);
-      const lastUsed = r.last_used_at ? new Date(r.last_used_at as string).toISOString().slice(0, 19) : 'never'.padEnd(19);
-      const status = r.revoked_at ? 'REVOKED' : 'active';
-      console.log(`${name}  ${scopes}  ${created}  ${lastUsed}  ${status}`);
+
+    if (rows.length > 0) {
+      console.log('Legacy bearer tokens:');
+      console.log('  Name                  Scopes               Created              Last Used            Status');
+      console.log('  ' + '─'.repeat(98));
+      for (const r of rows) {
+        const name = (r.name as string).padEnd(20);
+        // v0.42 #7: surface the persisted scope set. NULL (pre-v113 brain or
+        // a token created before scopes were persisted) renders as '(admin)'
+        // since verifyAccessToken falls back to read+write+admin for NULL.
+        const scopesArr = (r.scopes as string[] | null) ?? ['read', 'write', 'admin'];
+        const scopes = (scopesArr.length > 0 ? scopesArr.join(' ') : '(none)').padEnd(20);
+        const created = new Date(r.created_at as string).toISOString().slice(0, 19);
+        const lastUsed = r.last_used_at ? new Date(r.last_used_at as string).toISOString().slice(0, 19) : 'never'.padEnd(19);
+        const status = r.revoked_at ? 'REVOKED' : 'active';
+        console.log(`  ${name}  ${scopes}  ${created}  ${lastUsed}  ${status}`);
+      }
+    }
+
+    if (clients.length > 0) {
+      console.log('\nOAuth 2.1 clients:');
+      console.log('  Client Name            Source               Grant Types                  Scopes          Tokens  Status');
+      console.log('  ' + '─'.repeat(98));
+      for (const c of clients) {
+        const name = (c.client_name as string).padEnd(22);
+        const source = (c.source_id as string | null) ?? '';
+        const sourcePadded = (source || '(default)').padEnd(19);
+        const grants = ((c.grant_types as string[] | null) ?? []).join(',').padEnd(27);
+        const scope = (c.scope as string | null) || '(none)';
+        const scopePadded = scope.padEnd(18);
+        const tokenCount = String((c.token_count as number) ?? 0).padEnd(7);
+        const status = c.deleted_at ? 'REVOKED' : 'active';
+        console.log(`  ${name}  ${sourcePadded}  ${grants}  ${scopePadded}  ${tokenCount}  ${status}`);
+      }
     }
   });
 }
@@ -544,7 +590,9 @@ Usage:
                                                           job/action/schema-pack ops — admin is the largest
                                                           blast radius. Prefer voltmind auth register-client
                                                           for OAuth clients with per-source bindings.
-  voltmind auth list                                         List all tokens
+  voltmind auth list                                         List legacy bearer tokens AND OAuth 2.1
+                                                          clients (including per-client issued token
+                                                          counts) in one view
   voltmind auth revoke <name>                                Revoke a legacy token
   voltmind auth permissions <name> set-takes-holders <h1,h2,h3>
                                                           Update visibility for an existing token

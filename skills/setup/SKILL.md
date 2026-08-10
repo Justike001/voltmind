@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Set up VoltMind with Supabase or PGLite, agent instructions, first import, and thin-client shared-drive roots. Use for first boot or configuring RaiDrive/SMB/Z-drive mappings on a client workstation.
+description: Set up VoltMind as a thin client connected to the company brain Host over MCP (OAuth 2.1), agent instructions, first retrieval, and thin-client shared-drive roots. Use for first connect to the Host's MCP server, or for configuring RaiDrive/SMB/Z-drive mappings on a client workstation.
 triggers:
   - "set up voltmind"
   - "initialize brain"
@@ -31,49 +31,57 @@ Set up VoltMind from scratch. Target: working brain in under 5 minutes.
 - The brain-first lookup protocol is injected into the project's AGENTS.md or equivalent.
 - Live sync is configured and verified (a test change pushed and found via search).
 - Schema state is tracked in `~/.voltmind/update-state.json` so future upgrades know what the user adopted or declined.
-- No Supabase anon key is requested; VoltMind uses only the database connection string.
+- No Supabase anon key or cloud database is requested. As a thin client you connect to the Host's MCP server with OAuth credentials; the Host owns the database.
 - For a company environment that requires embedding/reranking data to stay
   internal, use [`docs/ai-providers/qwen-vllm.md`](../../docs/ai-providers/qwen-vllm.md)
   before initialization. It defines the required Qwen `halfvec(2048)` schema
   and internal endpoint configuration; do not substitute a public embedding
   provider for that workflow.
 
-## How VoltMind connects
+## How you connect: MCP to the Host (thin client)
 
-VoltMind connects directly to Postgres over the wire protocol. NOT through the
-Supabase REST API. You need the **database connection string** (a `postgresql://` URI),
-not the project URL or anon key. The password is embedded in the connection string.
+The VoltMind brain already runs **on the company brain Host** (an Ubuntu server).
+You do NOT stand up your own Postgres/Supabase. Your machine or agent is a
+**thin client**: it connects to the Host's MCP server over HTTPS with OAuth 2.1,
+and the Host owns all retrieval, writes, sync, and embeddings. Brain data never
+leaves the Host.
 
-Use the **Transaction pooler** connection string (port 6543), not the direct
-connection (port 5432). The direct hostname resolves to IPv6 only, which many
-environments can't reach. Find it: click **Connect** in the top navigation bar,
-then **Connection String** > **Transaction pooler**, and copy the string.
+- **Ingress (issuer):** `https://<host-public-url>` (e.g. `https://<host>.ts.net`)
+- **MCP endpoint:** `<issuer>/mcp` (e.g. `https://<host>.ts.net/mcp`)
+- **Auth:** OAuth 2.1 (`client_credentials`, or annotated PKCE for browser clients)
+- **OAuth discovery:** `<issuer>/.well-known/oauth-authorization-server`
+- **Routable from a thin client:** `search`, `query`, `stats`, `doctor --json`,
+  page reads/writes, and — if the Host enables `mcp.publish_skills=true` —
+  `list_skills` / `get_skill`, so you can read THIS skill live from the Host.
+- **Host-only (never run on the thin client):** `sync`, `embed`, `extract`,
+  `sources`/file management, `serve`, migrations. Thin clients are refused these
+  and pointed at the Host; the Host's agent runs them on the server.
 
-**Do NOT ask for the Supabase anon key.** VoltMind doesn't use it.
+The Host operator (or the Host's own agent — see "Automated provisioning" in
+Phase A) issues your `client_id` / `client_secret` and binds you to a **source**
+(which repo inside the brain). You never see a database connection string or a
+Supabase key — those never leave the Host.
 
-## Why Supabase
+## Prerequisites (on your side)
 
-Supabase gives you managed Postgres + pgvector (vector search built in) for $25/mo:
-- 8GB database + 100GB storage on Pro tier
-- No server to manage, automatic backups, dashboard for debugging
-- pgvector pre-installed, just works
-- Alternative: any Postgres with pgvector extension (self-hosted, Neon, Railway, etc.)
+- The `voltmind` binary installed on your machine/agent.
+- Host-issued OAuth credentials:
+  - `--issuer-url https://<host-public-url>` (or `VOLTMIND_REMOTE_ISSUER_URL`)
+  - `--mcp-url https://<host-public-url>/mcp` (or `VOLTMIND_REMOTE_MCP_URL`)
+  - `--oauth-client-id <id>` / `--oauth-client-secret <s>` (or `VOLTMIND_REMOTE_CLIENT_ID` / `VOLTMIND_REMOTE_CLIENT_SECRET`)
+- A target **source id** assigned by the Host (e.g. `personal-alice-example`).
+- Network reachability to the Host (HTTPS outbound).
 
-## Prerequisites
+## Available init options (thin client)
 
-- A Supabase account (Pro tier recommended, $25/mo) OR any Postgres with pgvector
-- An OpenAI API key (for semantic search embeddings, ~$4-5 for 7,500 pages)
-- A git-backed markdown knowledge base (or start fresh)
+- `voltmind init --mcp-only --issuer-url <u> --mcp-url <u>/mcp --oauth-client-id <id> --oauth-client-secret <s>`
+  -- writes a `remote_mcp` config, creates **no** local engine, and runs three
+  pre-flight smokes (OAuth discovery → token round-trip → MCP initialize).
+- `voltmind init --mcp-only --force` -- re-run / refresh an existing thin-client config.
+- `voltmind doctor --json` -- post-connect health check (OAuth + MCP checks).
+- `voltmind remote ping` -- ask the Host to run a sync/embed cycle (thin-client friendly).
 
-## Available init options
-
-- `voltmind init --supabase` -- interactive wizard (prompts for connection string)
-- `voltmind init --url <connection_string>` -- direct, no prompts
-- `voltmind init --non-interactive --url <connection_string>` -- for scripts/agents
-- `voltmind doctor --json` -- health check after init
-
-There is no `--local`, `--sqlite`, or offline mode. VoltMind requires Postgres + pgvector
-(local PGLite or remote Supabase / self-hosted).
+Not a thin client? A machine that will run its OWN engine uses **Phase B** instead.
 
 ## Thin-client shared-drive roots
 
@@ -93,42 +101,137 @@ return the commands for the user to run. Verify retrieval with
 `voltmind file-refs search '<local-path>'`; the Host stores only the logical
 root/path identity.
 
-## Phase A: Supabase Setup (recommended)
+## Phase A: Connect to the Host via MCP (recommended)
 
-Guide the user through creating a Supabase project:
-
-1. "Go to https://supabase.com and sign up or log in."
-2. "Click 'New Project' in the top left."
-   - Name: `voltmind`
-   - Region: pick the one closest to you
-   - Database password: generate a strong one and save it
-3. "Wait about 2 minutes for the project to initialize."
-4. "Find the connection string: click **Connect** in the top navigation bar,
-   then **Connection String** > **Transaction pooler**, and copy the string
-   (port 6543)."
-5. Initialize voltmind:
+1. Confirm which Host brain + source the user belongs to, and that the Host's MCP
+   server is reachable:
    ```bash
-   voltmind init --non-interactive --url "postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres"
+   curl -sI https://<host-public-url>/mcp          # expect 200/204
+   curl -s  https://<host-public-url>/.well-known/oauth-authorization-server
    ```
-6. Verify: `voltmind doctor --json`
+2. Collect your Host-issued credentials. **No manual Host work needed** if the
+   Host operator has run the automated provisioning bootstrap (see below).
+3. Connect as a thin client (this runs the three pre-flight smokes automatically):
+   ```bash
+   voltmind init --mcp-only \
+     --issuer-url https://<host-public-url> \
+     --mcp-url https://<host-public-url>/mcp \
+     --oauth-client-id <client-id> \
+     --oauth-client-secret <client-secret>
+   ```
+   Expected: `✓ OAuth discovery`, `✓ OAuth /token`, `✓ MCP initialize`. If any
+   step fails, stop and report it (see "Error Recovery").
+4. Verify the connection:
+   ```bash
+   voltmind doctor --json
+   ```
+   Report the full JSON; every check should be OK.
+5. Basic test — prove retrieval works end-to-end through the MCP connection:
+   ```bash
+   voltmind search "<a topic you know is in the brain>"
+   voltmind query "what do we know about <topic>"
+   voltmind stats
+   ```
+6. (Optional) Pull this skill live from the Host instead of trusting a local copy:
+   once `mcp.publish_skills=true`, call `list_skills` then `get_skill setup`.
 
-**OpenClaw/Hermes agent instructions:** Store the Supabase access token in your persistent
-env as `SUPABASE_ACCESS_TOKEN`. voltmind doesn't store it, you need it for future
-`voltmind doctor` runs. Generate at: https://supabase.com/dashboard/account/tokens
+**Automated provisioning (removes the manual Host brace):** the Host operator runs a
+one-time bootstrap that (a) ensures your source exists and (b) registers an OAuth
+client bound to it (`--source <id> --scopes read write`), then hands you
+`client_id`/`client_secret`. After that, connecting + testing is fully self-service.
+The exact command list lives in `docs/mcp/DEPLOY.md`.
 
-## Phase B: BYO Postgres (alternative)
+## Phase A.5: Onboard a user's personal knowledge base (email → source + Gogs repo)
 
-If the user already has Postgres with pgvector:
+For each user, the **personal KB** lives in its own isolated DB source. Company
+email is the identity contract:
+- `alice-example@company.example` → source id `personal-alice-example` (`personal-<name>`).
+- **One company email always maps to exactly ONE source** (deterministic dedup) —
+  re-provisioning never creates a second source, keeping per-user KBs manageable.
+- **Scope isolation:** the minted credential can only read/write that user's own
+  source; other users' sources are unreachable.
 
-1. Get the connection string from the user.
+### Step 1 — user (or their agent) creates their Gogs account + knowledge repo
+Most users aren't developers, so the user's agent does this for them against the
+company Gogs `https://gogs.internal.example` (org: `https://gogs.internal.example/example-org`):
+1. Create a Gogs account (username from the email local part, e.g. `alice-example`).
+2. Under the `example-org` org, create an empty personal knowledge repo, e.g.
+   `https://gogs.internal.example/example-org/alice-example-kb`.
+3. Add an initial commit (e.g. a `README.md`) so the Host can clone it.
+
+### Step 2 — provision (Host operator / Host agent)
+One command (or one admin call) creates the DB source, checks out the repo, and
+mints a source-scoped credential. The repo can be cloned over **HTTPS** or over
+**SSH** using the Host's Gogs-admin SSH key (sees every member's private repo):
+```bash
+# The USER's agent creates the repo in Gogs, then hands its SSH address over.
+# The HOST agent clones it (SSH checkout) and syncs with the Host key.
+
+# CLI, on the Host (admin / Host agent): SSH checkout
+voltmind provision-personal alice-example@company.example \
+  --repo-url git@gogs.internal.example:example-org/alice-example-kb.git
+#   --allow-ssh auto-detected for ssh:// / git@host:path forms
+
+# admin HTTP endpoint (bootstrap token):
+curl -X POST https://<host>/admin/api/provision-personal-source \
+  -H "Authorization: Bearer <bootstrap-token>" -H "Content-Type: application/json" \
+  -d '{"email":"alice-example@company.example","repoUrl":"git@gogs.internal.example:example-org/alice-example-kb.git"}'
+
+# MCP op (admin scope):
+#   provision_personal_source { email, repo_url, scopes:"read write" }
+```
+Returns `source_id` + `client_id`/`client_secret`.
+
+> **SSH key security boundary (admin-only):** the Host's Gogs-admin SSH key is used
+> ONLY by the Host to checkout/sync users' private repos — that's why the user's
+> agent passes the repo's SSH address, and the Host (not the user) runs the clone.
+> SSH checkout is an **admin-privilege** capability: it is honored only for an
+> `admin`-scope caller (the Host agent / operator) or the bootstrap-token admin
+> endpoint / local CLI. Non-admin users cannot invoke it (they lack `admin` scope
+> and never reach `provision_personal_source`). As an extra guard the key is
+> **confined to the company Gogs host** (`VOLTMIND_GOGS_SSH_HOST`, default
+> `gogs.internal.example`) — so even an admin can't point it at arbitrary internal hosts.
+
+> **Private/internal Gogs (important):**
+> - **SSH checkout (recommended for private repos):** the Host clones with the
+>   Gogs-admin key via `GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"`
+>   — no password in any URL, key must be on the Host (`~/.ssh`) and its
+>   `git@gogs.internal.example:~` confirmation accepted once.
+> - **HTTPS checkout:** only accepts `https://` and rejects internal networks
+>   unless the Host runs with `VOLTMIND_ALLOW_PRIVATE_REMOTES=1`; embedded
+>   `user:pass@host` credentials are always blocked.
+> - Hosts talking to the private `gogs.internal.example` Gogs should set
+>   `VOLTMIND_ALLOW_PRIVATE_REMOTES=1` regardless (the IP is a private net).
+
+### Step 3 — user connects as a thin client (self-serve)
+```bash
+voltmind init --mcp-only \
+  --issuer-url https://<host-public-url> \
+  --mcp-url https://<host-public-url>/mcp \
+  --oauth-client-id <client_id> --oauth-client-secret <client_secret>
+voltmind doctor --json
+voltmind search "<topic>"
+```
+From here the user reads/writes only their own `personal-*` source; other users'
+sources stay unreachable.
+
+## Phase B: Standalone VoltMind (alternative)
+
+Only for a machine that runs its OWN engine (not a thin client) — e.g. a personal
+brain or an isolated Host. The company default is connecting to the Host (Phase A).
+
+1. Have any Postgres with pgvector ready (self-hosted, Neon, Railway, managed
+   PgBouncer pooler, etc.). Prefer the Transaction pooler string (port 6543) over
+   a direct IPv6-only host where applicable.
 2. Run: `voltmind init --non-interactive --url "<connection_string>"`
 3. Verify: `voltmind doctor --json`
-
-If the connection fails with ECONNREFUSED and the URL contains `supabase.co`,
-the user probably pasted the direct connection (IPv6 only). Guide them to the
-Transaction pooler string instead (see Phase A step 4).
+4. Live sync, embeddings, and autopilot then run on THIS machine (Phase H).
 
 ## Phase C: First Import
+
+> **Thin client:** imports run on the Host, not your machine. If you connected via
+> Phase A, skip to the retrieval verification below, or ask the Host's agent to run
+> the import. The rest of Phase C is for a Host operator with a local engine (Phase B).
 
 1. **Discover markdown repos.** Scan the environment for git repos with markdown content.
 
@@ -440,6 +543,9 @@ index stays current:
 voltmind sync --no-pull --no-embed
 ```
 
+> **Thin client:** `sync` is refused locally. Writes made via MCP `put_page` are
+> picked up by the Host's autopilot sync; trigger a cycle with `voltmind remote ping`.
+
 This indexes new/changed files without pulling from git or regenerating embeddings.
 Embeddings can be refreshed later in batch (`voltmind embed --stale`).
 
@@ -508,12 +614,12 @@ output. It checks connection, pgvector, RLS, schema version, and embeddings.
 
 | What You See | Why | Fix |
 |---|---|---|
-| Connection refused | Supabase project paused, IPv6, or wrong URL | Use Transaction pooler (port 6543), or supabase.com/dashboard > Restore |
-| Password authentication failed | Wrong password | Project Settings > Database > Reset password |
-| pgvector not available | Extension not enabled | Run `CREATE EXTENSION vector;` in SQL Editor |
-| OpenAI key invalid | Expired or wrong key | platform.openai.com/api-keys > Create new |
-| No pages found | Query before import | Import files into voltmind first |
-| RLS not enabled | Security gap | Run `voltmind init` again (auto-enables RLS) |
+| OAuth discovery failed (`discovery_*`) | Wrong `--issuer-url`, Host unreachable, or `serve --http` not running on the Host | Confirm the issuer URL and that the Host is up; `curl` the `/.well-known/oauth-authorization-server` |
+| `token_*` failed | Wrong `client_id`/`client_secret`, or the client lacks scopes | Re-request credentials from the Host; confirm `--scopes read write` was set |
+| `mcp_smoke_*` failed | Wrong `--mcp-url` path, or the Host isn't serving `/mcp` | Confirm `<issuer>/mcp` matches the Host's served path |
+| `missing_scope` on a tool call | Your OAuth client isn't granted that scope | Host re-registers the client with the needed scope (read / write / sources_admin) |
+| `sync`/`embed`/`sources` errors | These run on the Host, not the thin client | Use `voltmind remote ping`, or run on the Host |
+| No pages found | Querying before the source is populated | Ask the Host to import/sync the source, then re-search |
 
 ## Phase G: Auto-Update Check (if not already configured)
 
@@ -534,6 +640,10 @@ If already configured or user declines, skip.
 
 The brain repo is the source of truth. If sync doesn't run automatically, the
 vector DB falls behind and voltmind returns stale answers. This phase is not optional.
+
+> **Thin client:** sync/embed run on the Host (they are refused locally on a thin
+> client). Trigger a Host cycle with `voltmind remote ping`; the Host's autopilot
+> handles the rest. This phase is for the Host operator only.
 
 Read `docs/VOLTMIND_SKILLPACK.md` Section 18 for the full reference. Key points:
 
@@ -632,7 +742,8 @@ re-suggesting things the user already declined.
 ## Anti-Patterns
 
 - **Ending setup without offering cold-start.** An empty brain is useless. Phase J (cold-start) is where setup pays off. Always present the "Ready to populate?" prompt after verification. Skipping this is like installing an app and never logging in.
-- **Asking for the Supabase anon key.** VoltMind connects directly to Postgres over the wire protocol, not through the REST API. Only the database connection string is needed.
+- **Asking for a database connection string or Supabase key on a thin client.**
+  You connect to the Host's MCP server with OAuth credentials; the database stays host-side.
 - **Skipping live sync setup.** If sync doesn't run automatically, the vector DB falls behind and search returns stale answers. Phase H is not optional.
 - **Declaring setup complete without verification.** "The command ran" is not the same as "it worked." Push a test change, wait for sync, search for the corrected text.
 - **Leaving the direct connection unreachable on IPv4.** VoltMind uses the Transaction pooler (port 6543) for reads and a derived direct connection (`db.<ref>.supabase.co:5432`, IPv6-only) for migrations, DDL, and sync transactions. On an IPv4-only host, reads work but sync silently skips pages. Set `VOLTMIND_DIRECT_DATABASE_URL` to the Session pooler string (port 5432, IPv4), or enable the IPv4 add-on.
@@ -644,8 +755,9 @@ re-suggesting things the user already declined.
 VOLTMIND SETUP COMPLETE
 =====================
 
-Engine: [PGLite / Supabase Postgres]
-Connection: [verified / pooler mode confirmed]
+Endpoint: https://<host-public-url>/mcp
+Source: [default / <source id>]
+Connection: [OAuth verified / MCP initialize OK]
 Pages imported: N
 Embeddings: N/N (keyword search active, semantic improving)
 Live sync: [configured / method]
@@ -662,8 +774,9 @@ with a bullet list.** The bullet list is for when the user defers cold-start.
 
 ## Tools Used
 
-- `voltmind init --non-interactive --url ...` -- create brain
-- `voltmind import <dir> --no-embed [--workers N]` -- import files
+- `voltmind init --mcp-only --issuer-url ... --mcp-url ... --oauth-client-id ... --oauth-client-secret ...` -- connect to the Host as a thin client
+- `voltmind remote ping` -- trigger a Host sync/embed cycle
+- `voltmind import <dir> --no-embed [--workers N]` -- import files (Host only)
 - `voltmind search <query>` -- search brain
 - `voltmind doctor --json` -- health check
 - `voltmind check-update --json` -- check for updates
