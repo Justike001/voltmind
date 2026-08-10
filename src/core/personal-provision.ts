@@ -7,7 +7,7 @@
  * agent needs to connect to the Host's MCP server.
  *
  * Email → source contract:
- *   - `alice-example@company.example` → source id `personal-alice-example`
+ *   - `alice-example@company.example` → source id `personal-alice-<digest>`
  *   - one email always derives to exactly one source id (deterministic), so
  *     a re-provision can never create a second source for the same person.
  *
@@ -25,6 +25,7 @@ import type { BrainEngine } from './engine.ts';
 import type { SqlQuery } from './sql-query.ts';
 import { addSource } from './sources-ops.ts';
 import { VoltMindOAuthProvider } from './oauth-provider.ts';
+import { createHash } from 'node:crypto';
 
 /** Company email domain. Overridable for other instances via env. */
 export const COMPANY_DOMAIN = process.env.VOLTMIND_COMPANY_DOMAIN || 'company.example';
@@ -64,24 +65,47 @@ export function normalizeCompanyEmail(email: string): NormalizedCompanyEmail {
 
 /**
  * Derive the deterministic personal source id for a company email.
- * `alice-example@company.example` → `personal-alice-example`.
- * Dots/underscores → dashes; everything else lowercased. Guarantees one
- * email == one source (the id is a pure function of the email).
+ *
+ * The readable prefix is intentionally NOT the identity boundary: distinct
+ * valid email locals such as `a.b`, `a_b`, and `a-b` can collapse to the same
+ * slug. A stable digest of the full normalized email keeps those identities
+ * isolated while preserving a short human-readable hint.
  */
 export function deriveSourceIdFromEmail(email: string): string {
   const { local } = normalizeCompanyEmail(email);
   const stem = local
-    .split('@')[0]
+    .replace(/[._]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'user';
+  const normalizedEmail = `${local}@${COMPANY_DOMAIN}`;
+  const digest = createHash('sha256').update(normalizedEmail, 'utf8').digest('hex').slice(0, 16);
+  const readable = stem.slice(0, 6).replace(/-+$/g, '') || 'user';
+  // At most 9 (`personal-`) + 6 readable chars + 1 separator + 16 hex chars = 32.
+  return `personal-${readable}-${digest}`;
+}
+
+/** Pre-fix id, used only to adopt an already-provisioned source safely. */
+function deriveLegacySourceIdFromEmail(email: string): string | null {
+  const { local } = normalizeCompanyEmail(email);
+  const stem = local
     .replace(/[._]+/g, '-')
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-');
   const sourceId = `personal-${stem}`;
-  // Same shape the rest of the codebase enforces: 1-32 lowercase alnum with
-  // interior hyphens.
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(sourceId)) {
-    throw new Error(`Derived source id "${sourceId}" is invalid for email "${email}"`);
+  return /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(sourceId) ? sourceId : null;
+}
+
+function sourceOwnerEmail(config: unknown): string | null {
+  let value = config;
+  // Postgres rows written by the old `$N::jsonb` + JSON.stringify path may
+  // come back as a JSONB string scalar. Decode once for safe adoption.
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); } catch { return null; }
   }
-  return sourceId;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const owner = (value as Record<string, unknown>).owner_email;
+  return typeof owner === 'string' ? owner.trim().toLowerCase() : null;
 }
 
 export interface ProvisionPersonalOpts {
@@ -173,7 +197,7 @@ export async function provisionPersonalSource(
 ): Promise<ProvisionPersonalResult> {
   const email = opts.email.trim().toLowerCase();
   const { local } = normalizeCompanyEmail(email);
-  const sourceId = deriveSourceIdFromEmail(email);
+  let sourceId = deriveSourceIdFromEmail(email);
   const scopes = opts.scopes ?? 'read write';
   const grantTypes = opts.grantTypes ?? ['client_credentials'];
   const federated = opts.federated ?? false;
@@ -186,10 +210,27 @@ export async function provisionPersonalSource(
 
   // Deterministic dedup: one email → one source id. Re-provisioning mints a
   // fresh client against the SAME source instead of a duplicate.
-  const existing = await engine.executeRaw<{ id: string }>(
-    'SELECT id FROM sources WHERE id = $1',
+  let existing = await engine.executeRaw<{ id: string; config: unknown }>(
+    'SELECT id, config FROM sources WHERE id = $1',
     [sourceId],
   );
+
+  // Backward compatibility for sources created before collision-resistant
+  // ids shipped. Reuse the legacy id only when its persisted owner matches
+  // exactly; never infer ownership from the lossy slug itself.
+  if (existing.length === 0) {
+    const legacySourceId = deriveLegacySourceIdFromEmail(email);
+    if (legacySourceId && legacySourceId !== sourceId) {
+      const legacy = await engine.executeRaw<{ id: string; config: unknown }>(
+        'SELECT id, config FROM sources WHERE id = $1',
+        [legacySourceId],
+      );
+      if (legacy[0] && sourceOwnerEmail(legacy[0].config) === email) {
+        sourceId = legacySourceId;
+        existing = legacy;
+      }
+    }
+  }
 
   let clonePath: string | null = null;
   let sourceName = `${local} personal brain`;

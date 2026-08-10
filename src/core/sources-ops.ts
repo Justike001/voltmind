@@ -349,7 +349,7 @@ export async function addSource(
     try {
       await engine.executeRaw(
         `INSERT INTO sources (id, name, local_path, config)
-             VALUES ($1, $2, $3, $4::jsonb)`,
+             VALUES ($1, $2, $3, $4::text::jsonb)`,
         [opts.id, displayName, finalPath, JSON.stringify(config)],
       );
     } catch (e) {
@@ -395,7 +395,7 @@ export async function addSource(
     const displayName = opts.name ?? opts.id;
     await engine.executeRaw(
       `INSERT INTO sources (id, name, local_path, config)
-           VALUES ($1, $2, $3, $4::jsonb)`,
+           VALUES ($1, $2, $3, $4::text::jsonb)`,
       [opts.id, displayName, finalPath, JSON.stringify(config)],
     );
   }

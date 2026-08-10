@@ -4612,7 +4612,7 @@ const provision_personal_source: Operation = {
     email: {
       type: 'string',
       required: true,
-      description: 'Company email, eg alice-example@company.example → source personal-alice-example.',
+      description: 'Company email; derives a readable collision-resistant personal-<prefix>-<digest> source id.',
     },
     repo_url: {
       type: 'string',
