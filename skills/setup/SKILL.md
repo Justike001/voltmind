@@ -145,7 +145,8 @@ The exact command list lives in `docs/mcp/DEPLOY.md`.
 
 For each user, the **personal KB** lives in its own isolated DB source. Company
 email is the identity contract:
-- `alice-example@company.example` → source id `personal-alice-example` (`personal-<name>`).
+- `alice-example@company.example` → a readable collision-resistant source id such as
+  `personal-alice-<digest>`.
 - **One company email always maps to exactly ONE source** (deterministic dedup) —
   re-provisioning never creates a second source, keeping per-user KBs manageable.
 - **Scope isolation:** the minted credential can only read/write that user's own
