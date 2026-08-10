@@ -198,12 +198,12 @@ written against `embedding` (1536d OpenAI). Existing v=2 rows become
 unreachable on first re-query (one-time miss spike on upgrade);
 `mode.ts:KNOBS_HASH_VERSION` is the single source of truth.
 
-**v0.42.34.0 knobs_hash v=9 → v=10.** Folds the `relationalRetrieval` knob +
+**Unreleased knobs_hash v=9 → v=10.** Folds the `relationalRetrieval` knob +
 depth into the cache key so a relational-on result set can't be served to a
 relational-off lookup (same contamination class as graph_signals). One-time
 miss spike on upgrade.
 
-**Relational retrieval (v0.42.34.0).** `relationalRetrieval` (on for
+**Relational retrieval (Unreleased).** `relationalRetrieval` (on for
 balanced/tokenmax) adds a fourth recall arm: a relational query ("who invested
 in X", "what connects A and B") resolves its seed entity and walks the typed-edge
 graph (`src/core/search/relational-recall.ts` + `relational-intent.ts`,
@@ -261,7 +261,7 @@ routing is narrowed to what the skill actually covers.
 **Skillify loop (v0.19):** skillify (the markdown orchestration), skillpack-check
 (agent-readable health report).
 
-**Brain-resident skillpacks + advisor (v0.42.47.0, #2180):** A brain repo can carry its
+**Brain-resident skillpacks + advisor (Unreleased, #2180):** A brain repo can carry its
 own publishable skillpack (`brain_resident: true` in `skillpack.json` + `schema_pack`);
 `voltmind skillpack init-brain-pack` scaffolds one with a 5-section machine-parseable README.
 Connecting harnesses discover it on `voltmind sources add` (Topology A advisory, bounded nag
@@ -370,7 +370,7 @@ For background tasks (`run_in_background: true`), the harness captures the exit
 file separately — use it via the bg task's `<id>.exit` file, not the streamed
 output.
 
-## Sync resumability + lock tuning (v0.42.x, #1794)
+## Sync resumability + lock tuning (Unreleased, #1794)
 
 `voltmind sync` is resumable and converges under pool exhaustion + repeated kills.
 Progress banks into the append-only `op_checkpoint_paths` table (one row per drained
