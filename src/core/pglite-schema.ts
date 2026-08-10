@@ -185,8 +185,8 @@ CREATE TABLE IF NOT EXISTS content_chunks (
   end_line        INTEGER,
   -- Unified Qwen3-VL retrieval space for text, image, and mixed chunks.
   modality        TEXT NOT NULL DEFAULT 'text',
-  embedding_image halfvec(__EMBEDDING_DIMS__),
-  embedding_multimodal halfvec(__EMBEDDING_DIMS__)
+  embedding_image halfvec(2048),
+  embedding_multimodal halfvec(2048)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chunks_page_index ON content_chunks(page_id, chunk_index);

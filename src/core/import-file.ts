@@ -9,6 +9,7 @@ import { chunkCodeText, chunkCodeTextFull, detectCodeLanguage, CHUNKER_VERSION }
 import { findChunkForOffset } from './chunkers/edge-extractor.ts';
 import { extractCodeRefs, imageOfCandidates } from './link-extraction.ts';
 import { embedBatch, embedMultimodal } from './embedding.ts';
+import { DEFAULT_EMBEDDING_MODEL } from './ai/defaults.ts';
 import { slugifyPath, slugifyCodePath, isCodeFilePath } from './sync.ts';
 import type { ChunkInput, PageInput, PageType } from './types.ts';
 import { computeEffectiveDate } from './effective-date.ts';
@@ -1153,7 +1154,7 @@ export type ImportFileResult = ImportResult;
 /**
  * v0.27.1: image extension allow-list. PNG/JPG/JPEG/GIF/WEBP are universal
  * codecs that don't need decoding before embedding (we send raw bytes).
- * HEIC/HEIF/AVIF need WASM decode to JPEG before Voyage will accept them.
+ * HEIC/HEIF/AVIF need WASM decode to JPEG before the canonical Qwen endpoint accepts them.
  *
  * Other variants (BMP, TIFF, etc.) intentionally left out — they're rare in
  * the kinds of brains voltmind serves and adding them would expand the WASM
@@ -1161,10 +1162,10 @@ export type ImportFileResult = ImportResult;
  */
 export const SUPPORTED_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.heic', '.heif', '.avif'] as const;
 
-/** Voyage caps each multimodal input at 20MB. We honor that as the size limit. */
+/** Conservative per-image cap for the canonical multimodal ingestion path. */
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
-/** Extensions that need WASM decode before Voyage embedding. */
+/** Extensions that need WASM decode before multimodal embedding. */
 const NEEDS_DECODE = new Set(['.heic', '.heif', '.avif']);
 
 /**
@@ -1252,7 +1253,7 @@ export function pLimit(concurrency: number) {
 }
 
 /**
- * Decode HEIC/AVIF bytes to a re-encoded JPEG buffer that Voyage accepts.
+ * Decode HEIC/AVIF bytes to a re-encoded JPEG buffer accepted by the embedding endpoint.
  * Pre-loads the WASM via the bun-compile-safe pattern proven in Phase 1's
  * scripts/check-image-decoders-embedded.sh. PNG/JPG/JPEG/GIF/WEBP pass
  * through unchanged.
@@ -1428,7 +1429,7 @@ export async function importImageFile(
       slug: slugifyPath(relativePath),
       status: 'skipped',
       chunks: 0,
-      error: `Image too large (${stat.size} bytes, max ${MAX_IMAGE_BYTES}). Voyage multimodal caps at 20MB per input.`,
+      error: `Image too large (${stat.size} bytes, max ${MAX_IMAGE_BYTES}). The multimodal ingestion limit is 20MB per input.`,
     };
   }
 
@@ -1474,7 +1475,7 @@ export async function importImageFile(
     try {
       const [vec] = await embedMultimodal([
         { kind: 'image_base64', data: decoded.buf.toString('base64'), mime: decoded.mime },
-      ]);
+      ], { embeddingModel: DEFAULT_EMBEDDING_MODEL });
       embedding = vec;
     } catch (err) {
       return {

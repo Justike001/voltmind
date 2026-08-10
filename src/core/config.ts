@@ -138,7 +138,7 @@ export interface VoltMindConfig {
    * still win as the operator escape hatch.
    */
   embedding_multimodal?: boolean;
-  /** Model override for multimodal embeddings (e.g. "voyage:voyage-multimodal-3"). */
+  /** Legacy/custom multimodal model override; built-in columns stay on canonical Qwen3-VL 2048d. */
   embedding_multimodal_model?: string;
   embedding_image_ocr?: boolean;
   embedding_image_ocr_model?: string;

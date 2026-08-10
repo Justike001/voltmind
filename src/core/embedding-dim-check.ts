@@ -19,6 +19,7 @@ import { voltmindPath } from './config.ts';
 import { resolveRecipe } from './ai/model-resolver.ts';
 import type { Recipe } from './ai/types.ts';
 import { AIConfigError } from './ai/errors.ts';
+import { DEFAULT_EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_MODEL } from './ai/defaults.ts';
 import {
   supportsVoyageOutputDimension,
   isValidVoyageOutputDim,
@@ -332,7 +333,33 @@ export function resolveSchemaMultimodalDim(opts: ResolveSchemaMultimodalDimOpts)
           `Pick a multimodal-capable model from this provider.`,
       };
     }
-    return validateDimAgainstTouchpoint(parsed.modelId, recipe, tp.default_dims, tp.dims_options, opts.embedding_multimodal_dimensions);
+    if (opts.embedding_multimodal_model !== DEFAULT_EMBEDDING_MODEL) {
+      return {
+        ok: false,
+        error:
+          `Built-in multimodal columns use the canonical ${DEFAULT_EMBEDDING_MODEL} ` +
+          `model at ${DEFAULT_EMBEDDING_DIMENSIONS} dimensions; got ` +
+          `"${opts.embedding_multimodal_model}". Custom or legacy multimodal models ` +
+          `must use a separately declared embedding column and cannot populate ` +
+          `embedding_image or embedding_multimodal.`,
+      };
+    }
+    const resolved = validateDimAgainstTouchpoint(
+      parsed.modelId,
+      recipe,
+      tp.default_dims,
+      tp.dims_options,
+      opts.embedding_multimodal_dimensions,
+    );
+    if (resolved.ok && resolved.dim !== DEFAULT_EMBEDDING_DIMENSIONS) {
+      return {
+        ok: false,
+        error:
+          `Built-in multimodal columns require ${DEFAULT_EMBEDDING_DIMENSIONS} dimensions; ` +
+          `resolved ${resolved.dim}.`,
+      };
+    }
+    return resolved;
   } catch (err) {
     return { ok: false, error: err instanceof AIConfigError ? err.message : String(err) };
   }

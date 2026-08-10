@@ -1768,7 +1768,7 @@ export class PostgresEngine implements BrainEngine {
     //
     // v0.36 Phase 3: 'embedding_multimodal' is the unified column populated
     // by `voltmind reindex --multimodal`. Carries BOTH text and image content
-    // in Voyage multimodal-3 space — no modality filter; the column itself
+    // in canonical Qwen3-VL 2048d space — no modality filter; the column itself
     // is the discriminator (rows without embedding_multimodal aren't searched).
     const resolvedCol = normalizeEngineColumn(opts?.embeddingColumn);
     const { col, castSql } = buildVectorCastFragment(resolvedCol);

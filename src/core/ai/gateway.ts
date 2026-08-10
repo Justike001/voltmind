@@ -51,20 +51,8 @@ import { dimsProviderOptions } from './dims.ts';
 import { AIConfigError, AITransientError, normalizeAIError } from './errors.ts';
 
 const MAX_CHARS = 8000;
-// v0.36.0.0 (D3 + D4): ZeroEntropy zembed-1 at 1280d via Matryoshka is the
-// new default for embedding. Real-corpus benchmark across 20 queries:
-//   - ZE wins 11/20 (OpenAI 6, Voyage 4)
-//   - 442ms avg vs OpenAI 973ms (2.2x faster)
-//   - $0.05/M tokens vs OpenAI $0.13/M (2.6x cheaper at regular pricing)
-// ZE valid Matryoshka steps are {2560, 1280, 640, 320, 160, 80, 40}; 1280 is
-// the closest analog to current OpenAI 1536d (smaller -> smaller HNSW index
-// -> faster queries) while staying in the high-recall zone of the Matryoshka
-// curve. 1024 (Voyage's step) is NOT a valid ZE dim — see
-// src/core/ai/dims.ts:ZEROENTROPY_VALID_DIMS.
-// New installs without ZEROENTROPY_API_KEY size for 1280d anyway — the
-// AIConfigError surfaces at first embed with a paste-ready setup hint.
-// Re-exported from the leaf `defaults.ts` so heavy schema/registry modules
-// don't transitively load every provider SDK just to read the defaults.
+// Re-exported from the leaf `defaults.ts` so schema/registry modules can use
+// the canonical Qwen3-VL 2048d contract without loading every provider SDK.
 export { DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from './defaults.ts';
 import { DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from './defaults.ts';
 const DEFAULT_EXPANSION_MODEL = 'anthropic:claude-haiku-4-5-20251001';
@@ -1553,7 +1541,8 @@ export async function embedMultimodal(
   // Prefer embedding_multimodal_model when set, so brains using OpenAI for
   // text embeddings can route multimodal to Voyage without changing the
   // primary embedding_model. Falls back to embedding_model for single-model setups.
-  const modelStr = cfg.embedding_multimodal_model
+  const modelStr = opts.embeddingModel
+    ?? cfg.embedding_multimodal_model
     ?? cfg.embedding_model
     ?? DEFAULT_EMBEDDING_MODEL;
   const { parsed, recipe } = resolveRecipe(modelStr);
@@ -1562,7 +1551,7 @@ export async function embedMultimodal(
     throw new AIConfigError(
       `Recipe ${recipe.id} (${parsed.modelId}) does not support multimodal embedding.`,
       `Set embedding_multimodal_model to route multimodal separately from text embeddings.\n` +
-      `Today: voyage:voyage-multimodal-3. OpenAI / Cohere multimodal support is on the roadmap.`,
+      `Built-in multimodal retrieval uses ${DEFAULT_EMBEDDING_MODEL}; legacy/custom models require a multimodal-capable recipe.`,
     );
   }
   // v0.28.11: model-level validation. supports_multimodal is recipe-scoped, so
@@ -1611,12 +1600,8 @@ export async function embedMultimodal(
   }
 
   const expected = cfg.embedding_dimensions ?? DEFAULT_EMBEDDING_DIMENSIONS;
-  // Voyage multimodal returns 1024 dims. If the brain is configured for a
-  // different `embedding` column dim (e.g. OpenAI 1536 text), the dual-column
-  // schema lets text live in `embedding` (1536) and images in
-  // `embedding_image` (1024). The gateway-level dim assertion only fires when
-  // the caller is targeting the primary `embedding` column; for image rows
-  // landing in `embedding_image` the column itself is fixed at 1024.
+  // Legacy generic Voyage calls remain fixed at 1024d. Built-in image and
+  // unified columns never use this branch; their callers pin Qwen3-VL 2048d.
   const targetDims = 1024;
 
   // v0.36 (D22-2): thread Voyage's retrieval input_type discipline through.
@@ -1691,8 +1676,9 @@ export async function embedMultimodal(
       if (!Array.isArray(row.embedding) || row.embedding.length !== targetDims) {
         throw new AIConfigError(
           `Voyage multimodal returned ${row.embedding?.length ?? 0}-dim vector; expected ${targetDims}.`,
-          `Voyage multimodal-3 is fixed at 1024 dims. Brain primary embedding dim is ${expected} ` +
-          `(used by the text path). Image vectors land in content_chunks.embedding_image (1024).`,
+          `Voyage multimodal-3 is fixed at 1024 dims. Brain primary embedding dim is ${expected}. ` +
+          `Store Voyage vectors only in a separately declared 1024d custom column; ` +
+          `built-in image columns are Qwen3-VL 2048d.`,
         );
       }
       allEmbeddings.push(new Float32Array(row.embedding));
@@ -1947,21 +1933,19 @@ async function embedMultimodalOpenAICompat(
 /**
  * Embed a TEXT query through the configured multimodal model.
  *
- * Routes through `embedding_multimodal_model` (defaults to Voyage multimodal-3)
- * so the resulting vector lives in the multimodal embedding space — the same
- * space the brain's `embedding_image` column was populated into. A text
+ * Routes through the canonical Qwen3-VL 2048d model so the resulting vector
+ * lives in the same space as the built-in image and unified columns. A text
  * query embedded here can match image chunks (Phase 1 of the cross-modal
  * wave) and, post Phase 3 reindex, text chunks in the unified column.
  *
- * Threads `inputType: 'query'` (D22-2) so Voyage routes to the retrieval
- * half of its asymmetric embedding space.
- *
- * Sibling of v0.35.0.0's `embedQuery(text)`, which uses the TEXT embedding
- * model (typically OpenAI text-embedding-3-large at 1536d or 2560d, NOT
- * compatible with the 1024d multimodal column).
+ * The Qwen adapter intentionally omits input_type because the deployed model
+ * is symmetric and rejects that field.
  */
 export async function embedQueryMultimodal(text: string): Promise<Float32Array> {
-  const [vec] = await embedMultimodal([{ kind: 'text', text }], { inputType: 'query' });
+  const [vec] = await embedMultimodal([{ kind: 'text', text }], {
+    inputType: 'query',
+    embeddingModel: DEFAULT_EMBEDDING_MODEL,
+  });
   if (!vec) {
     throw new AITransientError('embedQueryMultimodal: gateway returned no vector for non-empty text input');
   }
@@ -1974,15 +1958,14 @@ export async function embedQueryMultimodal(text: string): Promise<Float32Array> 
  * Sibling of `embedQueryMultimodal(text)` for the Phase 2 image-as-query
  * path. The image bytes must already be loaded and base64-encoded by the
  * caller (see `src/core/search/image-loader.ts` for the SSRF-defended
- * loader). Threads `inputType: 'query'` so Voyage routes to the
- * retrieval half of its asymmetric space.
+ * loader). The built-in path is pinned to Qwen3-VL 2048d.
  */
 export async function embedQueryMultimodalImage(
   input: { data: string; mime: string },
 ): Promise<Float32Array> {
   const [vec] = await embedMultimodal(
     [{ kind: 'image_base64', data: input.data, mime: input.mime }],
-    { inputType: 'query' },
+    { inputType: 'query', embeddingModel: DEFAULT_EMBEDDING_MODEL },
   );
   if (!vec) {
     throw new AITransientError('embedQueryMultimodalImage: gateway returned no vector');

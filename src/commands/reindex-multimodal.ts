@@ -2,13 +2,13 @@
  * v0.36 Phase 3 — `voltmind reindex --multimodal` sweep.
  *
  * Walks `content_chunks` where `embedding_multimodal IS NULL`, batches
- * through `embedMultimodalSafe` (partial-failure-aware from Commit 0), and
+ * through the canonical Qwen3-VL 2048d model, and
  * persists the new vectors.
  *
  * Wired patterns:
  *   - D7: acquires `voltmind-reindex-multimodal` writer lock via
  *     `tryAcquireDbLock` so a concurrent autopilot embed phase can't
- *     double-spend Voyage budget on the same chunks.
+ *     duplicate work on the same chunks.
  *   - D20 phase 2: builds the HNSW partial index AFTER bulk load completes
  *     (pgvector best practice — per-row index maintenance during bulk
  *     ingest is 2-3x slower than post-load build).
@@ -39,9 +39,10 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path';
 // v0.41.15.0 (T9, D9): per-chunk UPDATE workers within each batch.
 import { runSlidingPool } from '../core/worker-pool.ts';
 import { resolveWorkersWithClamp } from '../core/sync-concurrency.ts';
+import { DEFAULT_EMBEDDING_MODEL } from '../core/ai/defaults.ts';
 
 const LOCK_ID = 'voltmind-reindex-multimodal';
-const BATCH_SIZE = 32; // Voyage cap
+const BATCH_SIZE = 32;
 const CHECKPOINT_FILE = 'reindex-multimodal-checkpoint.json';
 
 export interface ReindexMultimodalOpts {
@@ -90,19 +91,21 @@ export async function runReindexMultimodal(
   try {
     const { loadConfig } = await import('../core/config.ts');
     const cfg = loadConfig();
-    const multimodalModel = cfg?.embedding_multimodal_model;
-    if (multimodalModel) {
-      const { resolveSchemaMultimodalDim } = await import('../core/embedding-dim-check.ts');
-      const pre = resolveSchemaMultimodalDim({
-        embedding_multimodal_model: multimodalModel,
-      });
-      if (!pre.ok) {
-        progress.finish();
-        throw new Error(
-          `Refusing to reindex: ${pre.error}\n` +
-          `Fix with \`voltmind config set embedding_multimodal_model <provider>:<model>\`.`,
-        );
-      }
+    const configuredModel = cfg?.embedding_multimodal_model;
+    if (configuredModel && configuredModel !== DEFAULT_EMBEDDING_MODEL) {
+      progress.heartbeat(
+        `Ignoring legacy embedding_multimodal_model=${configuredModel}; ` +
+        `built-in multimodal columns are pinned to ${DEFAULT_EMBEDDING_MODEL} (2048d).`,
+      );
+    }
+    const { resolveSchemaMultimodalDim } = await import('../core/embedding-dim-check.ts');
+    const pre = resolveSchemaMultimodalDim({
+      embedding_multimodal_model: DEFAULT_EMBEDDING_MODEL,
+      embedding_multimodal_dimensions: 2048,
+    });
+    if (!pre.ok) {
+      progress.finish();
+      throw new Error(`Refusing to reindex: ${pre.error}`);
     }
   } catch (e) {
     // Re-throw if it's the preflight refusal; suppress only when loadConfig fails.
@@ -116,21 +119,12 @@ export async function runReindexMultimodal(
     SELECT COUNT(*)::text AS count
     FROM content_chunks
     WHERE embedding_multimodal IS NULL
+       OR (modality = 'image' AND embedding_image IS NULL)
   `;
   const pendingBefore = parseInt(String(pendingRows[0]?.count ?? '0'), 10);
 
-  // Cost estimate (Voyage multimodal-3 is $0.18 / 1M tokens; ~3.5 chars/token).
-  // We estimate based on chunk_text length per row. Cheap two-stat probe.
-  const statsRows = pendingBefore > 0
-    ? await sql`
-      SELECT COALESCE(SUM(LENGTH(chunk_text)), 0)::text AS chars
-      FROM content_chunks
-      WHERE embedding_multimodal IS NULL
-    `
-    : [{ chars: '0' }];
-  const totalChars = parseInt(String(statsRows[0]?.chars ?? '0'), 10);
-  const estimatedTokens = totalChars / 3.5;
-  const costUsdEstimate = (estimatedTokens / 1_000_000) * 0.18;
+  // The canonical internal Qwen service has no metered API charge.
+  const costUsdEstimate = 0;
 
   if (opts.costEstimate) {
     progress.finish();
@@ -175,7 +169,7 @@ export async function runReindexMultimodal(
   if (process.env.VOLTMIND_NO_REEMBED === '1') {
     process.stderr.write(
       `[reindex-multimodal] skipping: VOLTMIND_NO_REEMBED=1. ` +
-      `Pending: ${pendingBefore} chunks (~$${costUsdEstimate.toFixed(2)}).\n`,
+      `Pending: ${pendingBefore} chunks.\n`,
     );
     progress.finish();
     return {
@@ -189,13 +183,12 @@ export async function runReindexMultimodal(
     };
   }
 
-  // Cost grace window (TTY only; non-TTY auto-proceeds for CI / cron).
-  // Skip if --yes was passed.
+  // Compute-time grace window (TTY only; non-TTY auto-proceeds for CI/cron).
   if (!opts.yes && process.stdout.isTTY && process.stdin.isTTY) {
     const minutes = Math.ceil((pendingBefore / BATCH_SIZE) * 0.5 / 60); // ~0.5s per batch
     process.stderr.write(
-      `Will re-embed ~${pendingBefore} chunks via voyage:voyage-multimodal-3, ` +
-      `est. ~$${costUsdEstimate.toFixed(2)}, ~${minutes}min. ` +
+      `Will re-embed ~${pendingBefore} chunks via ${DEFAULT_EMBEDDING_MODEL} at 2048d, ` +
+      `est. ~${minutes}min. ` +
       `Press Ctrl-C within 10s to abort.\n`,
     );
     await new Promise<void>((resolve) => setTimeout(resolve, 10_000));
@@ -234,7 +227,8 @@ export async function runReindexMultimodal(
         FROM content_chunks cc
         JOIN pages p ON p.id = cc.page_id
         LEFT JOIN files f ON f.page_id = p.id
-        WHERE cc.embedding_multimodal IS NULL
+        WHERE (cc.embedding_multimodal IS NULL
+               OR (cc.modality = 'image' AND cc.embedding_image IS NULL))
           AND cc.id > ${lastId}
         ORDER BY id
         LIMIT ${batchSize}
@@ -247,7 +241,7 @@ export async function runReindexMultimodal(
         modality: String(r.modality ?? 'text'),
         storagePath: r.storage_path == null ? null : String(r.storage_path),
         mime: r.mime_type == null ? 'application/octet-stream' : String(r.mime_type),
-      })).filter(r => !completedIds.has(r.id));
+      }));
 
       if (items.length === 0) {
         lastId = parseInt(String(rows[rows.length - 1].id), 10);
@@ -261,7 +255,7 @@ export async function runReindexMultimodal(
         const inputs: MultimodalInput[] = items.map(item => multimodalInputForReindex(item));
         const result = await embedMultimodalSafe(
           inputs,
-          { inputType: 'document' },
+          { inputType: 'document', embeddingModel: DEFAULT_EMBEDDING_MODEL },
         );
         // v0.41.15.0 (T9): per-chunk UPDATE loop wrapped in the sliding
         // pool. JS single-threaded event loop makes reembedded++ /
@@ -282,11 +276,20 @@ export async function runReindexMultimodal(
             const vec = result.embeddings[i];
             if (vec) {
               const vecLiteral = `[${Array.from(vec).join(',')}]`;
-              await sql`
-                UPDATE content_chunks
-                SET embedding_multimodal = ${vecLiteral}::halfvec
-                WHERE id = ${item.id}
-              `;
+              if (item.modality === 'image') {
+                await sql`
+                  UPDATE content_chunks
+                  SET embedding_multimodal = ${vecLiteral}::halfvec,
+                      embedding_image = ${vecLiteral}::halfvec
+                  WHERE id = ${item.id}
+                `;
+              } else {
+                await sql`
+                  UPDATE content_chunks
+                  SET embedding_multimodal = ${vecLiteral}::halfvec
+                  WHERE id = ${item.id}
+                `;
+              }
               reembedded++;
               completedIds.add(item.id);
             } else {
@@ -311,6 +314,7 @@ export async function runReindexMultimodal(
     SELECT COUNT(*)::text AS count
     FROM content_chunks
     WHERE embedding_multimodal IS NULL
+       OR (modality = 'image' AND embedding_image IS NULL)
   `;
   const pendingAfter = parseInt(String(pendingAfterRows[0]?.count ?? '0'), 10);
   let unifiedFlagPrompted = false;

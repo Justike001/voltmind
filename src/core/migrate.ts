@@ -1792,11 +1792,10 @@ export const MIGRATIONS: Migration[] = [
     //    keep image OCR text out of text-page keyword search by default.
     //
     // 2. content_chunks gains the native 2048d Qwen3-VL image space.
-    //    multimodal embeddings. NULL on every text row; sparse on the column.
+    //    Multimodal embeddings are NULL on every text row and sparse on the column.
     //    Partial HNSW index ignores NULL rows so the index footprint stays
     //    proportional to image chunk count, not table size. Mixed-provider
-    //    brains (e.g. OpenAI 1536 text + Voyage 1024 images) can keep both
-    //    columns populated with distinct dim spaces.
+    //    Text and image retrieval use the same Qwen3-VL 2048d space.
     //
     // 3. PGLite gains the `files` table (mirroring the Postgres v0.18 shape)
     //    so the multimodal ingest pipeline can persist binary-asset metadata
@@ -3164,10 +3163,9 @@ export const MIGRATIONS: Migration[] = [
     // Operator class will be vector_cosine_ops to match the existing
     // embedding_image index for ranking parity.
     //
-    // The column ships at 1024 dims to match Voyage multimodal-3 output.
-    // Operators wanting a different dim (Cohere multimodal at 1408d, etc.)
-    // need a column rebuild — surfaced by the `multimodal_column_dim_match`
-    // doctor check (D20 model+dim pin).
+    // The column ships at the native 2048 dimensions of the canonical
+    // Qwen3-VL unified model. Built-in multimodal paths do not inherit
+    // legacy Voyage 1024d configuration overrides.
     idempotent: true,
     sql: `
       ALTER TABLE content_chunks ADD COLUMN IF NOT EXISTS embedding_multimodal halfvec(2048);
@@ -5741,6 +5739,70 @@ export const MIGRATIONS: Migration[] = [
         ALTER TABLE project_tracking_receipt_history ENABLE ROW LEVEL SECURITY;
         ALTER TABLE page_versions ENABLE ROW LEVEL SECURITY;
       `);
+    },
+  },
+  {
+    version: 121,
+    name: 'canonical_multimodal_qwen_2048d',
+    sql: '',
+    // Earlier PGLite templates incorrectly substituted the primary text
+    // embedding width into both built-in multimodal columns. Repair only
+    // databases whose physical columns are not already native Qwen 2048d.
+    // Existing vectors in an incompatible space cannot be converted safely;
+    // dropping them makes the required multimodal reindex explicit instead of
+    // preserving corrupt cross-space similarity data.
+    idempotent: true,
+    handler: async (engine) => {
+      const columns = ['embedding_image', 'embedding_multimodal'] as const;
+      const rows = await engine.executeRaw<{ column_name: string; formatted_type: string }>(`
+        SELECT a.attname AS column_name,
+               format_type(a.atttypid, a.atttypmod) AS formatted_type
+          FROM pg_attribute a
+          JOIN pg_class c ON c.oid = a.attrelid
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public'
+           AND c.relname = 'content_chunks'
+           AND a.attname IN ('embedding_image', 'embedding_multimodal')
+           AND a.attnum > 0
+           AND NOT a.attisdropped
+      `);
+      const current = new Map(rows.map(row => [row.column_name, row.formatted_type.toLowerCase()]));
+      const needsRepair = columns.some(column => current.get(column) !== 'halfvec(2048)');
+      if (!needsRepair) return;
+
+      await engine.transaction(async tx => {
+        await tx.executeRaw(`DROP INDEX IF EXISTS idx_chunks_embedding_image`);
+        await tx.executeRaw(`DROP INDEX IF EXISTS idx_chunks_embedding_multimodal`);
+        for (const column of columns) {
+          await tx.executeRaw(`ALTER TABLE content_chunks DROP COLUMN IF EXISTS ${column}`);
+          await tx.executeRaw(`ALTER TABLE content_chunks ADD COLUMN ${column} halfvec(2048)`);
+        }
+        await tx.executeRaw(`
+          CREATE INDEX IF NOT EXISTS idx_chunks_embedding_image
+            ON content_chunks USING hnsw (embedding_image halfvec_cosine_ops)
+            WHERE embedding_image IS NOT NULL
+        `);
+        await tx.executeRaw(`
+          CREATE INDEX IF NOT EXISTS idx_chunks_embedding_multimodal
+            ON content_chunks USING hnsw (embedding_multimodal halfvec_cosine_ops)
+            WHERE embedding_multimodal IS NOT NULL
+        `);
+      });
+    },
+    verify: async (engine) => {
+      const rows = await engine.executeRaw<{ column_name: string; formatted_type: string }>(`
+        SELECT a.attname AS column_name,
+               format_type(a.atttypid, a.atttypmod) AS formatted_type
+          FROM pg_attribute a
+          JOIN pg_class c ON c.oid = a.attrelid
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public'
+           AND c.relname = 'content_chunks'
+           AND a.attname IN ('embedding_image', 'embedding_multimodal')
+           AND a.attnum > 0
+           AND NOT a.attisdropped
+      `);
+      return rows.length === 2 && rows.every(row => row.formatted_type.toLowerCase() === 'halfvec(2048)');
     },
   },
 ];

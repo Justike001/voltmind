@@ -1756,7 +1756,7 @@ async function handleCliOnly(command: string, args: string[]) {
       }
       // v0.32.7 CJK wave — post-upgrade markdown re-chunk sweep.
       // v0.36 Phase 3 wave — `voltmind reindex --multimodal` re-embeds content_chunks
-      // into the unified Voyage multimodal-3 column.
+      // into the unified Qwen3-VL 2048d column.
       case 'reindex':
       case 'reindex-multimodal': {
         if (command === 'reindex-multimodal' || args.includes('--multimodal')) {
@@ -1765,8 +1765,8 @@ async function handleCliOnly(command: string, args: string[]) {
           const limitIdx = args.indexOf('--limit');
           const limitVal = limitIdx >= 0 && limitIdx + 1 < args.length ? parseInt(args[limitIdx + 1], 10) : undefined;
           // v0.41.15.0 (T9, D9): --workers N for parallel UPDATEs within
-          // each Voyage batch. Honored by the inner write loop only;
-          // the outer batch loop is one Voyage round-trip per batch.
+          // each Qwen batch. Honored by the inner write loop only;
+          // the outer batch loop is one embedding round-trip per batch.
           const workersIdx = args.indexOf('--workers');
           const concurrencyIdx = args.indexOf('--concurrency');
           const workersValIdx = workersIdx >= 0 ? workersIdx + 1 : (concurrencyIdx >= 0 ? concurrencyIdx + 1 : -1);

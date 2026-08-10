@@ -93,10 +93,9 @@ export const MAX_DIMENSIONS = 8192;
  */
 export const DEFAULT_COLUMN_NAME = 'embedding';
 
-/** Names that always exist regardless of user config. Both derive their
- *  provider from existing config keys (embedding_model and
- *  embedding_multimodal_model) so users who don't declare anything still
- *  get correct routing. */
+/** Names that always exist regardless of user config. `embedding` follows the
+ *  configured text model; `embedding_image` is pinned to the canonical
+ *  Qwen3-VL 2048d unified space. */
 const BUILTIN_KEYS = ['embedding', 'embedding_image'] as const;
 type BuiltinKey = (typeof BUILTIN_KEYS)[number];
 
@@ -331,10 +330,9 @@ export function getEmbeddingColumnRegistry(
 
   // Builtin: 'embedding_image' — same native Qwen3-VL space and dimensions
   // as the text column, so cross-modal retrieval never mixes vector spaces.
-  const mmModel = cfg.embedding_multimodal_model ?? embedModel;
   out['embedding_image'] = {
-    provider: mmModel,
-    dimensions: embedDims,
+    provider: DEFAULT_EMBEDDING_MODEL,
+    dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
     type: 'halfvec',
   };
 
@@ -344,6 +342,19 @@ export function getEmbeddingColumnRegistry(
     for (const [key, value] of Object.entries(userColumns)) {
       validateColumnKey(key);
       validateColumnConfig(key, value);
+      if (key === 'embedding_image' && (
+        value.provider !== DEFAULT_EMBEDDING_MODEL ||
+        value.dimensions !== DEFAULT_EMBEDDING_DIMENSIONS ||
+        value.type !== 'halfvec'
+      )) {
+        throw new EmbeddingColumnConfigError(
+          'embedding_image',
+          'shape',
+          `is reserved for the canonical ` +
+          `${DEFAULT_EMBEDDING_MODEL} ${DEFAULT_EMBEDDING_DIMENSIONS}d halfvec space. ` +
+          `Declare legacy or custom multimodal vectors under a different column name.`,
+        );
+      }
       out[key] = value;
     }
   }

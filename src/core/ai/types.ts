@@ -123,7 +123,7 @@ export interface EmbeddingTouchpoint {
  * `src/core/search/image-loader.ts` resolves URLs to base64 first.
  *
  * v0.36 (cross-modal wave) adds the `text` variant for query-side
- * multimodal embedding (`embedQueryMultimodal(text)`) — Voyage's
+ * multimodal embedding (`embedQueryMultimodal(text)`) — the canonical Qwen3-VL
  * multimodal endpoint accepts a content array mixing text + image entries.
  */
 export type MultimodalInput =
@@ -142,6 +142,10 @@ export type MultimodalInput =
  */
 export interface EmbedMultimodalOpts {
   inputType?: 'document' | 'query';
+  /** Explicit provider:model override. Built-in 2048d column callers pin the
+   * canonical Qwen3-VL model through this field instead of inheriting a
+   * legacy 1024d multimodal override from config. */
+  embeddingModel?: string;
 }
 
 /**
@@ -352,7 +356,8 @@ export interface AIGatewayConfig {
   /** Target embedding dims. Gateway asserts returned embeddings match this. */
   embedding_dimensions?: number;
   /**
-   * Separate model for multimodal embeddings (e.g. "voyage:voyage-multimodal-3").
+   * Legacy/custom model for generic multimodal calls. Built-in image and unified
+   * retrieval paths are pinned to the canonical Qwen3-VL 2048d model.
    * When set, embedMultimodal() routes to this model instead of embedding_model.
    * Allows brains using OpenAI for text to use Voyage for image embeddings.
    */

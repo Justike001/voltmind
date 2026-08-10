@@ -22,7 +22,7 @@
 //   code-refs / code-callers / code-callees + Cathedral II two-pass retrieval.
 // - `image` (v0.27.1): multimodal-embedded images (PNG/JPG/HEIC/AVIF). One page
 //   per image; chunk lives in content_chunks with modality='image' +
-//   embedding_image vector(1024). Bytes never enter the DB; the brain repo
+//   embedding_image halfvec(2048). Bytes never enter the DB; the brain repo
 //   holds the file and `files.storage_path` references it.
 // - `synthesis` (v0.28): think-generated provenance pages.
 export type PageType = string;
@@ -902,7 +902,7 @@ export interface SearchOpts {
   floorRatio?: number;
   /**
    * v0.36 cross-modal wave: route this search through the multimodal
-   * embedding space (Voyage multimodal-3 by default).
+   * canonical Qwen3-VL 2048d embedding space.
    *
    * - 'text' (default for queries that don't match image-intent regex):
    *   existing text-embedding path. No behavior change vs pre-v0.36.

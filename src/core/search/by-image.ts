@@ -99,7 +99,7 @@ export async function searchByImage(
     // Both branches target the same multimodal-embedding column (Phase 2).
     // The "intersect" is via RRF rank merging — the text-side vector lives
     // in the SAME multimodal embedding space as the image vector
-    // (embedQueryMultimodal returns a 1024d vector), so it's the right
+    // (embedQueryMultimodal returns a Qwen3-VL 2048d vector), so it's the right
     // space to query.
     const textList = await engine.searchVector(textEmbedding, textOpts);
     for (const r of textList) {

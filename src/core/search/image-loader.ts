@@ -21,8 +21,8 @@
  * Out of scope:
  *   - Pixel-bomb defense (decompression bombs): the size cap doubles as the
  *     bomb defense per D22-9. We never call a pixel parser; only feed bytes
- *     to Voyage. A 10MB cap is well below the pixel-bomb threshold.
- *   - HEIC / GIF / TIFF — Voyage multimodal-3 supports them but the test
+ *     to the canonical Qwen endpoint. A 10MB cap is well below the pixel-bomb threshold.
+ *   - HEIC / GIF / TIFF — some providers support them but the test
  *     fixtures and OCR pipeline don't, so we keep the input surface
  *     conservative for v1.
  */

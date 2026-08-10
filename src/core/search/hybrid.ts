@@ -587,7 +587,7 @@ export async function hybridSearch(
   // v0.36 (D10): ask "is the RESOLVED column's provider reachable?" rather
   // than "is the global default reachable?" — otherwise an unreachable
   // global default disables vector search even when the active column's
-  // provider (Voyage, ZE) works fine.
+  // provider (Qwen3-VL, Voyage, ZE) works fine.
   const { isAvailable } = await import('../ai/gateway.ts');
   const providerProbe = resolvedCol.embeddingModel || undefined;
   if (!isAvailable('embedding', providerProbe)) {
@@ -690,8 +690,8 @@ export async function hybridSearch(
   let imageVectorList: SearchResult[] | null = null;
   let crossModalFellOpen = false;
 
-  // Phase 3 unified routing: when on, route ALL queries through Voyage
-  // multimodal-3 + embedding_multimodal column. Bypasses the dual-column
+  // Phase 3 unified routing: when on, route ALL queries through canonical
+  // Qwen3-VL 2048d + embedding_multimodal. Bypasses the dual-column
   // branching below — but with D8 fail-open: if the unified path returns
   // zero rows AND the operator hasn't opted into strict unified-only mode,
   // fall through to the dual-column text path. unified_multimodal_only
