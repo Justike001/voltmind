@@ -205,10 +205,17 @@ describe('voltmind extract --dir default resolution', () => {
     const errBuf: string[] = [];
     const savedExit = process.exit;
     const savedConsoleError = console.error;
+    // Run from a neutral tmpdir (NOT /srv/voltmind) so the repo-root
+    // `.voltmind-source` dotfile isn't picked up by the resolver's dotfile
+    // tier — otherwise getDefaultSourcePath resolves a source and throws a
+    // different error before the intended "no brain directory" message.
+    const neutralDir = mkdtempSync(join(tmpdir(), 'voltmind-extract-neutral-'));
+    const savedCwd = process.cwd();
     try {
       (process as any).exit = (code: number) => { exitCode = code; throw new Error('__test_exit__'); };
       console.error = (...parts: unknown[]) => { errBuf.push(parts.join(' ')); };
       try {
+        process.chdir(neutralDir);
         await runExtract(engine, ['links']);
       } catch (e) {
         if (!(e instanceof Error && e.message === '__test_exit__')) throw e;
@@ -216,6 +223,8 @@ describe('voltmind extract --dir default resolution', () => {
     } finally {
       (process as any).exit = savedExit;
       console.error = savedConsoleError;
+      process.chdir(savedCwd);
+      try { rmSync(neutralDir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
     expect(exitCode as unknown).toBe(1);
     const all = errBuf.join('\n');

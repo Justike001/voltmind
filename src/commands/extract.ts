@@ -40,6 +40,7 @@ import {
 } from '../core/link-extraction.ts';
 import { createProgress } from '../core/progress.ts';
 import { getCliOptions, cliOptsToProgressOptions } from '../core/cli-options.ts';
+import { resolveSourceWithTier } from '../core/source-resolver.ts';
 import { pathToSlug, pruneDir, isSyncable } from '../core/sync.ts';
 // v0.41.18.0: withRetry + isRetryableConnError + WithRetryOpts moved to
 // src/core/retry.ts as the canonical primitive. Engine methods
@@ -407,6 +408,54 @@ export async function runExtractCore(engine: BrainEngine, opts: ExtractOpts): Pr
   );
   const workers = workersResolved.workers;
 
+  // v0.41.20.0 silent-no-op guard (multi-source extract): the fs walker pushes
+  // links/timeline rows WITHOUT source_id when no source is pinned, and
+  // addLinksBatch/addTimelineEntriesBatch JOIN the pages table against
+  // source_id='default'. When pages actually live under a non-'default'
+  // source (e.g. 'personal-alice-example'), every JOIN matches nothing and
+  // extract silently reports created:0 — the exact reason fs extract has
+  // reported 0 forever. Resolve the source owning opts.dir via the canonical
+  // resolution chain (same one sync/query use) and thread it into every
+  // sub-extractor so the fs walk lands on the right source by default.
+  // DB-source extractors (extractLinksFromDB / extractTimelineFromDB)
+  // already thread per-page source_id and don't reach this path.
+  let resolvedSourceId = opts.sourceId;
+  if (resolvedSourceId === undefined) {
+    try {
+      const tier = await resolveSourceWithTier(engine, null, opts.dir);
+      resolvedSourceId = tier.source_id;
+      // Safety net for the residual ambiguous case: the resolution chain fell
+      // all the way through to the seeded 'default' source even though other
+      // registered (non-archived) sources with a local_path exist. That is
+      // exactly the footgun that silently writes 0 rows into empty 'default'
+      // while the pages live elsewhere. Surface it instead of a quiet no-op.
+      if (tier.tier === 'seed_default') {
+        let hasOther = false;
+        try {
+          const others = await engine.executeRaw<{ id: string }>(
+            `SELECT id FROM sources
+             WHERE local_path IS NOT NULL AND id != 'default'
+               AND (archived = false OR archived IS NULL)
+             LIMIT 1`,
+          );
+          hasOther = others.length > 0;
+        } catch {
+          // pre-v34 brains lack the archived column — ignore, keep walking.
+        }
+        if (hasOther && !jsonMode) {
+          console.error(
+            `[extract] no source resolved for '${opts.dir}'; falling back to source 'default'. ` +
+            `If pages live under a registered source, re-run with --source-id <id> ` +
+            `(see \`voltmind sources list\`) to avoid a silent 0-row extract.`,
+          );
+        }
+      }
+    } catch {
+      // Source resolution is best-effort here; on failure fall back to the
+      // legacy 'default' JOIN behavior rather than aborting extraction.
+    }
+  }
+
   // Incremental path: if specific slugs provided, only extract from those files.
   // This is the cycle path — sync tells us what changed, we only re-extract those.
   if (opts.slugs !== undefined) {
@@ -414,7 +463,7 @@ export async function runExtractCore(engine: BrainEngine, opts: ExtractOpts): Pr
       // Nothing changed — skip entirely.
       return result;
     }
-    const r = await extractForSlugs(engine, opts.dir, opts.slugs, opts.mode, dryRun, jsonMode, workers, opts.sourceId);
+    const r = await extractForSlugs(engine, opts.dir, opts.slugs, opts.mode, dryRun, jsonMode, workers, resolvedSourceId);
     result.links_created = r.links_created;
     result.timeline_entries_created = r.timeline_created;
     result.pages_processed = r.pages;
@@ -423,12 +472,12 @@ export async function runExtractCore(engine: BrainEngine, opts: ExtractOpts): Pr
 
   // Full walk path: CLI `voltmind extract` or first-run.
   if (opts.mode === 'links' || opts.mode === 'all') {
-    const r = await extractLinksFromDir(engine, opts.dir, dryRun, jsonMode, workers, opts.sourceId);
+    const r = await extractLinksFromDir(engine, opts.dir, dryRun, jsonMode, workers, resolvedSourceId);
     result.links_created = r.created;
     result.pages_processed = r.pages;
   }
   if (opts.mode === 'timeline' || opts.mode === 'all') {
-    const r = await extractTimelineFromDir(engine, opts.dir, dryRun, jsonMode, workers, opts.sourceId);
+    const r = await extractTimelineFromDir(engine, opts.dir, dryRun, jsonMode, workers, resolvedSourceId);
     result.timeline_entries_created = r.created;
     result.pages_processed = Math.max(result.pages_processed, r.pages);
   }
