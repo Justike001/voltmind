@@ -43,6 +43,11 @@ Primary pages hold context. State pages hold structured operational status and b
 4. Risk, blocker, concern, or watch item -> `state/risks/`
 5. Derived operational view or generated index -> `state/indexes/`
 
+After ingest creates one or more open `state/actions/` pages, route their
+execution-detail interview and ChatGPT desktop scheduling to
+`skills/schedule-actions/SKILL.md`. The action remains filed in `state/actions/`;
+the skill owns clarification, schedule registration, and idempotent execution.
+
 ## Common Tiebreakers
 
 - Project vs Idea: if there is active work, owner, milestone, or scope, use `projects/`; otherwise use `ideas/`.

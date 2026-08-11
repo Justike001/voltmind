@@ -52,6 +52,7 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | Morning prep, meeting context, day planning | `skills/daily-task-prep/SKILL.md` |
 | Daily briefing, "what's happening today" | `skills/briefing/SKILL.md` |
 | Cron scheduling, quiet hours, job staggering | `skills/cron-scheduler/SKILL.md` |
+| Ingest produced `state/actions/`, schedule pending actions, collect action execution details and exact execution time | `skills/schedule-actions/SKILL.md` |
 | "get more out of voltmind", "is my brain set up right", "weekly brain checkup", "advise me on my brain", "voltmind advisor" | `skills/voltmind-advisor/SKILL.md` |
 | Save or load reports | `skills/reports/SKILL.md` |
 | "Create a skill", "improve this skill" | `skills/skill-creator/SKILL.md` |

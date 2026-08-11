@@ -1,0 +1,4 @@
+interface:
+  display_name: "Schedule Actions"
+  short_description: "Clarify and schedule executable actions"
+  default_prompt: "Use $schedule-actions to clarify and schedule every pending VoltMind action."

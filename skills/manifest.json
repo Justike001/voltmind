@@ -10,6 +10,11 @@
       "description": "Route content and tracking-aware evidence into VoltMind; client agents write canonical evidence and bound project/workstream state, then register revisions for server Dream maintenance."
     },
     {
+      "name": "schedule-actions",
+      "path": "schedule-actions/SKILL.md",
+      "description": "Clarify each executable action, persist its execution contract and exact time, and register an idempotent ChatGPT desktop scheduled task."
+    },
+    {
       "name": "query",
       "path": "query/SKILL.md",
       "description": "Answer questions using 3-layer search, synthesis, and citation propagation"

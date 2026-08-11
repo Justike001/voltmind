@@ -44,6 +44,9 @@ This skill guarantees:
 - Source attribution on every fact written (inline `[Source: ...]` citations)
 - User's direct statements are highest-authority data
 - Back-links maintained on every brain write (Iron Law)
+- In thin-client mode, semantic page writes use local `voltmind put`, which
+  validates the canonical draft and writes `client_vault_path` before remote
+  MCP synchronization. A direct remote `put_page` call is not client-first.
 
 ## Iron Law: Back-Linking (MANDATORY)
 

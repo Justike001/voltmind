@@ -11,10 +11,12 @@ remote brain is its synchronized index, graph, and audit surface.
 3. Write raw evidence to the local vault first, with stable event identity.
 4. Route semantic signal locally: update confirmed canonical pages or append
    ambiguity to `state/indexes/project-tracking-review`.
-5. Validate local Markdown: frontmatter, source links, citations, file-ref
-   shape, and diff scope.
-6. Send `put_page` for the exact local evidence and semantic Markdown; source
-   evidence is sent before the derived pages.
+5. For every canonical semantic page, call the local thin-client writer
+   (`voltmind put <slug> < page.md`). It validates the canonical draft contract
+   before atomically writing the exact Markdown to `client_vault_path`.
+6. Let that same local command send `put_page` only after the local write
+   succeeds. Source evidence is synchronized before derived pages. Do not call
+   remote MCP `put_page` directly for a client-first semantic write.
 7. Call `register_tracking_evidence` only after the corresponding remote
    evidence write succeeds.
 8. Record remote success, failure, or retry state in the local manifest.
@@ -25,6 +27,11 @@ leaves the local vault authoritative and the manifest in
 local file. Never advance a coverage checkpoint because a connector read
 returned data but local persistence, remote synchronization, or registration
 failed.
+
+A direct call to the Host's remote MCP `put_page` is protected by the same
+draft contract, but it is only the server-side safety gate: it cannot perform
+the client's local write-ahead step. Client-first agents therefore route
+semantic writes through the local VoltMind CLI/adapter.
 
 ## Evidence identity and coverage
 

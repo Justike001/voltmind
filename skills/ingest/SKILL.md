@@ -179,6 +179,13 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
 7. **Create cross-reference links.** Link entities in voltmind for every entity pair mentioned together, using the appropriate relationship type.
 8. **Back-link all entities.** Update EVERY mentioned entity's page with a back-link to this page (Iron Law).
 9. **Timeline merge.** The same event appears on ALL mentioned entities' timelines. If Alice met Bob at Acme Corp, the event goes on Alice's page, Bob's page, and Acme Corp's page.
+10. **Schedule executable actions.** After all canonical `state/actions/` pages
+    from this ingest are durable and synchronized, invoke
+    `skills/schedule-actions/SKILL.md` in interview mode. Hand off the exact
+    action slugs. That skill asks about one action per turn, persists the
+    user-confirmed execution contract and exact time, and registers the
+    ChatGPT desktop scheduled task. Do not schedule directly from the ingest
+    summary and do not treat extraction as execution consent.
 
 ### Teams group-chat identity and later reconciliation
 
@@ -573,10 +580,14 @@ compatibility. A client-authored run follows this order:
    source Markdown to the local vault.
 2. Run Brain-First Lookup; write the confirmed semantic pages or durable review
    candidate locally. Do not wait for a human review to continue ingest.
-3. Validate the local files and manifest. If validation fails, retain
-   `local_written_remote_pending` and do not claim completion.
-4. Call remote `put_page` with the exact local source page, followed by the
-   exact derived pages.
+3. For canonical semantic pages, invoke local
+   `voltmind put <slug> < page.md`. The command validates the canonical draft
+   before its atomic local-vault write. A validation failure means no semantic
+   page was written locally or remotely.
+4. Let that local command forward the exact persisted Markdown through remote
+   `put_page`; do not call the Host MCP tool directly for client-first semantic
+   writes. If remote synchronization fails after the local write, retain
+   `local_written_remote_pending` and retry from the local file.
 5. Call `register_tracking_evidence` only after the remote source write
    succeeds. Pass only actual project/workstream/state slugs in
    `affected_pages`; review-index-only evidence uses `review_needed` with
