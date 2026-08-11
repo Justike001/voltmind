@@ -10,6 +10,9 @@ Design rules:
 - `.system/` holds machine registries and sync/index state.
 - Keep current synthesis above `<!-- timeline -->`.
 - Keep evidence, transcript, raw notes, and lifecycle events below `<!-- timeline -->`.
+- Keep template H2 headings exactly as written in English, for example `## Open Threads` and `## Current Work`; do not translate headings such as `## Timeline` to `## 时间线`.
+- Write body prose, bullet explanations, and timeline summaries in Chinese. Frontmatter keys and fixed template headings remain English.
+- Timeline entries must match the runtime scaffold format exactly: `- **YYYY-MM-DD** | 中文摘要 [Source: ...]`.
 
 Preferred page shape:
 
@@ -34,12 +37,12 @@ tags: []
 
 # Page Title
 
-Current synthesized truth, status, open questions, and links.
+用中文填写当前综合结论、状态、待解决问题和关联链接。
 
 <!-- timeline -->
 
 ## Timeline
-- YYYY-MM-DD | Source - What happened.
+- **YYYY-MM-DD** | 用中文说明发生了什么。[Source: 来源]
 ```
 
 ## Core Frontmatter
@@ -241,7 +244,7 @@ This section tracks unresolved obligations, risks, decisions, and questions invo
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Joined the company / changed role / moved team / took ownership / made a key decision / completed notable work.
+- **YYYY-MM-DD** | 用中文记录入职、角色变化、团队调整、承担职责、关键决策或重要成果。[Source: 来源]
 ```
 
 ## Orgs
@@ -309,7 +312,7 @@ tags: []
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Org change, ownership update, priority shift, or operating decision.
+- **YYYY-MM-DD** | 用中文记录组织变化、职责更新、优先级调整或运营决策。[Source: 来源]
 ```
 
 ## Companies
@@ -363,7 +366,7 @@ tags: []
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Meeting, account update, contract event, product signal, ticket, incident, or relationship change.
+- **YYYY-MM-DD** | 用中文记录会议、客户更新、合同事件、产品信号、工单、事故或关系变化。[Source: 来源]
 ```
 
 ## Workstreams
@@ -439,7 +442,7 @@ Client-agent maintained directional progress appears here after an explicitly bo
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Direction change, new project, closed project, major decision, or external signal.
+- **YYYY-MM-DD** | 用中文记录方向变化、新项目、项目关闭、重大决策或外部信号。[Source: 来源]
 ```
 
 ## Projects
@@ -524,7 +527,7 @@ Client-agent maintained progress appears here after an explicitly bound source i
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Milestone, decision, scope change, blocker, shipped work, or project status change.
+- **YYYY-MM-DD** | 用中文记录里程碑、决策、范围变化、阻塞、交付或项目状态变化。[Source: 来源]
 ```
 
 ## Meetings
@@ -645,7 +648,7 @@ Draft, outline, memo, proposal, report, or prompt content.
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Created, revised, reviewed, sent, superseded, or archived.
+- **YYYY-MM-DD** | 用中文记录创建、修订、评审、发送、替代或归档。[Source: 来源]
 ```
 
 ## Concepts
@@ -700,7 +703,7 @@ tags: []
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Concept captured, refined, applied, challenged, or superseded.
+- **YYYY-MM-DD** | 用中文记录概念的捕获、完善、应用、质疑或替代。[Source: 来源]
 ```
 
 ## Ideas
@@ -766,7 +769,7 @@ Quote or near-verbatim capture of the original observation, thesis, bet, or prod
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Captured, discussed, validated, promoted, parked, or rejected.
+- **YYYY-MM-DD** | 用中文记录想法的捕获、讨论、验证、推进、搁置或否决。[Source: 来源]
 ```
 
 ## Daily
@@ -827,7 +830,7 @@ tags: []
 
 ## Timeline
 
-- HH:MM | Source - Event, thought, update, or work log entry.
+- **YYYY-MM-DD** | HH:MM 用中文记录事件、想法、更新或工作日志。[Source: 来源]
 ```
 
 ## Policies
@@ -885,7 +888,7 @@ tags: []
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Created, approved, revised, superseded, or violated.
+- **YYYY-MM-DD** | 用中文记录创建、批准、修订、替代或违反规则的事件。[Source: 来源]
 ```
 
 ## Sources
@@ -935,7 +938,7 @@ Paste raw excerpt, attach path, or preserve source link/reference. Do not over-s
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Captured, imported, refreshed, redacted, or superseded.
+- **YYYY-MM-DD** | 用中文记录捕获、导入、刷新、脱敏或替代。[Source: 来源]
 ```
 
 ## Contribution Candidate
@@ -1017,7 +1020,7 @@ Ticket, CRM, project, or other operational system to update.
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Candidate created, reviewed, redacted, approved, rejected, published, or written back.
+- **YYYY-MM-DD** | 用中文记录候选项创建、评审、脱敏、批准、拒绝、发布或回写。[Source: 来源]
 ```
 
 ## Private
@@ -1054,7 +1057,7 @@ Private reflection, plan, or material that must not be proposed for publishing.
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Private update.
+- **YYYY-MM-DD** | 用中文记录私有内容更新。[Source: 来源]
 ```
 
 ## Inbox
@@ -1097,7 +1100,7 @@ Raw quick capture, voice note, snippet, meeting note, or temporary thought.
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Captured, reviewed, filed, or discarded.
+- **YYYY-MM-DD** | 用中文记录捕获、审阅、归档或丢弃。[Source: 来源]
 ```
 
 ## State Decision
@@ -1163,7 +1166,7 @@ When this decision should be revisited.
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Proposed, accepted, superseded, reviewed, or rejected.
+- **YYYY-MM-DD** | 用中文记录提出、接受、替代、复审或拒绝。[Source: 来源]
 ```
 
 ## State Commitment
@@ -1231,7 +1234,7 @@ Private, shared, or restricted.
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Created, changed, fulfilled, broken, published, or written back.
+- **YYYY-MM-DD** | 用中文记录创建、变更、履行、违约、发布或回写。[Source: 来源]
 ```
 
 ## State Action
@@ -1347,7 +1350,7 @@ Open, on schedule, in progress, done, blocked, or canceled.
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Created, assigned, blocked, completed, canceled, or published.
+- **YYYY-MM-DD** | 用中文记录创建、分配、阻塞、完成、取消或发布。[Source: 来源]
 ```
 
 ## State Risk
@@ -1418,5 +1421,5 @@ Internal, confidential, or restricted.
 
 ## Timeline
 
-- YYYY-MM-DD | Source - Raised, updated, mitigated, escalated, published, or closed.
+- **YYYY-MM-DD** | 用中文记录风险提出、更新、缓解、升级、发布或关闭。[Source: 来源]
 ```

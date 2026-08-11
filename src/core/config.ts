@@ -243,6 +243,13 @@ export interface VoltMindConfig {
     oauth_client_secret?: string;
   };
 
+  /**
+   * Client-local Markdown vault used as the write-ahead truth surface before
+   * a thin-client `put_page` is forwarded to remote MCP. File-plane only;
+   * never sent to the host. Env override: VOLTMIND_CLIENT_VAULT_PATH.
+   */
+  client_vault_path?: string;
+
   /** Host-side publication of agent skill prose over MCP. Default OFF. */
   mcp?: {
     publish_skills?: boolean;
@@ -397,6 +404,9 @@ export function loadConfig(): VoltMindConfig | null {
       : {}),
     ...(process.env.VOLTMIND_REMOTE_CLIENT_SECRET && fileConfig?.remote_mcp
       ? { remote_mcp: { ...fileConfig.remote_mcp, oauth_client_secret: process.env.VOLTMIND_REMOTE_CLIENT_SECRET } }
+      : {}),
+    ...(process.env.VOLTMIND_CLIENT_VAULT_PATH
+      ? { client_vault_path: process.env.VOLTMIND_CLIENT_VAULT_PATH }
       : {}),
   };
 
@@ -659,6 +669,7 @@ export const KNOWN_CONFIG_KEYS: readonly string[] = [
   'embedding_columns',
   'search_embedding_column',
   'remote_mcp',
+  'client_vault_path',
   'sync',
   'sync.repo_path',
   'sync.last_commit',

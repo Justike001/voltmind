@@ -2,7 +2,13 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
+import { parseTimelineEntries } from './link-extraction.ts';
 import { inferTypeFromPack } from './markdown.ts';
+// Keep the canonical draft available inside compiled thin-client binaries.
+// The source file remains the only authority; this text import is its build-time
+// embedding, not a second hand-maintained template registry.
+// @ts-ignore — Bun text imports are not represented in TypeScript's lib types.
+import EMBEDDED_CANONICAL_PAGE_TEMPLATE_DRAFT from '../../docs/drafts/voltmind-company-core-page-templates.draft.md' with { type: 'text' };
 
 export const CANONICAL_PAGE_TEMPLATE_DRAFT =
   'docs/drafts/voltmind-company-core-page-templates.draft.md';
@@ -40,7 +46,9 @@ export interface TemplateContractFinding {
   | 'PATH_TYPE_MISMATCH'
   | 'MISSING_H1'
   | 'MISSING_HEADING'
-  | 'MISSING_TIMELINE_MARKER';
+  | 'MISSING_TIMELINE_MARKER'
+  | 'INVALID_TIMELINE_FORMAT'
+  | 'BODY_LANGUAGE_MISMATCH';
   message: string;
   field?: string;
   heading?: string;
@@ -76,16 +84,12 @@ export function resolveCanonicalPageTemplateDraft(): string | null {
 }
 
 export function loadCanonicalPageTemplateContract(): PageTemplateContractSet {
-  const draftPath = resolveCanonicalPageTemplateDraft();
-  if (!draftPath) {
-    throw new Error(
-      `Canonical page template draft not found. Expected ${CANONICAL_PAGE_TEMPLATE_DRAFT}; ` +
-      'set VOLTMIND_PAGE_TEMPLATE_DRAFT for packaged runtimes.',
-    );
-  }
-
-  const content = readFileSync(draftPath, 'utf8');
-  const mtimeMs = statSync(draftPath).mtimeMs;
+  const resolvedDraftPath = resolveCanonicalPageTemplateDraft();
+  const draftPath = resolvedDraftPath ?? `embedded:${CANONICAL_PAGE_TEMPLATE_DRAFT}`;
+  const content = resolvedDraftPath
+    ? readFileSync(resolvedDraftPath, 'utf8')
+    : EMBEDDED_CANONICAL_PAGE_TEMPLATE_DRAFT;
+  const mtimeMs = resolvedDraftPath ? statSync(resolvedDraftPath).mtimeMs : 0;
 
   // The draft is stable during a process lifetime in normal operation. The
   // content hash is cheap for this small design document and also makes tests
@@ -192,6 +196,41 @@ export function validateCanonicalPageTemplate(
       code: 'MISSING_TIMELINE_MARKER',
       message: "page body must contain the canonical '<!-- timeline -->' marker",
     });
+  }
+
+  const timelineBody = extractH2Section(parsed.content, 'Timeline');
+  if (timelineBody !== null) {
+    for (const line of timelineBody.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('-')) continue;
+      if (parseTimelineEntries(trimmed).length === 0) {
+        findings.push({
+          code: 'INVALID_TIMELINE_FORMAT',
+          heading: 'Timeline',
+          message: "timeline entries must use '- **YYYY-MM-DD** | 中文摘要 [Source: ...]'",
+        });
+        break;
+      }
+    }
+  }
+
+  const languageExemptHeadings = new Set(['Transcript', 'Raw / Pointer', 'Evidence']);
+  for (const section of extractBodySections(parsed.content)) {
+    // Raw evidence keeps the source language verbatim. The Chinese-language
+    // contract applies to synthesized prose, not transcripts or quoted proof.
+    if (section.heading && languageExemptHeadings.has(section.heading)) continue;
+    const prose = stripNonProseMarkup(section.content);
+    const latinLetters = (prose.match(/[A-Za-z]/g) ?? []).length;
+    const hasChinese = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/u.test(prose);
+    if (latinLetters >= 12 && !hasChinese) {
+      findings.push({
+        code: 'BODY_LANGUAGE_MISMATCH',
+        ...(section.heading ? { heading: section.heading } : {}),
+        message: section.heading
+          ? `body content under '## ${section.heading}' must be written in Chinese`
+          : 'body introduction must be written in Chinese',
+      });
+    }
   }
 
   return {
@@ -338,6 +377,51 @@ function extractHeadings(body: string): Set<string> {
   return headings;
 }
 
+function extractH2Section(body: string, heading: string): string | null {
+  const lines = body.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `## ${heading}`);
+  if (start < 0) return null;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^##\s+/.test(lines[i]!)) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start + 1, end).join('\n');
+}
+
+function extractBodySections(body: string): Array<{ heading?: string; content: string }> {
+  const sections: Array<{ heading?: string; content: string }> = [];
+  let heading: string | undefined;
+  let lines: string[] = [];
+  for (const line of body.split(/\r?\n/)) {
+    const match = /^##\s+(.+?)\s*$/.exec(line);
+    if (match) {
+      if (lines.some((entry) => entry.trim().length > 0)) sections.push({ heading, content: lines.join('\n') });
+      heading = match[1]!;
+      lines = [];
+      continue;
+    }
+    if (/^#\s+/.test(line)) continue;
+    lines.push(line);
+  }
+  if (lines.some((entry) => entry.trim().length > 0)) sections.push({ heading, content: lines.join('\n') });
+  return sections;
+}
+
+function stripNonProseMarkup(content: string): string {
+  return content
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/<!--[^]*?-->/g, '')
+    .replace(/\[Source:[^\]]*\]/gi, '')
+    .replace(/!?(?:\[[^\]]*\])?\([^)]*\)/g, '')
+    .replace(/\[\[[^\]]*\]\]/g, '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/`[^`]*`/g, '')
+    .trim();
+}
+
 function readField(root: Record<string, unknown>, path: string): { present: boolean; value: unknown } {
   const parts = path.split('.');
   let current: unknown = root;
@@ -354,7 +438,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export async function resolveTemplateContractMode(engine: { getConfig(key: string): Promise<unknown> }): Promise<TemplateContractMode> {
+export async function resolveTemplateContractMode(
+  engine: { getConfig(key: string): Promise<unknown> },
+  options: { remote?: boolean } = {},
+): Promise<TemplateContractMode> {
   const configured = await engine.getConfig('writer.template_contract').catch(() => undefined);
   if (configured === false) return 'off';
   if (configured === true) return 'strict';
@@ -364,5 +451,10 @@ export async function resolveTemplateContractMode(engine: { getConfig(key: strin
   if (normalized === 'strict' || normalized === 'true' || normalized === '1') return 'strict';
 
   const repoPath = await engine.getConfig('sync.repo_path').catch(() => undefined);
-  return typeof repoPath === 'string' && existsSync(repoPath) ? 'strict' : 'off';
+  if (typeof repoPath === 'string' && existsSync(repoPath)) return 'strict';
+  // Client-first semantic writes arrive through MCP and must fail closed even
+  // when the database host does not have a local vault checkout. Raw server
+  // ingestion uses importFromContent directly and is intentionally outside
+  // this agent-authored page contract.
+  return options.remote === true ? 'strict' : 'off';
 }

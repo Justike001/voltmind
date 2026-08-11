@@ -474,15 +474,51 @@ async function runThinClientRouted(
   // and VOLTMIND_NO_BANNER=1.
   await printIdentityBannerBestEffort(cfg, cliOpts, sigintController.signal);
 
+  let localWriteReceipt:
+    | import('./core/client-first-page-writer.ts').ClientFirstLocalWriteReceipt
+    | undefined;
   try {
+    // Client-first semantic writes are write-ahead: the canonical Markdown is
+    // validated and durably written to the client vault BEFORE remote MCP sees
+    // it. The host still validates again and updates DB/source checkout.
+    if (op.name === 'put_page') {
+      const { writeClientFirstPage } = await import('./core/client-first-page-writer.ts');
+      localWriteReceipt = await writeClientFirstPage(cfg, {
+        slug: params.slug as string,
+        content: params.content as string,
+      });
+      process.stderr.write(`[client-first] local_written_remote_pending ${localWriteReceipt.path}\n`);
+    }
+
     const raw = await callRemoteTool(cfg, op.name, params, {
       timeoutMs,
       signal: sigintController.signal,
     });
-    const result = unpackToolResult(raw);
+    const result = unpackToolResult(raw) as unknown;
+    if (localWriteReceipt && result && typeof result === 'object' && !Array.isArray(result)) {
+      Object.assign(result as Record<string, unknown>, {
+        client_local_write: { ...localWriteReceipt, status: 'synchronized' },
+      });
+    }
     const output = formatResult(op.name, result);
     if (output) process.stdout.write(output);
   } catch (e: unknown) {
+    if (localWriteReceipt) {
+      process.stderr.write(
+        `[client-first] local_written_remote_pending path=${localWriteReceipt.path} sha256=${localWriteReceipt.content_sha256}\n`,
+      );
+    }
+    if (
+      e instanceof Error
+      && e.name === 'ClientFirstPageWriteError'
+      && 'code' in e
+    ) {
+      const localError = e as Error & { code: string; suggestion?: string };
+      console.error(`Error [${localError.code}]: ${localError.message}`);
+      if (localError.suggestion) console.error(`  Fix: ${localError.suggestion}`);
+      process.off('SIGINT', onSigint);
+      process.exit(1);
+    }
     if (e instanceof RemoteMcpError) {
       const url = cfg.remote_mcp!.mcp_url;
       switch (e.reason) {
@@ -2262,7 +2298,7 @@ SETUP
 
 PAGES
   get <slug>                         Read a page
-  put <slug> [< file.md]             Write/update a page
+  put <slug> [< file.md]             Write local vault first, then sync remote in thin-client mode
   delete <slug>                      Delete a page
   restore <slug>                     Restore a deleted page
   list [--type T] [--tag T] [-n N]   List pages

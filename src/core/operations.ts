@@ -817,9 +817,9 @@ const put_page: Operation = {
 
     // Canonical Personal Brain page-format gate. The draft document is the
     // single source of truth for required frontmatter and body headings. The
-    // default is strict whenever a local vault is configured; DB-only callers
-    // can opt in explicitly with writer.template_contract=strict, while
-    // migration workflows can use off or warn.
+    // default is strict for every remote/client-first agent write and whenever
+    // a local vault is configured. Trusted local DB-only maintenance stays
+    // compatible unless it opts in; migrations can explicitly use off/warn.
     let templateValidation:
       | { mode: 'warn'; type: string; section: string; findings: Array<{ code: string; message: string; field?: string; heading?: string }> }
       | undefined;
@@ -828,7 +828,7 @@ const put_page: Operation = {
         resolveTemplateContractMode,
         validateCanonicalPageTemplate,
       } = await import('./page-template-contract.ts');
-      const templateMode = await resolveTemplateContractMode(ctx.engine);
+      const templateMode = await resolveTemplateContractMode(ctx.engine, { remote: ctx.remote !== false });
       if (templateMode !== 'off') {
         let validation;
         try {

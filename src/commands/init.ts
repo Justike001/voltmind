@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import { readdirSync, lstatSync, existsSync, copyFileSync, mkdirSync, readFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 
@@ -547,6 +547,7 @@ async function initMigrateOnly(opts: { jsonOutput: boolean }) {
  *   --mcp-url <url>             (or VOLTMIND_REMOTE_MCP_URL)
  *   --oauth-client-id <id>      (or VOLTMIND_REMOTE_CLIENT_ID)
  *   --oauth-client-secret <s>   (or VOLTMIND_REMOTE_CLIENT_SECRET; preferred)
+ *   --vault-path <dir>          (or VOLTMIND_CLIENT_VAULT_PATH; required for put)
  *
  * Re-run semantics: if a thin-client config already exists, --force overwrites;
  * otherwise refuses with a hint pointing at the existing mcp_url.
@@ -566,6 +567,7 @@ async function initRemoteMcp(opts: {
   const mcpUrl = (arg('--mcp-url') ?? process.env.VOLTMIND_REMOTE_MCP_URL ?? '').trim();
   const clientId = (arg('--oauth-client-id') ?? process.env.VOLTMIND_REMOTE_CLIENT_ID ?? '').trim();
   const clientSecret = (arg('--oauth-client-secret') ?? process.env.VOLTMIND_REMOTE_CLIENT_SECRET ?? '').trim();
+  const clientVaultPath = (arg('--vault-path') ?? process.env.VOLTMIND_CLIENT_VAULT_PATH ?? '').trim();
 
   function fail(reason: string, message: string, extra: Record<string, unknown> = {}): never {
     if (jsonOutput) {
@@ -580,6 +582,9 @@ async function initRemoteMcp(opts: {
   if (!mcpUrl) fail('missing_mcp_url', '--mcp-url is required (or set VOLTMIND_REMOTE_MCP_URL). Example: --mcp-url https://brain-host.local:3001/mcp');
   if (!clientId) fail('missing_client_id', '--oauth-client-id is required (or set VOLTMIND_REMOTE_CLIENT_ID). Get it from `voltmind auth register-client` on the host.');
   if (!clientSecret) fail('missing_client_secret', '--oauth-client-secret is required (or set VOLTMIND_REMOTE_CLIENT_SECRET). Get it from `voltmind auth register-client` on the host.');
+  if (clientVaultPath && (!existsSync(resolve(clientVaultPath)) || !lstatSync(resolve(clientVaultPath)).isDirectory())) {
+    fail('client_vault_not_found', `--vault-path must point to an existing local Markdown vault: ${resolve(clientVaultPath)}`);
+  }
 
   // Re-run guard for --mcp-only specifically: refuse without --force to
   // avoid silently rotating credentials on a working install.
@@ -660,6 +665,7 @@ async function initRemoteMcp(opts: {
         ? {}
         : { oauth_client_secret: clientSecret }),
     },
+    ...(clientVaultPath ? { client_vault_path: resolve(clientVaultPath) } : {}),
   };
   // database_url / database_path get explicitly removed when converting; the
   // spread above with `undefined` doesn't drop them in JSON, so prune.
@@ -676,17 +682,19 @@ async function initRemoteMcp(opts: {
       mcp_url: config.remote_mcp!.mcp_url,
       oauth_client_id: config.remote_mcp!.oauth_client_id,
       oauth_secret_in_config: 'oauth_client_secret' in config.remote_mcp!,
+      client_vault_path: config.client_vault_path ?? null,
     }));
   } else {
     console.log('');
     console.log('Thin-client mode configured. No local DB.');
     console.log(`  Config: ${configPath()}`);
     console.log(`  Talks to: ${config.remote_mcp!.mcp_url}`);
+    console.log(`  Local vault: ${config.client_vault_path ?? '(not configured — put is disabled until --vault-path is set)'}`);
     console.log('');
     console.log('Next steps:');
-    console.log(`  1. Configure your agent's MCP client to point at ${config.remote_mcp!.mcp_url} (Claude Desktop / Hermes / openclaw).`);
-    console.log('  2. Run `voltmind doctor` to re-verify connectivity at any time.');
-    console.log('  3. Run `voltmind remote ping` after writing markdown if you want the host to re-index immediately (Tier B).');
+    console.log('  1. Use local `voltmind put <slug> < page.md` for semantic writes; it writes the vault before remote MCP.');
+    console.log(`  2. Configure remote MCP ${config.remote_mcp!.mcp_url} for reads and non-page operations.`);
+    console.log('  3. Run `voltmind doctor` to re-verify connectivity at any time.');
   }
 }
 
@@ -1494,6 +1502,7 @@ ENGINE SELECTION (mutually exclusive)
   --supabase            Use Supabase Postgres (recommended for 1000+ files)
   --url <URL>           Use a manual Postgres connection string
   --mcp-only            Thin-client mode: connect to a remote voltmind MCP, no local engine
+  --vault-path <DIR>     Client-first local Markdown vault written before remote put_page
 
 OPTIONS
   --force               Overwrite an existing config (gated by default)
@@ -1517,7 +1526,8 @@ EXAMPLES
   voltmind init --pglite                      # Local-only, no API keys
   voltmind init --supabase                    # Interactive Supabase setup
   voltmind init --url postgresql://...        # Use a custom Postgres
-  voltmind init --mcp-only --url https://...  # Thin-client mode
+  voltmind init --mcp-only --issuer-url https://... --mcp-url https://.../mcp --vault-path E:\\vault
+                                               # Client-first thin-client mode
 
 NOTES
   - Bare \`voltmind init\` defaults to PGLite at ~/.voltmind/brain.pglite and
