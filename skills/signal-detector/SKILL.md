@@ -20,6 +20,7 @@ writes_to:
   - people/
   - companies/
   - concepts/
+  - state/indexes/
 ---
 
 # Signal Detector — Ambient Brain Capture
@@ -40,6 +41,8 @@ This skill guarantees:
 - Runs in parallel (spawned, never blocks main response)
 - Captures ideas with the user's EXACT phrasing (no paraphrasing)
 - Detects entity mentions and creates/enriches brain pages
+- Preserves notable ambiguous ingest signals for deferred clarification instead
+  of dropping them or promoting guesses to facts
 - Logs a one-line summary of what was captured
 - Back-links all entity mentions (Iron Law)
 - Citations on every fact written
@@ -76,6 +79,14 @@ meetings, and concepts. An original without cross-links is a dead original.
    - If page exists and RICH → no action
 3. For new FACTS with specific dates → call `voltmind timeline-add <slug> <date> "<summary>"`
 
+When signal detection runs inside an ingest workflow and the raw source has a
+stable identity, classify extracted statements as `observed`, `inferred`, or
+`confirmed`. Route a notable `inferred` signal that lacks required context to
+`skills/clarification-review/SKILL.md`; preserve its exact excerpt in
+`state/indexes/ingest-clarification-review` and keep it out of canonical pages.
+Do not create a durable question for incidental low-notability ambiguity or a
+fragment with no citable source identity.
+
 **Auto-link (v0.10.1):** When you write/update an originals or ideas page that
 references a person or company, the auto-link post-hook on `put_page`
 automatically creates the link from the new page to that entity. You don't
@@ -99,6 +110,7 @@ The output is brain pages created/updated and the signal log line.
 - Blocking the main response to wait for signal detection to complete
 - Paraphrasing the user's original thinking instead of capturing exact phrasing
 - Creating pages for non-notable entities (one-off mentions)
+- Ignoring a notable ambiguous ingest signal or writing an inference as fact
 - Skipping back-links after creating/updating pages
 - Running on purely operational messages ("ok", "thanks", "do it")
 

@@ -1,16 +1,19 @@
 // v0.27.1 follow-up: end-to-end smoke for `voltmind query --image <path>`.
 //
 // Exercises the full op-layer wiring without going through the CLI dispatch:
-// seed two image pages with known 1024-dim image vectors, invoke the `query`
+// seed two image pages with known 2048-dim image vectors, invoke the `query`
 // op with a base64'd payload, assert the closer page wins. Mocks
-// embedMultimodal so the test runs without a real Voyage key.
+// embedMultimodal so the test runs without a live Qwen service.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { resetPgliteState } from './helpers/reset-pglite.ts';
 import { operations as OPERATIONS } from '../src/core/operations.ts';
+import { configureGateway, resetGateway } from '../src/core/ai/gateway.ts';
 
 let engine: PGLiteEngine;
+let nextQueryVec: Float32Array<ArrayBufferLike> = new Float32Array(2048);
+const origFetch = globalThis.fetch;
 
 beforeAll(async () => {
   engine = new PGLiteEngine();
@@ -24,11 +27,26 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
+  nextQueryVec = new Float32Array(2048);
+  configureGateway({
+    embedding_model: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
+    embedding_dimensions: 2048,
+    base_urls: { 'qwen-vllm': 'http://qwen.test/v1' },
+    env: {},
+  });
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    embeddings: { float: [Array.from(nextQueryVec)] },
+  }), { status: 200 })) as unknown as typeof fetch;
 });
 
-function fakeImage1024(seed: number): Float32Array {
-  const out = new Float32Array(1024);
-  for (let i = 0; i < 1024; i++) out[i] = (i + seed) / 1024;
+afterEach(() => {
+  globalThis.fetch = origFetch;
+  resetGateway();
+});
+
+function fakeImage2048(seed: number): Float32Array {
+  const out = new Float32Array(2048);
+  for (let i = 0; i < 2048; i++) out[i] = (i + seed) / 2048;
   return out;
 }
 
@@ -54,18 +72,13 @@ async function seedImagePage(slug: string, vec: Float32Array) {
 describe('query op with --image (v0.27.1 follow-up)', () => {
   test('returns image-similarity hits ordered by cosine', async () => {
     // Seed two image pages with distinct vectors.
-    const vecA = fakeImage1024(0);
-    const vecB = fakeImage1024(500);
+    const vecA = fakeImage2048(0);
+    const vecB = fakeImage2048(500);
     await seedImagePage('photos/a', vecA);
     await seedImagePage('photos/b', vecB);
 
-    // Mock embedMultimodal so the op call doesn't try to hit Voyage.
-    // Returns whatever vector the test's "query" prefix encodes — we
-    // shadow the gateway by patching the imported binding via mock.module.
-    const stubVec = fakeImage1024(500); // closest to 'photos/b'
-    mock.module('../src/core/ai/gateway.ts', () => ({
-      embedMultimodal: async () => [stubVec],
-    }));
+    const stubVec = fakeImage2048(500); // closest to 'photos/b'
+    nextQueryVec = stubVec;
 
     const queryOp = OPERATIONS.find(o => o.name === 'query')!;
     const ctx = { engine, config: null, logger: console, dryRun: false, remote: false } as any;
@@ -109,12 +122,10 @@ describe('query op with --image (v0.27.1 follow-up)', () => {
         modality: 'text',
       },
     ]);
-    const imgVec = fakeImage1024(7);
+    const imgVec = fakeImage2048(7);
     await seedImagePage('photos/img', imgVec);
 
-    mock.module('../src/core/ai/gateway.ts', () => ({
-      embedMultimodal: async () => [imgVec],
-    }));
+    nextQueryVec = imgVec;
 
     const queryOp = OPERATIONS.find(o => o.name === 'query')!;
     const ctx = { engine, config: null, logger: console, dryRun: false, remote: false } as any;

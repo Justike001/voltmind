@@ -48,4 +48,15 @@ describe('P1 skill-platform MCP surface', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('permission_denied');
   });
+
+  test('enforces scalar source scope when federated allowedSources is absent', async () => {
+    const result = await dispatchToolCall(
+      {} as never,
+      'audit_frontmatter',
+      { source_id: 'outside-grant' },
+      { remote: true, sourceId: 'default', auth: undefined },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('permission_denied');
+  });
 });

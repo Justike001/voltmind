@@ -43,6 +43,7 @@ writes_to:
   - sources/
   - projects/
   - workstreams/
+  - state/indexes/
   - state/actions/
   - state/decisions/
   - state/commitments/
@@ -91,6 +92,10 @@ Ingest meetings, articles, media, documents, and conversations into the brain.
   Markdown locally, validate it, then synchronize the exact files with remote
   `put_page` and register receipts. A remote write is not a substitute for a
   durable local source page.
+- Ambiguous but notable signals are durable work, not noise. Preserve the raw
+  evidence, keep uncertain inference out of canonical truth, and route a stable
+  candidate to `state/indexes/ingest-clarification-review` through
+  `skills/clarification-review/SKILL.md`.
 
 > **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
 > **Convention:** See `skills/conventions/page-template-contract.md` for the canonical draft-backed write format.
@@ -118,7 +123,9 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
 > **Router note:** This skill is a router. For specialized ingestion, see: idea-ingest, media-ingest, meeting-ingestion.
 
 1. **Parse the source.** Extract people, companies, dates, events, and any
-   external file references from the input.
+   external file references from the input. Classify each statement as
+   `observed`, `inferred`, or `confirmed`. Preserve observed evidence;
+   canonical semantic pages may contain only confirmed assertions.
 2. **Route external file references.** Validate each
    `ExternalFileReferenceV1` and attach it to the source page. Microsoft files
    use tenant/drive/item identity. RaiDrive and mapped shared drives use a
@@ -167,7 +174,10 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
    or a workstream when it is a durable responsibility domain with no fixed end
    date. Multiple candidates are appended immediately to
    `state/indexes/project-tracking-review`; this is non-blocking and must not
-   be held only in the current session.
+   be held only in the current session. Identity, fact, relationship, owner,
+   time, privacy, or brain/source ambiguity instead goes to
+   `state/indexes/ingest-clarification-review`. If both ambiguity classes apply,
+   cross-reference the records rather than duplicating the question.
    One evidence event may update multiple targets. Update Timeline, managed
    current state, and canonical state objects with evidence links and
    `[Source: ...]`; then call `register_tracking_evidence` with the actual
@@ -179,13 +189,39 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
 7. **Create cross-reference links.** Link entities in voltmind for every entity pair mentioned together, using the appropriate relationship type.
 8. **Back-link all entities.** Update EVERY mentioned entity's page with a back-link to this page (Iron Law).
 9. **Timeline merge.** The same event appears on ALL mentioned entities' timelines. If Alice met Bob at Acme Corp, the event goes on Alice's page, Bob's page, and Acme Corp's page.
-10. **Schedule executable actions.** After all canonical `state/actions/` pages
-    from this ingest are durable and synchronized, invoke
+10. **Schedule executable actions.** After all canonical local
+    `state/actions/*.md` pages from this ingest are durable, invoke
     `skills/schedule-actions/SKILL.md` in interview mode. Hand off the exact
-    action slugs. That skill asks about one action per turn, persists the
+    local file paths and action slugs; do not read a database or remote action
+    index first. That skill asks about one action per turn, persists the
     user-confirmed execution contract and exact time, and registers the
     ChatGPT desktop scheduled task. Do not schedule directly from the ingest
     summary and do not treat extraction as execution consent.
+
+### Deferred clarification and semantic commit
+
+Run `skills/clarification-review/SKILL.md` whenever partial evidence leaves a
+notable signal unresolved. The default policy is:
+
+1. Persist raw evidence and the ingest manifest first.
+2. Continue writing confirmed, independent facts and processing unrelated
+   events.
+3. Append a stable candidate to
+   `state/indexes/ingest-clarification-review` and set
+   `semantic_status: review_required` for the affected ingest unit.
+4. After the available batch is durable, reconcile candidates against later
+   events and Brain-First context; self-resolve or deduplicate before asking.
+5. Use `ask-user` one question per turn. Ask immediately only when an affected
+   write would merge/overwrite the wrong entity, cross an ownership/privacy
+   boundary, create an actionable owner/deadline, or materially corrupt
+   canonical state.
+6. Preserve the user's answer as separate clarification provenance, then run
+   the normal client-first local `voltmind put` write-through. Do not rewrite
+   the raw source as though it contained the later oral context.
+
+The generic clarification index is operational metadata. It is not a semantic
+source citation and must not appear in `affected_pages` when registering
+tracking evidence.
 
 ### Teams group-chat identity and later reconciliation
 
@@ -564,6 +600,9 @@ up 100 bad pages is enormous.
 - **Skipping raw source preservation.** Every ingested item must have its raw source preserved. A brain page without provenance is unverifiable.
 - **Bulk processing without sample test.** Test on 3-5 items first. Fix quality issues in the approach, not via one-off patches.
 - **Paraphrasing the user's original thinking.** The user's exact language IS the insight. Capture verbatim phrasing for ideas, theses, and frameworks.
+- **Dropping or prematurely committing ambiguity.** Preserve notable unresolved
+  signals in the clarification queue; do not ignore them and do not write
+  inferred meaning into canonical truth.
 - **Writing project tracking state.** The client agent is the primary semantic
   writer: evidence first, then direct `put_page` updates/creates for bound
   projects, workstreams, and canonical state objects, followed by
@@ -578,8 +617,10 @@ compatibility. A client-authored run follows this order:
 
 1. Read Teams/Outlook evidence with the client connector and persist the raw
    source Markdown to the local vault.
-2. Run Brain-First Lookup; write the confirmed semantic pages or durable review
-   candidate locally. Do not wait for a human review to continue ingest.
+2. Run Brain-First Lookup; write confirmed semantic pages locally and persist
+   ambiguous project candidates or generic clarification candidates in their
+   durable review indexes. Do not wait for human review to continue raw capture
+   or unrelated semantic work.
 3. For canonical semantic pages, invoke local
    `voltmind put <slug> < page.md`. The command validates the canonical draft
    before its atomic local-vault write. A validation failure means no semantic

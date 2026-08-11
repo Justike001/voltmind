@@ -24,6 +24,7 @@ writes_to:
   - deals/
   - concepts/
   - meetings/
+  - state/indexes/
 ---
 
 # Brain Operations — The Ambient Context Layer
@@ -47,6 +48,10 @@ This skill guarantees:
 - In thin-client mode, semantic page writes use local `voltmind put`, which
   validates the canonical draft and writes `client_vault_path` before remote
   MCP synchronization. A direct remote `put_page` call is not client-first.
+- Partial ingest evidence is classified as `observed`, `inferred`, or
+  `confirmed`. Notable inference that lacks required context is persisted via
+  `skills/clarification-review/SKILL.md`, not discarded or written as compiled
+  truth.
 
 ## Iron Law: Back-Linking (MANDATORY)
 
@@ -75,8 +80,11 @@ Every message, meeting, email, or conversation that references a person or compa
 1. **Detect entities** — people, companies, deals mentioned
 2. **Load brain pages** — read existing pages for context before responding
 3. **Identify new information** — what does this signal tell us that the page doesn't know?
-4. **Write it back** — update the brain page with new info + timeline entry + source citation
-5. **Create if missing** — if notable and no page exists, create via enrich skill
+4. **Separate certainty** — preserve observed evidence, keep unresolved
+   inference in `state/indexes/ingest-clarification-review`, and promote only
+   confirmed assertions to semantic pages
+5. **Write it back** — update the brain page with confirmed info + timeline entry + source citation
+6. **Create if missing** — if notable and no page exists, create via enrich skill
 
 **User's direct statements are the highest-value data source.** Write them to brain
 pages immediately with attribution `[Source: User, YYYY-MM-DD]`.
@@ -151,6 +159,7 @@ the citation is `[gstack:plans/foo]`. That's the whole rule.
 - Answering questions about people/companies without checking the brain first
 - Using external APIs before checking the brain
 - Writing facts without inline `[Source: ...]` citations
+- Dropping a notable ambiguous signal or writing an unconfirmed inference as fact
 - Blocking the response to do enrichment
 - Overwriting user's direct statements with lower-authority sources
 - Creating brain pages for non-notable entities

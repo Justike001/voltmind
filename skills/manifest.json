@@ -10,6 +10,11 @@
       "description": "Route content and tracking-aware evidence into VoltMind; client agents write canonical evidence and bound project/workstream state, then register revisions for server Dream maintenance."
     },
     {
+      "name": "clarification-review",
+      "path": "clarification-review/SKILL.md",
+      "description": "Persist, reconcile, and resolve ambiguous ingest signals before client-first semantic Markdown write-through."
+    },
+    {
       "name": "schedule-actions",
       "path": "schedule-actions/SKILL.md",
       "description": "Clarify each executable action, persist its execution contract and exact time, and register an idempotent ChatGPT desktop scheduled task."

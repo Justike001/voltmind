@@ -122,11 +122,11 @@ describe('getEmbeddingColumnRegistry — builtins + merge', () => {
     expect(reg.embedding!.provider).toBe('openai:text-embedding-3-large');
   });
 
-  test('builtin embedding_image shares the configured native dimensions', () => {
+  test('builtin embedding_image uses canonical native dimensions', () => {
     const reg = getEmbeddingColumnRegistry(cfg());
     expect(reg.embedding_image).toBeDefined();
     expect(reg.embedding_image!.type).toBe('halfvec');
-    expect(reg.embedding_image!.dimensions).toBe(1536);
+    expect(reg.embedding_image!.dimensions).toBe(2048);
   });
 
   test('builtin embedding derives provider from cfg.embedding_model', () => {
@@ -137,11 +137,12 @@ describe('getEmbeddingColumnRegistry — builtins + merge', () => {
     expect(reg.embedding!.dimensions).toBe(1024);
   });
 
-  test('builtin embedding_image derives provider from cfg.embedding_multimodal_model', () => {
+  test('builtin embedding_image stays pinned to canonical Qwen despite legacy config', () => {
     const reg = getEmbeddingColumnRegistry(
       cfg({ embedding_multimodal_model: 'voyage:voyage-multimodal-3' }),
     );
-    expect(reg.embedding_image!.provider).toBe('voyage:voyage-multimodal-3');
+    expect(reg.embedding_image!.provider).toBe('qwen-vllm:./models/Qwen3-VL-Embedding-2B');
+    expect(reg.embedding_image!.dimensions).toBe(2048);
   });
 
   test('user-declared columns merge with builtins', () => {
@@ -165,6 +166,16 @@ describe('getEmbeddingColumnRegistry — builtins + merge', () => {
     );
     expect(reg.embedding!.provider).toBe('voyage:voyage-3-large');
     expect(reg.embedding!.dimensions).toBe(1024);
+  });
+
+  test('rejects attempts to redefine the canonical embedding_image space', () => {
+    expect(() => getEmbeddingColumnRegistry(
+      cfg({
+        embedding_columns: {
+          embedding_image: { provider: 'voyage:voyage-multimodal-3', dimensions: 1024, type: 'vector' },
+        },
+      }),
+    )).toThrow(/reserved.*2048d halfvec space/i);
   });
 
   test('halfvec column with high dim accepted', () => {

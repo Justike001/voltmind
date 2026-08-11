@@ -10,16 +10,19 @@
  * SQL handle, so its interaction is exercised end-to-end separately; these
  * tests pin the pure contract.
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, test } from 'bun:test';
 import {
   COMPANY_DOMAIN,
   normalizeCompanyEmail,
   deriveSourceIdFromEmail,
+  provisionPersonalSource,
   GOGS_SSH_HOST,
   sshHostOf,
   assertSshHostAllowed,
   SshHostNotAllowedError,
 } from '../src/core/personal-provision.ts';
+import { PGLiteEngine } from '../src/core/pglite-engine.ts';
+import { sqlQueryForEngine } from '../src/core/sql-query.ts';
 
 describe('normalizeCompanyEmail', () => {
   it('accepts a valid company email and lowercases it', () => {
@@ -41,29 +44,94 @@ describe('normalizeCompanyEmail', () => {
 });
 
 describe('deriveSourceIdFromEmail', () => {
-  it('maps name@company.example → personal-<name>', () => {
-    expect(deriveSourceIdFromEmail('alice-example@company.example')).toBe('personal-alice-example');
-    expect(deriveSourceIdFromEmail('alice@company.example')).toBe('personal-alice');
+  it('maps company email to a valid, readable, collision-resistant source id', () => {
+    const id = deriveSourceIdFromEmail('alice-example@company.example');
+    expect(id).toMatch(/^personal-alice-[a-f0-9]{16}$/);
+    expect(id.length).toBeLessThanOrEqual(32);
   });
 
   it('is deterministic (one email always → one source), case-insensitive', () => {
     const a = deriveSourceIdFromEmail('Alice-Example@Company.Example');
     const b = deriveSourceIdFromEmail('alice-example@company.example');
     expect(a).toBe(b);
-    expect(a).toBe('personal-alice-example');
   });
 
-  it('dedups: two different spellings that normalize the same collapse to one id', () => {
-    // Dots and underscores are normalized to the same dash -> same source.
-    expect(deriveSourceIdFromEmail('a.b@company.example')).toBe(
+  it('keeps distinct emails isolated even when their readable slugs collide', () => {
+    const ids = [
+      deriveSourceIdFromEmail('a.b@company.example'),
       deriveSourceIdFromEmail('a_b@company.example'),
-    );
+      deriveSourceIdFromEmail('a-b@company.example'),
+      deriveSourceIdFromEmail('ab@company.example'),
+      deriveSourceIdFromEmail('a+b@company.example'),
+    ];
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('enforces the company domain before deriving', () => {
     expect(() => deriveSourceIdFromEmail('x@other.com')).toThrow(/not the company domain/);
   });
 });
+
+test('provisioning keeps colliding readable slugs isolated and stores config as an object', async () => {
+  const engine = new PGLiteEngine();
+  await engine.connect({});
+  await engine.initSchema();
+  try {
+    const sql = sqlQueryForEngine(engine);
+    const dotted = await provisionPersonalSource(engine, sql, {
+      email: 'a.b@company.example',
+    });
+    const underscored = await provisionPersonalSource(engine, sql, {
+      email: 'a_b@company.example',
+    });
+
+    expect(dotted.source_id).not.toBe(underscored.source_id);
+    const rows = await engine.executeRaw<{
+      id: string;
+      config_type: string;
+      owner_email: string | null;
+    }>(
+      `SELECT id, jsonb_typeof(config) AS config_type,
+              config->>'owner_email' AS owner_email
+         FROM sources
+        WHERE id IN ($1, $2)
+        ORDER BY id`,
+      [dotted.source_id, underscored.source_id],
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.every(row => row.config_type === 'object')).toBe(true);
+    expect(new Set(rows.map(row => row.owner_email))).toEqual(
+      new Set(['a.b@company.example', 'a_b@company.example']),
+    );
+
+    // A pre-fix source may be adopted only by its persisted owner. Another
+    // email whose lossy legacy slug collides must receive its own hashed id.
+    await engine.executeRaw(
+      `INSERT INTO sources (id, name, config)
+       VALUES ($1, $2, $3::text::jsonb)`,
+      [
+        'personal-c-d',
+        'legacy personal brain',
+        JSON.stringify({ owner_email: 'c.d@company.example', federated: false }),
+      ],
+    );
+    const legacyOwner = await provisionPersonalSource(engine, sql, {
+      email: 'c.d@company.example',
+    });
+    expect(legacyOwner).toMatchObject({
+      source_id: 'personal-c-d',
+      alreadyProvisioned: true,
+    });
+
+    const collidingEmail = await provisionPersonalSource(engine, sql, {
+      email: 'c_d@company.example',
+    });
+    expect(collidingEmail.source_id).not.toBe('personal-c-d');
+    expect(collidingEmail.alreadyProvisioned).toBe(false);
+  } finally {
+    await engine.disconnect();
+  }
+}, 60_000);
 
 describe('SSH checkout host allowlist (Host key confinement)', () => {
   it('extracts the host from scp-style and ssh:// URLs', () => {

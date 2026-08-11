@@ -11,8 +11,15 @@ each user decision survives the choice-gate boundary.
 
 ## Contract
 
-- Read `skills/brain-ops/SKILL.md` before reading or updating action pages and
-  read `skills/ask-user/SKILL.md` before every user decision gate.
+- Read `skills/brain-ops/SKILL.md` for write, citation, routing, and safety
+  conventions, and read `skills/ask-user/SKILL.md` before every user decision
+  gate. For `state/actions/` discovery and reads, the local-Markdown-first rule
+  in this skill is an explicit exception to brain-ops' generic
+  `search -> query -> get` lookup sequence.
+- Treat the local vault Markdown under `state/actions/` as the canonical action
+  source. Read it before any database, VoltMind CLI action-index, or MCP call.
+  A missing local Postgres database must never block action discovery,
+  clarification, scheduling, or a scheduled run.
 - Ask about every open action individually. Never infer consent for one action
   from the user's answer about another action.
 - Ask one question per turn, offer 2-4 self-explanatory choices including Skip
@@ -40,19 +47,31 @@ Choose the mode from the current turn:
 
 ### 1. Build the queue
 
-1. Run `voltmind actions scan`.
-2. Read open actions with `voltmind actions list --status open --json` and also
-   inspect `on_schedule` actions whose Desktop automation identity is missing.
-3. Exclude `done`, `canceled`, and archived actions. Exclude a scheduled action
+1. Resolve the local vault root. Prefer the configured client vault path; then
+   check `<workspace>/brain/state/actions/`; then `<workspace>/state/actions/`.
+   Do not infer a server filesystem path and do not open a database to find it.
+2. Enumerate `*.md` directly from that local directory and parse each file's
+   frontmatter and body. This local Markdown is the queue source of truth.
+3. Select open actions and `on_schedule` actions whose Desktop automation
+   identity is missing. Exclude `done`, `canceled`, and archived actions.
+   Exclude a scheduled action
    when its persisted Desktop automation still exists and matches the action.
 4. Sort by due time, priority, then slug. Work on exactly one action until it is
    scheduled or skipped.
+
+Do not call `voltmind actions scan`, `list`, or `get` while building or reading
+the interview queue. Those commands operate through the configured database
+engine and may try a nonexistent client-side Postgres instance. Query a remote
+action index through MCP only when the user explicitly requests server state;
+never use it ahead of the local Markdown.
 
 If there are no candidates, report that no action needs scheduling and stop.
 
 ### 2. Confirm execution details
 
-Read the full action page and its cited source context. Present a compact summary:
+Read the full local action page first. Resolve cited source context from linked local
+Markdown when available; use DB/MCP only as optional gap-fill after the action is
+already loaded. Present a compact summary:
 
 - objective and expected deliverable;
 - inputs and context references;
@@ -156,8 +175,11 @@ For reminder-only choices, set `mode: manual` and ensure the scheduled prompt
 only reminds or requests review. Keep approval fields truthful; medium-risk
 approval is persisted by VoltMind rather than fabricated in Markdown.
 
-After the page write, synchronize it using the brain-ops workflow and rerun
-`voltmind actions scan` so the action index sees the new contract and due time.
+After the page write, treat the local Markdown update as complete. If a remote
+VoltMind MCP write-through is configured, synchronize the exact persisted file
+as a best-effort post-step and record `local_written_remote_pending` when it
+fails. Do not initialize local Postgres, rerun `voltmind actions scan`, or block
+Desktop schedule registration merely to refresh a derived database index.
 
 ### 6. Register the Desktop scheduled task
 
@@ -203,17 +225,24 @@ message.
 
 ## Scheduled-Run Workflow
 
-1. Read exactly the action slug named in the scheduled prompt.
+1. Resolve the local vault root and read exactly the Markdown file named by the
+   action slug. Do this before any CLI, database, or MCP operation.
 2. Verify that status is executable, the current time is due, the automation ID
-   matches, and the idempotency key has no successful run.
-3. Run `voltmind actions scan`, then execute with `voltmind actions run <slug>
-   --execute`. Never add `--force` and never answer an interactive confirmation
-   from an unattended run.
-4. Let the VoltMind action runtime enforce tool routes, risk, approvals,
-   `max_autonomy`, and result writeback.
-5. On success, verify the action/run status and persist the outcome and artifact
-   references. On a policy, credential, permission, or missing-context failure,
-   mark the action blocked with the exact reason.
+   matches, and the Markdown receipt for the idempotency key has no successful
+   run.
+3. Enforce `risk_level`, approval, `max_autonomy`, `allowed_tools`, and
+   `blocked_tools` from the Markdown contract, then execute the confirmed
+   draft/artifact task with the currently available Desktop tools. Never widen
+   the contract because a database or remote index is unavailable.
+4. Use the VoltMind action runtime or remote MCP adapter only when it is already
+   reachable and useful for execution/writeback. It is an optional adapter, not
+   the source of truth or a prerequisite. Never initialize a nonexistent local
+   Postgres instance and never add `--force`.
+5. On success, atomically write the terminal status, outcome, artifact refs,
+   run timestamp, automation ID, and idempotency receipt back to the same local
+   Markdown file. On a policy, credential, permission, or missing-context
+   failure, write `blocked` and the exact reason. Best-effort remote sync happens
+   only after the local receipt is durable.
 6. For one-shot actions, pause or complete the Desktop automation after a
    terminal result. For recurring actions, retain it only while the recurrence
    and stop condition remain valid.
@@ -239,6 +268,8 @@ artifact references, and whether the automation was completed, paused, or kept.
 
 - Asking about multiple actions or multiple decision gates in one message.
 - Scheduling from an ingest summary without reading each canonical action page.
+- Reading the action database, local Postgres, or remote MCP before the local
+  `state/actions/*.md` file.
 - Treating a due date as permission to execute or inventing missing details.
 - Creating duplicate automations after a retry or ingest replay.
 - Putting secrets or long source context into the scheduled prompt.

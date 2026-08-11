@@ -30,6 +30,7 @@ writes_to:
   - companies/
   - projects/
   - workstreams/
+  - state/indexes/
   - state/actions/
   - state/decisions/
   - state/commitments/
@@ -54,6 +55,8 @@ This skill guarantees:
 - Use the local vault as the write-ahead source: write and validate canonical
   transcript and derived pages locally before remote `put_page` and receipt
   registration.
+- Preserve incomplete but notable signals in the generic clarification queue;
+  never fill transcript gaps with inferred oral context.
 
 > **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
 
@@ -71,6 +74,11 @@ Extract from the transcript:
 - Decisions made
 - Action items with owners
 - Companies and projects mentioned
+
+Classify extracted statements as `observed`, `inferred`, or `confirmed`.
+Preserve observed transcript text, but route notable inference that lacks
+identity, ownership, timing, relationship, privacy, or filing context through
+`skills/clarification-review/SKILL.md` before canonical write-through.
 
 ### Phase 2: Create meeting page
 
@@ -128,6 +136,13 @@ state pages, preserving user prose and adding evidence citations.
 Candidates are appended to `state/indexes/project-tracking-review` immediately;
 they do not delay meeting ingest or remain session-only.
 
+Generic ambiguity is independent of project routing. Append it to
+`state/indexes/ingest-clarification-review`, set the ingest unit's
+`semantic_status: review_required`, and continue raw capture and unrelated
+entity propagation. Reconcile all captured meeting/Teams context before using
+`ask-user`; ask immediately only for a high-impact semantic write identified by
+the clarification-review policy.
+
 ### Phase 5: Timeline merge
 
 The same event appears on ALL mentioned entities' timelines. If Alice met Bob at
@@ -167,3 +182,6 @@ updated, {N} action items captured."
 - Filing meeting pages without cross-linking to all participants
 - Writing a project/workstream/state object before the canonical source evidence
 - Calling `register_tracking_evidence` with pages that were not actually changed
+- Guessing missing oral context or dropping an ambiguous but notable signal
+- Asking several clarification questions in one turn instead of using the
+  durable queue and `ask-user` one question at a time

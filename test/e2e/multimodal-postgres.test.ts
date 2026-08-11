@@ -4,7 +4,7 @@
  * Runs the v0.27.1 schema (migration v36 + dual embedding columns + files
  * table) against a real Postgres + pgvector and exercises every code path
  * the production user will hit: upsertFile / getFile / listFilesForPage,
- * upsertChunks with modality + embedding_image vector(1024), searchVector
+ * upsertChunks with modality + embedding_image halfvec(2048), searchVector
  * column routing, modality filter on searchKeyword, partial HNSW
  * idx_chunks_embedding_image.
  *
@@ -45,9 +45,9 @@ describe.skipIf(skip)('multimodal v0.27.1 against real Postgres', () => {
     await pg.executeRaw('DELETE FROM pages');
   });
 
-  function fakeImage1024(seed: number): Float32Array {
-    const out = new Float32Array(1024);
-    for (let i = 0; i < 1024; i++) out[i] = (i + seed) / 1024;
+  function fakeImage2048(seed: number): Float32Array {
+    const out = new Float32Array(2048);
+    for (let i = 0; i < 2048; i++) out[i] = (i + seed) / 2048;
     return out;
   }
 
@@ -146,7 +146,7 @@ describe.skipIf(skip)('multimodal v0.27.1 against real Postgres', () => {
       title: 'round-trip', compiled_truth: '', timeline: '',
     });
 
-    const vec = fakeImage1024(7);
+    const vec = fakeImage2048(7);
     await pg.upsertChunks('photos/round-trip', [
       {
         chunk_index: 0,
@@ -173,7 +173,7 @@ describe.skipIf(skip)('multimodal v0.27.1 against real Postgres', () => {
 
   test('searchVector with embeddingColumn=embedding_image returns image rows on Postgres', async () => {
     // Seed: one text page (1536-dim primary embedding) and two image pages
-    // (1024-dim embedding_image).
+    // (2048-dim embedding_image).
     const textVec = new Float32Array(1536);
     for (let i = 0; i < 1536; i++) textVec[i] = i / 1536;
     await pg.putPage('notes/text-only', {
@@ -185,8 +185,8 @@ describe.skipIf(skip)('multimodal v0.27.1 against real Postgres', () => {
       embedding: textVec, modality: 'text',
     }]);
 
-    const imgA = fakeImage1024(0);
-    const imgB = fakeImage1024(500);
+    const imgA = fakeImage2048(0);
+    const imgB = fakeImage2048(500);
     await pg.putPage('photos/a', {
       type: 'image', page_kind: 'image',
       title: 'a', compiled_truth: '', timeline: '',
@@ -240,7 +240,7 @@ describe.skipIf(skip)('multimodal v0.27.1 against real Postgres', () => {
       chunk_index: 0,
       chunk_text: 'sunset photo at the beach',
       chunk_source: 'image_asset',
-      embedding_image: fakeImage1024(2), modality: 'image',
+      embedding_image: fakeImage2048(2), modality: 'image',
     }]);
 
     const out = await pg.searchKeyword('sunset', { limit: 10 });
@@ -258,7 +258,7 @@ describe.skipIf(skip)('multimodal v0.27.1 against real Postgres', () => {
     await pglite.initSchema();
 
     try {
-      const vec = fakeImage1024(42);
+      const vec = fakeImage2048(42);
       const slug = 'photos/parity-test';
       const fileSpec = {
         filename: 'parity.jpg',

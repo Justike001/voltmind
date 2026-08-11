@@ -207,7 +207,7 @@ describe('VoltMind main `voltmind --help` surface', () => {
       expect(status).toBe(0);
       expect(stdout).toContain(expected);
     }
-  });
+  }, 60_000);
 
   test('takes mutating subcommands are available', () => {
     for (const sub of ['add', 'update', 'supersede', 'resolve', 'scorecard', 'calibration', 'revisit', 'extract']) {

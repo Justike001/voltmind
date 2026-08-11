@@ -79,6 +79,46 @@ describe('forget_fact dispatch', () => {
     });
     expect(r1.isError).not.toBe(true);
   });
+
+  test('fact forget operations cannot cross the caller source boundary', async () => {
+    await engine.executeRaw(
+      `INSERT INTO sources (id, name) VALUES ('other-source', 'Other Source') ON CONFLICT (id) DO NOTHING`,
+    );
+    const foreign = await engine.insertFact(
+      { fact: 'must remain isolated', kind: 'fact', source: 'test' },
+      { source_id: 'other-source' },
+    );
+
+    const preview = await dispatchToolCall(engine, 'preview_forget_fact', { id: foreign.id }, {
+      remote: true,
+      sourceId: 'default',
+    });
+    expect(preview.isError).toBe(true);
+    expect(JSON.parse(preview.content[0].text).error).toBe('fact_not_found');
+
+    const legacy = await dispatchToolCall(engine, 'forget_fact', { id: foreign.id }, {
+      remote: true,
+      sourceId: 'default',
+    });
+    expect(legacy.isError).toBe(true);
+    expect(JSON.parse(legacy.content[0].text).error).toBe('fact_not_found');
+
+    const controlled = await dispatchToolCall(engine, 'apply_forget_fact', {
+      id: foreign.id,
+      reason: 'unauthorized',
+      source_id: 'default',
+      citation: 'test request',
+      confirm: true,
+    }, { remote: true, sourceId: 'default' });
+    expect(controlled.isError).toBe(true);
+    expect(JSON.parse(controlled.content[0].text).error).toBe('fact_not_found');
+
+    const rows = await engine.executeRaw<{ expired_at: Date | null }>(
+      `SELECT expired_at FROM facts WHERE id = $1`,
+      [foreign.id],
+    );
+    expect(rows[0]?.expired_at).toBeNull();
+  });
 });
 
 describe('extract_facts dispatch (no API key)', () => {

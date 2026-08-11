@@ -273,13 +273,18 @@ describe('resolveSchemaEmbeddingDim', () => {
 });
 
 describe('resolveSchemaMultimodalDim', () => {
-  test('voyage voyage-multimodal-3 accepted', () => {
+  test('legacy Voyage multimodal is rejected for built-in 2048d columns', () => {
     const got = resolveSchemaMultimodalDim({ embedding_multimodal_model: 'voyage:voyage-multimodal-3' });
+    expect(got.ok).toBe(false);
+    if (!got.ok) expect(got.error).toMatch(/canonical.*2048 dimensions/i);
+  });
+
+  test('canonical Qwen3-VL model resolves to 2048 dimensions', () => {
+    const got = resolveSchemaMultimodalDim({
+      embedding_multimodal_model: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
+    });
     expect(got.ok).toBe(true);
-    if (got.ok) {
-      expect(got.provider).toBe('voyage');
-      expect(got.dim).toBeGreaterThan(0);
-    }
+    if (got.ok) expect(got.dim).toBe(2048);
   });
 
   test('OpenAI text-embedding-3-large rejected — not multimodal', () => {

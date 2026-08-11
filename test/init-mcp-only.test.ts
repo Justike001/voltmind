@@ -126,6 +126,25 @@ async function run(args: string[], extraEnv: Record<string, string | undefined> 
 function configPath(): string { return join(tmp, '.voltmind', 'config.json'); }
 
 describe('voltmind init --mcp-only — happy path', () => {
+  test('persists the client vault used by local write-ahead put', async () => {
+    const vault = join(tmp, 'personal-vault');
+    mkdirSync(vault, { recursive: true });
+    const r = await run([
+      'init', '--mcp-only', '--json',
+      '--issuer-url', `http://127.0.0.1:${port}`,
+      '--mcp-url', `http://127.0.0.1:${port}/mcp`,
+      '--oauth-client-id', 'cid',
+      '--oauth-client-secret', 'csecret',
+      '--vault-path', vault,
+    ]);
+
+    expect(r.exitCode).toBe(0);
+    const cfg = JSON.parse(readFileSync(configPath(), 'utf-8'));
+    expect(cfg.client_vault_path).toBe(vault);
+    const parsed = JSON.parse(r.stdout.trim().split('\n').pop()!);
+    expect(parsed.client_vault_path).toBe(vault);
+  });
+
   test('writes remote_mcp config and creates NO local DB', async () => {
     const r = await run([
       'init', '--mcp-only', '--json',

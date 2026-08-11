@@ -13,6 +13,16 @@ import { hybridSearch } from '../src/core/search/hybrid.ts';
 
 let engine: PGLiteEngine;
 const origFetch = globalThis.fetch;
+const TEXT_COLUMN = {
+  name: 'embedding',
+  type: 'halfvec' as const,
+  dimensions: 1536,
+  embeddingModel: 'openai:text-embedding-3-large',
+};
+
+function search(query: string, opts: Parameters<typeof hybridSearch>[2] = {}) {
+  return hybridSearch(engine, query, { ...opts, embeddingColumn: TEXT_COLUMN });
+}
 
 beforeAll(async () => {
   engine = new PGLiteEngine();
@@ -28,9 +38,9 @@ beforeEach(async () => {
   await resetPgliteState(engine);
   globalThis.fetch = (async (url: string | URL | Request) => {
     const u = typeof url === 'string' ? url : url.toString();
-    if (u.includes('multimodalembeddings')) {
+    if (u.includes('/v2/embed')) {
       return new Response(JSON.stringify({
-        data: [{ embedding: Array.from({ length: 1024 }, () => 0.1), index: 0 }],
+        embeddings: { float: [Array.from({ length: 2048 }, () => 0.1)] },
       }), { status: 200 });
     }
     // Default OpenAI text embed response.
@@ -42,6 +52,7 @@ beforeEach(async () => {
     embedding_model: 'openai:text-embedding-3-large',
     embedding_dimensions: 1536,
     embedding_multimodal_model: 'voyage:voyage-multimodal-3',
+    base_urls: { 'qwen-vllm': 'http://qwen.test/v1' },
     env: { OPENAI_API_KEY: 'test', VOYAGE_API_KEY: 'test', ANTHROPIC_API_KEY: 'test' },
   });
 });
@@ -60,7 +71,7 @@ describe('hybridSearch LLM intent escalation gate (Commit 4)', () => {
       return { text: 'image', blocks: [], stopReason: 'end', usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 }, model: 'x', providerId: 'x' };
     });
     // Flag NOT set → default false.
-    await hybridSearch(engine, 'the chart', { limit: 5 });
+    await search('the chart', { limit: 5 });
     expect(chatCalled).toBe(0);
   });
 
@@ -71,7 +82,7 @@ describe('hybridSearch LLM intent escalation gate (Commit 4)', () => {
       chatCalled++;
       return { text: 'image', blocks: [], stopReason: 'end', usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 }, model: 'x', providerId: 'x' };
     });
-    await hybridSearch(engine, 'the chart', { limit: 5 });
+    await search('the chart', { limit: 5 });
     expect(chatCalled).toBe(1);
   });
 
@@ -82,7 +93,7 @@ describe('hybridSearch LLM intent escalation gate (Commit 4)', () => {
       chatCalled++;
       return { text: 'image', blocks: [], stopReason: 'end', usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 }, model: 'x', providerId: 'x' };
     });
-    await hybridSearch(engine, 'what is founder mode', { limit: 5 });
+    await search('what is founder mode', { limit: 5 });
     expect(chatCalled).toBe(0);
   });
 
@@ -94,7 +105,7 @@ describe('hybridSearch LLM intent escalation gate (Commit 4)', () => {
       return { text: 'image', blocks: [], stopReason: 'end', usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 }, model: 'x', providerId: 'x' };
     });
     // Strong regex match: "show me photos from X" → already image.
-    await hybridSearch(engine, 'show me photos from the hackathon', { limit: 5 });
+    await search('show me photos from the hackathon', { limit: 5 });
     // No tie-break needed when regex is already confident.
     expect(chatCalled).toBe(0);
   });
@@ -107,7 +118,7 @@ describe('hybridSearch LLM intent escalation gate (Commit 4)', () => {
       return { text: 'image', blocks: [], stopReason: 'end', usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 }, model: 'x', providerId: 'x' };
     });
     // Caller passed explicit crossModal — no need to tie-break.
-    await hybridSearch(engine, 'the chart', { crossModal: 'text', limit: 5 });
+    await search('the chart', { crossModal: 'text', limit: 5 });
     expect(chatCalled).toBe(0);
   });
 
@@ -117,7 +128,7 @@ describe('hybridSearch LLM intent escalation gate (Commit 4)', () => {
       throw new Error('LLM unavailable');
     });
     // Should not throw — fail-open to regex result.
-    const results = await hybridSearch(engine, 'the chart', { limit: 5 });
+    const results = await search('the chart', { limit: 5 });
     expect(Array.isArray(results)).toBe(true);
   });
 });

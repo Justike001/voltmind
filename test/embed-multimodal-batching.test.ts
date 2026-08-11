@@ -7,8 +7,7 @@
 //   - embedMultimodalSafe binary-search retry on transient failure
 //   - embedMultimodalSafe surfaces failed_indices when individual inputs fail
 //   - embedMultimodalSafe stops on AIConfigError (permanent misconfig)
-//   - embedQueryMultimodal returns 1024-dim vector
-//   - embedQueryMultimodalImage returns 1024-dim vector
+//   - canonical query helpers pin Qwen3-VL and return native 2048-dim vectors
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
@@ -43,6 +42,24 @@ function configureVoyage(env: Record<string, string | undefined> = {}) {
     embedding_dimensions: 1024,
     env: { VOYAGE_API_KEY: 'test-key', ...env },
   });
+}
+
+function configureCanonicalQueries() {
+  configureGateway({
+    embedding_model: 'voyage:voyage-multimodal-3',
+    embedding_dimensions: 1024,
+    base_urls: { 'qwen-vllm': 'http://qwen.test/v1' },
+    env: { VOYAGE_API_KEY: 'test-key' },
+  });
+}
+
+function fakeQwenResponse(count: number, dims = 2048): Response {
+  return new Response(JSON.stringify({
+    embeddings: {
+      float: Array.from({ length: count }, (_, i) =>
+        Array.from({ length: dims }, () => 0.1 * (i + 1))),
+    },
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
 function fakeResponse(count: number, dims = 1024): Response {
@@ -117,53 +134,56 @@ describe('Voyage multimodal — text variant + inputType discipline', () => {
 });
 
 describe('embedQueryMultimodal — text query path', () => {
-  test('returns 1024-dim Float32Array via Voyage query embed', async () => {
-    configureVoyage();
-    fetchHandler = async () => fakeResponse(1, 1024);
+  test('returns native 2048-dim Float32Array via canonical Qwen query embed', async () => {
+    configureCanonicalQueries();
+    fetchHandler = async () => fakeQwenResponse(1);
     const v = await embedQueryMultimodal('hackathon photos');
     expect(v).toBeInstanceOf(Float32Array);
-    expect(v.length).toBe(1024);
+    expect(v.length).toBe(2048);
   });
 
-  test('threads inputType="query" to the wire', async () => {
-    configureVoyage();
+  test('uses Qwen /v2/embed text content shape', async () => {
+    configureCanonicalQueries();
+    let capturedUrl = '';
     let capturedBody: any;
-    fetchHandler = async (_url, init) => {
+    fetchHandler = async (url, init) => {
+      capturedUrl = url;
       capturedBody = JSON.parse(init.body as string);
-      return fakeResponse(1);
+      return fakeQwenResponse(1);
     };
     await embedQueryMultimodal('q');
-    expect(capturedBody.input_type).toBe('query');
+    expect(capturedUrl).toBe('http://qwen.test/v2/embed');
     expect(capturedBody.inputs[0].content[0]).toEqual({ type: 'text', text: 'q' });
+    expect(capturedBody.input_type).toBeUndefined();
   });
 });
 
 describe('embedQueryMultimodalImage — image query path', () => {
-  test('returns 1024-dim Float32Array via Voyage image-query embed', async () => {
-    configureVoyage();
-    fetchHandler = async () => fakeResponse(1, 1024);
+  test('returns native 2048-dim Float32Array via canonical Qwen image embed', async () => {
+    configureCanonicalQueries();
+    fetchHandler = async () => fakeQwenResponse(1);
     const v = await embedQueryMultimodalImage({
       data: Buffer.from('fake').toString('base64'),
       mime: 'image/png',
     });
     expect(v).toBeInstanceOf(Float32Array);
-    expect(v.length).toBe(1024);
+    expect(v.length).toBe(2048);
   });
 
-  test('threads inputType="query" + image_base64 shape to the wire', async () => {
-    configureVoyage();
+  test('uses Qwen image_url content shape', async () => {
+    configureCanonicalQueries();
     let capturedBody: any;
     fetchHandler = async (_url, init) => {
       capturedBody = JSON.parse(init.body as string);
-      return fakeResponse(1);
+      return fakeQwenResponse(1);
     };
     await embedQueryMultimodalImage({
       data: Buffer.from('xyz').toString('base64'),
       mime: 'image/webp',
     });
-    expect(capturedBody.input_type).toBe('query');
-    expect(capturedBody.inputs[0].content[0].type).toBe('image_base64');
-    expect(capturedBody.inputs[0].content[0].image_base64).toContain('data:image/webp;base64,');
+    expect(capturedBody.input_type).toBeUndefined();
+    expect(capturedBody.inputs[0].content[0].type).toBe('image_url');
+    expect(capturedBody.inputs[0].content[0].image_url.url).toContain('data:image/webp;base64,');
   });
 });
 

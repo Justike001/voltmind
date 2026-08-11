@@ -46,7 +46,9 @@ Primary pages hold context. State pages hold structured operational status and b
 After ingest creates one or more open `state/actions/` pages, route their
 execution-detail interview and ChatGPT desktop scheduling to
 `skills/schedule-actions/SKILL.md`. The action remains filed in `state/actions/`;
-the skill owns clarification, schedule registration, and idempotent execution.
+the local Markdown is authoritative, and the skill owns clarification, schedule
+registration, and idempotent execution. Database/MCP action indexes are derived
+and must not be read before the local action file.
 
 ## Common Tiebreakers
 
