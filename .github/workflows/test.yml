@@ -88,12 +88,12 @@ jobs:
           test/autopilot-cli-invocation.test.ts
           test/autopilot-detect-target.test.ts
           test/autopilot-diagnostics.test.ts
-          test/autopilot-env-file.test.ts
+          test/autopilot-env-file.serial.test.ts
           test/autopilot-heartbeat-wiring.test.ts
           test/autopilot-lock-cleanup.test.ts
-          test/autopilot-manifest.test.ts
-          test/autopilot-pause-control.test.ts
-          test/autopilot-runtime-status.test.ts
+          test/autopilot-manifest.serial.test.ts
+          test/autopilot-pause-control.serial.test.ts
+          test/autopilot-runtime-status.serial.test.ts
           test/autopilot-verify-once-wiring.test.ts
           test/autopilot-windows-task-xml.test.ts
 

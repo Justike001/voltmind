@@ -27,7 +27,7 @@ interface ServerHandle {
 }
 
 function generateToken(): string {
-  return 'gbrain_test_' + randomBytes(16).toString('hex');
+  return 'voltmind_test_' + randomBytes(16).toString('hex');
 }
 
 function hashToken(token: string): string {

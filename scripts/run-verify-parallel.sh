@@ -38,6 +38,7 @@ CHECKS=(
   "check:proposal-pii"
   "check:test-names"
   "check:jsonb"
+  "check:jsonb-params"
   "check:source-id-projection"
   "check:source-config-leak"
   "check:progress"

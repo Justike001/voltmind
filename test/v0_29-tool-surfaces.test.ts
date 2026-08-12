@@ -48,12 +48,13 @@ describe('v0.29 — serve-http localOnly filter', () => {
     expect(ano!.localOnly).toBeFalsy();
   });
 
-  test('all three v0.29 ops carry scope: read', () => {
-    // v0.26.0 contract: every op must annotate scope. Read-only is correct
-    // for all three (no DB writes, no fs writes).
+  test('all three v0.29 ops require admin scope for sensitive readouts', () => {
+    // These operations are read-only but expose cross-page behavioral and
+    // transcript data, so the current trust boundary deliberately requires
+    // admin authorization on remote transports.
     for (const name of ['get_recent_salience', 'find_anomalies', 'get_recent_transcripts']) {
       const op = operations.find(o => o.name === name);
-      expect(op!.scope).toBe('read');
+      expect(op!.scope).toBe('admin');
     }
   });
 });

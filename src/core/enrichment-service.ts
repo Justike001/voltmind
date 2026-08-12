@@ -260,7 +260,7 @@ export async function enrichEntity(
 
   let timelineAdded = false;
   try {
-    await engine.addTimelineEntry(slug, {
+    await engine.addTimelineEntry(slug, { // voltmind-allow-direct-insert: enrichment persists a cited projection only after the canonical entity page is written
       date: today(),
       source: citation,
       summary: `Referenced in ${sourceSlug}: ${trimContext(request.context)}`,
@@ -273,7 +273,7 @@ export async function enrichEntity(
   let backlinkCreated = false;
   if (sourceSlug && sourceSlug !== slug) {
     try {
-      await engine.addLink(slug, sourceSlug, `Entity mention from ${sourceSlug}`, 'mentions', 'mentions', slug, 'signal', {
+      await engine.addLink(slug, sourceSlug, `Entity mention from ${sourceSlug}`, 'mentions', 'mentions', slug, 'signal', { // voltmind-allow-direct-insert: enrichment materializes a cited backlink between canonical pages
         fromSourceId: sourceId,
         toSourceId: sourceId,
         originSourceId: sourceId,

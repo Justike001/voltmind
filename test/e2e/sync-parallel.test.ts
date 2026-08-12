@@ -9,9 +9,9 @@
  *
  * Gated on DATABASE_URL. Run via:
  *   docker run -d --name voltmind-test-pg -e POSTGRES_USER=postgres \
- *     -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=gbrain_test \
+ *     -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=voltmind_test \
  *     -p 5435:5432 pgvector/pgvector:pg16
- *   DATABASE_URL=postgresql://postgres:postgres@localhost:5435/gbrain_test \
+ *   DATABASE_URL=postgresql://postgres:postgres@localhost:5435/voltmind_test \
  *     bun test test/e2e/sync-parallel.test.ts
  */
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';

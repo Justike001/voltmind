@@ -950,7 +950,7 @@ describeE2E('E2E: RLS Verification', () => {
   const cliEnv = () => ({ ...process.env, DATABASE_URL: process.env.DATABASE_URL!, VOLTMIND_DATABASE_URL: process.env.DATABASE_URL! });
 
   // Seed a unique suffix per run so concurrent test DBs / crashed prior
-  // runs don't collide. All helper tables follow `gbrain_rls_regression_<suffix>`.
+  // runs don't collide. All helper tables follow `voltmind_rls_regression_<suffix>`.
   const suffix = `${process.pid}_${Date.now()}`;
 
   test('RLS is enabled on every public table (no hardcoded allowlist)', async () => {
@@ -978,7 +978,7 @@ describeE2E('E2E: RLS Verification', () => {
 
   test('voltmind doctor fails with exit 1 when a public table is missing RLS', async () => {
     const conn = getConn();
-    const tbl = `gbrain_rls_regression_${suffix}`;
+    const tbl = `voltmind_rls_regression_${suffix}`;
     try {
       // Init first so all migrations (including v35's auto-RLS event trigger
       // and one-time backfill) are applied. AFTER migrations run, simulate
@@ -1023,7 +1023,7 @@ describeE2E('E2E: RLS Verification', () => {
 
   test('GBRAIN:RLS_EXEMPT comment with valid reason exempts a non-RLS public table', async () => {
     const conn = getConn();
-    const tbl = `gbrain_rls_exempt_ok_${suffix}`;
+    const tbl = `voltmind_rls_exempt_ok_${suffix}`;
     try {
       await conn.unsafe(`CREATE TABLE public.${tbl} (id int)`);
       await conn.unsafe(`ALTER TABLE public.${tbl} DISABLE ROW LEVEL SECURITY`);
@@ -1050,7 +1050,7 @@ describeE2E('E2E: RLS Verification', () => {
 
   test('GBRAIN:RLS_EXEMPT comment WITHOUT reason= still fails doctor', async () => {
     const conn = getConn();
-    const tbl = `gbrain_rls_exempt_bad_${suffix}`;
+    const tbl = `voltmind_rls_exempt_bad_${suffix}`;
     try {
       await conn.unsafe(`CREATE TABLE public.${tbl} (id int)`);
       await conn.unsafe(`ALTER TABLE public.${tbl} DISABLE ROW LEVEL SECURITY`);
@@ -1078,7 +1078,7 @@ describeE2E('E2E: RLS Verification', () => {
 
   test('Non-exempt unrelated COMMENT on a no-RLS table still fails doctor', async () => {
     const conn = getConn();
-    const tbl = `gbrain_rls_comment_${suffix}`;
+    const tbl = `voltmind_rls_comment_${suffix}`;
     try {
       await conn.unsafe(`CREATE TABLE public.${tbl} (id int)`);
       await conn.unsafe(`ALTER TABLE public.${tbl} DISABLE ROW LEVEL SECURITY`);

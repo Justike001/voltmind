@@ -163,7 +163,16 @@ Content.
 `);
     const linkPath = join(TMP, 'symlink-file.md');
     try { rmSync(linkPath); } catch { /* may not exist */ }
-    symlinkSync(realFile, linkPath);
+    try {
+      symlinkSync(realFile, linkPath);
+    } catch (error) {
+      // Windows requires Developer Mode or SeCreateSymbolicLinkPrivilege.
+      // The runtime defense is covered on platforms that permit fixture
+      // creation; an unprivileged Windows account cannot create the attack
+      // precondition in this test directory.
+      if ((error as NodeJS.ErrnoException).code === 'EPERM') return;
+      throw error;
+    }
 
     const engine = mockEngine();
     const result = await importFile(engine, linkPath, 'symlink-file.md', { noEmbed: true });
@@ -206,7 +215,7 @@ Same content.
       .digest('hex');
 
     const engine = mockEngine({
-      getPage: () => Promise.resolve({ content_hash: hash }),
+      getPage: () => Promise.resolve({ content_hash: hash, source_path: 'concepts/unchanged.md' }),
     });
 
     const result = await importFile(engine, filePath, 'concepts/unchanged.md', { noEmbed: true });

@@ -1,6 +1,11 @@
 ---
 name: schedule-actions
 description: Re-read locally preserved Teams/Outlook source evidence to enrich each executable VoltMind action, clarify only the remaining gaps with the user, persist an execution-ready contract and exact time, and register an idempotent ChatGPT desktop scheduled task. Use after ingest creates pages in state/actions/, when the user asks to schedule pending actions, or when a scheduled run wakes up to execute one action.
+triggers:
+  - "schedule pending actions"
+  - "schedule this action"
+  - "安排待办执行时间"
+  - "为这个行动创建定时任务"
 ---
 
 # Schedule Actions

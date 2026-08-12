@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "companion": "_brain-filing-rules.md",
-  "description": "Canonical (machine-readable) brain filing rules. The .md companion is the human explainer; this JSON is what `gbrain check-resolvable` audits against. Keep both in sync.",
+  "description": "Canonical (machine-readable) brain filing rules. The .md companion is the human explainer; this JSON is what `voltmind check-resolvable` audits against. Keep both in sync.",
   "rules": [
     {
       "kind": "person",
@@ -38,6 +38,18 @@
       "directory": "projects/",
       "examples": ["internal initiatives", "multi-session work"],
       "description": "A multi-session piece of work with its own arc."
+    },
+    {
+      "kind": "organization",
+      "directory": "orgs/",
+      "examples": ["internal teams", "departments", "committees"],
+      "description": "A durable internal organizational unit when the active schema pack distinguishes it from a company."
+    },
+    {
+      "kind": "workstream",
+      "directory": "workstreams/",
+      "examples": ["cross-project initiatives", "ongoing operating streams"],
+      "description": "A durable stream of work spanning multiple tasks, meetings, or projects."
     },
     {
       "kind": "analysis",
@@ -158,6 +170,18 @@
       "directory": "state/risks/",
       "examples": ["state/risks/{risk-slug}.md"],
       "description": "Canonical risks, blockers, and concerns tracked across projects or meetings."
+    },
+    {
+      "kind": "state-index",
+      "directory": "state/indexes/",
+      "examples": ["state/indexes/{index-slug}.md"],
+      "description": "Canonical machine-maintained indexes that bind evidence and tracked entities."
+    },
+    {
+      "kind": "state-decision",
+      "directory": "state/decisions/",
+      "examples": ["state/decisions/{decision-slug}.md"],
+      "description": "Canonical decisions with durable rationale, ownership, and evidence links."
     },
     {
       "kind": "contribution-candidate",

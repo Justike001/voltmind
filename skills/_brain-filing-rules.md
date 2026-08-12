@@ -24,9 +24,12 @@ source, and not the skill that is running.
 | `companies/` | companies relevant to the user's work or notes |
 | `orgs/` | internal teams, departments, functions, committees, working groups, and durable ownership groups when the active schema pack defines this type |
 | `projects/` | projects, products, workstreams |
+| `workstreams/` | durable operating streams that span tasks, meetings, or projects |
 | `concepts/` | reusable ideas, frameworks, technical concepts |
 | `meetings/` | meeting notes or dated discussion records |
 | `sources/` | raw imported source snapshots that feed multiple pages |
+| `state/indexes/` | machine-maintained indexes binding evidence and tracked entities |
+| `state/decisions/` | durable decisions with rationale, ownership, and evidence links |
 
 ## Common Misfiling Patterns
 

@@ -7,6 +7,11 @@ const PERSONAL_PATHS = {
     { name: 'concept', path_prefixes: ['concepts/'] },
     { name: 'company', path_prefixes: ['companies/'] },
     { name: 'writing', path_prefixes: ['writing/'] },
+    { name: 'email', path_prefixes: ['emails/', 'email/'] },
+    { name: 'slack', path_prefixes: ['slack/'] },
+    { name: 'calendar-event', path_prefixes: ['cal/', 'calendar/'] },
+    { name: 'note', path_prefixes: ['notes/', 'note/'] },
+    { name: 'meeting', path_prefixes: ['meetings/', 'meeting/'] },
   ],
 };
 
@@ -82,7 +87,7 @@ title: Someone
 ---
 Content
 `;
-    const parsed = parseMarkdown(md, 'people/someone.md');
+    const parsed = parseMarkdown(md, 'people/someone.md', { activePack: PERSONAL_PATHS });
     expect(parsed.type).toBe('person');
   });
 
@@ -113,7 +118,7 @@ Content
     ['meeting/mtg-0003.md', 'meeting'],
   ] as const)('infers type %s -> %s', (path, expectedType) => {
     const md = `---\ntitle: Fixture\n---\nBody\n`;
-    const parsed = parseMarkdown(md, path);
+    const parsed = parseMarkdown(md, path, { activePack: PERSONAL_PATHS });
     expect(parsed.type).toBe(expectedType);
   });
 });

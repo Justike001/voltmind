@@ -28,6 +28,8 @@ jobs:
         with:
           bun-version: 1.3.13
       - run: bun install
+      - name: Check JSONB parameter casts
+        run: bun run check:jsonb-params
       - name: Run full test suite on Unix release builders
         if: matrix.os != 'windows-latest'
         run: bun test
@@ -42,19 +44,31 @@ jobs:
           test/autopilot-cli-invocation.test.ts
           test/autopilot-detect-target.test.ts
           test/autopilot-diagnostics.test.ts
-          test/autopilot-env-file.test.ts
+          test/autopilot-env-file.serial.test.ts
           test/autopilot-heartbeat-wiring.test.ts
           test/autopilot-lock-cleanup.test.ts
-          test/autopilot-manifest.test.ts
-          test/autopilot-pause-control.test.ts
-          test/autopilot-runtime-status.test.ts
+          test/autopilot-manifest.serial.test.ts
+          test/autopilot-pause-control.serial.test.ts
+          test/autopilot-runtime-status.serial.test.ts
           test/autopilot-verify-once-wiring.test.ts
           test/autopilot-windows-task-xml.test.ts
       - run: bun build --compile --target=${{ matrix.target }} --outfile bin/${{ matrix.artifact }} src/cli.ts
+      - name: Generate SHA-256 checksum (Unix)
+        if: matrix.os != 'windows-latest'
+        run: sha256sum "bin/${{ matrix.artifact }}" > "bin/${{ matrix.artifact }}.sha256"
+      - name: Generate SHA-256 checksum (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $artifact = "bin/${{ matrix.artifact }}"
+          $hash = (Get-FileHash -Algorithm SHA256 $artifact).Hash.ToLowerInvariant()
+          "$hash  ${{ matrix.artifact }}" | Set-Content -NoNewline -Encoding ascii "$artifact.sha256"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ${{ matrix.artifact }}
-          path: bin/${{ matrix.artifact }}
+          path: |
+            bin/${{ matrix.artifact }}
+            bin/${{ matrix.artifact }}.sha256
 
   release:
     needs: build
@@ -68,6 +82,9 @@ jobs:
         with:
           files: |
             artifacts/voltmind-darwin-arm64/voltmind-darwin-arm64
+            artifacts/voltmind-darwin-arm64/voltmind-darwin-arm64.sha256
             artifacts/voltmind-linux-x64/voltmind-linux-x64
+            artifacts/voltmind-linux-x64/voltmind-linux-x64.sha256
             artifacts/voltmind-windows-x64.exe/voltmind-windows-x64.exe
+            artifacts/voltmind-windows-x64.exe/voltmind-windows-x64.exe.sha256
           generate_release_notes: true

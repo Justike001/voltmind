@@ -19,10 +19,10 @@ describe('buildTenantLockId — D4 multi-tenant safety', () => {
   test('postgres engine: queries current_database()', async () => {
     const fakeEngine = {
       kind: 'postgres' as const,
-      executeRaw: async () => [{ db: 'gbrain_main' }],
+      executeRaw: async () => [{ db: 'voltmind_main' }],
     } as unknown as Parameters<typeof buildTenantLockId>[0];
     const id = await buildTenantLockId(fakeEngine, 'voltmind-migrate');
-    expect(id).toBe('voltmind-migrate:gbrain_main');
+    expect(id).toBe('voltmind-migrate:voltmind_main');
   });
 
   test('pglite engine: returns scope:pglite', async () => {

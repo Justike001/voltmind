@@ -702,7 +702,7 @@ describe('lock contention (C4)', () => {
     await withTempDirs(async ({ brainDir }) => {
       // Manually claim the voltmind-sync lock with a future TTL
       await engine.executeRaw(
-        `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
+        `INSERT INTO voltmind_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at)
          VALUES ('voltmind-sync', 9999, 'other-host', now(), now() + interval '1 hour')`,
       );
 
@@ -725,12 +725,12 @@ describe('lock contention (C4)', () => {
       // held externally; the lock_busy result is asserted in a slow
       // companion test if needed.
       const lockBefore = await engine.executeRaw<{ holder_pid: number }>(
-        `SELECT holder_pid FROM gbrain_cycle_locks WHERE id='voltmind-sync'`,
+        `SELECT holder_pid FROM voltmind_cycle_locks WHERE id='voltmind-sync'`,
       );
       expect(lockBefore[0].holder_pid).toBe(9999);
 
       // Cleanup
-      await engine.executeRaw(`DELETE FROM gbrain_cycle_locks WHERE id='voltmind-sync'`);
+      await engine.executeRaw(`DELETE FROM voltmind_cycle_locks WHERE id='voltmind-sync'`);
     });
   });
 });

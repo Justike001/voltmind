@@ -26,7 +26,7 @@ describe('isSupabasePoolerUrl', () => {
   });
 
   test('rejects self-hosted on standard port', () => {
-    expect(isSupabasePoolerUrl('postgresql://u:p@localhost:5432/gbrain_test')).toBe(false);
+    expect(isSupabasePoolerUrl('postgresql://u:p@localhost:5432/voltmind_test')).toBe(false);
   });
 
   test('handles malformed URL gracefully', () => {

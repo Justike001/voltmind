@@ -6,7 +6,7 @@
  *   - 1 `autopilot-cycle` completed row with `result.report.totals`
  *   - 1 `autopilot-embed` completed row (newer; covers the dual-row
  *     "Last full" + "Last targeted" output per D3)
- *   - 1 active gbrain_cycle_locks row
+ *   - 1 active voltmind_cycle_locks row
  *   - some minion_jobs counts (waiting/active/dead)
  *
  * Asserts:
@@ -146,7 +146,7 @@ describe('voltmind status E2E (PGLite)', () => {
   test('active lock surfaces in the locks section', async () => {
     await seedSource(engine, 'default');
     await engine.executeRaw(
-      `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
+      `INSERT INTO voltmind_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
        VALUES ('voltmind-cycle', 1234, 'test-host', NOW(), NOW() + INTERVAL '30 minutes', NOW())`,
     );
     let jsonOut = '';

@@ -326,6 +326,7 @@ export async function submitTrackedIngestionEvent(
   const idempotencyKey = [
     'ingest:tracked', sourceId, input.source_kind, identity,
     input.event_version ?? 'unversioned', contentHash,
+    fileRefsProjectionHash ?? 'no-file-refs',
   ].join(':');
   const existing = await engine.executeRaw<{ id: number }>(
     'SELECT id FROM minion_jobs WHERE idempotency_key=$1 LIMIT 1',

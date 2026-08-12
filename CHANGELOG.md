@@ -1,8 +1,26 @@
 # Changelog
 
-All notable changes to GBrain will be documented in this file.
+All notable changes to VoltMind will be documented in this file.
 
 ## [Unreleased]
+
+## [0.41.21.0] - 2026-08-12
+
+**Release hardening and VoltMind naming finalization.** This release closes the
+remaining database parameter, schema naming, ingestion consistency, dependency
+security, and Windows delivery gaps before colleague distribution.
+
+- Fixed all 30 JSONB string parameter bindings by casting through `text`, and
+  added `check:jsonb-params` to both `verify` and the tag-release workflow.
+- Finished the live `gbrain_*` to `voltmind_*` schema/runtime/test migration
+  while retaining historical migration spellings solely for upgrade replay.
+- Included attachment projections in tracked-ingestion idempotency keys; added
+  explicit system-of-record annotations and repaired resolver filing coverage.
+- Isolated process-global tests in the serial runner and refreshed stale schema,
+  routing, multimodal-dimension, permission-scope, and import contracts.
+- Upgraded or pinned vulnerable direct/transitive dependencies; `bun audit`
+  now reports no known vulnerabilities.
+- Release artifacts now include per-platform SHA-256 checksum files.
 
 **Fixed the D17 freshness-gate no-op sync spin.** On an idle source (HEAD
 unchanged, no syncable drift, no chunker-version bump), sync returned

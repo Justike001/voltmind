@@ -20,7 +20,7 @@ function hashToken(token: string): string {
 }
 
 function generateToken(): string {
-  return 'gbrain_' + randomBytes(32).toString('hex');
+  return 'voltmind_' + randomBytes(32).toString('hex');
 }
 
 let alicePageId: number;

@@ -5,7 +5,7 @@
  * It enables Row Level Security on 10 voltmind-managed public tables that
  * shipped without it: access_tokens, mcp_request_log, minion_inbox,
  * minion_attachments, subagent_messages, subagent_tool_executions,
- * subagent_rate_leases, gbrain_cycle_locks, budget_ledger, budget_reservations.
+ * subagent_rate_leases, voltmind_cycle_locks, budget_ledger, budget_reservations.
  *
  * Phase structure mirrors v0.18.0:
  *   A. Schema — `voltmind init --migrate-only` runs the migration chain,

@@ -97,10 +97,10 @@ describe.skipIf(skip)('schema drift: PGLite ↔ Postgres post-initSchema parity 
     const dbName = url.pathname.replace(/^\//, '');
     const host = url.hostname;
     const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
-    // db-name pattern is the floor: gbrain_test, *_test, test_*, *_e2e.
+    // db-name pattern is the floor: voltmind_test, *_test, test_*, *_e2e.
     // Required REGARDLESS of any override — a production db named "production_data"
     // cannot be reset even with VOLTMIND_TEST_DB=1.
-    const looksLikeTestDb = /^(gbrain_test|.*_test|test_.*|.*_e2e)$/i.test(dbName);
+    const looksLikeTestDb = /^(voltmind_test|.*_test|test_.*|.*_e2e)$/i.test(dbName);
     const ciOptIn = process.env.VOLTMIND_TEST_DB === '1';
     // resetAllowed semantics: db name is test-shaped AND (localhost OR ci-opt-in).
     // Neither host nor env-var alone is sufficient.
@@ -112,7 +112,7 @@ describe.skipIf(skip)('schema drift: PGLite ↔ Postgres post-initSchema parity 
       // Surface a loud, paste-ready hint. The test will still try initSchema;
       // if the caller already had a fresh DB the parity check passes anyway.
       const reason = !looksLikeTestDb
-        ? `db name "${dbName}" doesn't match the test pattern (gbrain_test, *_test, test_*, *_e2e). ` +
+        ? `db name "${dbName}" doesn't match the test pattern (voltmind_test, *_test, test_*, *_e2e). ` +
           `VOLTMIND_TEST_DB=1 does NOT override this — db name is the hard floor.`
         : `host="${host}" is non-local AND VOLTMIND_TEST_DB=1 is not set. ` +
           `Set VOLTMIND_TEST_DB=1 to allow non-local hosts (e.g. CI service names) — ` +

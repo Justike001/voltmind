@@ -127,17 +127,17 @@ describe('migration v39 (multimodal dual-column + PGLite files)', () => {
       ['photos/probe', 'media', 'Probe', '', '']
     );
     const pageId = pageRows[0].id;
-    // 1024 dims of 0.5 — a valid Voyage multimodal-shaped vector.
-    const vec = '[' + Array.from({ length: 1024 }, () => 0.5).join(',') + ']';
+    // 2048 dims of 0.5 — the canonical Qwen multimodal halfvec contract.
+    const vec = '[' + Array.from({ length: 2048 }, () => 0.5).join(',') + ']';
     await engine.executeRaw(
       `INSERT INTO content_chunks (page_id, chunk_index, chunk_text, modality, embedding_image)
-       VALUES ($1, 0, $2, 'image', $3::vector)`,
+       VALUES ($1, 0, $2, 'image', $3::halfvec)`,
       [pageId, 'probe', vec]
     );
     const hits = await engine.executeRaw<{ id: number }>(
       `SELECT id FROM content_chunks
        WHERE embedding_image IS NOT NULL
-       ORDER BY embedding_image <=> $1::vector
+       ORDER BY embedding_image <=> $1::halfvec
        LIMIT 1`,
       [vec]
     );

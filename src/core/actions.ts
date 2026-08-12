@@ -552,9 +552,9 @@ export async function saveUserActionToolRoute(
   }
   await engine.executeRaw(
     `UPDATE action_index
-        SET tool_route_json = $3::jsonb,
-            allowed_tools = $4::jsonb,
-            blocked_tools = $5::jsonb,
+        SET tool_route_json = $3::text::jsonb,
+            allowed_tools = $4::text::jsonb,
+            blocked_tools = $5::text::jsonb,
             updated_at = now()
       WHERE source_id = $1 AND slug = $2`,
     [action.source_id || sourceId, slug, JSON.stringify(route), JSON.stringify(selectedTools), JSON.stringify(blockedTools)],
@@ -637,7 +637,7 @@ export async function runAction(
             SET status = $1,
                 prompt = $2,
                 user_prompt = $3,
-                result = $4::jsonb,
+                result = $4::text::jsonb,
                 error_text = $5,
                 finished_at = CASE WHEN $6::boolean THEN NULL ELSE now() END
           WHERE id = $7`,
@@ -695,7 +695,7 @@ export async function runAction(
 
     const rows = await engine.executeRaw<ActionRunRecord>(
       `INSERT INTO action_runs (source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt, result, error_text, finished_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, now())
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::text::jsonb, $9, now())
        ON CONFLICT (source_id, action_slug, idempotency_key)
        DO UPDATE SET
          status = EXCLUDED.status,
@@ -720,7 +720,7 @@ export async function runAction(
     if (runnerResult.status === 'executed' || runnerResult.status === 'failed' || runnerResult.status === 'interactive_handoff') {
       await engine.executeRaw(
         `UPDATE action_runs
-            SET status = $1, result = $2::jsonb, error_text = $3, finished_at = now()
+            SET status = $1, result = $2::text::jsonb, error_text = $3, finished_at = now()
           WHERE id = $4`,
         [
           runnerResult.status === 'executed' ? 'completed' : runnerResult.status,
@@ -757,7 +757,7 @@ export async function runAction(
 
   const rows = await engine.executeRaw<ActionRunRecord>(
     `INSERT INTO action_runs (source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt, result, error_text, finished_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, now())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::text::jsonb, $9, now())
      ON CONFLICT (source_id, action_slug, idempotency_key)
      DO UPDATE SET
        status = EXCLUDED.status,
@@ -917,7 +917,7 @@ export async function finalizeInteractiveActionRun(
   await engine.executeRaw(
     `UPDATE action_runs
         SET status = $1,
-            result = $2::jsonb,
+            result = $2::text::jsonb,
             error_text = $3,
             finished_at = now()
       WHERE id = $4`,
@@ -1478,7 +1478,7 @@ async function upsertAction(engine: BrainEngine, action: ParsedAction): Promise<
       agent_contract, automation, allowed_tools, blocked_tools, related_context, file_path, content_hash,
       last_scanned_at, updated_at
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18::jsonb,$19::jsonb,$20::jsonb,$21::jsonb,$22,$23,now(),now())
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::text::jsonb,$18::text::jsonb,$19::text::jsonb,$20::text::jsonb,$21::text::jsonb,$22,$23,now(),now())
     ON CONFLICT (source_id, slug)
     DO UPDATE SET
       title = EXCLUDED.title,
@@ -1671,7 +1671,7 @@ async function saveActionToolRouteJson(
 ): Promise<void> {
   await engine.executeRaw(
     `UPDATE action_index
-        SET tool_route_json = $3::jsonb,
+        SET tool_route_json = $3::text::jsonb,
             updated_at = now()
       WHERE source_id = $1 AND slug = $2`,
     [sourceId, slug, JSON.stringify(route)],
@@ -1810,7 +1810,7 @@ async function createInteractiveActionRun(
   };
   const rows = await engine.executeRaw<ActionRunRecord>(
     `INSERT INTO action_runs (source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt, result, error_text, finished_at)
-     VALUES ($1, $2, $3, 'interactive_pending', false, '', $4, $5::jsonb, NULL, NULL)
+     VALUES ($1, $2, $3, 'interactive_pending', false, '', $4, $5::text::jsonb, NULL, NULL)
      RETURNING id, source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt,
                result, error_text, created_at::text, finished_at::text`,
     [opts.sourceId, action.slug, idempotencyKey, opts.userPrompt, JSON.stringify(initialResult)],
@@ -1842,7 +1842,7 @@ async function createInteractiveActionRun(
   };
   await engine.executeRaw(
     `UPDATE action_runs
-        SET result = $2::jsonb
+        SET result = $2::text::jsonb
       WHERE id = $1`,
     [runId, JSON.stringify(interactivePendingMetaForResult(envelope, planContextSnapshot))],
   );
@@ -2294,7 +2294,7 @@ export async function saveActionPlan(
   const hasStarted = normalized?.plan.some(phase => phase.steps.some(step => step.done)) ?? false;
   await engine.executeRaw(
     `UPDATE action_index
-        SET plan_json = $3::jsonb,
+        SET plan_json = $3::text::jsonb,
             started_at = CASE WHEN $4 THEN COALESCE(started_at, now()) ELSE started_at END,
             updated_at = now()
       WHERE source_id = $1 AND slug = $2`,

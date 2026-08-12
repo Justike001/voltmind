@@ -1844,7 +1844,7 @@ async function handleCliOnly(command: string, args: string[]) {
       // v0.41.19.0 — `voltmind status`: single-screen brain health dashboard.
       // CLI-only with own thin-client branch INSIDE runStatus (per D2 + codex
       // MAJOR-4 architecture). Composes existing exports: buildSyncStatusReport,
-      // readSupervisorEvents, gbrain_cycle_locks, minion_jobs.
+      // readSupervisorEvents, voltmind_cycle_locks, minion_jobs.
       case 'status': {
         const { runStatus } = await import('./commands/status.ts');
         const result = await runStatus(engine, args);

@@ -5,6 +5,7 @@ import { sweepUnregisteredTrackingEvidence } from '../src/core/cycle/tracking-ev
 import { buildBrainTools } from '../src/core/minions/tools/brain-allowlist.ts';
 import type { VoltMindConfig } from '../src/core/config.ts';
 import { resetPgliteState } from './helpers/reset-pglite.ts';
+import { withEnv } from './helpers/with-env.ts';
 
 let engine: PGLiteEngine;
 const config: VoltMindConfig = { engine: 'pglite' } as VoltMindConfig;
@@ -61,9 +62,7 @@ describe('server evidence sweep', () => {
   });
 
   test('maintenance runs the sweep before queuing repair and carries source scope', async () => {
-    const previousRole = process.env.VOLTMIND_RUNTIME_ROLE;
-    process.env.VOLTMIND_RUNTIME_ROLE = 'company-server';
-    try {
+    await withEnv({ VOLTMIND_RUNTIME_ROLE: 'company-server' }, async () => {
       const submitted: Array<{ name: string; data?: Record<string, unknown> }> = [];
       const result = await runTrackingMaintenance(engine, {
         sourceId: 'default',
@@ -84,10 +83,7 @@ describe('server evidence sweep', () => {
       expect(data.source_id).toBe('default');
       expect(data.tracking_maintenance).toBe(true);
       expect(data.allowed_tools).toContain('register_tracking_evidence');
-    } finally {
-      if (previousRole === undefined) delete process.env.VOLTMIND_RUNTIME_ROLE;
-      else process.env.VOLTMIND_RUNTIME_ROLE = previousRole;
-    }
+    });
   });
 
   test('sweep never crosses source boundaries', async () => {

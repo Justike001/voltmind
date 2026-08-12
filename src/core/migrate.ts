@@ -1218,9 +1218,23 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_takes_holder_active ON takes(holder) WHERE active;
       CREATE INDEX IF NOT EXISTS idx_takes_weight_active ON takes(weight DESC) WHERE active;
       CREATE INDEX IF NOT EXISTS idx_takes_resolved_at   ON takes(resolved_at) WHERE resolved_at IS NOT NULL;
-      CREATE INDEX IF NOT EXISTS idx_takes_embedding_hnsw ON takes
-        USING hnsw (embedding vector_cosine_ops)
-        WHERE active AND embedding IS NOT NULL;
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+            FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+           WHERE c.relname = 'takes' AND a.attname = 'embedding'
+             AND format_type(a.atttypid, a.atttypmod) LIKE 'halfvec%'
+        ) THEN
+          CREATE INDEX IF NOT EXISTS idx_takes_embedding_hnsw ON takes
+            USING hnsw (embedding halfvec_cosine_ops)
+            WHERE active AND embedding IS NOT NULL;
+        ELSE
+          CREATE INDEX IF NOT EXISTS idx_takes_embedding_hnsw ON takes
+            USING hnsw (embedding vector_cosine_ops)
+            WHERE active AND embedding IS NOT NULL;
+        END IF;
+      END $$;
 
       CREATE TABLE IF NOT EXISTS synthesis_evidence (
         synthesis_page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
@@ -1280,9 +1294,23 @@ export const MIGRATIONS: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_takes_holder_active ON takes(holder) WHERE active;
         CREATE INDEX IF NOT EXISTS idx_takes_weight_active ON takes(weight DESC) WHERE active;
         CREATE INDEX IF NOT EXISTS idx_takes_resolved_at   ON takes(resolved_at) WHERE resolved_at IS NOT NULL;
-        CREATE INDEX IF NOT EXISTS idx_takes_embedding_hnsw ON takes
-          USING hnsw (embedding vector_cosine_ops)
-          WHERE active AND embedding IS NOT NULL;
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1
+                FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+             WHERE c.relname = 'takes' AND a.attname = 'embedding'
+                 AND format_type(a.atttypid, a.atttypmod) LIKE 'halfvec%'
+          ) THEN
+            CREATE INDEX IF NOT EXISTS idx_takes_embedding_hnsw ON takes
+                USING hnsw (embedding halfvec_cosine_ops)
+                WHERE active AND embedding IS NOT NULL;
+          ELSE
+            CREATE INDEX IF NOT EXISTS idx_takes_embedding_hnsw ON takes
+                USING hnsw (embedding vector_cosine_ops)
+                WHERE active AND embedding IS NOT NULL;
+          END IF;
+        END $$;
 
         CREATE TABLE IF NOT EXISTS synthesis_evidence (
           synthesis_page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,

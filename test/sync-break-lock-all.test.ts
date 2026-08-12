@@ -39,9 +39,9 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
-  // Also clear gbrain_cycle_locks since resetPgliteState focuses on user data
+  // Also clear voltmind_cycle_locks since resetPgliteState focuses on user data
   // and the lock table is per-test state we want fresh.
-  await engine.executeRaw('DELETE FROM gbrain_cycle_locks', []);
+  await engine.executeRaw('DELETE FROM voltmind_cycle_locks', []);
 });
 
 // Helper: read raw row for assertions against the new column shape.
@@ -54,7 +54,7 @@ async function readLockRow(lockId: string) {
     last_refreshed_at: string | null;
   }>(
     `SELECT id, holder_pid, acquired_at, ttl_expires_at, last_refreshed_at
-       FROM gbrain_cycle_locks WHERE id = $1`,
+       FROM voltmind_cycle_locks WHERE id = $1`,
     [lockId],
   );
   return rows[0] ?? null;
@@ -80,7 +80,7 @@ describe('tryAcquireDbLock writes last_refreshed_at (v0.41.13.0 T5)', () => {
     // last_refreshed_at so we can verify the takeover bumps it.
     const oldTs = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1h ago
     await engine.executeRaw(
-      `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
+      `INSERT INTO voltmind_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
        VALUES ($1, $2, $3, $4, $5, $4)`,
       ['test:takeover', 99999, 'fake-host', oldTs, oldTs],
     );
@@ -134,7 +134,7 @@ describe('inspectLock surfaces last_refreshed_at (v0.41.13.0 T5)', () => {
 
   test('returns null for last_refreshed_at when the row has NULL (pre-v98 fallback)', async () => {
     await engine.executeRaw(
-      `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
+      `INSERT INTO voltmind_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
        VALUES ('test:null-ref', 12345, 'h', NOW(), NOW() + INTERVAL '30 minutes', NULL)`,
       [],
     );
@@ -171,7 +171,7 @@ describe('deleteLockRowIfStale (v0.41.13.0 T4 + D-V4-mech-4/5)', () => {
     // Insert a row with last_refreshed_at 1 hour ago.
     const oldTs = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     await engine.executeRaw(
-      `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
+      `INSERT INTO voltmind_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
        VALUES ('test:stale', 54321, 'h', NOW(), NOW() + INTERVAL '30 minutes', $1)`,
       [oldTs],
     );
@@ -188,7 +188,7 @@ describe('deleteLockRowIfStale (v0.41.13.0 T4 + D-V4-mech-4/5)', () => {
   test('refuses on holder_pid mismatch (PID-safe)', async () => {
     const oldTs = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     await engine.executeRaw(
-      `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
+      `INSERT INTO voltmind_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
        VALUES ('test:wrong-pid', 11111, 'h', NOW(), NOW() + INTERVAL '30 minutes', $1)`,
       [oldTs],
     );
@@ -203,7 +203,7 @@ describe('deleteLockRowIfStale (v0.41.13.0 T4 + D-V4-mech-4/5)', () => {
     // A row with NULL last_refreshed_at is conservatively kept alive — the
     // operator should run apply-migrations or use --force-break-lock.
     await engine.executeRaw(
-      `INSERT INTO gbrain_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
+      `INSERT INTO voltmind_cycle_locks (id, holder_pid, holder_host, acquired_at, ttl_expires_at, last_refreshed_at)
        VALUES ('test:null-ref-stale', 33333, 'h', NOW() - INTERVAL '2 hours', NOW() + INTERVAL '30 minutes', NULL)`,
       [],
     );
@@ -238,7 +238,7 @@ describe('R6 regression: schema bootstrap includes last_refreshed_at column', ()
     const rows = await engine.executeRaw<{ column_name: string; data_type: string; is_nullable: string }>(
       `SELECT column_name, data_type, is_nullable
          FROM information_schema.columns
-        WHERE table_name = 'gbrain_cycle_locks' AND column_name = 'last_refreshed_at'`,
+        WHERE table_name = 'voltmind_cycle_locks' AND column_name = 'last_refreshed_at'`,
       [],
     );
     expect(rows).toHaveLength(1);

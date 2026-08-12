@@ -34,7 +34,7 @@ afterEach(() => {
 
 const baseManifest: AutopilotInstallManifest = {
   schemaVersion: MANIFEST_SCHEMA_VERSION,
-  installVersion: '0.41.20.0',
+  installVersion: '0.41.21.0',
   target: 'windows-task',
   repoPath: 'C:\\Users\\alice\\brain',
   cliInvocation: { executable: 'C:\\voltmind\\voltmind.exe', prefixArgs: [], source: 'native-exe' },

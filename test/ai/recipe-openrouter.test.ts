@@ -40,7 +40,7 @@ describe('recipe: openrouter', () => {
     const e = r.touchpoints.embedding!;
     expect(e.models[0]).toBe('openai/text-embedding-3-small');
     expect(e.default_dims).toBe(1536);
-    expect(e.dims_options).toEqual([512, 768, 1024, 1536]);
+    expect(e.dims_options).toEqual([512, 768, 1024, 1280, 1536]);
     expect(e.max_batch_tokens).toBe(300_000);
   });
 

@@ -731,6 +731,11 @@ const COLUMN_EXEMPTIONS = new Set<string>([
   'minion_jobs.budget_remaining_cents',
   'minion_jobs.budget_owner_job_id',
   'minion_jobs.budget_root_owner_id',
+  // v106-v107 naming bridge: these legacy identifiers are created only long
+  // enough to copy/verify old state, then v107 removes them. They must never
+  // be added to the latest-schema bootstrap.
+  'subagent_tool_executions.gbrain_tool_use_id',
+  'gbrain_cycle_locks.last_refreshed_at',
 ]);
 
 test('every ALTER TABLE ADD COLUMN in MIGRATIONS is covered by applyForwardReferenceBootstrap (column-only class)', async () => {

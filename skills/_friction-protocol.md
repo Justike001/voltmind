@@ -35,7 +35,7 @@ gbrain friction log \
 
 For delight, add `--kind delight` and pick any severity.
 
-The CLI auto-fills `ts`, `cwd`, `gbrain_version`, and resolves `run_id` from `$GBRAIN_FRICTION_RUN_ID` (set by the harness) or falls back to `standalone.jsonl`. So you can call this anywhere — inside a harness run, manually during normal use, or from a scripted test.
+The CLI auto-fills `ts`, `cwd`, `voltmind_version`, and resolves `run_id` from `$VOLTMIND_FRICTION_RUN_ID` (set by the harness) or falls back to `standalone.jsonl`. So you can call this anywhere — inside a harness run, manually during normal use, or from a scripted test.
 
 ## Severity guide
 

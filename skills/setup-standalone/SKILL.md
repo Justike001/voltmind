@@ -6,15 +6,6 @@ description: |
   including the standalone-engine and autopilot/minions-install sections for
   self-hosted operators. Preserved variant — NOT routed in RESOLVER and NOT in
   the skillpack.
-triggers:
-  - "set up voltmind"
-  - "initialize brain"
-  - "voltmind setup"
-  - "configure shared drive"
-  - "configure raidrive"
-  - "map z drive"
-  - "配置共享盘"
-  - "映射 z 盘"
 tools:
   - get_stats
   - get_health

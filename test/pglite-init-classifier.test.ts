@@ -67,7 +67,7 @@ describe('buildPgliteInitErrorMessage — hint routing', () => {
 
   test('macos-26-3 verdict surfaces the #223 link AND original error', () => {
     const msg = buildPgliteInitErrorMessage('macos-26-3', original);
-    expect(msg).toContain('https://github.com/garrytan/voltmind/issues/223');
+    expect(msg).toContain('https://github.com/Justike001/voltmind/issues/223');
     expect(msg).toContain('macOS 26.3');
     expect(msg).toContain(original);
     expect(msg).not.toContain('Bun vfs');

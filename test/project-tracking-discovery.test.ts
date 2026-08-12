@@ -4,6 +4,7 @@ import { operations, operationsByName } from '../src/core/operations.ts';
 import { buildToolDefs } from '../src/mcp/tool-defs.ts';
 import { submitTrackedIngestionEvent } from '../src/core/project-tracking-runtime.ts';
 import type { BrainEngine } from '../src/core/engine.ts';
+import { withEnv } from './helpers/with-env.ts';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 
@@ -14,6 +15,7 @@ describe('long-running project tracking capability injection', () => {
     expect(operationsByName.reconcile_project_tracking?.scope).toBe('admin');
     expect(operationsByName.register_tracking_evidence?.scope).toBe('write');
     expect(operationsByName.register_tracking_evidence?.params).not.toHaveProperty('source_id');
+    expect(operationsByName.register_tracking_evidence?.params).toHaveProperty('action_assignments');
     expect(operationsByName.submit_ingestion_event?.params).not.toHaveProperty('source_id');
     expect(operationsByName.submit_ingestion_event?.params).toHaveProperty('file_refs');
 
@@ -59,8 +61,8 @@ describe('long-running project tracking capability injection', () => {
     };
     const project = catalog.skills.find(skill => skill.name === 'project');
     expect(project?.description).toContain('tracking candidates');
-    expect(catalog.version).toBe('0.41.20.0');
-    expect(bundle.version).toBe('0.41.20.0');
+    expect(catalog.version).toBe('0.41.21.0');
+    expect(bundle.version).toBe('0.41.21.0');
     expect(bundle.skills).toContain('skills/project');
     expect(bundle.shared_deps).toContain('skills/RESOLVER.md');
   });
@@ -148,14 +150,12 @@ describe('long-running project tracking capability injection', () => {
   });
 
   test('mutating tracking operations reject a client runtime before touching storage', async () => {
-    const previousRole = process.env.VOLTMIND_RUNTIME_ROLE;
-    process.env.VOLTMIND_RUNTIME_ROLE = 'client';
-    const ctx = {
-      engine: { kind: 'postgres' },
-      sourceId: 'company-a',
-      remote: true,
-    } as Parameters<typeof operationsByName.submit_ingestion_event.handler>[0];
-    try {
+    await withEnv({ VOLTMIND_RUNTIME_ROLE: 'client' }, async () => {
+      const ctx = {
+        engine: { kind: 'postgres' },
+        sourceId: 'company-a',
+        remote: true,
+      } as Parameters<typeof operationsByName.submit_ingestion_event.handler>[0];
       await expect(operationsByName.submit_ingestion_event.handler(ctx, {
         source_kind: 'teams-connector',
         source_uri: 'teams://conversation/example',
@@ -163,9 +163,6 @@ describe('long-running project tracking capability injection', () => {
       })).rejects.toMatchObject({ code: 'permission_denied' });
       await expect(operationsByName.reconcile_project_tracking.handler(ctx, {}))
         .rejects.toMatchObject({ code: 'permission_denied' });
-    } finally {
-      if (previousRole === undefined) delete process.env.VOLTMIND_RUNTIME_ROLE;
-      else process.env.VOLTMIND_RUNTIME_ROLE = previousRole;
-    }
+    });
   });
 });

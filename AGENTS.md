@@ -71,6 +71,11 @@ If you are writing or reviewing an operation, consult:
 This repository uses the VoltMind runtime. Use `voltmind`,
 `VOLTMIND_HOME`, `.voltmind-source`, and `voltmind.yml` in agent context.
 
+- **Local brain vault:** resolve `<LOCAL_BRAIN_VAULT_PATH>` from the Windows
+  user-scoped environment variable `VOLTMIND_LOCAL_BRAIN_VAULT` before brain
+  operations. If it is unset, ask the user for the private path; never commit,
+  echo, or infer the real path from repository text or public artifacts.
+
 ### Always-on VoltMind skill loading
 
 These two skills are always-on and must be loaded from the workspace before

@@ -47,6 +47,7 @@ ALLOWED=(
   "src/core/minions/tools/brain-allowlist.ts"   # subagent registry; has its own opt-in allowlist (separate from localOnly)
   "src/commands/capture.ts"                     # local CLI tool; not network-exposed
   "src/commands/book-mirror.ts"                 # local CLI tool; not network-exposed
+  "src/commands/enrich.ts"                      # local CLI; thin-client mode invokes one named remote operation, never publishes the registry
   "src/commands/tools-json.ts"                  # voltmind --tools-json introspection; full op list IS the purpose
   "src/commands/serve-http.ts"                  # MUST APPLY .filter(op => !op.localOnly) — verified by grep below
 )
