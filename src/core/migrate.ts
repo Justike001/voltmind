@@ -4598,8 +4598,27 @@ export const MIGRATIONS: Migration[] = [
     // immediately delete the lock of a HEALTHY 25-min-old holder that's
     // still actively writing.
     sql: `
-      ALTER TABLE gbrain_cycle_locks ADD COLUMN IF NOT EXISTS last_refreshed_at TIMESTAMPTZ;
-      UPDATE gbrain_cycle_locks SET last_refreshed_at = NOW() WHERE last_refreshed_at IS NULL;
+      DO $$
+      BEGIN
+        IF to_regclass('public.gbrain_cycle_locks') IS NOT NULL THEN
+          ALTER TABLE public.gbrain_cycle_locks
+            ADD COLUMN IF NOT EXISTS last_refreshed_at TIMESTAMPTZ;
+          UPDATE public.gbrain_cycle_locks
+             SET last_refreshed_at = NOW()
+           WHERE last_refreshed_at IS NULL;
+        ELSIF to_regclass('public.voltmind_cycle_locks') IS NOT NULL THEN
+          -- Fresh installations replay the current VoltMind-only schema before
+          -- applying historical migrations. Support that forward-bootstrap
+          -- path without recreating the retired gbrain_* table name.
+          ALTER TABLE public.voltmind_cycle_locks
+            ADD COLUMN IF NOT EXISTS last_refreshed_at TIMESTAMPTZ;
+          UPDATE public.voltmind_cycle_locks
+             SET last_refreshed_at = NOW()
+           WHERE last_refreshed_at IS NULL;
+        ELSE
+          RAISE EXCEPTION 'v98: neither legacy nor VoltMind cycle lock table exists';
+        END IF;
+      END $$;
     `,
   },
   {

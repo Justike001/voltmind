@@ -48,7 +48,10 @@ describe('VoltMind CI and release contracts', () => {
     expect(text).toContain('test:e2e:tier2');
     expect(text).toContain('test:heavy:host');
     expect(text).toContain('VOLTMIND_REMOTE_MCP_URL');
+    expect(text).toContain('VOLTMIND_REMOTE_ISSUER_URL');
+    expect(text).toContain('VOLTMIND_REMOTE_CLIENT_ID');
     expect(text).toContain('VOLTMIND_REMOTE_CLIENT_SECRET');
+    expect(text).not.toContain('TS_AUTHKEY');
     expect(text).not.toContain('DATABASE_URL');
     expect(text).not.toContain('pgvector/pgvector');
     expect(text).not.toContain('services');
@@ -56,6 +59,14 @@ describe('VoltMind CI and release contracts', () => {
     expect(text).not.toContain('ANTHROPIC_API_KEY');
     expect(text).not.toContain('openclaw@');
     expect(text).not.toContain('ci-pass-');
+
+    const hostProbe = readFileSync(new URL('../scripts/host-mcp-e2e.ts', import.meta.url), 'utf8');
+    expect(hostProbe).toContain("'get_brain_identity'");
+    expect(hostProbe).toContain("'schema_stats'");
+    expect(hostProbe).toContain("'recall'");
+    expect(hostProbe).not.toContain("'get_status_snapshot'");
+    expect(hostProbe).not.toContain("'list_jobs'");
+    expect(hostProbe).not.toContain("'run_doctor'");
   });
 
   test('release requires the green SHA, checksums every binary, and attests provenance', () => {

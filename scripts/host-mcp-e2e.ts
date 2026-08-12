@@ -2,8 +2,9 @@
  * Release-gate probe for the real VoltMind Host.
  *
  * The CI runner is a thin client: it must never open a PostgreSQL connection.
- * Database, autopilot, and dream-cycle assertions are made exclusively through
- * the Host's authenticated MCP surface.
+ * PostgreSQL-backed assertions are made exclusively through the Host's
+ * authenticated, read-scope MCP surface. Admin-only scheduler/job state is a
+ * Host operations concern and is intentionally outside this client gate.
  */
 import type { VoltMindConfig } from '../src/core/config.ts';
 import { callRemoteTool, unpackToolResult } from '../src/core/mcp-client.ts';
@@ -15,28 +16,36 @@ type BrainIdentity = {
   chunk_count: number;
 };
 
-type StatusSnapshot = {
+type SchemaStats = {
   schema_version: number;
-  sync: unknown;
-  cycle: unknown;
+  aggregate: { total_pages: number; typed_pages: number };
+  per_source: unknown[];
 };
 
-type RemoteJob = { id?: number; name?: string; state?: string };
+type RecallResult = {
+  facts: unknown[];
+  total: number;
+  pending_consolidation_count?: number;
+};
 
-function required(name: string): string {
+function configured(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required Host MCP setting: ${name}`);
   return value;
 }
 
 function hostConfig(): VoltMindConfig {
+  // CI uses a dedicated read-scope client_credentials client. Deliberately do
+  // not fall back to a workstation config: a developer's interactive client
+  // may be broader than the public thin-client trust boundary and would mask a
+  // scope regression in this gate.
   return {
-    engine: 'pglite', // ignored in thin-client mode; kept for config typing
+    engine: 'pglite', // ignored by callRemoteTool; no local engine is opened
     remote_mcp: {
-      issuer_url: required('VOLTMIND_REMOTE_ISSUER_URL'),
-      mcp_url: required('VOLTMIND_REMOTE_MCP_URL'),
-      oauth_client_id: required('VOLTMIND_REMOTE_CLIENT_ID'),
-      oauth_client_secret: required('VOLTMIND_REMOTE_CLIENT_SECRET'),
+      issuer_url: configured('VOLTMIND_REMOTE_ISSUER_URL'),
+      mcp_url: configured('VOLTMIND_REMOTE_MCP_URL'),
+      oauth_client_id: configured('VOLTMIND_REMOTE_CLIENT_ID'),
+      oauth_client_secret: configured('VOLTMIND_REMOTE_CLIENT_SECRET'),
     },
   };
 }
@@ -57,17 +66,19 @@ async function inspectHost(config: VoltMindConfig): Promise<void> {
   assert(Number.isInteger(identity.page_count) && identity.page_count >= 0, 'Invalid Host page_count');
   assert(Number.isInteger(identity.chunk_count) && identity.chunk_count >= 0, 'Invalid Host chunk_count');
 
-  const status = await call<StatusSnapshot>(config, 'get_status_snapshot');
-  assert(status.schema_version === 1, `Unsupported Host status schema: ${JSON.stringify(status.schema_version)}`);
-  assert(status.sync !== null && typeof status.sync === 'object', 'Host status is missing sync state');
-  assert(status.cycle !== null && typeof status.cycle === 'object', 'Host status is missing dream-cycle state');
+  const schema = await call<SchemaStats>(config, 'schema_stats');
+  assert(schema.schema_version === 1, `Unsupported schema_stats payload: ${JSON.stringify(schema.schema_version)}`);
+  assert(Number.isInteger(schema.aggregate?.total_pages), 'Host schema_stats is missing total_pages');
+  assert(schema.aggregate.total_pages === identity.page_count, 'Host identity/schema_stats page counts disagree');
+  assert(Array.isArray(schema.per_source), 'Host schema_stats is missing per_source results');
 
-  const jobs = await call<RemoteJob[]>(config, 'list_jobs', { name: 'autopilot-cycle', limit: 20 });
-  assert(Array.isArray(jobs), 'Host list_jobs did not return an array');
-  assert(jobs.some((job) => job?.name === 'autopilot-cycle'), 'Host has no recorded autopilot/dream cycle');
-
-  const doctor = await call<{ status?: string; health_score?: number }>(config, 'run_doctor');
-  assert(doctor.status !== 'unhealthy', `Host doctor reports unhealthy (score ${doctor.health_score ?? 'unknown'})`);
+  // This is a DB-backed read of the hot-memory surface. include_pending also
+  // proves the Host can execute the dream-cycle consolidation count query,
+  // without exposing or requiring admin-only scheduler/job state.
+  const recall = await call<RecallResult>(config, 'recall', { limit: 1, include_pending: true });
+  assert(Array.isArray(recall.facts), 'Host recall did not return a facts array');
+  assert(Number.isInteger(recall.total) && recall.total >= 0, 'Host recall returned an invalid total');
+  assert(Number.isInteger(recall.pending_consolidation_count), 'Host recall omitted pending consolidation count');
 
   console.log(JSON.stringify({
     gate: 'host-mcp',
@@ -75,22 +86,22 @@ async function inspectHost(config: VoltMindConfig): Promise<void> {
     engine: identity.engine,
     page_count: identity.page_count,
     chunk_count: identity.chunk_count,
-    autopilot_jobs_observed: jobs.length,
-    doctor_status: doctor.status,
-    doctor_score: doctor.health_score,
+    typed_pages: schema.aggregate.typed_pages,
+    pending_consolidation_count: recall.pending_consolidation_count,
   }));
 }
 
 async function runHeavy(config: VoltMindConfig): Promise<void> {
-  // A bounded soak of the real thin-client path. Sequential calls avoid
+  // A bounded soak of the real thin-client path. Sequential iterations avoid
   // turning a release check into a load test against the user's Host.
   for (let i = 0; i < 10; i++) {
-    const [identity, status] = await Promise.all([
+    const [identity, schema] = await Promise.all([
       call<BrainIdentity>(config, 'get_brain_identity'),
-      call<StatusSnapshot>(config, 'get_status_snapshot'),
+      call<SchemaStats>(config, 'schema_stats'),
     ]);
     assert(identity.engine === 'postgres', `Heavy iteration ${i + 1}: Host stopped reporting postgres`);
-    assert(status.schema_version === 1, `Heavy iteration ${i + 1}: status schema drifted`);
+    assert(schema.schema_version === 1, `Heavy iteration ${i + 1}: schema_stats payload drifted`);
+    assert(schema.aggregate.total_pages === identity.page_count, `Heavy iteration ${i + 1}: page counts disagree`);
   }
   console.log(JSON.stringify({ gate: 'host-mcp-heavy', iterations: 10, calls: 20 }));
 }

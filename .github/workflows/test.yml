@@ -148,9 +148,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      VOLTMIND_REMOTE_ISSUER_URL: ${{ secrets.VOLTMIND_REMOTE_ISSUER_URL }}
-      VOLTMIND_REMOTE_MCP_URL: ${{ secrets.VOLTMIND_REMOTE_MCP_URL }}
-      VOLTMIND_REMOTE_CLIENT_ID: ${{ secrets.VOLTMIND_REMOTE_CLIENT_ID }}
+      VOLTMIND_REMOTE_ISSUER_URL: ${{ vars.VOLTMIND_REMOTE_ISSUER_URL }}
+      VOLTMIND_REMOTE_MCP_URL: ${{ vars.VOLTMIND_REMOTE_MCP_URL }}
+      VOLTMIND_REMOTE_CLIENT_ID: ${{ vars.VOLTMIND_REMOTE_CLIENT_ID }}
       VOLTMIND_REMOTE_CLIENT_SECRET: ${{ secrets.VOLTMIND_REMOTE_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -158,7 +158,7 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
-      - name: Verify PostgreSQL, doctor, autopilot, and dream-cycle state through Host MCP
+      - name: Verify PostgreSQL-backed read surfaces through Host MCP
         run: bun run test:e2e:tier2
 
   heavy:
@@ -167,9 +167,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      VOLTMIND_REMOTE_ISSUER_URL: ${{ secrets.VOLTMIND_REMOTE_ISSUER_URL }}
-      VOLTMIND_REMOTE_MCP_URL: ${{ secrets.VOLTMIND_REMOTE_MCP_URL }}
-      VOLTMIND_REMOTE_CLIENT_ID: ${{ secrets.VOLTMIND_REMOTE_CLIENT_ID }}
+      VOLTMIND_REMOTE_ISSUER_URL: ${{ vars.VOLTMIND_REMOTE_ISSUER_URL }}
+      VOLTMIND_REMOTE_MCP_URL: ${{ vars.VOLTMIND_REMOTE_MCP_URL }}
+      VOLTMIND_REMOTE_CLIENT_ID: ${{ vars.VOLTMIND_REMOTE_CLIENT_ID }}
       VOLTMIND_REMOTE_CLIENT_SECRET: ${{ secrets.VOLTMIND_REMOTE_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

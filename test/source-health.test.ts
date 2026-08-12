@@ -131,8 +131,23 @@ describe('computeAllSourceMetrics', () => {
     // Two pages with chunks, half embedded
     await engine.putPage('a', { type: 'note', title: 'a', compiled_truth: 'a' });
     await engine.putPage('b', { type: 'note', title: 'b', compiled_truth: 'b' });
+    // Bun executes test files in shared workers, and gateway-focused suites can
+    // legitimately reconfigure the process-wide embedding dimension. Read the
+    // dimension from this test database instead of coupling the fixture to
+    // whichever suite initialized the gateway first.
+    const [embeddingType] = await engine.executeRaw<{ sql_type: string }>(`
+      SELECT format_type(a.atttypid, a.atttypmod) AS sql_type
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+       WHERE c.relname = 'content_chunks'
+         AND a.attname = 'embedding'
+         AND a.attnum > 0
+         AND NOT a.attisdropped
+    `);
+    const dimension = Number(/\((\d+)\)/.exec(embeddingType?.sql_type ?? '')?.[1]);
+    expect(dimension).toBeGreaterThan(0);
     await engine.upsertChunks('a', [
-      { chunk_index: 0, chunk_text: 'one', chunk_source: 'compiled_truth', token_count: 1, embedding: new Float32Array(1536) },
+      { chunk_index: 0, chunk_text: 'one', chunk_source: 'compiled_truth', token_count: 1, embedding: new Float32Array(dimension) },
       { chunk_index: 1, chunk_text: 'two', chunk_source: 'compiled_truth', token_count: 1, embedding: undefined },
     ]);
     await engine.upsertChunks('b', [

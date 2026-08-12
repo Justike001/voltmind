@@ -3911,11 +3911,12 @@ export async function buildChecks(
     //   - non-empty brain → `voltmind retrieval-upgrade --to … --reindex`
     // The bug-reporter's `rm -rf ~/.voltmind` recovery is never the right answer.
     let surfacedUnconfiguredDrift = false;
+    let deferredSetup = false;
     try {
       const { loadConfig } = await import('../core/config.ts');
       const cfg = loadConfig();
       const fileEmbeddingSet = !!cfg?.embedding_model;
-      const deferredSetup = cfg?.embedding_disabled === true;
+      deferredSetup = cfg?.embedding_disabled === true;
       if (!fileEmbeddingSet && !deferredSetup) {
         // Read column dim + chunk count
         const { readContentChunksEmbeddingDim } = await import('../core/embedding-dim-check.ts');
@@ -3957,7 +3958,16 @@ export async function buildChecks(
       // available/probe branch surface the issue.
     }
 
-    if (surfacedUnconfiguredDrift) {
+    if (deferredSetup) {
+      // `init --no-embedding` is an explicit offline/deferred-setup choice.
+      // Local providers can report themselves as structurally available even
+      // when no model server is listening, so probing here can hang doctor.
+      checks.push({
+        name: 'embedding_provider',
+        status: 'ok',
+        message: 'Skipped (embedding setup explicitly deferred).',
+      });
+    } else if (surfacedUnconfiguredDrift) {
       // Bail out — the warn above is more actionable than the live probe.
     } else if (!available) {
       // Per v0.28.5 plan P1: silently skipped when no API key is configured.

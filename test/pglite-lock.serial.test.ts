@@ -132,7 +132,7 @@ describe('PGLite file lock', () => {
     expect(existsSync(lockDir)).toBe(false);
   });
 
-  test('unlock stale-only removes expired locks and leaves fresh live locks', () => {
+  test('unlock stale-only never reaps a live PID, even when its heartbeat is expired', () => {
     process.env.VOLTMIND_PGLITE_STALE_MS = '15000';
     const lockDir = writeLock(root, {
       pid: process.pid,
@@ -141,10 +141,15 @@ describe('PGLite file lock', () => {
     });
 
     const expired = clearPgliteLockIfStale(root);
-    expect(expired.removed).toBe(true);
+    // A PGLite/WASM operation can block the JS heartbeat while the holder is
+    // still writing. Age remains diagnostic, but a live PID must not be reaped
+    // because opening the directory from a second process can corrupt it.
+    expect(expired.removed).toBe(false);
     expect(expired.info.reason).toBe('expired');
-    expect(existsSync(lockDir)).toBe(false);
+    expect(expired.info.processAlive).toBe(true);
+    expect(existsSync(lockDir)).toBe(true);
 
+    rmSync(lockDir, { recursive: true, force: true });
     writeLock(root, {
       pid: process.pid,
       acquired_at: Date.now(),
