@@ -1,6 +1,6 @@
 ---
 name: setup
-description: User-agent manual: get the user's personal knowledge base live on the company VoltMind Host — create their private repo in company Gogs, apply for their own sourceID + read/write via the self-provision endpoint, connect as a thin client over MCP (OAuth), and persist credentials into their repo's AGENTS.md / env.
+description: Set up VoltMind as a thin client connected to the company brain Host over MCP (OAuth 2.1), agent instructions, first retrieval, and thin-client shared-drive roots. Use for first connect to the Host's MCP server, or for configuring RaiDrive/SMB/Z-drive mappings on a client workstation.
 triggers:
   - "set up voltmind"
   - "initialize brain"
@@ -21,124 +21,212 @@ tools:
 mutating: true
 ---
 
-# Setup VoltMind — User Agent Manual
+# Setup VoltMind
 
-This is the operating instruction manual for a **user's agent** connecting to the
-company VoltMind Host. Follow it in order to: create your own personal knowledge
-repo in the company Gogs, get your own **sourceID** + **read/write** permission on
-the Host, connect as a thin client to the Host's MCP server, and persist those
-credentials so your agent can use them on every run.
-
-## Real endpoints (this Host)
-
-| What | Value |
-|---|---|
-| MCP / OAuth issuer | `https://voltage3d.tailce7d39.ts.net` |
-| MCP endpoint | `https://voltage3d.tailce7d39.ts.net/mcp` |
-| Self-provision (`/provision/request`) | `https://voltage3d.tailce7d39.ts.net/provision/request` |
-| Company Gogs (web) | `http://192.168.5.6:3000` |
-| Gogs org | `http://192.168.5.6:3000/VoltMind` |
-| Gogs API | `http://192.168.5.6:3000/api/v1` |
-| Gogs SSH (clone form) | `voltage@192.168.5.6:VoltMind/<repo>.git` |
-
-**Security boundary you rely on:** you (the user's agent) only ever get
-**read/write on your OWN `personal-*` source** — never admin, never anyone else's
-data. The Host keeps the Gogs-admin key and all admin credentials to itself.
+Set up VoltMind from scratch. Target: working brain in under 5 minutes.
 
 ## Contract
 
-- One company email ⇒ exactly ONE personal source (`personal-<name>`); applying
-  again just re-keys the same source (no duplicate).
-- Your thin client can search/read/write **only your own** source (scope isolation).
-- You never receive a database connection string, the Gogs-admin SSH key, or any
-  admin credential.
+- Setup completes with a working brain verified by `voltmind doctor --json` (all checks OK).
+- The brain-first lookup protocol is injected into the project's AGENTS.md or equivalent.
+- Live sync is configured and verified (a test change pushed and found via search).
+- Schema state is tracked in `~/.voltmind/update-state.json` so future upgrades know what the user adopted or declined.
+- No Supabase anon key or cloud database is requested. As a thin client you connect to the Host's MCP server with OAuth credentials; the Host owns the database.
+- For a company environment that requires embedding/reranking data to stay
+  internal, use [`docs/ai-providers/qwen-vllm.md`](../../docs/ai-providers/qwen-vllm.md)
+  before initialization. It defines the required Qwen `halfvec(2048)` schema
+  and internal endpoint configuration; do not substitute a public embedding
+  provider for that workflow.
 
-## Phase A: Create your personal knowledge repo in the company Gogs
+## How you connect: MCP to the Host (thin client)
 
-1. You already have a company Gogs account. In Gogs (`http://192.168.5.6:3000`),
-   under the org `VoltMind`, create a **private** personal knowledge repo, e.g.
-   `VoltMind/<name>_PersonalBrain`, and push an initial commit (e.g. `README.md`).
-2. Get the repo's **SSH clone address** (Gogs → your repo → Clone → SSH) — the form
-   is `voltage@192.168.5.6:VoltMind/<repo>.git`.
-3. Create a **Gogs personal access token** for your account: Gogs → Settings →
-   Applications → Generate New Token (read scope is enough).
+The VoltMind brain already runs **on the company brain Host** (an Ubuntu server).
+You do NOT stand up your own Postgres/Supabase. Your machine or agent is a
+**thin client**: it connects to the Host's MCP server over HTTPS with OAuth 2.1,
+and the Host owns all retrieval, writes, sync, and embeddings. Brain data never
+leaves the Host.
 
-## Phase A.5: Apply to the Host for your sourceID + read/write (self-provision)
+- **Ingress (issuer):** `https://<host-public-url>` (e.g. `https://<host>.ts.net`)
+- **MCP endpoint:** `<issuer>/mcp` (e.g. `https://<host>.ts.net/mcp`)
+- **Auth:** OAuth 2.1 (`client_credentials`, or annotated PKCE for browser clients)
+- **OAuth discovery:** `<issuer>/.well-known/oauth-authorization-server`
+- **Routable from a thin client:** `search`, `query`, `stats`, `doctor --json`,
+  page reads/writes, and — if the Host enables `mcp.publish_skills=true` —
+  `list_skills` / `get_skill`, so you can read THIS skill live from the Host.
+- **Host-only (never run on the thin client):** `sync`, `embed`, `extract`,
+  `sources`/file management, `serve`, migrations. Thin clients are refused these
+  and pointed at the Host; the Host's agent runs them on the server.
 
-One request to the Host creates your **source**, **checks out your repo**, and
-**mints your read/write thin-client credential** — source + client + permission in
-one step. Use the Gogs API token you just made:
+The Host operator (or the Host's own agent — see "Automated provisioning" in
+Phase A) issues your `client_id` / `client_secret` and binds you to a **source**
+(which repo inside the brain). You never see a database connection string or a
+Supabase key — those never leave the Host.
 
+## Prerequisites (on your side)
+
+- The `voltmind` binary installed on your machine/agent.
+- Host-issued OAuth credentials:
+  - `--issuer-url https://<host-public-url>` (or `VOLTMIND_REMOTE_ISSUER_URL`)
+  - `--mcp-url https://<host-public-url>/mcp` (or `VOLTMIND_REMOTE_MCP_URL`)
+  - `--oauth-client-id <id>` / `--oauth-client-secret <s>` (or `VOLTMIND_REMOTE_CLIENT_ID` / `VOLTMIND_REMOTE_CLIENT_SECRET`)
+- A target **source id** assigned by the Host (e.g. `personal-alice-example`).
+- Network reachability to the Host (HTTPS outbound).
+
+## Available init options (thin client)
+
+- `voltmind init --mcp-only --issuer-url <u> --mcp-url <u>/mcp --oauth-client-id <id> --oauth-client-secret <s>`
+  -- writes a `remote_mcp` config, creates **no** local engine, and runs three
+  pre-flight smokes (OAuth discovery → token round-trip → MCP initialize).
+- `voltmind init --mcp-only --force` -- re-run / refresh an existing thin-client config.
+- `voltmind doctor --json` -- post-connect health check (OAuth + MCP checks).
+- `voltmind remote ping` -- ask the Host to run a sync/embed cycle (thin-client friendly).
+
+Not a thin client? A machine that will run its OWN engine uses **Phase B** instead.
+
+## Thin-client shared-drive roots
+
+Configure mapped drives on each client workstation after `init --mcp-only`.
+These commands are CLI-local and must not run on the Host:
+
+```powershell
+voltmind client-roots add synology-public `
+  --local-root 'Z:\' `
+  --unc-root '\\RaiDrive-CurrentUser\Synology'
+voltmind client-roots test synology-public
+```
+
+Every workstation uses the same `root_key` but may use a different drive letter
+or RaiDrive username. If the agent cannot execute a shell on that workstation,
+return the commands for the user to run. Verify retrieval with
+`voltmind file-refs search '<local-path>'`; the Host stores only the logical
+root/path identity.
+
+## Phase A: Connect to the Host via MCP (recommended)
+
+1. Confirm which Host brain + source the user belongs to, and that the Host's MCP
+   server is reachable:
+   ```bash
+   curl -sI https://<host-public-url>/mcp          # expect 200/204
+   curl -s  https://<host-public-url>/.well-known/oauth-authorization-server
+   ```
+2. Collect your Host-issued credentials. **No manual Host work needed** if the
+   Host operator has run the automated provisioning bootstrap (see below).
+3. Connect as a thin client (this runs the three pre-flight smokes automatically):
+   ```bash
+   voltmind init --mcp-only \
+     --issuer-url https://<host-public-url> \
+     --mcp-url https://<host-public-url>/mcp \
+     --oauth-client-id <client-id> \
+     --oauth-client-secret <client-secret>
+   ```
+   Expected: `✓ OAuth discovery`, `✓ OAuth /token`, `✓ MCP initialize`. If any
+   step fails, stop and report it (see "Error Recovery").
+4. Verify the connection:
+   ```bash
+   voltmind doctor --json
+   ```
+   Report the full JSON; every check should be OK.
+5. Basic test — prove retrieval works end-to-end through the MCP connection:
+   ```bash
+   voltmind search "<a topic you know is in the brain>"
+   voltmind query "what do we know about <topic>"
+   voltmind stats
+   ```
+6. (Optional) Pull this skill live from the Host instead of trusting a local copy:
+   once `mcp.publish_skills=true`, call `list_skills` then `get_skill setup`.
+
+**Automated provisioning (removes the manual Host brace):** the Host operator runs a
+one-time bootstrap that (a) ensures your source exists and (b) registers an OAuth
+client bound to it (`--source <id> --scopes read write`), then hands you
+`client_id`/`client_secret`. After that, connecting + testing is fully self-service.
+The exact command list lives in `docs/mcp/DEPLOY.md`.
+
+## Phase A.5: Onboard a user's personal knowledge base (email → source + Gogs repo)
+
+For each user, the **personal KB** lives in its own isolated DB source. Company
+email is the identity contract:
+- `alice-example@company.example` → a readable collision-resistant source id such as
+  `personal-alice-<digest>`.
+- **One company email always maps to exactly ONE source** (deterministic dedup) —
+  re-provisioning never creates a second source, keeping per-user KBs manageable.
+- **Scope isolation:** the minted credential can only read/write that user's own
+  source; other users' sources are unreachable.
+
+### Step 1 — user (or their agent) creates their Gogs account + knowledge repo
+Most users aren't developers, so the user's agent does this for them against the
+company Gogs `https://gogs.internal.example` (org: `https://gogs.internal.example/example-org`):
+1. Create a Gogs account (username from the email local part, e.g. `alice-example`).
+2. Under the `example-org` org, create an empty personal knowledge repo, e.g.
+   `https://gogs.internal.example/example-org/alice-example-kb`.
+3. Add an initial commit (e.g. a `README.md`) so the Host can clone it.
+
+### Step 2 — provision (Host operator / Host agent)
+One command (or one admin call) creates the DB source, checks out the repo, and
+mints a source-scoped credential. The repo can be cloned over **HTTPS** or over
+**SSH** using the Host's Gogs-admin SSH key (sees every member's private repo):
 ```bash
-curl -X POST https://voltage3d.tailce7d39.ts.net/provision/request \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "<your company email>",
-    "repo_url": "voltage@192.168.5.6:VoltMind/<repo>.git",
-    "gogs_token": "<your Gogs personal access token>"
-  }'
+# The USER's agent creates the repo in Gogs, then hands its SSH address over.
+# The HOST agent clones it (SSH checkout) and syncs with the Host key.
+
+# CLI, on the Host (admin / Host agent): SSH checkout
+voltmind provision-personal alice-example@company.example \
+  --repo-url git@gogs.internal.example:example-org/alice-example-kb.git
+#   --allow-ssh auto-detected for ssh:// / git@host:path forms
+
+# admin HTTP endpoint (bootstrap token):
+curl -X POST https://<host>/admin/api/provision-personal-source \
+  -H "Authorization: Bearer <bootstrap-token>" -H "Content-Type: application/json" \
+  -d '{"email":"alice-example@company.example","repoUrl":"git@gogs.internal.example:example-org/alice-example-kb.git"}'
+
+# MCP op (admin scope):
+#   provision_personal_source { email, repo_url, scopes:"read write" }
 ```
+Returns `source_id` + `client_id`/`client_secret`.
 
-The Host verifies via the Gogs API (`/api/v1/user`) that the token's owner is you
-and that you can read the repo — so you get **only your own** source. Response:
+> **SSH key security boundary (admin-only):** the Host's Gogs-admin SSH key is used
+> ONLY by the Host to checkout/sync users' private repos — that's why the user's
+> agent passes the repo's SSH address, and the Host (not the user) runs the clone.
+> SSH checkout is an **admin-privilege** capability: it is honored only for an
+> `admin`-scope caller (the Host agent / operator) or the bootstrap-token admin
+> endpoint / local CLI. Non-admin users cannot invoke it (they lack `admin` scope
+> and never reach `provision_personal_source`). As an extra guard the key is
+> **confined to the company Gogs host** (`VOLTMIND_GOGS_SSH_HOST`, default
+> `gogs.internal.example`) — so even an admin can't point it at arbitrary internal hosts.
 
-```json
-{ "source_id": "personal-<name>", "already_provisioned": false,
-  "clone_path": "...", "owner_email": "...",
-  "client_id": "...", "client_secret": "..." }
-```
+> **Private/internal Gogs (important):**
+> - **SSH checkout (recommended for private repos):** the Host clones with the
+>   Gogs-admin key via `GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"`
+>   — no password in any URL, key must be on the Host (`~/.ssh`) and its
+>   `git@gogs.internal.example:~` confirmation accepted once.
+> - **HTTPS checkout:** only accepts `https://` and rejects internal networks
+>   unless the Host runs with `VOLTMIND_ALLOW_PRIVATE_REMOTES=1`; embedded
+>   `user:pass@host` credentials are always blocked.
+> - Hosts talking to the private `gogs.internal.example` Gogs should set
+>   `VOLTMIND_ALLOW_PRIVATE_REMOTES=1` regardless (the IP is a private net).
 
-> If `/provision/request` returns `404` (the operator keeps self-provision OFF by
-> default), ask the Host's agent / admin to run the admin path or switch it on.
-
-## Phase A.6: Connect as a thin client
-
+### Step 3 — user connects as a thin client (self-serve)
 ```bash
 voltmind init --mcp-only \
-  --issuer-url https://voltage3d.tailce7d39.ts.net \
-  --mcp-url https://voltage3d.tailce7d39.ts.net/mcp \
-  --oauth-client-id <client_id> \
-  --oauth-client-secret <client_secret>
-voltmind doctor --json       # expect "status": "ok"
-voltmind search "<a topic>"  # first retrieval
+  --issuer-url https://<host-public-url> \
+  --mcp-url https://<host-public-url>/mcp \
+  --oauth-client-id <client_id> --oauth-client-secret <client_secret>
+voltmind doctor --json
+voltmind search "<topic>"
 ```
+From here the user reads/writes only their own `personal-*` source; other users'
+sources stay unreachable.
 
-## Phase A.7: Persist your credentials (so the agent reads them on every run)
+## Phase B: Standalone VoltMind (alternative)
 
-Write into your **own repo's `AGENTS.md`** and/or your environment so your agent
-always has them at run time:
+Only for a machine that runs its OWN engine (not a thin client) — e.g. a personal
+brain or an isolated Host. The company default is connecting to the Host (Phase A).
 
-```bash
-export VOLTMIND_SOURCE=personal-<name>
-export VOLTMIND_REMOTE_ISSUER_URL=https://voltage3d.tailce7d39.ts.net
-export VOLTMIND_REMOTE_MCP_URL=https://voltage3d.tailce7d39.ts.net/mcp
-export VOLTMIND_REMOTE_CLIENT_ID=<client_id>
-export VOLTMIND_REMOTE_CLIENT_SECRET=<client_secret>
-```
-
-Mirror these into your repo's `AGENTS.md` under a `## voltmind credentials`
-section so your agent picks them up automatically. Treat `client_secret` as
-sensitive (`.env` / secret manager, never a public repo).
-
-## Phase A.8: Clone your vault and bind your remote repo
-
-After your source is provisioned, set up your local working copy and bind it to
-your personal remote repo so your local writes stay in sync with what the Host
-checks out:
-
-```bash
-# clone the vault template or your own personal repo:
-git clone voltage@192.168.5.6:VoltMind/brain.git ~/vault
-# (or) git clone voltage@192.168.5.6:VoltMind/<repo>.git ~/vault
-
-# bind the remote so your local vault tracks your personal KB repo:
-cd ~/vault
-git remote add origin voltage@192.168.5.6:VoltMind/<repo>.git   # if not already set
-git remote -v
-```
-
-From then on: write to your vault → `git push` → the Host syncs it into your
-source → `voltmind search` returns it.
+1. Have any Postgres with pgvector ready (self-hosted, Neon, Railway, managed
+   PgBouncer pooler, etc.). Prefer the Transaction pooler string (port 6543) over
+   a direct IPv6-only host where applicable.
+2. Run: `voltmind init --non-interactive --url "<connection_string>"`
+3. Verify: `voltmind doctor --json`
+4. Live sync, embeddings, and autopilot then run on THIS machine (Phase H).
 
 ## Phase C: First Import
 
@@ -277,6 +365,152 @@ Write-Host "=== Discovery Complete ==="
 
 If no markdown repos are found, create a starter brain with a few template pages
 (a person page, a company page, a concept page) from docs/VOLTMIND_RECOMMENDED_SCHEMA.md.
+
+## Phase C.5: One-step autopilot + Minions install (v0.11.1+)
+
+Windows, macOS, and Linux all use the same entry:
+
+```bash
+voltmind autopilot --install
+```
+
+`voltmind autopilot --install` is now a public MVP command (no
+`VOLTMIND_INTERNAL_MIGRATION` flag needed). It detects the platform and
+installs the right process manager, then runs the single platform-agnostic
+`runAutopilot()` which supervises one Minions worker consuming the
+Postgres/Supabase queue.
+
+**Process manager differs by platform. Autopilot, ChildWorkerSupervisor,
+Minion worker and Postgres queue are shared.**
+
+Detect the platform first, or ask the user if you cannot determine it:
+
+```bash
+node -e "console.log(process.platform)"   # darwin -> macOS, linux -> Linux, win32 -> Windows
+```
+
+> If detection is inconclusive, ask the user:
+> "What OS are you on — Windows, macOS, or Linux?"
+
+### Windows
+
+- Uses the **Task Scheduler** adapter. `win32` routes to `windows-task`
+  (never falls back to `linux-cron`).
+- **Requires Supabase/Postgres.** PGLite does not support a supervised
+  Minion worker on Windows — install returns a clear, actionable error.
+- Registers a user-level task (`VoltMind Autopilot`) that runs on logon
+  with `LeastPrivilege`, `IgnoreNew` concurrency, restart-on-failure
+  (1 min, up to 5 retries), and indefinite execution time.
+- **Administrator PowerShell is not required by default.** The task uses the
+  current user's `InteractiveToken` and `LeastPrivilege`; run the install from
+  a normal PowerShell window first. If Task Scheduler returns `Access is
+  denied`, a local policy blocks task registration, or the task service
+  requires elevation, stop and ask the user to open **PowerShell as
+  Administrator** and rerun the same install command themselves. Do not
+  silently self-elevate or ask the model to bypass the user's UAC decision.
+- The task action is plain `voltmind autopilot --repo <path>` — never
+  `--no-worker` and never `jobs work` (only the allowed topology
+  Task Scheduler → autopilot → supervised `jobs work`).
+- Optional `--runtime-env-file <path>` loads allowlisted runtime secrets
+  (Postgres/Supabase/provider keys) before engine init. Windows does NOT
+  read `.zshrc`/`.bashrc` and does NOT generate a bash wrapper.
+- Windows writes the Autopilot and supervised Minion stdout/stderr to the
+  combined live log `%USERPROFILE%\.voltmind\runtime\autopilot.log` while
+  preserving the native Task Scheduler → Autopilot → worker process tree. Tail
+  it with `Get-Content "$env:USERPROFILE\.voltmind\runtime\autopilot.log" -Wait`.
+- Recommended PowerShell install path:
+
+  ```powershell
+  voltmind apply-migrations --yes
+  voltmind autopilot --install --repo <path>
+  # Add --runtime-env-file <path> only when required secrets are not already
+  # available through the VoltMind config file.
+  ```
+
+  If `sync.repo_path` is already configured, omit `--repo <path>`. This is
+  the complete Windows install path: do not run `voltmind jobs work` as a
+  second scheduled task, do not add `--no-worker`, and do not use WSL or
+  PowerShell `Start-Job` as a substitute. The Task Scheduler task starts
+  autopilot, and autopilot starts and supervises the Postgres Minions worker.
+- Installation performs a readiness check after starting the task. Verify the
+  result with:
+
+  ```powershell
+  voltmind autopilot --status --json
+  voltmind jobs stats
+  ```
+
+  The expected state is `target: "windows-task"`, a registered/running
+  scheduler entry, `autopilot: running`, and a ready Postgres worker. A task
+  that is merely registered but has no ready worker is not a successful
+  installation.
+- Common Windows failures are actionable: a PGLite engine must be migrated to
+  Supabase/Postgres first; a missing runtime env file must be corrected with
+  `--runtime-env-file`; and a worker readiness failure should be diagnosed
+  through the autopilot log and Supabase connectivity. Never work around these
+  failures by switching to `--no-worker`, because that leaves dispatched jobs
+  unconsumed.
+- Runs after the user logs in. 24x7 across logoff/reboot is not currently
+  guaranteed; rely on the Task Scheduler logon trigger.
+- `voltmind autopilot --status --json` reports scheduler, autopilot,
+  worker, and database readiness. `voltmind autopilot --uninstall` stops
+  and deletes the task plus VoltMind-owned manifest/Task XML (never user
+  repo/config/env/Supabase data).
+
+### macOS
+
+- Keeps the **launchd** path (`~/Library/LaunchAgents/com.voltmind.autopilot.plist`).
+
+### Linux
+
+- Keeps the **systemd / ephemeral-container / cron** paths. A Linux brain
+  host uses the same `runAutopilot()` and `ChildWorkerSupervisor` and
+  consumes the same Supabase/Postgres queue — no Windows-specific manifest,
+  Task XML, or local paths enter the shared database.
+- On Ubuntu/Linux, run only `voltmind autopilot --install` and let runtime
+  detection choose `linux-systemd`, `ephemeral-container`, or `linux-cron`.
+  Never pass `--target windows-task` and never set
+  `VOLTMIND_AUTOPILOT_TARGET=windows-task`; the runtime rejects that target on
+  non-Windows hosts.
+
+### Install
+
+```bash
+voltmind apply-migrations --yes       # idempotent on healthy installs
+voltmind autopilot --install          # supervises itself + forks the Minions worker; env-aware
+```
+
+What `voltmind autopilot --install` does:
+
+- On **macOS**: writes a launchd plist at `~/Library/LaunchAgents/com.voltmind.autopilot.plist`.
+- On **Linux with systemd**: writes `~/.config/systemd/user/voltmind-autopilot.service`
+  with `Restart=on-failure`.
+- On **ephemeral containers** (Render / Railway / Fly / Docker): writes
+  `~/.voltmind/start-autopilot.sh` and prints the one-line your agent's
+  bootstrap should source to launch autopilot on every container start.
+  Auto-injects into OpenClaw's `hooks/bootstrap/ensure-services.sh` if
+  detected (use `--no-inject` to opt out).
+- On **Linux without systemd**: installs a crontab entry (every 5 min).
+- On **Windows**: registers a Task Scheduler entry (`windows-task`) and
+  starts it immediately.
+
+Autopilot then supervises the Minions worker as a child process. Users get
+sync + extract + embed + backlinks + durable Postgres-backed job processing
+from ONE install step. No separate `voltmind jobs work` daemon to manage.
+
+On PGLite, autopilot runs inline (PGLite's exclusive file lock blocks a
+separate worker process). On Windows, PGLite install is refused — configure
+Supabase/Postgres first. Everything else still works.
+
+If `minion_mode=off`, the install still registers autopilot but reports a
+**degraded** state (`autopilot: running, minion_worker: disabled_by_config,
+queue_consumption: unavailable`) — it never silently overrides user config.
+
+If `apply-migrations` prints "N host-specific items need your agent's
+attention," read `~/.voltmind/migrations/pending-host-work.jsonl` + walk
+`skills/migrations/v0.11.0.md` + `docs/guides/plugin-handlers.md` to
+register host-specific handlers. Re-run `apply-migrations` after each
+batch.
 
 ## Phase D: Brain-First Lookup Protocol
 
