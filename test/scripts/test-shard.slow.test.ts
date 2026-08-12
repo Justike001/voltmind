@@ -109,7 +109,7 @@ describe('test-shard.sh — exclusion contract', () => {
 describe('test-shard.sh — process isolation contract', () => {
   it('runs one test file per Bun process with bounded parallelism', () => {
     const script = readFileSync(SHARD_SH, 'utf8');
-    expect(script).toContain('VOLTMIND_TEST_FILE_CONCURRENCY:-4');
+    expect(script).toContain('VOLTMIND_TEST_FILE_CONCURRENCY:-2');
     expect(script).toContain('xargs -n 1 -P "$FILE_CONCURRENCY" bun test --timeout=60000');
   });
 });

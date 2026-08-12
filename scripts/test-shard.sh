@@ -112,7 +112,7 @@ fi
 # files race and makes results depend on the LPT packing. Keep bounded file-level
 # parallelism for wall-clock performance while preserving a hard isolation
 # boundary between files. xargs returns non-zero when any child test fails.
-FILE_CONCURRENCY="${VOLTMIND_TEST_FILE_CONCURRENCY:-4}"
+FILE_CONCURRENCY="${VOLTMIND_TEST_FILE_CONCURRENCY:-2}"
 if ! [[ "$FILE_CONCURRENCY" =~ ^[1-9][0-9]*$ ]]; then
   echo "error: VOLTMIND_TEST_FILE_CONCURRENCY must be a positive integer" >&2
   exit 2
