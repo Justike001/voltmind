@@ -193,10 +193,13 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
     `state/actions/*.md` pages from this ingest are durable, invoke
     `skills/schedule-actions/SKILL.md` in interview mode. Hand off the exact
     local file paths and action slugs; do not read a database or remote action
-    index first. That skill asks about one action per turn, persists the
-    user-confirmed execution contract and exact time, and registers the
-    ChatGPT desktop scheduled task. Do not schedule directly from the ingest
-    summary and do not treat extraction as execution consent.
+    index first. Ensure each action retains its raw `source_refs` even when the
+    semantic summary appears complete. That skill re-reads the locally preserved
+    Teams/Outlook evidence, enriches the action with omitted observed details
+    and citations, then asks about only the remaining gaps one action per turn.
+    It persists the user-confirmed execution contract and exact time and
+    registers the ChatGPT desktop scheduled task. Do not schedule directly from
+    the ingest summary and do not treat extraction as execution consent.
 
 ### Deferred clarification and semantic commit
 

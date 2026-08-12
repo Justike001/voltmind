@@ -17,7 +17,7 @@
     {
       "name": "schedule-actions",
       "path": "schedule-actions/SKILL.md",
-      "description": "Clarify each executable action, persist its execution contract and exact time, and register an idempotent ChatGPT desktop scheduled task."
+      "description": "Re-read local Teams/Outlook evidence to enrich each executable action, clarify only remaining gaps, persist its execution contract and exact time, and register an idempotent ChatGPT desktop scheduled task."
     },
     {
       "name": "query",

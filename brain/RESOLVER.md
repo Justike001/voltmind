@@ -48,7 +48,10 @@ execution-detail interview and ChatGPT desktop scheduling to
 `skills/schedule-actions/SKILL.md`. The action remains filed in `state/actions/`;
 the local Markdown is authoritative, and the skill owns clarification, schedule
 registration, and idempotent execution. Database/MCP action indexes are derived
-and must not be read before the local action file.
+and must not be read before the local action file. Before asking the user, resolve
+the action's cited raw source in `sources/...` for the default source or
+`.sources/<source-id>/sources/...` for a non-default source, recover omitted
+observed details, and write them back with exact citations.
 
 ## Common Tiebreakers
 

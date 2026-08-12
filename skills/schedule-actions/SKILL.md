@@ -1,6 +1,6 @@
 ---
 name: schedule-actions
-description: Clarify every executable VoltMind action with the user, persist an execution-ready contract and exact time, and register an idempotent ChatGPT desktop scheduled task. Use after ingest creates pages in state/actions/, when the user asks to schedule pending actions, or when a scheduled run wakes up to execute one action.
+description: Re-read locally preserved Teams/Outlook source evidence to enrich each executable VoltMind action, clarify only the remaining gaps with the user, persist an execution-ready contract and exact time, and register an idempotent ChatGPT desktop scheduled task. Use after ingest creates pages in state/actions/, when the user asks to schedule pending actions, or when a scheduled run wakes up to execute one action.
 ---
 
 # Schedule Actions
@@ -20,6 +20,10 @@ each user decision survives the choice-gate boundary.
   source. Read it before any database, VoltMind CLI action-index, or MCP call.
   A missing local Postgres database must never block action discovery,
   clarification, scheduling, or a scheduled run.
+- Before asking the user anything about an action, resolve and inspect every
+  locally available raw evidence page cited by the action. Recover omitted
+  execution details from evidence first and attach exact source citations to
+  every recovered fact.
 - Ask about every open action individually. Never infer consent for one action
   from the user's answer about another action.
 - Ask one question per turn, offer 2-4 self-explanatory choices including Skip
@@ -67,7 +71,64 @@ never use it ahead of the local Markdown.
 
 If there are no candidates, report that no action needs scheduling and stop.
 
-### 2. Confirm execution details
+### 2. Reconstruct details from local raw evidence
+
+Do this before the first `ask-user` gate for each action. Ingest may have lost
+details while producing semantic pages under context pressure; the preserved
+Teams/Outlook source pages are the recovery layer.
+
+1. Collect candidate source slugs from `source_refs`, `agent_contract.context_refs`,
+   top-level `context_refs`, and wiki links or `[Source: ...]` citations in the
+   action body. Keep only `sources/...` references and deduplicate them.
+2. Resolve each source reference against the local vault without using DB/MCP:
+   - An explicitly source-qualified reference such as `[source-id:slug]` maps
+     to `<brain>/.sources/<source-id>/<slug>.md`.
+   - For the default source, check `<brain>/<slug>.md`, for example
+     `<brain>/sources/teams/event-slug.md`.
+   - For an unqualified reference not found in the default source, search
+     `<brain>/.sources/*/<slug>.md`, for example
+     `<brain>/.sources/personal-justike-liu/sources/teams/event-slug.md`.
+   - Accept a non-default match only when it is unique. If multiple source IDs
+     contain the same slug, record an evidence-routing ambiguity; do not choose
+     by filename recency or query a database to guess.
+3. Read the full relevant source files. Search inside them using the action
+   title, named people, project, systems, filenames, and key nouns. Recover
+   concrete details such as the original requester/speaker, exact wording,
+   recipients/participants, shared file or attachment names, links, deadlines,
+   destinations, constraints, message IDs, and timestamps.
+4. Compare the recovered evidence with the existing action. Classify each
+   candidate as:
+   - `observed`: directly present in raw evidence and safe to add with citation;
+   - `inferred`: plausible but not stated; keep as an unresolved question;
+   - `conflicting`: disagrees with the action or another source; show the
+     conflict and ask the user rather than overwriting either claim.
+5. Before asking the user, update the local action Markdown with missing
+   `observed` details. Add them to the appropriate existing fields and to a
+   managed `## Evidence Recheck` section. Cite the exact local source slug and,
+   when available, the Teams/Outlook timestamp and message/event ID. Preserve
+   existing user-confirmed fields and never replace them with lower-authority
+   evidence.
+6. Recompute the missing-detail list after the write. Ask only about information
+   that remains missing, inferred, conflicting, permission-sensitive, or a real
+   user preference.
+
+Use this section format:
+
+```markdown
+## Evidence Recheck
+
+- <recovered execution detail> [Source: [[source-qualified-or-local-slug]],
+  Teams message <id>, <timestamp>]
+- **Still unresolved:** <only the remaining gaps>
+```
+
+If an action from client-authored ingest cites raw evidence that cannot be found
+in either local layout, do not claim the action is fully reconstructed. Record
+the missing source slug in `## Evidence Recheck` and ask a single locate/recover,
+reminder-only, or skip gate before requesting execution details. Remote MCP is
+an optional later recovery path, never the first lookup.
+
+### 3. Confirm execution details
 
 Read the full local action page first. Resolve cited source context from linked local
 Markdown when available; use DB/MCP only as optional gap-fill after the action is
@@ -117,7 +178,7 @@ Preserve existing fields not changed by the user. Record the user's confirmation
 with a dated source citation in the page body. Never store secrets, session
 tokens, or passwords in the page or scheduled prompt.
 
-### 3. Ask for the execution time
+### 4. Ask for the execution time
 
 Only after the details are confirmed, use a separate `ask-user` choice gate:
 
@@ -132,7 +193,7 @@ and an optional stop condition in one focused follow-up. Resolve relative dates
 against the current date and echo the normalized ISO-8601 time plus IANA
 timezone for confirmation. If the time is in the past, ask for a new time.
 
-### 4. Apply the safety gate
+### 5. Apply the safety gate
 
 Before registration, derive the narrowest safe execution posture:
 
@@ -149,7 +210,7 @@ Before registration, derive the narrowest safe execution posture:
 Do not use `--force` to bypass an action policy. Do not schedule an action whose
 runtime would wait for interactive stdin.
 
-### 5. Persist the schedule
+### 6. Persist the schedule
 
 Update the action page in UTF-8 and preserve unrelated content. Use this shape:
 
@@ -181,7 +242,7 @@ as a best-effort post-step and record `local_written_remote_pending` when it
 fails. Do not initialize local Postgres, rerun `voltmind actions scan`, or block
 Desktop schedule registration merely to refresh a derived database index.
 
-### 6. Register the Desktop scheduled task
+### 7. Register the Desktop scheduled task
 
 Use the currently surfaced ChatGPT/Codex automation-management tool. For a local
 VoltMind action:
@@ -216,7 +277,7 @@ For a one-shot task, configure native single-occurrence behavior when supported.
 If the surface cannot express a one-shot schedule, fail clearly instead of
 creating an endlessly recurring substitute.
 
-### 7. Continue the queue
+### 8. Continue the queue
 
 Report the action title, normalized next run, timezone, execution posture, and
 Desktop automation ID. Then start the next action by returning to the details
@@ -227,23 +288,27 @@ message.
 
 1. Resolve the local vault root and read exactly the Markdown file named by the
    action slug. Do this before any CLI, database, or MCP operation.
-2. Verify that status is executable, the current time is due, the automation ID
+2. Re-resolve the action's local raw evidence using the interview workflow's
+   source-layout rules. Incorporate newly available observed details with exact
+   citations, but block instead of asking interactively when a material conflict
+   or required detail remains.
+3. Verify that status is executable, the current time is due, the automation ID
    matches, and the Markdown receipt for the idempotency key has no successful
    run.
-3. Enforce `risk_level`, approval, `max_autonomy`, `allowed_tools`, and
+4. Enforce `risk_level`, approval, `max_autonomy`, `allowed_tools`, and
    `blocked_tools` from the Markdown contract, then execute the confirmed
    draft/artifact task with the currently available Desktop tools. Never widen
    the contract because a database or remote index is unavailable.
-4. Use the VoltMind action runtime or remote MCP adapter only when it is already
+5. Use the VoltMind action runtime or remote MCP adapter only when it is already
    reachable and useful for execution/writeback. It is an optional adapter, not
    the source of truth or a prerequisite. Never initialize a nonexistent local
    Postgres instance and never add `--force`.
-5. On success, atomically write the terminal status, outcome, artifact refs,
+6. On success, atomically write the terminal status, outcome, artifact refs,
    run timestamp, automation ID, and idempotency receipt back to the same local
    Markdown file. On a policy, credential, permission, or missing-context
    failure, write `blocked` and the exact reason. Best-effort remote sync happens
    only after the local receipt is durable.
-6. For one-shot actions, pause or complete the Desktop automation after a
+7. For one-shot actions, pause or complete the Desktop automation after a
    terminal result. For recurring actions, retain it only while the recurrence
    and stop condition remain valid.
 
@@ -268,6 +333,10 @@ artifact references, and whether the automation was completed, paused, or kept.
 
 - Asking about multiple actions or multiple decision gates in one message.
 - Scheduling from an ingest summary without reading each canonical action page.
+- Asking the user for a detail that is recoverable from cited local Teams or
+  Outlook evidence.
+- Copying an inferred or conflicting source interpretation into the action as
+  observed fact.
 - Reading the action database, local Postgres, or remote MCP before the local
   `state/actions/*.md` file.
 - Treating a due date as permission to execute or inventing missing details.
