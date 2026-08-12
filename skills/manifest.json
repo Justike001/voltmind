@@ -10,6 +10,11 @@
       "description": "Route content and tracking-aware evidence into VoltMind; client agents write canonical evidence and bound project/workstream state, then register revisions for server Dream maintenance."
     },
     {
+      "name": "clarification-review",
+      "path": "clarification-review/SKILL.md",
+      "description": "Persist, reconcile, and resolve ambiguous ingest signals before client-first semantic Markdown write-through."
+    },
+    {
       "name": "schedule-actions",
       "path": "schedule-actions/SKILL.md",
       "description": "Clarify each executable action, persist its execution contract and exact time, and register an idempotent ChatGPT desktop scheduled task."
@@ -288,11 +293,6 @@
       "name": "eiirp",
       "path": "eiirp/SKILL.md",
       "description": "Everything In Its Right Place — post-work organizer. 7-phase audit: inventory, taxonomy, schema check, file, skill graph audit, verify, report."
-    },
-    {
-      "name": "onboard-user",
-      "path": "onboard-user/SKILL.md",
-      "description": "Onboard a new user's personal knowledge base to the company VoltMind Host in one command: derive an isolated source from their company email, SSH-checkout their private Gogs repo, and mint a source-scoped thin-client credential (admin/Host-agent self-serve)."
     }
   ],
   "dependencies": {

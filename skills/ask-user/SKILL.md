@@ -25,6 +25,8 @@ priority: 50
 - The user's response triggers the next turn. Acknowledge briefly, then branch.
 - One question per message — never stack multiple choice gates.
 - Self-explanatory option labels: action verb plus brief qualifier, not "Option 1".
+- The calling workflow owns durable state. This skill does not persist pending
+  questions, answers, or resumable review sessions.
 
 ## What This Is
 
@@ -53,6 +55,9 @@ This is NOT a traditional async/await. In an LLM agent, "gating" means:
 - Low-stakes decisions → pick the best option and mention it
 - Time-critical operations where delay costs more than a wrong choice
 - When the user has already expressed a preference
+- Every ambiguous fragment in a batch ingest → persist and reconcile through
+  `skills/clarification-review/SKILL.md`; use this skill only when that workflow
+  selects one immediate or deferred-review question.
 
 ## How To Present Choices
 
@@ -212,6 +217,8 @@ This pattern is used by:
 - **brain-ops** — filing location decisions
 - **meeting-ingestion** — where to file meeting notes
 - **archive-crawler** — scan vs full ingestion gate
+- **clarification-review** — one-question session gate after durable candidate
+  capture, deduplication, and corpus reconciliation
 
 When building a new skill that needs user input at a decision point,
 reference this pattern rather than inventing a new one.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Clarification Review"
+  short_description: "Resolve ambiguous ingest signals before semantic write-through"
+  default_prompt: "Use $clarification-review to resolve pending ingest questions and write confirmed context through safely."
