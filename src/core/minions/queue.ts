@@ -263,13 +263,15 @@ export class MinionQueue {
         ? Math.max(1, Math.min(100, Math.floor(opts!.max_stalled as number)))
         : null;
 
-      const baseCols = `name, queue, status, priority, data, max_attempts, backoff_type,
+      const sourceIdRaw = data?.source_id ?? data?.sourceId;
+      const sourceId = typeof sourceIdRaw === 'string' && sourceIdRaw.length > 0 ? sourceIdRaw : null;
+      const baseCols = `name, queue, status, priority, data, source_id, max_attempts, backoff_type,
             backoff_delay, backoff_jitter, delay_until, parent_job_id, on_child_fail,
             depth, max_children, timeout_ms, remove_on_complete, remove_on_fail, idempotency_key,
             quiet_hours, stagger_key`;
-      const baseVals = `$1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20`;
+      const baseVals = `$1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21`;
       const cols = hasMaxStalled ? `${baseCols}, max_stalled` : baseCols;
-      const vals = hasMaxStalled ? `${baseVals}, $21` : baseVals;
+      const vals = hasMaxStalled ? `${baseVals}, $22` : baseVals;
 
       const insertSql = opts?.idempotency_key
         ? `INSERT INTO minion_jobs (${cols})
@@ -286,6 +288,7 @@ export class MinionQueue {
         childStatus,
         opts?.priority ?? 0,
         data ?? {},
+        sourceId,
         opts?.max_attempts ?? 3,
         opts?.backoff_type ?? 'exponential',
         opts?.backoff_delay ?? 1000,
@@ -349,6 +352,8 @@ export class MinionQueue {
     status?: MinionJobStatus;
     queue?: string;
     name?: string;
+    sourceId?: string;
+    beforeId?: number;
     limit?: number;
     offset?: number;
   }): Promise<MinionJob[]> {
@@ -368,13 +373,21 @@ export class MinionQueue {
       conditions.push(`name = $${idx++}`);
       params.push(opts.name);
     }
+    if (opts?.sourceId) {
+      conditions.push(`source_id = $${idx++}`);
+      params.push(opts.sourceId);
+    }
+    if (opts?.beforeId) {
+      conditions.push(`id < $${idx++}`);
+      params.push(opts.beforeId);
+    }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const limit = opts?.limit ?? 50;
     const offset = opts?.offset ?? 0;
 
     const rows = await this.engine.executeRaw<Record<string, unknown>>(
-      `SELECT * FROM minion_jobs ${where} ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx}`,
+      `SELECT * FROM minion_jobs ${where} ORDER BY id DESC LIMIT $${idx++} OFFSET $${idx}`,
       [...params, limit, offset]
     );
     return rows.map(rowToMinionJob);

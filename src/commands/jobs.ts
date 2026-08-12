@@ -1461,6 +1461,7 @@ export async function registerBuiltinHandlers(
     const report = await runCycle(engine, {
       brainDir: repoPath,
       pull,
+      dryRun: job.data.dryRun === true,
       signal: job.signal, // propagate abort so cycle bails on timeout/cancel
       ...(sourceId ? { sourceId } : {}),
       ...(requestedPhases && requestedPhases.length > 0 ? { phases: requestedPhases as any } : {}),

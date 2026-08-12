@@ -95,6 +95,10 @@ export async function runServe(
     const publicUrlIdx = args.indexOf('--public-url');
     const publicUrl = publicUrlIdx >= 0 ? args[publicUrlIdx + 1] : undefined;
 
+    const adminPublicUrlIdx = args.indexOf('--admin-public-url');
+    const adminPublicUrl = adminPublicUrlIdx >= 0 ? args[adminPublicUrlIdx + 1] : process.env.VOLTMIND_ADMIN_PUBLIC_URL;
+    const adminApiOnly = args.includes('--admin-api-only');
+
     // F8 escape hatch: --log-full-params writes raw payloads to mcp_request_log
     // and the admin SSE feed instead of redacted summaries. Off by default
     // (privacy-first); operators running voltmind on their own laptop can flip
@@ -125,6 +129,8 @@ export async function runServe(
       enableDcr,
       enableDcrInsecure,
       publicUrl,
+      adminPublicUrl,
+      adminApiOnly,
       logFullParams,
       bind,
       suppressBootstrapToken,

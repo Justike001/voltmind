@@ -5805,6 +5805,27 @@ export const MIGRATIONS: Migration[] = [
       return rows.length === 2 && rows.every(row => row.formatted_type.toLowerCase() === 'halfvec(2048)');
     },
   },
+  {
+    version: 122,
+    name: 'admin_api_v1_source_jobs_audit',
+    sql: `
+      ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS source_id TEXT;
+      UPDATE minion_jobs j
+         SET source_id = COALESCE(NULLIF(j.data->>'source_id', ''), NULLIF(j.data->>'sourceId', ''))
+       WHERE j.source_id IS NULL
+         AND EXISTS (SELECT 1 FROM sources s WHERE s.id = COALESCE(NULLIF(j.data->>'source_id', ''), NULLIF(j.data->>'sourceId', '')));
+      CREATE INDEX IF NOT EXISTS idx_minion_jobs_source_id ON minion_jobs (source_id, id DESC) WHERE source_id IS NOT NULL;
+      CREATE TABLE IF NOT EXISTS admin_audit_log (
+        id BIGSERIAL PRIMARY KEY, request_id TEXT NOT NULL, session_hash TEXT NOT NULL,
+        source_id TEXT REFERENCES sources(id) ON DELETE SET NULL, client_id TEXT, job_id INTEGER,
+        action TEXT NOT NULL, status TEXT NOT NULL, params_summary JSONB NOT NULL DEFAULT '{}',
+        ip TEXT, error_code TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_log (created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_source_created ON admin_audit_log (source_id, created_at DESC) WHERE source_id IS NOT NULL;
+    `,
+    idempotent: true,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS.length > 0

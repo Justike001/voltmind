@@ -916,6 +916,7 @@ CREATE TABLE IF NOT EXISTS minion_jobs (
   status           TEXT        NOT NULL DEFAULT 'waiting',
   priority         INTEGER     NOT NULL DEFAULT 0,
   data             JSONB       NOT NULL DEFAULT '{}',
+  source_id        TEXT,
   max_attempts     INTEGER     NOT NULL DEFAULT 3,
   attempts_made    INTEGER     NOT NULL DEFAULT 0,
   attempts_started INTEGER     NOT NULL DEFAULT 0,
@@ -966,6 +967,16 @@ CREATE INDEX IF NOT EXISTS idx_minion_jobs_parent ON minion_jobs(parent_job_id);
 CREATE INDEX IF NOT EXISTS idx_minion_jobs_timeout ON minion_jobs (timeout_at) WHERE status = 'active' AND timeout_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_minion_jobs_parent_status ON minion_jobs (parent_job_id, status) WHERE parent_job_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_minion_jobs_idempotency ON minion_jobs (idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_minion_jobs_source_id ON minion_jobs (source_id, id DESC) WHERE source_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id BIGSERIAL PRIMARY KEY, request_id TEXT NOT NULL, session_hash TEXT NOT NULL,
+  source_id TEXT REFERENCES sources(id) ON DELETE SET NULL, client_id TEXT, job_id INTEGER,
+  action TEXT NOT NULL, status TEXT NOT NULL, params_summary JSONB NOT NULL DEFAULT '{}',
+  ip TEXT, error_code TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_source_created ON admin_audit_log (source_id, created_at DESC) WHERE source_id IS NOT NULL;
 
 -- ============================================================
 -- VoltMind Actions: FS-canonical task index + DB-only run ledger

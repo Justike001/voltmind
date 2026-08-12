@@ -1,0 +1,77 @@
+openapi: 3.1.0
+info:
+  title: VoltMind Host Admin API
+  version: 1.0.0
+  description: Same-origin, cookie-authenticated Host management API. Secrets are returned only at creation/rotation.
+servers:
+  - url: /admin/api/v1
+components:
+  securitySchemes:
+    adminCookie:
+      type: apiKey
+      in: cookie
+      name: voltmind_admin
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-VoltMind-CSRF
+security:
+  - adminCookie: []
+paths:
+  /session:
+    get: { summary: Get session state and CSRF token }
+  /overview:
+    get: { summary: Get Host counts }
+  /autopilot:
+    get: { summary: Get redacted daemon runtime status }
+  /sources:
+    get: { summary: List SourceIDs }
+    post:
+      summary: Provision a source
+      security: [{ adminCookie: [], csrfToken: [] }]
+  /sources/{sourceId}:
+    get: { summary: Get source, repository, and OAuth binding state }
+  /sources/{sourceId}/archive:
+    post:
+      summary: Archive source and revoke its clients/tokens
+      security: [{ adminCookie: [], csrfToken: [] }]
+  /sources/{sourceId}/restore:
+    post:
+      summary: Restore source without restoring credentials
+      security: [{ adminCookie: [], csrfToken: [] }]
+  /sources/{sourceId}/gogs:
+    get: { summary: Get redacted Gogs/repository health }
+  /oauth-clients:
+    get: { summary: List OAuth clients }
+    post:
+      summary: Create a source-bound OAuth client
+      security: [{ adminCookie: [], csrfToken: [] }]
+  /oauth-clients/{clientId}/rotate:
+    post:
+      summary: Replace an OAuth client and show the new secret once
+      security: [{ adminCookie: [], csrfToken: [] }]
+  /oauth-clients/{clientId}/revoke:
+    post:
+      summary: Revoke an OAuth client and its tokens
+      security: [{ adminCookie: [], csrfToken: [] }]
+  /sources/{sourceId}/jobs:
+    get: { summary: List jobs projected to a SourceID }
+  /cycle-profiles:
+    get: { summary: List safe cycle profiles }
+  /sources/{sourceId}/cycles:
+    get: { summary: List Dream Cycles for a SourceID }
+    post:
+      summary: Submit sync_only, quick, dream, or a safe custom cycle
+      security: [{ adminCookie: [], csrfToken: [] }]
+  /jobs/{jobId}:
+    get: { summary: Get job details }
+  /jobs/{jobId}/cancel:
+    post:
+      summary: Cancel a live job
+      security: [{ adminCookie: [], csrfToken: [] }]
+  /jobs/{jobId}/retry:
+    post:
+      summary: Retry a failed/dead job
+      security: [{ adminCookie: [], csrfToken: [] }]
+  /audit:
+    get: { summary: Read the redacted admin audit log }

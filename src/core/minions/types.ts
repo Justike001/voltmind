@@ -39,6 +39,7 @@ export interface MinionJob {
   status: MinionJobStatus;
   priority: number;
   data: Record<string, unknown>;
+  source_id: string | null;
 
   // Retry
   max_attempts: number;
@@ -357,6 +358,7 @@ export function rowToMinionJob(row: Record<string, unknown>): MinionJob {
     status: row.status as MinionJobStatus,
     priority: row.priority as number,
     data: (typeof row.data === 'string' ? JSON.parse(row.data) : row.data ?? {}) as Record<string, unknown>,
+    source_id: (row.source_id as string) || null,
     max_attempts: row.max_attempts as number,
     attempts_made: row.attempts_made as number,
     attempts_started: row.attempts_started as number,

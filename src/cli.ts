@@ -2460,6 +2460,8 @@ MCP
   serve --http [--port N]            HTTP MCP server
     --enable-dcr                     Enable DCR; defaults to authorization_code
     --enable-dcr-insecure            Also allow DCR client_credentials
+    --admin-public-url URL            Windows-hosted Admin SPA public origin
+    --admin-api-only                 Disable embedded SPA; serve Admin APIs/auth only
   call <tool> '<json>'               Raw tool invocation
         tools: get_links, put_raw_data, get_raw_data
 

@@ -416,6 +416,10 @@ interface ServeHttpOptions {
    * issuer claim in tokens MUST match the discovery URL clients hit.
    */
   publicUrl?: string;
+  /** Public origin of the Windows-hosted Admin SPA. */
+  adminPublicUrl?: string;
+  /** Serve APIs/auth only; do not mount the embedded Admin SPA. */
+  adminApiOnly?: boolean;
   /**
    * When true, write raw request payloads to mcp_request_log + the admin SSE
    * feed. Default false: payloads are summarized via dispatch.summarizeMcpParams
@@ -869,7 +873,7 @@ export async function queryAgentClientSpend(engine: BrainEngine): Promise<AgentC
 }
 
 export async function runServeHttp(engine: BrainEngine, options: ServeHttpOptions) {
-  const { port, tokenTtl, enableDcr, enableDcrInsecure, publicUrl, logFullParams } = options;
+  const { port, tokenTtl, enableDcr, enableDcrInsecure, publicUrl, adminPublicUrl, logFullParams } = options;
   // v0.34.1 (#864, D11): default bind flipped from 0.0.0.0 to 127.0.0.1.
   // voltmind's primary use case is a personal-knowledge brain on a laptop;
   // the pre-v0.34 default exposed brains on every interface. Server
@@ -956,7 +960,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   let bootstrapFromEnv: boolean = resolved.fromEnv;
   const bootstrapHash = createHash('sha256').update(bootstrapToken).digest('hex');
   const suppressBootstrapPrint = options.suppressBootstrapToken === true;
-  const adminSessions = new Map<string, number>(); // sessionId → expiresAt
+  type AdminSession = { expiresAt: number; csrfToken: string };
+  const adminSessions = new Map<string, AdminSession>();
   const adminAutoLoginLocal = resolveAdminAutoLoginLocal(process.env.VOLTMIND_ADMIN_AUTO_LOGIN_LOCAL);
 
   // SSE clients for live activity feed
@@ -1215,6 +1220,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   // (RFC 8414 §3.3). Honor --public-url for production deployments behind
   // reverse proxies / tunnels; default to localhost for dev.
   const issuerUrl = new URL(publicUrl || `http://localhost:${port}`);
+  const adminUrl = new URL(adminPublicUrl || publicUrl || `http://localhost:${port}`);
 
   // F9: cookie `secure` flag honors both the request's TLS state (req.secure
   // is set when express trust-proxy lands an X-Forwarded-Proto: https) AND
@@ -1225,7 +1231,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   const adminCookie = (req: Request, maxAge: number) => ({
     httpOnly: true,
     sameSite: 'strict' as const,
-    secure: req.secure || issuerUrl.protocol === 'https:',
+    secure: req.secure || adminUrl.protocol === 'https:',
     maxAge,
     path: '/admin',
   });
@@ -1233,7 +1239,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   function issueAdminSession(req: Request, res: Response, maxAgeMs: number): string {
     const sessionId = randomBytes(32).toString('hex');
     const expiresAt = Date.now() + maxAgeMs;
-    adminSessions.set(sessionId, expiresAt);
+    adminSessions.set(sessionId, { expiresAt, csrfToken: randomBytes(32).toString('hex') });
     res.cookie('voltmind_admin', sessionId, adminCookie(req, maxAgeMs));
     (req.cookies as Record<string, string>).voltmind_admin = sessionId;
     return sessionId;
@@ -1242,8 +1248,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   function hasValidAdminSession(req: Request): boolean {
     const sessionId = (req.cookies as Record<string, string>)?.voltmind_admin;
     if (!sessionId || !adminSessions.has(sessionId)) return false;
-    const expiresAt = adminSessions.get(sessionId)!;
-    if (Date.now() > expiresAt) {
+    const session = adminSessions.get(sessionId)!;
+    if (Date.now() > session.expiresAt) {
       adminSessions.delete(sessionId);
       return false;
     }
@@ -1397,7 +1403,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     pruneExpiredNonces();
     const nonce = randomBytes(32).toString('hex');
     magicLinkNonces.set(nonce, Date.now() + NONCE_TTL_MS);
-    const baseUrl = publicUrl || `http://localhost:${port}`;
+    const baseUrl = adminUrl.origin;
     res.json({ url: `${baseUrl}/admin/auth/${nonce}`, expires_in: NONCE_TTL_MS / 1000 });
   });
 
@@ -1447,8 +1453,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       res.status(401).json({ error: 'Admin authentication required' });
       return;
     }
-    const expiresAt = adminSessions.get(sessionId)!;
-    if (Date.now() > expiresAt) {
+    const session = adminSessions.get(sessionId)!;
+    if (Date.now() > session.expiresAt) {
       adminSessions.delete(sessionId);
       res.status(401).json({ error: 'Session expired' });
       return;
@@ -1459,6 +1465,18 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   // ---------------------------------------------------------------------------
   // Admin API endpoints
   // ---------------------------------------------------------------------------
+  const { createAdminV1Router } = await import('./admin-v1.ts');
+  app.use('/admin/api/v1', createAdminV1Router({
+    engine, sql, oauthProvider, adminOrigin: adminUrl.origin,
+    getSession: (req) => {
+      const sessionId = (req.cookies as Record<string, string>)?.voltmind_admin;
+      const session = sessionId ? adminSessions.get(sessionId) : undefined;
+      return sessionId && session && Date.now() <= session.expiresAt
+        ? { sessionId, csrfToken: session.csrfToken, expiresAt: session.expiresAt }
+        : null;
+    },
+  }));
+
 
   // Sign-out-everywhere: nuke ALL active admin sessions in-memory. Every
   // browser/tab fails its next request, gets 401, redirects to login.
@@ -2327,7 +2345,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   const path = await import('path');
   const fs = await import('fs');
   const adminDistPath = path.join(process.cwd(), 'admin', 'dist');
-  const useDevPath = fs.existsSync(adminDistPath);
+  const useDevPath = fs.existsSync(adminDistPath) && options.adminApiOnly !== true;
   if (useDevPath) {
     app.use('/admin', express.static(adminDistPath));
     app.get('/admin/{*path}', (req: Request, res: Response, next: NextFunction) => {
@@ -2336,7 +2354,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       }
       res.sendFile(path.join(adminDistPath, 'index.html'));
     });
-  } else {
+  } else if (options.adminApiOnly !== true) {
     // Embedded path. Read assets from the generated manifest. Cache the
     // bytes per asset on first request — these never change for a given
     // binary, so subsequent requests skip the fs read.
