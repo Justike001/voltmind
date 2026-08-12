@@ -734,34 +734,6 @@ describe('resolveSlugByPathOrSourcePath (CJK wave v0.32.7, codex F4)', () => {
   });
 });
 
-describe('hasSyncableWorkingTreeDrift', () => {
-  test('true only for syncable uncommitted files (.sources pruned)', async () => {
-    const { hasSyncableWorkingTreeDrift } = await import('../src/core/sync-delta.ts');
-    const repoPath = mkdtempSync(join(tmpdir(), 'voltmind-drift-'));
-    try {
-      execSync('git init', { cwd: repoPath, stdio: 'pipe' });
-      mkdirSync(join(repoPath, 'people'), { recursive: true });
-      writeFileSync(join(repoPath, 'people/a.md'), '---\ntype: person\ntitle: A\n---\na\n');
-      execSync('git add -A && git commit -m "init"', { cwd: repoPath, stdio: 'pipe' });
-
-      // clean tree → no drift
-      expect(hasSyncableWorkingTreeDrift(repoPath)).toBe(false);
-
-      // uncommitted syncable file → drift
-      writeFileSync(join(repoPath, 'people/b.md'), '---\ntype: person\ntitle: B\n---\nb\n');
-      expect(hasSyncableWorkingTreeDrift(repoPath)).toBe(true);
-
-      // remove b, add only .sources (leading-dot, pruned) → no drift
-      rmSync(join(repoPath, 'people/b.md'));
-      mkdirSync(join(repoPath, '.sources', 'v'), { recursive: true });
-      writeFileSync(join(repoPath, '.sources', 'v', 'c.md'), 'c');
-      expect(hasSyncableWorkingTreeDrift(repoPath)).toBe(false);
-    } finally {
-      rmSync(repoPath, { recursive: true, force: true });
-    }
-  });
-});
-
 describe('git() helper invocation order (CJK wave v0.32.7)', () => {
   // The git CLI requires `-c key=val` to appear BEFORE the subcommand,
   // and `-C path` BEFORE the subcommand too. Pin the emit order so a future

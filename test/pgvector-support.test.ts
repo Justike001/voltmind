@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import type { BrainEngine } from '../src/core/engine.ts';
 import { assertPgvectorHalfvecSupport, pgvectorSupportsHalfvec } from '../src/core/pgvector-support.ts';
 
 describe('pgvector halfvec compatibility gate', () => {
+  test('Postgres fresh-init creates vector before running the halfvec preflight', () => {
+    const source = readFileSync(new URL('../src/core/postgres-engine.ts', import.meta.url), 'utf8');
+    const create = source.indexOf('CREATE EXTENSION IF NOT EXISTS vector');
+    const preflight = source.indexOf('assertPgvectorHalfvecSupport(this)');
+    expect(create).toBeGreaterThan(-1);
+    expect(preflight).toBeGreaterThan(create);
+  });
+
   test('accepts 0.7.0 and newer releases', () => {
     expect(pgvectorSupportsHalfvec('0.7.0')).toBe(true);
     expect(pgvectorSupportsHalfvec('0.8.1')).toBe(true);

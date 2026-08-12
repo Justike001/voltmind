@@ -30,8 +30,8 @@ describe('VoltMind CI and release contracts', () => {
       'serial',
       'heavy',
       'windows-adapter',
-      'tier1-postgres',
-      'tier2-runtime',
+      'tier1-thin-client',
+      'tier2-host-mcp',
       'test-status',
     ]));
     expect(jobs['test-status']?.needs).toEqual(expect.arrayContaining([
@@ -39,13 +39,19 @@ describe('VoltMind CI and release contracts', () => {
       'serial',
       'heavy',
       'windows-adapter',
-      'tier1-postgres',
-      'tier2-runtime',
+      'tier1-thin-client',
+      'tier2-host-mcp',
     ]));
 
     const text = rendered(ci);
     expect(text).toContain('test:e2e:tier1');
     expect(text).toContain('test:e2e:tier2');
+    expect(text).toContain('test:heavy:host');
+    expect(text).toContain('VOLTMIND_REMOTE_MCP_URL');
+    expect(text).toContain('VOLTMIND_REMOTE_CLIENT_SECRET');
+    expect(text).not.toContain('DATABASE_URL');
+    expect(text).not.toContain('pgvector/pgvector');
+    expect(text).not.toContain('services');
     expect(text).not.toContain('OPENAI_API_KEY');
     expect(text).not.toContain('ANTHROPIC_API_KEY');
     expect(text).not.toContain('openclaw@');

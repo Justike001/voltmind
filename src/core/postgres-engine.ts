@@ -227,8 +227,15 @@ export class PostgresEngine implements BrainEngine {
       ? await this.connectionManager.ddl()
       : this.sql;
 
+    // Fresh PostgreSQL databases do not have pgvector registered yet. The
+    // canonical schema used to create it as its first statement, but the
+    // halfvec preflight now runs before the schema replay. Provision the
+    // extension first so a clean install is distinguishable from an installed
+    // but outdated pgvector (<0.7). This is idempotent for existing brains.
+    await conn.unsafe('CREATE EXTENSION IF NOT EXISTS vector');
+
     // The canonical Postgres schema is Qwen/halfvec(2048). Refuse before any
-    // bootstrap or migration DDL if the managed pgvector extension cannot
+    // bootstrap or migration DDL if the installed pgvector extension cannot
     // create that type and its HNSW operator class.
     await assertPgvectorHalfvecSupport(this);
 

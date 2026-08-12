@@ -40,6 +40,7 @@ afterEach(() => {
 function configureVoyage(env: Record<string, string | undefined> = {}) {
   configureGateway({
     embedding_model: 'voyage:voyage-multimodal-3',
+    embedding_multimodal_model: 'voyage:voyage-multimodal-3',
     embedding_dimensions: 1024,
     env: { VOYAGE_API_KEY: 'test-key', ...env },
   });
@@ -116,54 +117,68 @@ describe('Voyage multimodal — text variant + inputType discipline', () => {
   });
 });
 
-describe('embedQueryMultimodal — text query path', () => {
-  test('returns 1024-dim Float32Array via Voyage query embed', async () => {
-    configureVoyage();
-    fetchHandler = async () => fakeResponse(1, 1024);
+function configureCanonicalQwen() {
+  configureGateway({
+    embedding_model: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
+    embedding_dimensions: 2048,
+    env: {},
+  });
+}
+
+function fakeQwenResponse(count = 1): Response {
+  return new Response(JSON.stringify({
+    embeddings: { float: Array.from({ length: count }, () => Array(2048).fill(0.1)) },
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
+describe('embedQueryMultimodal — canonical text query path', () => {
+  test('returns 2048-dim Float32Array via Qwen query embed', async () => {
+    configureCanonicalQwen();
+    fetchHandler = async () => fakeQwenResponse();
     const v = await embedQueryMultimodal('hackathon photos');
     expect(v).toBeInstanceOf(Float32Array);
-    expect(v.length).toBe(1024);
+    expect(v.length).toBe(2048);
   });
 
-  test('threads inputType="query" to the wire', async () => {
-    configureVoyage();
+  test('uses the symmetric Qwen wire shape without input_type', async () => {
+    configureCanonicalQwen();
     let capturedBody: any;
     fetchHandler = async (_url, init) => {
       capturedBody = JSON.parse(init.body as string);
-      return fakeResponse(1);
+      return fakeQwenResponse();
     };
     await embedQueryMultimodal('q');
-    expect(capturedBody.input_type).toBe('query');
+    expect(capturedBody.input_type).toBeUndefined();
     expect(capturedBody.inputs[0].content[0]).toEqual({ type: 'text', text: 'q' });
   });
 });
 
-describe('embedQueryMultimodalImage — image query path', () => {
-  test('returns 1024-dim Float32Array via Voyage image-query embed', async () => {
-    configureVoyage();
-    fetchHandler = async () => fakeResponse(1, 1024);
+describe('embedQueryMultimodalImage — canonical image query path', () => {
+  test('returns 2048-dim Float32Array via Qwen image-query embed', async () => {
+    configureCanonicalQwen();
+    fetchHandler = async () => fakeQwenResponse();
     const v = await embedQueryMultimodalImage({
       data: Buffer.from('fake').toString('base64'),
       mime: 'image/png',
     });
     expect(v).toBeInstanceOf(Float32Array);
-    expect(v.length).toBe(1024);
+    expect(v.length).toBe(2048);
   });
 
-  test('threads inputType="query" + image_base64 shape to the wire', async () => {
-    configureVoyage();
+  test('uses Qwen image_base64 shape without input_type', async () => {
+    configureCanonicalQwen();
     let capturedBody: any;
     fetchHandler = async (_url, init) => {
       capturedBody = JSON.parse(init.body as string);
-      return fakeResponse(1);
+      return fakeQwenResponse();
     };
     await embedQueryMultimodalImage({
       data: Buffer.from('xyz').toString('base64'),
       mime: 'image/webp',
     });
-    expect(capturedBody.input_type).toBe('query');
-    expect(capturedBody.inputs[0].content[0].type).toBe('image_base64');
-    expect(capturedBody.inputs[0].content[0].image_base64).toContain('data:image/webp;base64,');
+    expect(capturedBody.input_type).toBeUndefined();
+    expect(capturedBody.inputs[0].content[0].type).toBe('image_url');
+    expect(capturedBody.inputs[0].content[0].image_url.url).toContain('data:image/webp;base64,');
   });
 });
 

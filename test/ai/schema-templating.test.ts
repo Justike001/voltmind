@@ -22,7 +22,9 @@ describe('getPGLiteSchema', () => {
     expect(sql).toMatch(/'gemini-embedding-001'/);
     expect(sql).toMatch(/\('embedding_model', 'gemini-embedding-001'\)/);
     expect(sql).toMatch(/\('embedding_dimensions', '768'\)/);
-    expect(sql).not.toMatch(/halfvec\(2048\)/);
+    // Multimodal columns intentionally remain in the canonical 2048d Qwen
+    // space; only the configured text embedding column is templated.
+    expect(sql).not.toMatch(/\bembedding\s+halfvec\(2048\)/);
   });
 
   test('Voyage 1024d substitution', () => {
