@@ -959,6 +959,9 @@ CREATE TABLE IF NOT EXISTS minion_jobs (
   CONSTRAINT chk_timeout_positive CHECK (timeout_ms IS NULL OR timeout_ms > 0)
 );
 
+-- Existing brains may bootstrap this schema before migration v122 runs.
+ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS source_id TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_minion_jobs_claim ON minion_jobs (queue, priority ASC, created_at ASC) WHERE status = 'waiting';
 CREATE INDEX IF NOT EXISTS idx_minion_jobs_status ON minion_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_minion_jobs_stalled ON minion_jobs (lock_until) WHERE status = 'active';

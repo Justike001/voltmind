@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { MinionQueue } from '../src/core/minions/queue.ts';
 import { MIGRATIONS, LATEST_VERSION } from '../src/core/migrate.ts';
@@ -31,6 +32,16 @@ describe('Admin API v1 schema and queue projection', () => {
     expect(MIGRATIONS.find(m => m.version === 122)?.name).toBe('admin_api_v1_source_jobs_audit');
     const rows = await engine.executeRaw<{ count: number }>('SELECT count(*)::int count FROM admin_audit_log');
     expect(rows[0].count).toBe(0);
+  });
+
+  test('bootstrap adds the source projection before creating its index on existing brains', () => {
+    for (const path of ['src/schema.sql', 'src/core/pglite-schema.ts', 'src/core/schema-embedded.ts']) {
+      const schema = readFileSync(path, 'utf8');
+      const alter = schema.indexOf('ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS source_id TEXT');
+      const index = schema.indexOf('CREATE INDEX IF NOT EXISTS idx_minion_jobs_source_id');
+      expect(alter, path).toBeGreaterThan(-1);
+      expect(index, path).toBeGreaterThan(alter);
+    }
   });
 
   test('projects snake_case and camelCase job source IDs and filters on the column', async () => {
