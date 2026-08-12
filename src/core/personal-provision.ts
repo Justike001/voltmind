@@ -7,7 +7,7 @@
  * agent needs to connect to the Host's MCP server.
  *
  * Email → source contract:
- *   - `alice-example@company.example` → source id `personal-alice-<digest>`
+ *   - `alice-example@company.example` -> source id `personal-alice-<digest>`
  *   - one email always derives to exactly one source id (deterministic), so
  *     a re-provision can never create a second source for the same person.
  *
@@ -36,6 +36,10 @@ export const COMPANY_DOMAIN = process.env.VOLTMIND_COMPANY_DOMAIN || 'company.ex
  * reaching arbitrary internal hosts. Overridable via env.
  */
 export const GOGS_SSH_HOST = process.env.VOLTMIND_GOGS_SSH_HOST || 'gogs.internal.example';
+
+/** Gogs REST API base (for self-provision owner verification). */
+export const GOGS_API_URL =
+  process.env.VOLTMIND_GOGS_API_URL || `http://${GOGS_SSH_HOST}:3000/api/v1`;
 
 export interface NormalizedCompanyEmail {
   local: string;
@@ -151,6 +155,125 @@ export function sshHostOf(url: string): string | null {
 }
 
 /**
+ * Result of a Gogs-owner identity check.
+ */
+export interface GogsOwnerCheck {
+  ok: boolean;
+  /** Gogs login (username) of the token owner when ok. */
+  user?: string;
+  /** Machine code for the failure, e.g. 'gogs_token_invalid' | 'email_owner_mismatch' | 'repo_not_owned'. */
+  reason?: string;
+}
+export interface GogsRepoRef {
+  owner: string;
+  repo: string;
+}
+
+function gogsUserEmail(u: unknown): string {
+  const e = (u as Record<string, unknown>)?.email;
+  return typeof e === 'string' ? e.trim().toLowerCase() : '';
+}
+
+function gogsUserLogin(u: unknown): string {
+  const l = (u as Record<string, unknown>)?.login ?? (u as Record<string, unknown>)?.username;
+  return typeof l === 'string' ? l : '';
+}
+
+function normLocal(s: string): string {
+  return s.replace(/[._]+/g, '-').toLowerCase();
+}
+
+/**
+ * Parse every git URL form accepted by the self-provision path into the
+ * corresponding Gogs REST repository coordinates. Returning null is
+ * fail-closed: owner verification must never silently skip the repo check.
+ */
+export function gogsRepoRef(repoUrl: string): GogsRepoRef | null {
+  let path: string;
+  const scp = /^[^@/\s]+@[^:\s]+:(.+)$/.exec(repoUrl);
+  if (scp) {
+    path = scp[1];
+  } else {
+    try {
+      const parsed = new URL(repoUrl);
+      if (parsed.protocol !== 'ssh:' && parsed.protocol !== 'https:') return null;
+      path = decodeURIComponent(parsed.pathname).replace(/^\/+/, '');
+    } catch {
+      return null;
+    }
+  }
+
+  const parts = path.split('/').filter(Boolean);
+  if (parts.length !== 2) return null;
+  const owner = parts[0];
+  const repo = parts[1].replace(/\.git$/, '');
+  if (!owner || !repo) return null;
+  return { owner, repo };
+}
+
+/**
+ * Verify the caller (identified by a Gogs personal-access token) is the OWNER
+ * of the claimed company email AND can access the claimed repo. This is the
+ * anti-IDOR gate for self-service provisioning: a member can only claim their
+ * own personal KB.
+ *
+ * Checks:
+ *   1. token is valid → Gogs `GET /user`
+ *   2. token user's email == claimed email; login fallback is allowed only
+ *      when Gogs omits the email field
+ *   3. token user can read the repo → Gogs `GET /repos/{owner}/{repo}`
+ */
+export async function verifyGogsOwner(
+  email: string,
+  repoUrl: string,
+  gogsToken: string,
+  base: string = GOGS_API_URL,
+  fetchFn: typeof fetch = fetch,
+): Promise<GogsOwnerCheck> {
+  if (!gogsToken || typeof gogsToken !== 'string') {
+    return { ok: false, reason: 'gogs_token_required' };
+  }
+
+  let userRes: Response;
+  try {
+    userRes = await fetchFn(`${base}/user`, {
+      headers: { Authorization: `token ${gogsToken}` },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    return { ok: false, reason: 'gogs_unreachable' };
+  }
+  if (!userRes.ok) return { ok: false, reason: 'gogs_token_invalid' };
+  const user = await userRes.json().catch(() => null);
+  if (!user) return { ok: false, reason: 'gogs_token_invalid' };
+
+  const claimed = email.trim().toLowerCase();
+  const tokenEmail = gogsUserEmail(user);
+  const tokenLogin = gogsUserLogin(user);
+  const bound = tokenEmail !== ''
+    ? tokenEmail === claimed
+    : tokenLogin !== '' && normLocal(tokenLogin) === normLocal(claimed.split('@')[0]);
+  if (!bound) return { ok: false, reason: 'email_owner_mismatch' };
+
+  // Token user must actually be able to read the exact repo that the Host
+  // will clone. All accepted URL forms are parsed; an unrecognized form is a
+  // rejection rather than a skipped authorization check.
+  const repoRef = gogsRepoRef(repoUrl);
+  if (!repoRef) return { ok: false, reason: 'invalid_repo_url' };
+  try {
+    const repoRes = await fetchFn(`${base}/repos/${encodeURIComponent(repoRef.owner)}/${encodeURIComponent(repoRef.repo)}`, {
+      headers: { Authorization: `token ${gogsToken}` },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!repoRes.ok) return { ok: false, reason: 'repo_not_owned' };
+  } catch {
+    return { ok: false, reason: 'gogs_unreachable' };
+  }
+
+  return { ok: true, user: tokenLogin };
+}
+
+/**
  * Thrown when an SSH checkout targets a host other than the allowlisted
  * company Gogs server. Dedicated type so the MCP op can map it to a
  * structured OperationError (code: ssh_host_not_allowlisted) instead of a
@@ -161,6 +284,28 @@ export class SshHostNotAllowedError extends Error {
     super(message);
     this.name = 'SshHostNotAllowedError';
   }
+}
+
+/** Fail-closed ownership error for a normalized source-id collision. */
+export class SourceOwnerMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SourceOwnerMismatchError';
+  }
+}
+
+function ownerEmailFromConfig(config: unknown): string | null {
+  let parsed = config;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const owner = (parsed as Record<string, unknown>).owner_email;
+  return typeof owner === 'string' && owner.trim() !== '' ? owner.trim().toLowerCase() : null;
 }
 
 /**
@@ -215,6 +360,19 @@ export async function provisionPersonalSource(
     [sourceId],
   );
 
+  // Source ids predate self-service and intentionally normalize dots and
+  // underscores. Two distinct valid emails can therefore derive the same id.
+  // Before minting any credential for an existing source, bind it back to the
+  // recorded owner email and reject collisions (or unverifiable legacy rows).
+  if (existing.length > 0) {
+    const recordedOwner = ownerEmailFromConfig(existing[0].config);
+    if (recordedOwner !== email) {
+      throw new SourceOwnerMismatchError(
+        "Source " + sourceId + " belongs to a different or unverifiable owner; refusing to mint credentials.",
+      );
+    }
+  }
+
   // Backward compatibility for sources created before collision-resistant
   // ids shipped. Reuse the legacy id only when its persisted owner matches
   // exactly; never infer ownership from the lossy slug itself.
@@ -222,7 +380,7 @@ export async function provisionPersonalSource(
     const legacySourceId = deriveLegacySourceIdFromEmail(email);
     if (legacySourceId && legacySourceId !== sourceId) {
       const legacy = await engine.executeRaw<{ id: string; config: unknown }>(
-        'SELECT id, config FROM sources WHERE id = $1',
+        "SELECT id, config FROM sources WHERE id = $1",
         [legacySourceId],
       );
       if (legacy[0] && sourceOwnerEmail(legacy[0].config) === email) {

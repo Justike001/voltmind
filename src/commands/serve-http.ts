@@ -2386,6 +2386,138 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     res.status(405).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null });
   });
 
+  // ── Self-service personal-KB claim (design 1) ────────────────────────────
+  // Lets a user's agent claim their OWN personal knowledge base without admin
+  // in the loop: prove a company email + a repo that really exists in the
+  // company Gogs (the checkout/clone is the reachability proof), and the Host
+  // provisions an isolated source sharding + a source-scoped thin-client
+  // credential. Minted credential is read/write on ONLY that user's source.
+  //
+  // Threat note: unauthenticated by design (any company-Gogs insider can claim
+  // a company email). Do NOT mint admin here — only the scoped personal
+  // credential. Rate-limited per IP; every request is audited.
+  async function auditSelfProvision(
+    status: 'success' | 'error',
+    ip: string,
+    details: Record<string, unknown>,
+    errorMessage?: string,
+    sourceId?: string,
+  ): Promise<void> {
+    try {
+      await executeRawJsonb(
+        engine,
+        `INSERT INTO mcp_request_log (operation, status, error_message, source_id, params)
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        ['self_provision', status, errorMessage ?? null, sourceId ?? null],
+        [{ ip, ...details }],
+      );
+    } catch { /* best-effort audit must not change the HTTP result */ }
+  }
+
+  const selfProvisionRateLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: async (req: Request, res: Response) => {
+      const ip = req.ip ?? 'unknown';
+      await auditSelfProvision('error', ip, { code: 'rate_limited' }, 'rate_limited');
+      res.status(429).json({
+        error: { code: 'rate_limited', message: 'Too many self-provision requests. Try again in a minute.' },
+      });
+    },
+  });
+  const selfProvisionJson = express.json();
+  const parseSelfProvisionJson = (req: Request, res: Response, next: NextFunction): void => {
+    selfProvisionJson(req, res, (error?: unknown) => {
+      if (!error) {
+        next();
+        return;
+      }
+      const ip = req.ip ?? 'unknown';
+      void auditSelfProvision('error', ip, { code: 'invalid_json' }, 'invalid_json')
+        .finally(() => {
+          res.status(400).json({ error: { code: 'invalid_json', message: 'Request body must be valid JSON.' } });
+        });
+    });
+  };
+
+  app.post('/provision/request', selfProvisionRateLimiter, parseSelfProvisionJson, async (req: Request, res: Response) => {
+    // Self-provision is OFF by default — an explicit operator action enables it
+    // (voltmind config set mcp.self_provision true  OR  VOLTMIND_SELF_PROVISION=1).
+    // When off, return 404 so the endpoint is not even discoverable/enumerable
+    // (no public credential-minting surface unless the operator opts in).
+    const ip = req.ip ?? 'unknown';
+    let enabled = process.env.VOLTMIND_SELF_PROVISION === '1';
+    if (!enabled) {
+      try {
+        enabled = (await engine.getConfig('mcp.self_provision')) === 'true';
+      } catch { /* config read best-effort; stays disabled on ambiguity */ }
+    }
+    if (!enabled) {
+      await auditSelfProvision('error', ip, { code: 'not_found' }, 'self_provision_disabled');
+      res.status(404).json({ error: { code: 'not_found', message: 'Not found' } });
+      return;
+    }
+    const { email, repo_url, gogs_token } = (req.body ?? {}) as Record<string, unknown>;
+    const { provisionPersonalSource, normalizeCompanyEmail, assertSshHostAllowed, verifyGogsOwner, SshHostNotAllowedError, SourceOwnerMismatchError } =
+      await import('../core/personal-provision.ts');
+    try {
+      if (typeof email !== 'string' || typeof repo_url !== 'string') {
+        await auditSelfProvision('error', ip, { code: 'invalid_params' }, 'invalid_params');
+        res.status(400).json({ error: { code: 'invalid_params', message: 'email and repo_url (strings) are required' } });
+        return;
+      }
+      normalizeCompanyEmail(email); // throws on non-company domain / malformed
+      const isSsh = repo_url.startsWith('ssh://') || /^[^@/\s]+@[^:\s]+:/.test(repo_url);
+      if (isSsh) assertSshHostAllowed(repo_url); // confine the Host key to the company Gogs
+      if (typeof gogs_token !== 'string') {
+        await auditSelfProvision('error', ip, { code: 'gogs_token_required', email }, 'gogs_token_required');
+        res.status(400).json({ error: { code: 'gogs_token_required', message: 'gogs_token is required to prove you own this email/ repo.' } });
+        return;
+      }
+      // ANTI-IDOR GATE: the caller must own the claimed email AND be able to
+      // read the exact repo URL the Host will clone.
+      const owner = await verifyGogsOwner(email, repo_url, gogs_token);
+      if (!owner.ok) {
+        const code = owner.reason ?? 'ownership_check_failed';
+        await auditSelfProvision('error', ip, { code, email }, code);
+        res.status(code === 'invalid_repo_url' ? 400 : 403).json({
+          error: { code, message: `Gogs owner check failed: ${code}` },
+        });
+        return;
+      }
+      const result = await provisionPersonalSource(engine, sql, {
+        email,
+        repoUrl: repo_url,
+        allowSsh: isSsh,
+      });
+      await auditSelfProvision(
+        'success',
+        ip,
+        { email, gogs_user: owner.user, already: result.alreadyProvisioned },
+        undefined,
+        result.source_id,
+      );
+      res.json({
+        source_id: result.source_id,
+        already_provisioned: result.alreadyProvisioned,
+        clone_path: result.clone_path,
+        owner_email: result.owner_email,
+        client_id: result.client_id,
+        client_secret: result.client_secret,
+      });
+    } catch (e) {
+      const code = e instanceof SshHostNotAllowedError ? 'ssh_host_not_allowlisted'
+        : e instanceof SourceOwnerMismatchError ? 'source_owner_mismatch'
+        : e instanceof Error && /clone_failed|not found|repository|does not exist|could not read/i.test(e.message) ? 'repo_unreachable'
+        : 'invalid_request';
+      const message = e instanceof Error ? e.message : String(e);
+      await auditSelfProvision('error', ip, { code, email: typeof email === 'string' ? email : undefined }, message);
+      res.status(code === 'source_owner_mismatch' ? 409 : 400).json({ error: { code, message, ip } });
+    }
+  });
+
   app.post('/mcp', requireBearerAuth({ verifier: oauthProvider }), async (req: Request, res: Response) => {
     const startTime = Date.now();
     const authInfo = (req as any).auth as AuthInfo;
