@@ -3323,6 +3323,7 @@ const register_tracking_evidence: Operation = {
     tracking_refs: { type: 'array', items: { type: 'object' }, description: 'Provider-owned tracking references used by the client.' },
     client_outcome: { type: 'string', required: true, enum: ['applied', 'created', 'review_needed', 'no_signal', 'partial'], description: 'What the client agent actually did.' },
     affected_pages: { type: 'array', items: { type: 'string' }, description: 'Project/workstream/state pages the client actually changed or created.' },
+    action_assignments: { type: 'array', items: { type: 'object' }, description: 'Structured action-to-assignee projections preserved from source evidence. Required for each affected state/actions page before semantic completion.' },
   },
   mutating: true,
   scope: 'write',
@@ -3337,6 +3338,7 @@ const register_tracking_evidence: Operation = {
         tracking_refs: p.tracking_refs as TrackingReference[] | undefined,
         client_outcome: p.client_outcome as 'applied' | 'created' | 'review_needed' | 'no_signal' | 'partial',
         affected_pages: Array.isArray(p.affected_pages) ? p.affected_pages as string[] : [],
+        action_assignments: Array.isArray(p.action_assignments) ? p.action_assignments as import('./ingestion/action-assignees.ts').ActionAssigneeProjection[] : [],
       });
     } catch (error) {
       throw new OperationError('invalid_params', error instanceof Error ? error.message : String(error));

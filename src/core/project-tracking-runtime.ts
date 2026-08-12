@@ -14,6 +14,10 @@ import {
 import { MinionQueue } from './minions/queue.ts';
 import { resolveSourceEvidenceDirectory, routeSourceEvidenceSlug } from './source-routing.ts';
 import { computeFileRefsProjectionHash, computeSourcePayloadHash } from './tracking-hashes.ts';
+import {
+  validateActionAssigneeCoverage,
+  type ActionAssigneeProjection,
+} from './ingestion/action-assignees.ts';
 
 export interface TrackingQueue {
   add(
@@ -56,6 +60,7 @@ export interface RegisterTrackingEvidenceInput {
   tracking_refs?: TrackingReference[];
   client_outcome: TrackingClientOutcome;
   affected_pages?: string[];
+  action_assignments?: ActionAssigneeProjection[];
 }
 
 function pageRenderHash(page: { content_hash?: string; compiled_truth: string; timeline: string }): string {
@@ -128,6 +133,21 @@ export async function registerTrackingEvidence(
       throw new Error(`affected page has an unsupported type: ${slug}`);
     }
   }
+  if (input.action_assignments !== undefined
+    && (!Array.isArray(input.action_assignments) || input.action_assignments.length > 100)) {
+    throw new Error('action_assignments must be an array with at most 100 entries');
+  }
+  const actionAssignments = input.action_assignments ?? [];
+  const assigneeFindings = await validateActionAssigneeCoverage(
+    engine,
+    sourceId,
+    affectedPages,
+    actionAssignments,
+  );
+  const semanticReviewRequired = assigneeFindings.length > 0
+    || input.client_outcome === 'review_needed'
+    || input.client_outcome === 'partial';
+  const effectiveClientOutcome: TrackingClientOutcome = semanticReviewRequired ? 'review_needed' : input.client_outcome;
   const renderHash = pageRenderHash(evidencePage);
   const sourcePayloadHash = evidencePage.source_payload_hash ?? null;
   const fileRefsProjectionHash = pageFileRefsHash(evidencePage);
@@ -149,8 +169,8 @@ export async function registerTrackingEvidence(
   const sameRevision = !!prior && sameVersion && (sourceEqual || legacyEqual)
     && priorRenderHash === renderHash && prior.file_refs_projection_hash === fileRefsProjectionHash;
   const recovered = sameRevision && prior?.outcome !== 'registered' && prior?.outcome !== 'verified';
-  if (sameRevision && !recovered) {
-    return { status: 'duplicate', source_id: sourceId, evidence_slug: evidenceSlug, content_hash: renderHash, source_payload_hash: sourcePayloadHash };
+  if (sameRevision && !recovered && !semanticReviewRequired) {
+    return { status: 'duplicate', semantic_status: 'complete', source_id: sourceId, evidence_slug: evidenceSlug, content_hash: renderHash, source_payload_hash: sourcePayloadHash };
   }
   const projectionChanged = !!prior && sameVersion && (sourceEqual || legacyEqual)
     && (priorRenderHash !== renderHash || prior.file_refs_projection_hash !== fileRefsProjectionHash);
@@ -159,13 +179,21 @@ export async function registerTrackingEvidence(
   const conflict = sourceRevisionConflict || unknownWithoutSnapshot;
   const conflictKind = sourceRevisionConflict ? 'source_revision_conflict' : unknownWithoutSnapshot ? 'unknown_without_snapshot' : null;
   const supersedes = priorRenderHash && priorRenderHash !== renderHash ? priorRenderHash : null;
-  const outcome = conflict ? 'conflict' : (prior && !projectionChanged && !recovered ? prior.outcome : 'registered');
+  const outcome = conflict
+    ? 'conflict'
+    : semanticReviewRequired
+      ? 'review_needed'
+      : (prior && !projectionChanged && !recovered ? prior.outcome : 'registered');
   const snapshotKind = projectionChanged ? 'file_ref_projection' : prior && sameVersion ? 'client_semantic_update' : 'source_ingest';
   const details = JSON.stringify({
     evidence_type: input.evidence_type,
     tracking_refs: input.tracking_refs ?? [],
-    client_outcome: input.client_outcome,
+    client_outcome: effectiveClientOutcome,
+    requested_client_outcome: input.client_outcome,
+    semantic_status: semanticReviewRequired ? 'review_required' : 'complete',
     affected_pages: affectedPages,
+    action_assignments: actionAssignments,
+    assignee_coverage_findings: assigneeFindings,
     registration: outcome,
     hash_scheme: sourcePayloadHash ? 'v2' : 'legacy',
     ...(recovered ? { recovered_from: prior?.outcome ?? 'pending' } : {}),
@@ -235,6 +263,8 @@ export async function registerTrackingEvidence(
   );
   return {
     status: outcome,
+    semantic_status: semanticReviewRequired ? 'review_required' : 'complete',
+    assignee_coverage_findings: assigneeFindings,
     source_id: sourceId,
     evidence_slug: evidenceSlug,
     content_hash: renderHash,
