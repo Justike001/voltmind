@@ -83,6 +83,7 @@ export const BRAIN_CHECK_NAMES: ReadonlySet<string> = new Set([
   'graph_coverage',
   'graph_signals_coverage',
   'image_assets',
+  'ingestion_health',
   'integrity',
   'jsonb_integrity',
   'markdown_body_completeness',
