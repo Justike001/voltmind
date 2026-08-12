@@ -1,175 +1,243 @@
-const BASE = '';
+export type ApiResponse<T> = {
+  data: T;
+  meta: { request_id: string; next_cursor?: string | null };
+};
 
-// v0.26.3 trust model (D11 + D12): the admin UI does NOT cache the
-// bootstrap token in browser JS state. On 401, redirect to login —
-// no auto-reauth via saved token, no localStorage/sessionStorage read.
-// The HttpOnly cookie set by /admin/login is the only session credential.
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-  });
-  if (res.status === 401) {
-    // No token cache to retry from. Redirect to login.
-    window.location.hash = '#login';
-    throw new Error('Unauthorized');
+export type ApiErrorBody = {
+  error?: { code?: string; message?: string; details?: unknown };
+  request_id?: string;
+};
+
+export class AdminApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+    public readonly requestId?: string,
+    public readonly details?: unknown,
+  ) {
+    super(message);
+    this.name = 'AdminApiError';
   }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
-  }
-  return res.json();
 }
 
-// v0.36.1.0 (T15 / E6) — SVG fetch (text/plain payload, NOT JSON).
-async function apiFetchText(path: string) {
-  const res = await fetch(`${BASE}${path}`, { credentials: 'same-origin' });
-  if (res.status === 401) {
-    window.location.hash = '#login';
-    throw new Error('Unauthorized');
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.text();
+export interface SessionState {
+  authenticated: boolean;
+  csrf_token: string;
+  expires_at: string;
 }
+
+export interface SourceSummary {
+  id: string;
+  name: string;
+  archived: boolean;
+  archived_at: string | null;
+  archive_expires_at: string | null;
+  last_sync_at: string | null;
+  last_commit: string | null;
+  federated: boolean;
+  owner_email: string | null;
+  page_count: number;
+  oauth_client_count: number;
+}
+
+export interface OAuthClient {
+  client_id: string;
+  client_name: string;
+  source_id: string;
+  federated_read: string[];
+  grant_types: string[];
+  scope: string;
+  token_endpoint_auth_method: string;
+  created_at: string;
+  deleted_at: string | null;
+}
+
+export interface SourceDetail {
+  id?: string;
+  source_id?: string;
+  name?: string;
+  archived?: boolean;
+  federated?: boolean;
+  page_count?: number;
+  clone_state?: string;
+  last_sync_at?: string | null;
+  last_commit?: string | null;
+  remote_url?: string | null;
+  oauth_clients: OAuthClient[];
+  [key: string]: unknown;
+}
+
+export interface GogsStatus {
+  source_id: string;
+  configured: boolean;
+  repository_host: string | null;
+  repository_owner: string | null;
+  repository_name: string | null;
+  api_state: 'unconfigured' | 'healthy' | 'unreachable' | 'denied';
+  clone_state: string;
+  last_sync_at: string | null;
+  last_commit: string | null;
+}
+
+export interface AdminJob {
+  id: number;
+  source_id: string | null;
+  name: string;
+  queue: string;
+  status: string;
+  priority: number;
+  attempts_made: number;
+  max_attempts: number;
+  progress: unknown;
+  result: Record<string, unknown> | null;
+  error_text: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string;
+}
+
+export interface AutopilotStatus {
+  configured: boolean;
+  state: 'starting' | 'running' | 'degraded' | 'stopping' | 'failed' | 'stopped_or_unknown';
+  engine?: 'postgres' | 'pglite';
+  started_at?: string;
+  updated_at?: string;
+  heartbeat_at?: string;
+  heartbeat_stale?: boolean;
+  database?: { state: string; last_connected_at?: string };
+  supervisor?: { state: string; worker_expected: boolean; restart_count: number };
+}
+
+export interface Overview {
+  sources: { total: number; archived: number };
+  oauth_clients: { active: number; revoked: number };
+  jobs: { open: number; failed: number };
+}
+
+export interface AuditEntry {
+  id: number;
+  request_id: string;
+  source_id: string | null;
+  client_id: string | null;
+  job_id: number | null;
+  action: string;
+  status: 'ok' | 'error';
+  params_summary: { body_keys?: string[]; duration_ms?: number };
+  error_code: string | null;
+  created_at: string;
+}
+
+export interface SecretResult {
+  client_id: string;
+  client_secret?: string;
+  source_id?: string;
+  replaced_client_id?: string;
+  secret_shown_once: boolean;
+}
+
+let csrfToken: string | null = null;
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler;
+}
+
+export function clearSessionMemory() {
+  csrfToken = null;
+}
+
+async function parseError(response: Response): Promise<AdminApiError> {
+  const body = await response.json().catch(() => ({})) as ApiErrorBody;
+  return new AdminApiError(
+    response.status,
+    body.error?.code ?? `http_${response.status}`,
+    body.error?.message ?? response.statusText ?? `HTTP ${response.status}`,
+    body.request_id ?? response.headers.get('X-Request-ID') ?? undefined,
+    body.error?.details,
+  );
+}
+
+async function requestSession(): Promise<ApiResponse<SessionState>> {
+  const response = await fetch('/admin/api/v1/session', { credentials: 'same-origin' });
+  if (!response.ok) throw await parseError(response);
+  const body = await response.json() as ApiResponse<SessionState>;
+  csrfToken = body.data.csrf_token;
+  return body;
+}
+
+export async function adminFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  csrfRetry = true,
+): Promise<ApiResponse<T>> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  const mutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+  const headers = new Headers(init.headers);
+  if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (mutation && csrfToken) headers.set('X-VoltMind-CSRF', csrfToken);
+
+  const response = await fetch(path, { ...init, method, credentials: 'same-origin', headers });
+  if (response.ok) return response.json() as Promise<ApiResponse<T>>;
+
+  const error = await parseError(response);
+  if (error.status === 401) {
+    clearSessionMemory();
+    unauthorizedHandler?.();
+  } else if (error.status === 403 && error.code === 'csrf_failed' && mutation && csrfRetry) {
+    try {
+      await requestSession();
+      return adminFetch<T>(path, init, false);
+    } catch (sessionError) {
+      clearSessionMemory();
+      unauthorizedHandler?.();
+      throw sessionError;
+    }
+  }
+  throw error;
+}
+
+const enc = encodeURIComponent;
 
 export const api = {
-  login: (token: string) => apiFetch('/admin/login', { method: 'POST', body: JSON.stringify({ token }) }),
-  signOutEverywhere: () => apiFetch('/admin/api/sign-out-everywhere', { method: 'POST' }),
-  stats: () => apiFetch('/admin/api/stats'),
-  fullStats: () => apiFetch('/admin/api/full-stats'),
-  health: () => apiFetch('/admin/api/health-indicators'),
-  agents: () => apiFetch('/admin/api/agents'),
-  requests: (page = 1, qs = '') => apiFetch(`/admin/api/requests?page=${page}${qs}`),
-  apiKeys: () => apiFetch('/admin/api/api-keys'),
-  createApiKey: (name: string) => apiFetch('/admin/api/api-keys', { method: 'POST', body: JSON.stringify({ name }) }),
-  revokeApiKey: (name: string) => apiFetch('/admin/api/api-keys/revoke', { method: 'POST', body: JSON.stringify({ name }) }),
-  updateClientTtl: (clientId: string, tokenTtl: number | null) => apiFetch('/admin/api/update-client-ttl', { method: 'POST', body: JSON.stringify({ clientId, tokenTtl }) }),
-  revokeClient: (clientId: string) => apiFetch('/admin/api/revoke-client', { method: 'POST', body: JSON.stringify({ clientId }) }),
-  // v0.36.1.0 (T15 / E6) — calibration endpoints.
-  calibrationProfile: (holder?: string) =>
-    apiFetch(`/admin/api/calibration/profile${holder ? `?holder=${encodeURIComponent(holder)}` : ''}`),
-  calibrationChart: (type: string, holder?: string) =>
-    apiFetchText(`/admin/api/calibration/charts/${encodeURIComponent(type)}${holder ? `?holder=${encodeURIComponent(holder)}` : ''}`),
-  // v0.41 D2 — live minion-jobs dashboard snapshot.
-  jobsWatch: () => apiFetch('/admin/api/jobs/watch'),
-  archivedActions: () => apiFetch('/admin/api/actions/archive?limit=100&all_sources=1'),
-  actionsScan: (repo?: string) => apiFetch('/admin/api/actions/scan', { method: 'POST', body: JSON.stringify(repo ? { repo } : {}) }),
-  actions: (qs = '') => apiFetch(`/admin/api/actions${qs}`),
-  actionRuns: (slug: string, sourceId = 'default') =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/runs?source_id=${encodeURIComponent(sourceId)}`),
-  actionRunStatus: (runId: number) =>
-    apiFetch(`/admin/api/action-runs/${encodeURIComponent(String(runId))}`),
-  approveAction: (slug: string, sourceId = 'default') =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/approve`, {
+  async login(token: string) {
+    const response = await fetch('/admin/login', {
       method: 'POST',
-      body: JSON.stringify({ source_id: sourceId, approved_by: 'admin-ui' }),
-    }),
-  runAction: (
-    slug: string,
-    sourceId = 'default',
-    options: string | {
-      userPrompt?: string;
-      execute?: boolean;
-      interactive?: boolean;
-      confirmed?: boolean;
-      force?: boolean;
-      dryRun?: boolean;
-    } = '',
-  ) => {
-    const body = typeof options === 'string'
-      ? { source_id: sourceId, now: true, user_prompt: options }
-      : {
-          source_id: sourceId,
-          now: true,
-          user_prompt: options.userPrompt || '',
-          execute: options.execute === true,
-          interactive: options.interactive === true,
-          confirmed: options.confirmed === true,
-          force: options.force === true,
-          dry_run: options.dryRun === true,
-        };
-    return apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/run`, {
-      method: 'POST',
-      body: JSON.stringify(body),
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
     });
+    if (!response.ok) throw await parseError(response);
+    return response.json() as Promise<{ status: string }>;
   },
-  listAvailableToolPlugins: () => apiFetch('/admin/api/plugins/available-tool-plugins', { method: 'POST', body: '{}' }),
-
-  regenerateActionToolRoute: (slug: string, sourceId = 'default', pluginProviders?: readonly string[], includeAllPlugins = false) =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/tool-route`, {
-      method: 'POST',
-      body: JSON.stringify({
-        source_id: sourceId,
-        plugin_providers: pluginProviders && pluginProviders.length ? pluginProviders : undefined,
-        include_all_plugins: includeAllPlugins,
-      }),
-    }),
-  saveActionToolRoute: (
-    slug: string,
-    sourceId = 'default',
-    route: { selectedPlugins: string[]; selectedTools: string[]; blockedTools: string[]; notes?: string },
-  ) =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/tool-route/save`, {
-      method: 'POST',
-      body: JSON.stringify({
-        source_id: sourceId,
-        selected_plugins: route.selectedPlugins,
-        selected_tools: route.selectedTools,
-        blocked_tools: route.blockedTools,
-        notes: route.notes,
-      }),
-    }),
-  saveActionPlan: (slug: string, sourceId = 'default', plan: any) =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/plan/save`, {
-      method: 'POST',
-      body: JSON.stringify({ source_id: sourceId, plan }),
-    }),
-  getActionPlan: (slug: string, sourceId = 'default') =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/plan?source_id=${encodeURIComponent(sourceId)}`),
-  generateActionPlan: (slug: string, sourceId = 'default', userPrompt = '') =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/plan`, {
-      method: 'POST',
-      body: JSON.stringify({ source_id: sourceId, user_prompt: userPrompt }),
-    }),
-  regenerateActionPlan: (slug: string, sourceId = 'default', instructions = '', userPrompt = '') =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/plan`, {
-      method: 'POST',
-      body: JSON.stringify({ source_id: sourceId, instructions, user_prompt: userPrompt }),
-    }),
-  regenerateActionPlanStep: (slug: string, sourceId = 'default', phaseIndex: number, stepIndex: number, instructions = '') =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/plan/regenerate-step`, {
-      method: 'POST',
-      body: JSON.stringify({ source_id: sourceId, phase_index: phaseIndex, step_index: stepIndex, instructions }),
-    }),
-  updateAction: (slug: string, sourceId = 'default', dueAt?: string, userPrompt?: string, mode?: string, priority?: string) =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/update`, {
-      method: 'POST',
-      body: JSON.stringify({ source_id: sourceId, due_at: dueAt, user_prompt: userPrompt, mode, priority }),
-    }),
-  updateActionPatch: (
-    slug: string,
-    sourceId = 'default',
-    patch: { dueAt?: string | null; userPrompt?: string | null; mode?: string; priority?: string | null },
-  ) =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/update`, {
-      method: 'POST',
-      body: JSON.stringify({
-        source_id: sourceId,
-        due_at: patch.dueAt,
-        user_prompt: patch.userPrompt,
-        mode: patch.mode,
-        priority: patch.priority,
-      }),
-    }),
-  setActionStatus: (slug: string, sourceId: string, status: string, note?: string) =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/status`, {
-      method: 'POST',
-      body: JSON.stringify({ source_id: sourceId, status, note }),
-    }),
-  unarchiveAction: (slug: string, sourceId: string) =>
-    apiFetch(`/admin/api/actions/${encodeURIComponent(slug)}/unarchive`, {
-      method: 'POST',
-      body: JSON.stringify({ source_id: sourceId }),
-    }),
+  session: requestSession,
+  overview: () => adminFetch<Overview>('/admin/api/v1/overview'),
+  autopilot: () => adminFetch<AutopilotStatus>('/admin/api/v1/autopilot'),
+  sources: (includeArchived = false) => adminFetch<SourceSummary[]>(`/admin/api/v1/sources${includeArchived ? '?include_archived=true' : ''}`),
+  source: (id: string) => adminFetch<SourceDetail>(`/admin/api/v1/sources/${enc(id)}`),
+  createSource: (input: { source_id: string; name: string; remote_url?: string; owner_email?: string; federated: boolean; allow_ssh: boolean }) =>
+    adminFetch<{ source_id: string; name: string }>('/admin/api/v1/sources', { method: 'POST', body: JSON.stringify(input) }),
+  archiveSource: (id: string) => adminFetch<{ source_id: string; archive_expires_at: string; revoked_client_count: number }>(`/admin/api/v1/sources/${enc(id)}/archive`, { method: 'POST', body: '{}' }),
+  restoreSource: (id: string, federated: boolean) => adminFetch<{ source_id: string; restored: boolean; oauth_clients_restored: false }>(`/admin/api/v1/sources/${enc(id)}/restore`, { method: 'POST', body: JSON.stringify({ federated }) }),
+  gogs: (id: string) => adminFetch<GogsStatus>(`/admin/api/v1/sources/${enc(id)}/gogs`),
+  oauthClients: (sourceId?: string) => adminFetch<OAuthClient[]>(`/admin/api/v1/oauth-clients${sourceId ? `?source_id=${enc(sourceId)}` : ''}`),
+  createOAuthClient: (sourceId: string, name: string, scopes: string) => adminFetch<SecretResult>('/admin/api/v1/oauth-clients', { method: 'POST', body: JSON.stringify({ source_id: sourceId, name, scopes }) }),
+  rotateOAuthClient: (clientId: string) => adminFetch<SecretResult>(`/admin/api/v1/oauth-clients/${enc(clientId)}/rotate`, { method: 'POST', body: '{}' }),
+  revokeOAuthClient: (clientId: string) => adminFetch<{ client_id: string; revoked: boolean }>(`/admin/api/v1/oauth-clients/${enc(clientId)}/revoke`, { method: 'POST', body: '{}' }),
+  sourceJobs: (sourceId: string, options: { status?: string; limit?: number; cursor?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (options.status) query.set('status', options.status);
+    if (options.limit) query.set('limit', String(options.limit));
+    if (options.cursor) query.set('cursor', options.cursor);
+    const suffix = query.size ? `?${query.toString()}` : '';
+    return adminFetch<AdminJob[]>(`/admin/api/v1/sources/${enc(sourceId)}/jobs${suffix}`);
+  },
+  job: (id: number) => adminFetch<AdminJob>(`/admin/api/v1/jobs/${enc(String(id))}`),
+  cancelJob: (id: number) => adminFetch<AdminJob>(`/admin/api/v1/jobs/${enc(String(id))}/cancel`, { method: 'POST', body: '{}' }),
+  retryJob: (id: number) => adminFetch<AdminJob>(`/admin/api/v1/jobs/${enc(String(id))}/retry`, { method: 'POST', body: '{}' }),
+  cycleProfiles: () => adminFetch<Array<{ id: string; phases: string[] }>>('/admin/api/v1/cycle-profiles'),
+  cycles: (sourceId: string, cursor?: string) => adminFetch<AdminJob[]>(`/admin/api/v1/sources/${enc(sourceId)}/cycles${cursor ? `?cursor=${enc(cursor)}` : ''}`),
+  submitCycle: (sourceId: string, input: { profile: string; phases?: string[]; dry_run: boolean }) => adminFetch<{ job_id: number; source_id: string; profile: string; phases: string[]; dry_run: boolean }>(`/admin/api/v1/sources/${enc(sourceId)}/cycles`, { method: 'POST', body: JSON.stringify(input) }),
+  audit: (limit = 50) => adminFetch<AuditEntry[]>(`/admin/api/v1/audit?limit=${limit}`),
 };

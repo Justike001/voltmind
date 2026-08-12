@@ -1,96 +1,51 @@
-import React, { useState } from 'react';
-import { api } from '../api';
+import React, { useRef, useState } from 'react';
+import { AdminApiError, api } from '../api';
+import voltageLogoV from '../assets/voltage-logo-v.png';
 
-// v0.26.3 trust model (D11 + D12):
-// - The bootstrap token is NEVER stored in browser JS state. No
-//   localStorage, no sessionStorage, no React state beyond the form
-//   submit cycle. After successful POST /admin/login the operator's
-//   token only lives in the HttpOnly cookie that the server set.
-// - Magic-link URLs use single-use server-issued nonces, not the
-//   bootstrap token itself (see /admin/api/issue-magic-link). The
-//   bootstrap token never appears in a URL.
-// - Closing the tab ends the session client-side. Reopening the
-//   dashboard 401s and shows this page again. Operator asks the agent
-//   for a fresh magic link or pastes the bootstrap token from the
-//   server's terminal scrollback.
-export function LoginPage({ onLogin }: { onLogin: () => void }) {
-  const [token, setToken] = useState('');
+export function LoginPage({ onLogin }: { onLogin: () => Promise<void> | void }) {
+  const tokenRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const token = tokenRef.current?.value ?? '';
+    if (!token) return;
     setError('');
     setLoading(true);
     try {
       await api.login(token);
-      // Don't persist the token. The HttpOnly cookie is the only
-      // session credential after this point.
-      setToken('');
-      onLogin();
-    } catch (err) {
-      setError('Invalid token.');
+      if (tokenRef.current) tokenRef.current.value = '';
+      await onLogin();
+    } catch (cause) {
+      if (tokenRef.current) tokenRef.current.value = '';
+      const error = cause as AdminApiError;
+      setError(error.message || 'Authentication failed.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="login-page">
-      <div className="login-box">
-        <div className="login-logo">VoltMind</div>
-
-        <div style={{
-          background: 'rgba(136, 170, 255, 0.08)',
-          border: '1px solid rgba(136, 170, 255, 0.2)',
-          borderRadius: 8,
-          padding: '14px 16px',
-          marginBottom: 20,
-          fontSize: 13,
-          lineHeight: 1.5,
-          color: 'var(--text-secondary)',
-        }}>
-          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
-            🔒 This is a protected dashboard
-          </div>
-          Ask your AI agent for the admin login link:
-          <div style={{
-            background: 'rgba(0,0,0,0.3)',
-            borderRadius: 6,
-            padding: '8px 12px',
-            marginTop: 8,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            color: '#88aaff',
-            wordBreak: 'break-all',
-          }}>
-            "Give me the VoltMind admin login link"
-          </div>
-          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-            Each link is single-use. Your agent generates a fresh one each time.
-          </div>
+    <main className="vm-admin-v1 login-page">
+      <section className="login-card" aria-labelledby="login-title">
+        <div className="login-brand">
+          <img src={voltageLogoV} alt="" />
+          <div><strong>VoltMind</strong><span>Host Administration</span></div>
         </div>
-
-        <details style={{ marginBottom: 16 }}>
-          <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>
-            Or paste bootstrap token manually
-          </summary>
-          <form onSubmit={handleSubmit} style={{ marginTop: 12 }}>
-            <div style={{ marginBottom: 12 }}>
-              <input
-                type="password"
-                placeholder="Admin Token"
-                value={token}
-                onChange={e => setToken(e.target.value)}
-              />
-            </div>
-            <button className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-              {loading ? 'Authenticating...' : 'Submit'}
-            </button>
-            {error && <div className="login-error">{error}</div>}
-          </form>
-        </details>
-      </div>
-    </div>
+        <div className="login-copy">
+          <p className="eyebrow">Secure control plane</p>
+          <h1 id="login-title">Sign in to Admin</h1>
+          <p>The bootstrap token is used only for this request. It is never saved in browser storage or placed in a URL.</p>
+        </div>
+        <form onSubmit={handleSubmit} autoComplete="off">
+          <label htmlFor="admin-token">Admin bootstrap token</label>
+          <input ref={tokenRef} id="admin-token" type="password" name="admin-bootstrap-token" autoComplete="off" spellCheck={false} required autoFocus placeholder="Paste token" />
+          <button className="primary-button" disabled={loading}>{loading ? 'Authenticating…' : 'Continue'}</button>
+          {error && <div className="error-banner" role="alert">{error}</div>}
+        </form>
+        <p className="security-note">Session credentials remain in an HttpOnly, SameSite=Strict cookie.</p>
+      </section>
+    </main>
   );
 }
