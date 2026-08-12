@@ -7,8 +7,8 @@
  * ScopeProbeResult inputs to pin the status semantics:
  *
  *   read.missing_scope  → fail (broken setup)
- *   admin.missing_scope → warn (the load-bearing case for v0.29.2/v0.30.0
- *                              thin clients without admin scope)
+ *   admin not granted  → ok (ordinary least-privilege thin client)
+ *   admin claimed but rejected → warn (operator credential drift)
  *   both ok             → ok
  *   inconclusive        → ok with detail.inconclusive=true
  */
@@ -40,21 +40,31 @@ describe('buildScopeCheck', () => {
     expect(check.detail?.read_ok).toBe(false);
   });
 
-  test('admin missing_scope → status=warn with pinpoint hint (the load-bearing case)', () => {
+  test('ordinary client without admin → status=ok and no escalation hint', () => {
+    const probe: ScopeProbeResult = {
+      read_ok: true,
+      admin_ok: false,
+      admin_error: 'not_granted',
+    };
+    const check = buildScopeCheck('read write', probe);
+    expect(check.status).toBe('ok');
+    expect(check.message).toContain('admin intentionally not granted');
+    expect(check.message).not.toContain('register-client');
+    expect(check.detail?.read_ok).toBe(true);
+    expect(check.detail?.admin_ok).toBe(false);
+    expect(check.detail?.admin_required).toBe(false);
+  });
+
+  test('claimed admin rejected by Host → status=warn for operator credential drift', () => {
     const probe: ScopeProbeResult = {
       read_ok: true,
       admin_ok: false,
       admin_error: 'missing_scope',
     };
-    const check = buildScopeCheck('read write', probe);
+    const check = buildScopeCheck('read write admin', probe);
     expect(check.status).toBe('warn');
-    expect(check.message).toContain('admin scope MISSING');
-    // The pinpoint remediation must name the exact CLI invocation.
-    expect(check.message).toContain('voltmind auth register-client');
-    expect(check.message).toContain('read,write,admin');
-    expect(check.detail?.read_ok).toBe(true);
-    expect(check.detail?.admin_ok).toBe(false);
-    expect(check.detail?.admin_error).toBe('missing_scope');
+    expect(check.message).toContain('claims admin');
+    expect(check.message).toContain('Host operator');
   });
 
   test('admin probe fails for non-scope reason (e.g. parse) → status=ok inconclusive', () => {
@@ -91,7 +101,7 @@ describe('buildScopeCheck', () => {
   });
 
   test('empty granted scope renders as "unspecified"', () => {
-    const probe: ScopeProbeResult = { read_ok: true, admin_ok: true };
+    const probe: ScopeProbeResult = { read_ok: true, admin_ok: false, admin_error: 'not_granted' };
     const check = buildScopeCheck('', probe);
     expect(check.detail?.granted).toBe(null);
     expect(check.message).toContain('unspecified');

@@ -202,12 +202,9 @@ export async function collectRemoteDoctorReport(
   });
 
   // 5. v0.31.1 (CDX-5): scope-probe — verify the OAuth client actually has
-  // the scopes its token claims. Calls a representative read op (always
-  // safe), then a representative admin op (also read-only, no side effects).
-  // Reports per-tier status with a pinpoint remediation hint when admin is
-  // missing — the v0.29.2/v0.30.0 thin-clients without admin scope hit
-  // `voltmind stats` / `voltmind history` and fail today; this check surfaces
-  // the gap during `voltmind remote doctor` instead of mid-command.
+  // the scopes its token claims. Every client gets a representative read
+  // probe. The operator-only admin probe runs only when the token claims
+  // admin; its absence is the expected least-privilege client posture.
   //
   // Skippable via opts.skipScopeProbe (preferred for tests) OR
   // VOLTMIND_DOCTOR_SKIP_SCOPE_PROBE=1 (env-flag for ops bypass) — the MCP
@@ -216,7 +213,7 @@ export async function collectRemoteDoctorReport(
   const grantedScope = tokenRes.token.scope ?? '';
   const skipProbe = opts.skipScopeProbe || process.env.VOLTMIND_DOCTOR_SKIP_SCOPE_PROBE === '1';
   if (!skipProbe) {
-    const scopeResult = await probeScopes(config);
+    const scopeResult = await probeScopes(config, grantedScope);
     checks.push(buildScopeCheck(grantedScope, scopeResult));
   }
 
@@ -407,10 +404,10 @@ export async function runUpgradeDriftCheck(config: VoltMindConfig): Promise<Remo
 }
 
 /**
- * v0.31.1: minimal probe of the read + admin scope tiers via two harmless
- * read-only MCP calls. Write tier is NOT probed (no benign write op exists
- * — every write would mutate state). Trust the granted-scope string for
- * write status.
+ * Probe the read tier for every thin client. Admin is probed only when the
+ * token claims it, so an ordinary client neither needs admin nor generates
+ * expected-denial noise against an operator-only endpoint. Write tier is NOT
+ * probed (no benign write op exists — every write would mutate state).
  */
 /** v0.31.1: exported for test access (test/oauth-scope-probe.test.ts). */
 export interface ScopeProbeResult {
@@ -420,7 +417,7 @@ export interface ScopeProbeResult {
   admin_error?: string;
 }
 
-async function probeScopes(config: VoltMindConfig): Promise<ScopeProbeResult> {
+async function probeScopes(config: VoltMindConfig, grantedScope: string): Promise<ScopeProbeResult> {
   const result: ScopeProbeResult = { read_ok: false, admin_ok: false };
 
   // Read tier: get_brain_identity is the cheapest read op (just returns
@@ -436,8 +433,13 @@ async function probeScopes(config: VoltMindConfig): Promise<ScopeProbeResult> {
     }
   }
 
-  // Admin tier: get_health is read-only (engine.getHealth is a SELECT) but
-  // requires admin scope per operations.ts:1370.
+  const granted = grantedScope.split(/[\s,]+/).filter(Boolean);
+  if (!granted.includes('admin')) {
+    result.admin_error = 'not_granted';
+    return result;
+  }
+
+  // Operator tier: verify a claimed admin grant using a read-only admin op.
   try {
     await callRemoteTool(config, 'get_health', {}, { timeoutMs: 1500 });
     result.admin_ok = true;
@@ -461,11 +463,13 @@ export function buildScopeCheck(grantedScope: string, probe: ScopeProbeResult): 
   // status doesn't flap on probe noise.
   //
   //   - read.missing_scope  → 'fail' (broken setup; nothing works)
-  //   - admin.missing_scope → 'warn' (the load-bearing case for v0.29.2 thin
-  //     clients that registered with read+write only; pinpoint hint follows)
+  //   - admin absent       → 'ok' (ordinary thin-client least privilege)
+  //   - admin claimed but rejected → 'warn' (grant/config drift)
   //   - both succeed        → 'ok'
   //   - other probe errors  → 'ok' with inconclusive=true
   const readMissing = !probe.read_ok && probe.read_error === 'missing_scope';
+  const grantedScopes = grantedScope.split(/[\s,]+/).filter(Boolean);
+  const adminClaimed = grantedScopes.includes('admin');
   const adminMissing = !probe.admin_ok && probe.admin_error === 'missing_scope';
 
   if (readMissing) {
@@ -480,13 +484,25 @@ export function buildScopeCheck(grantedScope: string, probe: ScopeProbeResult): 
       },
     };
   }
-  if (adminMissing) {
+  if (!adminClaimed && probe.read_ok) {
+    return {
+      name: 'oauth_client_scopes_probe',
+      status: 'ok',
+      message: `read scope verified; admin intentionally not granted (least-privilege thin client, granted="${grantedScope || 'unspecified'}")`,
+      detail: {
+        granted: grantedScope || null,
+        read_ok: true,
+        admin_ok: false,
+        admin_required: false,
+      },
+    };
+  }
+  if (adminClaimed && adminMissing) {
     return {
       name: 'oauth_client_scopes_probe',
       status: 'warn',
       message:
-        'admin scope MISSING (read works). On the host, re-register: ' +
-        '`voltmind auth register-client <name> --grant-types client_credentials --scopes read,write,admin`',
+        'OAuth token claims admin but the Host rejected the admin probe. Ask the Host operator to rotate or correct this operator credential.',
       detail: {
         granted: grantedScope || null,
         read_ok: true,

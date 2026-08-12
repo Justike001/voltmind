@@ -2,7 +2,7 @@
  * E2E test for thin-client mode (multi-topology v1).
  *
  * Spins up `voltmind serve --http` against a real Postgres, registers a
- * client with `read,write,admin` scope, runs `voltmind init --mcp-only`
+ * ordinary client with `read,write` scope, runs `voltmind init --mcp-only`
  * against it from a second tempdir HOME, and exercises the canonical
  * thin-client flows:
  *
@@ -110,11 +110,12 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
       await new Promise(r => setTimeout(r, 250));
     }
 
-    // 4. Register a client with read,write,admin scope.
+    // 4. Register an ordinary least-privilege client. Host operations use a
+    // separate admin identity in the one operator-only test below.
     const reg = await spawn([
       'auth', 'register-client', 'thin-client-test',
       '--grant-types', 'client_credentials',
-      '--scopes', 'read write admin',
+      '--scopes', 'read write',
     ], hostHome);
     if (reg.exitCode !== 0) throw new Error(`register-client failed: ${reg.stderr || reg.stdout}`);
     const parsed = parseRegisterClientOutput(reg.stdout);
@@ -174,7 +175,10 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
     expect(checkNames).toContain('oauth_discovery');
     expect(checkNames).toContain('oauth_token');
     expect(checkNames).toContain('mcp_smoke');
-    expect(report.oauth_scope).toContain('admin');
+    expect(report.oauth_scope).not.toContain('admin');
+    const scopeCheck = report.checks.find((c: { name: string }) => c.name === 'oauth_client_scopes_probe');
+    expect(scopeCheck.status).toBe('ok');
+    expect(scopeCheck.message).toContain('admin intentionally not granted');
   });
 
   test('sync is refused with canonical thin-client error', async () => {
@@ -196,25 +200,42 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
   // ─── Tier B: voltmind remote ping + remote doctor ───
 
   test('voltmind remote doctor returns the host DoctorReport', async () => {
-    const r = await spawn(['remote', 'doctor', '--json'], clientHome);
-    // Exit code reflects the host brain's health. On an empty fresh brain
-    // brain_score is 0, so status is 'unhealthy' and exit is 1. That's
-    // legitimate doctor output, not a transport failure. What this test
-    // pins is the round-trip + JSON shape.
-    const report = JSON.parse(r.stdout.trim());
-    expect(report.schema_version).toBe(2);
-    expect(['healthy', 'warnings', 'unhealthy']).toContain(report.status);
-    const names = report.checks.map((c: { name: string }) => c.name);
-    expect(names).toContain('connection');
-    expect(names).toContain('schema_version');
-    expect(names).toContain('brain_score');
-    expect(names).toContain('queue_health');
-    // Host is fresh + connected, so connection check is OK.
-    const conn = report.checks.find((c: { name: string; status: string }) => c.name === 'connection');
-    expect(conn.status).toBe('ok');
-    // Schema version is at LATEST_VERSION on a fresh init.
-    const sv = report.checks.find((c: { name: string; status: string }) => c.name === 'schema_version');
-    expect(sv.status).toBe('ok');
+    const reg = await spawn([
+      'auth', 'register-client', 'host-operator-test',
+      '--grant-types', 'client_credentials',
+      '--scopes', 'read admin',
+    ], hostHome);
+    if (reg.exitCode !== 0) throw new Error(`operator register-client failed: ${reg.stderr || reg.stdout}`);
+    const operator = parseRegisterClientOutput(reg.stdout);
+    const operatorHome = mkdtempSync(join(tmpdir(), 'voltmind-host-operator-'));
+    try {
+      const init = await spawn([
+        'init', '--mcp-only', '--json',
+        '--issuer-url', `http://127.0.0.1:${serverPort}`,
+        '--mcp-url', `http://127.0.0.1:${serverPort}/mcp`,
+        '--oauth-client-id', operator.clientId,
+        '--oauth-client-secret', operator.clientSecret,
+      ], operatorHome);
+      expect(init.exitCode).toBe(0);
+      const r = await spawn(['remote', 'doctor', '--json'], operatorHome);
+      // Exit code reflects the host brain's health. On an empty fresh brain
+      // brain_score is 0, so status may be unhealthy; the JSON round-trip is
+      // the contract under test.
+      const report = JSON.parse(r.stdout.trim());
+      expect(report.schema_version).toBe(2);
+      expect(['healthy', 'warnings', 'unhealthy']).toContain(report.status);
+      const names = report.checks.map((c: { name: string }) => c.name);
+      expect(names).toContain('connection');
+      expect(names).toContain('schema_version');
+      expect(names).toContain('brain_score');
+      expect(names).toContain('queue_health');
+      const conn = report.checks.find((c: { name: string; status: string }) => c.name === 'connection');
+      expect(conn.status).toBe('ok');
+      const sv = report.checks.find((c: { name: string; status: string }) => c.name === 'schema_version');
+      expect(sv.status).toBe('ok');
+    } finally {
+      rmSync(operatorHome, { recursive: true, force: true });
+    }
   });
 
   // Skipped: the test fixture is structurally incompatible with what this
@@ -252,45 +273,11 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
     }
   });
 
-  test('client without admin scope cannot call run_doctor', async () => {
-    // Register a separate client with read+write only (no admin) and verify
-    // that voltmind remote doctor surfaces an auth-error message. This is the
-    // codex review #7 regression guard — the verification flow MUST require
-    // admin scope.
-    const reg = await spawn([
-      'auth', 'register-client', 'thin-client-readwrite',
-      '--grant-types', 'client_credentials',
-      '--scopes', 'read write',
-    ], hostHome);
-    if (reg.exitCode !== 0) throw new Error(`register-client failed: ${reg.stderr || reg.stdout}`);
-    const parsed = parseRegisterClientOutput(reg.stdout);
-    const lowScopeId = parsed.clientId;
-    const lowScopeSecret = parsed.clientSecret;
-
-    // Spin up a separate clientHome for the lower-scope client
-    const lowScopeHome = mkdtempSync(join(tmpdir(), 'voltmind-thin-client-lowscope-'));
-    try {
-      const init = await spawn([
-        'init', '--mcp-only', '--json',
-        '--issuer-url', `http://127.0.0.1:${serverPort}`,
-        '--mcp-url', `http://127.0.0.1:${serverPort}/mcp`,
-        '--oauth-client-id', lowScopeId,
-        '--oauth-client-secret', lowScopeSecret,
-      ], lowScopeHome);
-      if (init.exitCode !== 0) {
-        throw new Error(`low-scope init exit=${init.exitCode}\nstdout:${init.stdout}\nstderr:${init.stderr}`);
-      }
-      expect(init.exitCode).toBe(0);
-
-      const r = await spawn(['remote', 'doctor', '--json'], lowScopeHome);
-      expect(r.exitCode).toBe(1);
-      const err = JSON.parse(r.stdout.trim());
-      expect(err.status).toBe('error');
-      // Either the SDK 401 path or our auth_after_refresh wrap is fine —
-      // the test pins "this fails because admin scope is missing".
-      expect(['auth', 'auth_after_refresh', 'tool_error']).toContain(err.reason);
-    } finally {
-      rmSync(lowScopeHome, { recursive: true, force: true });
-    }
+  test('ordinary client cannot call admin-only remote doctor', async () => {
+    const r = await spawn(['remote', 'doctor', '--json'], clientHome);
+    expect(r.exitCode).toBe(1);
+    const err = JSON.parse(r.stdout.trim());
+    expect(err.status).toBe('error');
+    expect(['auth', 'auth_after_refresh', 'tool_error']).toContain(err.reason);
   });
 });
