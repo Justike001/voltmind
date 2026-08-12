@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: VoltMind Host Admin API
   version: 1.0.0
-  description: Same-origin, cookie-authenticated Host management API. Secrets are returned only at creation/rotation.
+  description: Same-origin, cookie-authenticated Host management API. Client secrets are returned only once by create or rotate responses.
 servers:
   - url: /admin/api/v1
 components:
@@ -15,6 +15,66 @@ components:
       type: apiKey
       in: header
       name: X-VoltMind-CSRF
+  schemas:
+    OAuthClient:
+      type: object
+      properties:
+        client_id: { type: string }
+        client_name: { type: string }
+        contact_email: { type: [string, "null"], format: email }
+        source_id: { type: [string, "null"] }
+        federated_read: { type: array, items: { type: string } }
+        grant_types: { type: array, items: { type: string } }
+        scope: { type: [string, "null"] }
+        token_endpoint_auth_method: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        deleted_at: { type: [string, "null"], format: date-time }
+    OAuthClientCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, contact_email, source_id, scopes]
+      properties:
+        name: { type: string, minLength: 1 }
+        contact_email: { type: string, format: email }
+        source_id: { type: string }
+        scopes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [read, write] }
+    OAuthClientCreateResult:
+      type: object
+      required: [client_id, client_secret, source_id, client_name, contact_email, scope, secret_shown_once]
+      properties:
+        client_id: { type: string }
+        client_secret:
+          type: string
+          writeOnly: true
+          description: Shown only in this create response; never returned by GET.
+        source_id: { type: string }
+        client_name: { type: string }
+        contact_email: { type: string, format: email }
+        scope: { type: string }
+        secret_shown_once: { type: boolean, const: true }
+    OAuthClientScopePatchRequest:
+      type: object
+      additionalProperties: false
+      required: [scopes]
+      properties:
+        scopes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [read, write] }
+    OAuthClientScopePatchResult:
+      type: object
+      required: [client_id, scope, tokens_revoked, codes_revoked, updated]
+      properties:
+        client_id: { type: string }
+        scope: { type: string }
+        tokens_revoked: { type: integer, minimum: 0 }
+        codes_revoked: { type: integer, minimum: 0 }
+        updated: { type: boolean, const: true }
 security:
   - adminCookie: []
 paths:
@@ -42,10 +102,73 @@ paths:
   /sources/{sourceId}/gogs:
     get: { summary: Get redacted Gogs/repository health }
   /oauth-clients:
-    get: { summary: List OAuth clients }
+    get:
+      summary: List OAuth clients without secrets, hashes, tokens, or host paths
+      parameters:
+        - name: source_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [active, revoked, all], default: active }
+      responses:
+        "200":
+          description: Filtered OAuth client list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/OAuthClient" } }
     post:
-      summary: Create a source-bound OAuth client
+      summary: Create a source-bound OAuth client and show its secret once
+      description: Requires the Admin cookie and X-VoltMind-CSRF. The secret is never returned by later GET requests.
       security: [{ adminCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OAuthClientCreateRequest" }
+      responses:
+        "201":
+          description: Created; client_secret is shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/OAuthClientCreateResult" }
+        "400": { description: Invalid name, contact_email, source_id, or invalid_scopes }
+        "409": { description: Source is missing or archived }
+  /oauth-clients/{clientId}:
+    patch:
+      summary: Update active client scopes and revoke all existing tokens and authorization codes
+      description: Requires the Admin cookie and X-VoltMind-CSRF. Keeps client_id and client_secret unchanged and returns no secret.
+      security: [{ adminCookie: [], csrfToken: [] }]
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OAuthClientScopePatchRequest" }
+      responses:
+        "200":
+          description: Scopes updated; old tokens and codes revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/OAuthClientScopePatchResult" }
+        "400": { description: invalid_scopes }
+        "404": { description: oauth_client_not_found }
+        "409": { description: oauth_client_revoked }
   /oauth-clients/{clientId}/rotate:
     post:
       summary: Replace an OAuth client and show the new secret once

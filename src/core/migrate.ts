@@ -5873,6 +5873,14 @@ export const MIGRATIONS: Migration[] = [
     `,
     idempotent: true,
   },
+  {
+    version: 123,
+    name: 'oauth_clients_contact_email',
+    sql: `
+      ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS contact_email TEXT;
+    `,
+    idempotent: true,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS.length > 0

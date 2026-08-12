@@ -7,7 +7,7 @@ import {
   pgArray,
   validateTokenEndpointAuthMethod,
 } from '../core/oauth-provider.ts';
-import { assertAllowedScopes, parseScopeString } from '../core/scope.ts';
+import { assertAllowedScopes, normalizeScopesInput, parseScopeString } from '../core/scope.ts';
 import { generateToken, hashToken } from '../core/utils.ts';
 import { addSource, getSourceStatus } from '../core/sources-ops.ts';
 import { isValidSourceId } from '../core/source-id.ts';
@@ -41,6 +41,30 @@ const JOB_STATUSES = new Set<MinionJobStatus>([
   'waiting', 'active', 'completed', 'failed', 'delayed', 'dead', 'cancelled',
   'waiting-children', 'paused',
 ]);
+const ADMIN_OAUTH_SCOPES = new Set(['read', 'write']);
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function adminOAuthScopes(raw: unknown): string {
+  if (raw === undefined || raw === null) throw new Error('scopes must be explicitly provided');
+  const normalized = normalizeScopesInput(raw);
+  const scopes = parseScopeString(normalized);
+  if (scopes.length === 0 || scopes.some(scope => !ADMIN_OAUTH_SCOPES.has(scope))) {
+    throw new Error('Admin OAuth clients only support read and write scopes');
+  }
+  return normalized;
+}
+
+function requiredClientName(raw: unknown): string {
+  if (typeof raw !== 'string' || raw.trim().length === 0) throw new Error('name is required');
+  return raw.trim();
+}
+
+function requiredContactEmail(raw: unknown): string {
+  if (typeof raw !== 'string') throw new Error('contact_email is required');
+  const email = raw.trim();
+  if (email.length > 254 || !EMAIL_PATTERN.test(email)) throw new Error('contact_email is invalid');
+  return email;
+}
 
 function ok(res: express.Response, data: unknown, meta: Record<string, unknown> = {}) {
   res.json({ data, meta: { request_id: res.locals.requestId, ...meta } });
@@ -94,7 +118,7 @@ function presentJob(job: any) {
 export async function rotateOAuthClient(engine: BrainEngine, oldId: string) {
   return engine.transaction(async tx => {
     const rows = await tx.executeRaw<any>(
-      `SELECT client_name,source_id,federated_read,grant_types,scope,token_endpoint_auth_method FROM oauth_clients WHERE client_id=$1 AND deleted_at IS NULL FOR UPDATE`,
+      `SELECT client_name,contact_email,source_id,federated_read,grant_types,scope,token_endpoint_auth_method FROM oauth_clients WHERE client_id=$1 AND deleted_at IS NULL FOR UPDATE`,
       [oldId],
     );
     const old = rows[0];
@@ -108,8 +132,8 @@ export async function rotateOAuthClient(engine: BrainEngine, oldId: string) {
     const clientSecret = authMethod === "none" ? undefined : generateToken("voltmind_cs_");
     const secretHash = clientSecret ? hashToken(clientSecret) : null;
     await tx.executeRaw(
-      `INSERT INTO oauth_clients (client_id,client_secret_hash,client_name,redirect_uris,grant_types,scope,token_endpoint_auth_method,client_id_issued_at,source_id,federated_read) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [clientId, secretHash, String(old.client_name), pgArray([]), pgArray(grantTypes), scopes, authMethod, Math.floor(Date.now() / 1000), String(old.source_id), pgArray(federatedRead)],
+      `INSERT INTO oauth_clients (client_id,client_secret_hash,client_name,contact_email,redirect_uris,grant_types,scope,token_endpoint_auth_method,client_id_issued_at,source_id,federated_read) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [clientId, secretHash, String(old.client_name), old.contact_email ?? null, pgArray([]), pgArray(grantTypes), scopes, authMethod, Math.floor(Date.now() / 1000), String(old.source_id), pgArray(federatedRead)],
     );
     await tx.executeRaw("DELETE FROM oauth_tokens WHERE client_id=$1", [oldId]);
     await tx.executeRaw("UPDATE oauth_clients SET deleted_at=now() WHERE client_id=$1", [oldId]);
@@ -123,10 +147,51 @@ export function adminV1OpenApi() {
     info: { title: 'VoltMind Host Admin API', version: '1.0.0' },
     servers: [{ url: '/admin/api/v1' }],
     security: [{ adminCookie: [] }],
-    components: { securitySchemes: {
-      adminCookie: { type: 'apiKey', in: 'cookie', name: 'voltmind_admin' },
-      csrfToken: { type: 'apiKey', in: 'header', name: 'X-VoltMind-CSRF' },
-    } },
+    components: {
+      securitySchemes: {
+        adminCookie: { type: 'apiKey', in: 'cookie', name: 'voltmind_admin' },
+        csrfToken: { type: 'apiKey', in: 'header', name: 'X-VoltMind-CSRF' },
+      },
+      schemas: {
+        OAuthClient: {
+          type: 'object',
+          properties: {
+            client_id: { type: 'string' }, client_name: { type: 'string' },
+            contact_email: { type: ['string', 'null'], format: 'email' },
+            source_id: { type: ['string', 'null'] }, federated_read: { type: 'array', items: { type: 'string' } },
+            grant_types: { type: 'array', items: { type: 'string' } }, scope: { type: ['string', 'null'] },
+            token_endpoint_auth_method: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' },
+            deleted_at: { type: ['string', 'null'], format: 'date-time' },
+          },
+        },
+        OAuthClientCreateRequest: {
+          type: 'object', required: ['name', 'contact_email', 'source_id', 'scopes'], additionalProperties: false,
+          properties: {
+            name: { type: 'string', minLength: 1 }, contact_email: { type: 'string', format: 'email' },
+            source_id: { type: 'string' }, scopes: { type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string', enum: ['read', 'write'] } },
+          },
+        },
+        OAuthClientCreateResult: {
+          type: 'object', required: ['client_id', 'client_secret', 'source_id', 'client_name', 'contact_email', 'scope', 'secret_shown_once'],
+          properties: {
+            client_id: { type: 'string' }, client_secret: { type: 'string', writeOnly: true, description: 'Shown once in this create response and never returned by GET.' },
+            source_id: { type: 'string' }, client_name: { type: 'string' }, contact_email: { type: 'string', format: 'email' },
+            scope: { type: 'string' }, secret_shown_once: { type: 'boolean', const: true },
+          },
+        },
+        OAuthClientScopePatchRequest: {
+          type: 'object', required: ['scopes'], additionalProperties: false,
+          properties: { scopes: { type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string', enum: ['read', 'write'] } } },
+        },
+        OAuthClientScopePatchResult: {
+          type: 'object', required: ['client_id', 'scope', 'tokens_revoked', 'codes_revoked', 'updated'],
+          properties: {
+            client_id: { type: 'string' }, scope: { type: 'string' }, tokens_revoked: { type: 'integer', minimum: 0 },
+            codes_revoked: { type: 'integer', minimum: 0 }, updated: { type: 'boolean', const: true },
+          },
+        },
+      },
+    },
     paths: {
       '/session': { get: { summary: 'Get session and CSRF token' } },
       '/autopilot': { get: { summary: 'Get redacted daemon runtime status' } },
@@ -135,7 +200,39 @@ export function adminV1OpenApi() {
       '/sources/{sourceId}': { get: { summary: 'Source detail' } },
       '/sources/{sourceId}/archive': { post: { summary: 'Archive source and revoke its OAuth clients', security: [{ adminCookie: [], csrfToken: [] }] } },
       '/sources/{sourceId}/restore': { post: { summary: 'Restore source; OAuth clients stay revoked', security: [{ adminCookie: [], csrfToken: [] }] } },
-      '/oauth-clients': { get: { summary: 'List OAuth clients' }, post: { summary: 'Create source-bound OAuth client', security: [{ adminCookie: [], csrfToken: [] }] } },
+      '/oauth-clients': {
+        get: {
+          summary: 'List OAuth clients',
+          parameters: [
+            { name: 'source_id', in: 'query', required: false, schema: { type: 'string' } },
+            { name: 'status', in: 'query', required: false, schema: { type: 'string', enum: ['active', 'revoked', 'all'], default: 'active' } },
+          ],
+          responses: { '200': { description: 'OAuth clients without secrets, hashes, tokens, or host paths', content: { 'application/json': { schema: { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/OAuthClient' } } } } } } } },
+        },
+        post: {
+          summary: 'Create source-bound OAuth client and show its secret once',
+          description: 'Requires the Admin cookie and X-VoltMind-CSRF. The client secret appears only in the 201 response.',
+          security: [{ adminCookie: [], csrfToken: [] }],
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/OAuthClientCreateRequest' } } } },
+          responses: {
+            '201': { description: 'Created; secret shown once', content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/OAuthClientCreateResult' } } } } } },
+            '400': { description: 'Invalid name, email, source ID, or scopes' }, '409': { description: 'Source missing or archived' },
+          },
+        },
+      },
+      '/oauth-clients/{clientId}': {
+        patch: {
+          summary: 'Update active client scopes and revoke all existing tokens and authorization codes',
+          description: 'Requires the Admin cookie and X-VoltMind-CSRF. The client ID and secret remain unchanged; no secret is returned.',
+          security: [{ adminCookie: [], csrfToken: [] }],
+          parameters: [{ name: 'clientId', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/OAuthClientScopePatchRequest' } } } },
+          responses: {
+            '200': { description: 'Scopes updated and prior credentials revoked', content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/OAuthClientScopePatchResult' } } } } } },
+            '400': { description: 'invalid_scopes' }, '404': { description: 'oauth_client_not_found' }, '409': { description: 'oauth_client_revoked' },
+          },
+        },
+      },
       '/oauth-clients/{clientId}/rotate': { post: { summary: 'Rotate secret by replacing the client', security: [{ adminCookie: [], csrfToken: [] }] } },
       '/oauth-clients/{clientId}/revoke': { post: { summary: 'Revoke client and tokens', security: [{ adminCookie: [], csrfToken: [] }] } },
       '/sources/{sourceId}/gogs': { get: { summary: 'Repository health without credentials or local paths' } },
@@ -258,7 +355,7 @@ export function createAdminV1Router(options: AdminV1Options): express.Router {
     try {
       const id = sourceId(req.params.sourceId);
       const status = await getSourceStatus(engine, id);
-      const clients = await sql`SELECT client_id, client_name, grant_types, scope, federated_read, deleted_at, created_at
+      const clients = await sql`SELECT client_id, client_name, contact_email, grant_types, scope, federated_read, deleted_at, created_at
                                   FROM oauth_clients WHERE source_id=${id} ORDER BY created_at DESC`;
       ok(res, { ...status, local_path: undefined, remote_url: redactedRemote(status.remote_url), oauth_clients: clients });
     } catch (e) { fail(res, 404, 'source_not_found', e instanceof Error ? e.message : String(e)); }
@@ -297,25 +394,83 @@ export function createAdminV1Router(options: AdminV1Options): express.Router {
   router.get('/oauth-clients', async (req, res) => {
     try {
       const sid = typeof req.query.source_id === 'string' ? sourceId(req.query.source_id) : null;
-      const rows = sid
-        ? await sql`SELECT client_id,client_name,source_id,federated_read,grant_types,scope,token_endpoint_auth_method,created_at,deleted_at FROM oauth_clients WHERE source_id=${sid} ORDER BY created_at DESC`
-        : await sql`SELECT client_id,client_name,source_id,federated_read,grant_types,scope,token_endpoint_auth_method,created_at,deleted_at FROM oauth_clients ORDER BY created_at DESC`;
+      const status = typeof req.query.status === 'string' ? req.query.status : 'active';
+      if (!['active', 'revoked', 'all'].includes(status)) {
+        return fail(res, 400, 'invalid_status', 'status must be active, revoked, or all');
+      }
+      const conditions: string[] = [];
+      const params: unknown[] = [];
+      if (sid) { params.push(sid); conditions.push(`source_id=$${params.length}`); }
+      if (status === 'active') conditions.push('deleted_at IS NULL');
+      else if (status === 'revoked') conditions.push('deleted_at IS NOT NULL');
+      const rows = await engine.executeRaw<any>(
+        `SELECT client_id,client_name,contact_email,source_id,federated_read,grant_types,scope,token_endpoint_auth_method,created_at,deleted_at
+           FROM oauth_clients ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+          ORDER BY created_at DESC`,
+        params,
+      );
       ok(res, rows);
     } catch (e) { fail(res, 400, 'oauth_clients_failed', e instanceof Error ? e.message : String(e)); }
   });
 
   router.post('/oauth-clients', async (req, res) => {
     try {
+      const name = requiredClientName(req.body?.name);
+      const contactEmail = requiredContactEmail(req.body?.contact_email);
       const sid = sourceId(req.body?.source_id);
+      let scopes: string;
+      try { scopes = adminOAuthScopes(req.body?.scopes); }
+      catch (e) { return fail(res, 400, 'invalid_scopes', e instanceof Error ? e.message : String(e)); }
       const source = await engine.executeRaw<any>('SELECT archived FROM sources WHERE id=$1', [sid]);
       if (!source[0] || source[0].archived) return fail(res, 409, 'source_unavailable', 'Source is missing or archived');
-      const scopes = typeof req.body?.scopes === 'string' ? req.body.scopes : 'read write';
       const result = await oauthProvider.registerClientManual(
-        typeof req.body?.name === 'string' ? req.body.name : `${sid} admin client`,
-        ['client_credentials'], scopes, [], sid, [sid], 'client_secret_post');
+        name, ['client_credentials'], scopes, [], sid, [sid], 'client_secret_post', contactEmail,
+      );
       res.locals.audit = { action: 'oauth_client.create', source_id: sid, client_id: result.clientId };
-      ok(res.status(201), { client_id: result.clientId, client_secret: result.clientSecret, source_id: sid, secret_shown_once: true });
+      ok(res.status(201), {
+        client_id: result.clientId, client_secret: result.clientSecret, source_id: sid,
+        client_name: name, contact_email: contactEmail, scope: scopes, secret_shown_once: true,
+      });
     } catch (e) { fail(res, 400, 'oauth_client_create_failed', e instanceof Error ? e.message : String(e)); }
+  });
+
+  router.patch('/oauth-clients/:clientId', async (req, res) => {
+    const clientId = String(req.params.clientId);
+    let scopes: string;
+    try { scopes = adminOAuthScopes(req.body?.scopes); }
+    catch (e) { return fail(res, 400, 'invalid_scopes', e instanceof Error ? e.message : String(e)); }
+
+    try {
+      const result = await engine.transaction(async tx => {
+        const active = await tx.executeRaw<{ source_id: string | null }>(
+          'SELECT source_id FROM oauth_clients WHERE client_id=$1 AND deleted_at IS NULL FOR UPDATE',
+          [clientId],
+        );
+        if (!active[0]) {
+          const existing = await tx.executeRaw<{ deleted_at: Date | string | null }>(
+            'SELECT deleted_at FROM oauth_clients WHERE client_id=$1',
+            [clientId],
+          );
+          return existing[0] ? { state: 'revoked' as const } : { state: 'missing' as const };
+        }
+        await tx.executeRaw('UPDATE oauth_clients SET scope=$1 WHERE client_id=$2', [scopes, clientId]);
+        const tokens = await tx.executeRaw('DELETE FROM oauth_tokens WHERE client_id=$1 RETURNING 1', [clientId]);
+        const codes = await tx.executeRaw('DELETE FROM oauth_codes WHERE client_id=$1 RETURNING 1', [clientId]);
+        return {
+          state: 'updated' as const,
+          sourceId: active[0].source_id,
+          tokensRevoked: tokens.length,
+          codesRevoked: codes.length,
+        };
+      });
+      if (result.state === 'missing') return fail(res, 404, 'oauth_client_not_found', 'OAuth client not found');
+      if (result.state === 'revoked') return fail(res, 409, 'oauth_client_revoked', 'OAuth client is revoked');
+      res.locals.audit = { action: 'oauth_client.scope_update', source_id: result.sourceId, client_id: clientId };
+      ok(res, {
+        client_id: clientId, scope: scopes, tokens_revoked: result.tokensRevoked,
+        codes_revoked: result.codesRevoked, updated: true,
+      });
+    } catch (e) { fail(res, 400, 'oauth_client_scope_update_failed', e instanceof Error ? e.message : String(e)); }
   });
 
   router.post('/oauth-clients/:clientId/revoke', async (req, res) => {

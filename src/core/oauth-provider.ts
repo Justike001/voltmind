@@ -840,6 +840,7 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     sourceId: string = 'default',
     federatedRead?: string[],
     tokenEndpointAuthMethod?: string,
+    contactEmail?: string,
   ): Promise<{ clientId: string; clientSecret?: string }> {
     // v0.28: ALLOWED_SCOPES allowlist. Reject `--scopes "read flying-unicorn"`
     // at registration so meaningless scope strings can't pile up in the DB.
@@ -871,6 +872,17 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     //   federated_read = [source_id] when omitted (a non-federated client
     //                    has read scope == write scope, the v0.33 default)
     const federated = federatedRead && federatedRead.length > 0 ? federatedRead : [sourceId];
+    if (contactEmail !== undefined) {
+      await this.sql`
+        INSERT INTO oauth_clients (client_id, client_secret_hash, client_name, contact_email,
+                                    redirect_uris, grant_types, scope, token_endpoint_auth_method,
+                                    client_id_issued_at, source_id, federated_read)
+        VALUES (${clientId}, ${secretHash}, ${name}, ${contactEmail},
+                ${pgArray(redirectUris)}, ${pgArray(grantTypes)}, ${scopes}, ${authMethod}, ${now},
+                ${sourceId}, ${pgArray(federated)})
+      `;
+      return { clientId, clientSecret };
+    }
     try {
       await this.sql`
         INSERT INTO oauth_clients (client_id, client_secret_hash, client_name, redirect_uris,

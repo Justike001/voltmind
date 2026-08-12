@@ -990,6 +990,7 @@ CREATE TABLE IF NOT EXISTS oauth_clients (
   client_id               TEXT PRIMARY KEY,
   client_secret_hash      TEXT,
   client_name             TEXT NOT NULL,
+  contact_email           TEXT,
   redirect_uris           TEXT[],
   grant_types             TEXT[] DEFAULT '{client_credentials}',
   scope                   TEXT,
