@@ -1,8 +1,8 @@
 /**
  * v0.36 Phase 2 (D23-#6) — per-OAuth-client paid-API spend tracking.
  *
- * Backs the daily-budget gate for `search_by_image`. Each successful Voyage
- * multimodal call records an entry; before any new call, `checkBudget`
+ * Backs the daily-budget gate for `search_by_image`. Each successful
+ * multimodal call records an estimated entry; before any new call, `checkBudget`
  * sums today's spend and rejects when it exceeds the configured cap.
  *
  * Config: `search.image_query.daily_budget_usd_per_client` (default $5).
@@ -10,14 +10,16 @@
  * Scope: ONLY fires when `ctx.remote === true`. Local CLI callers have
  * direct billing visibility through their own credentials and don't need
  * the gate. The gate exists to prevent a misbehaving OAuth client from
- * burning the brain operator's Voyage account.
+ * exhausting the brain operator's configured image-query allowance.
  */
 
 import type { BrainEngine } from './engine.ts';
 import { sqlQueryForEngine } from './sql-query.ts';
 
-/** Per-call Voyage multimodal-3 spend estimate (per image), in cents. */
-export const VOYAGE_MULTIMODAL_3_PER_IMAGE_CENTS = 0.12;
+/** Conservative per-call accounting estimate for the image-query budget. */
+export const IMAGE_QUERY_PER_CALL_ESTIMATE_CENTS = 0.12;
+/** @deprecated Use IMAGE_QUERY_PER_CALL_ESTIMATE_CENTS. */
+export const VOYAGE_MULTIMODAL_3_PER_IMAGE_CENTS = IMAGE_QUERY_PER_CALL_ESTIMATE_CENTS;
 
 export class BudgetExceededError extends Error {
   readonly code = 'BUDGET_EXCEEDED' as const;
@@ -76,7 +78,7 @@ export async function checkBudget(
   const spent = await getTodaySpendCents(engine, clientId);
   if (spent >= dailyBudgetCents) {
     throw new BudgetExceededError(
-      `Daily Voyage spend cap reached: $${(spent / 100).toFixed(2)} >= $${(dailyBudgetCents / 100).toFixed(2)}. ` +
+      `Daily image-query spend cap reached: $${(spent / 100).toFixed(2)} >= $${(dailyBudgetCents / 100).toFixed(2)}. ` +
       `Reset at midnight UTC.`,
       spent,
       dailyBudgetCents,

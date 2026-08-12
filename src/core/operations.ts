@@ -5373,6 +5373,15 @@ const search_by_image: Operation = {
       throw new Error('search_by_image accepts only one of: image_path, image_url, image_data');
     }
 
+    // Remote OAuth callers are budgeted before any image fetch or model call.
+    // Local trusted callers have no client id and intentionally bypass this gate.
+    const clientId = ctx.remote !== false ? (ctx.auth?.clientId ?? '') : '';
+    if (clientId) {
+      const budgetUsd = await getDailyImageBudgetUsd(ctx.engine);
+      const { checkBudget } = await import('./spend-log.ts');
+      await checkBudget(ctx.engine, clientId, Math.round(budgetUsd * 100));
+    }
+
     // Resolve image bytes via the SSRF-defended loader. For remote callers,
     // tighter byte cap.
     const remoteCap = await getRemoteMaxBytes(ctx.engine);
@@ -5399,10 +5408,35 @@ const search_by_image: Operation = {
       },
     );
 
+    // Best-effort accounting must not turn a successful search into an error.
+    if (clientId) {
+      const { recordSpend, IMAGE_QUERY_PER_CALL_ESTIMATE_CENTS } = await import('./spend-log.ts');
+      const calls = 1 + (queryRefinement ? 1 : 0);
+      void recordSpend(ctx.engine, {
+        clientId,
+        tokenName: ctx.auth?.clientName ?? null,
+        operation: 'search_by_image',
+        spendCents: IMAGE_QUERY_PER_CALL_ESTIMATE_CENTS * calls,
+        provider: 'qwen-vllm',
+        model: './models/Qwen3-VL-Embedding-2B',
+      });
+    }
+
     return results;
   },
   cliHints: { name: 'search-by-image' },
 };
+
+async function getDailyImageBudgetUsd(engine: BrainEngine): Promise<number> {
+  try {
+    const v = await engine.getConfig('search.image_query.daily_budget_usd_per_client');
+    if (v == null) return 5;
+    const n = parseFloat(v);
+    return Number.isFinite(n) && n > 0 ? n : 5;
+  } catch {
+    return 5;
+  }
+}
 
 async function getLocalMaxBytes(engine: BrainEngine): Promise<number> {
   try {
