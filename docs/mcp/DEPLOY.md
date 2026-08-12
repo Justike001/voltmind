@@ -277,6 +277,29 @@ the required scope. Retrieval (`search`, `query`, graph traversal), page writes,
 and other database-backed operations run on the server; host filesystem and
 maintenance operations remain on the server's local CLI.
 
+## Self-service personal-KB provisioning (`/provision/request`)
+
+Offers an **admin-free** onboarding path: a user's own agent POSTs their company
+email + their Gogs repo SSH URL + their own Gogs personal-access token, and the
+Host provisions an isolated personal source + a source-scoped thin-client
+credential. See `skills/onboard-user/SKILL.md`.
+
+> **DEFAULT: OFF (security).** The endpoint is disabled by default and returns
+> 404 (not even discoverable/enumerable) until the operator explicitly enables
+> it:
+> ```bash
+> voltmind config set mcp.self_provision true    # runtime toggle, no restart
+> #   or run the server with VOLTMIND_SELF_PROVISION=1
+> voltmind config set mcp.self_provision false   # back off
+> ```
+> Default-off is intentional: a public internet (e.g. Tailscale Funnel) exposure
+> of this endpoint widens the attack surface and leaks internal topology in
+> error messages (Gogs host/IP, org, email existence). Prefer to expose it only
+> over a private/Tailnet address, and only while self-service onboarding is
+> actually in use. Enablement does NOT weaken the minted credential — it still
+> requires the caller's own Gogs token (email owner + repo-read proof), never
+> mints admin, and is rate-limited and audited.
+
 ## Deployment Options
 
 See [ALTERNATIVES.md](ALTERNATIVES.md) for a comparison of ngrok, Tailscale

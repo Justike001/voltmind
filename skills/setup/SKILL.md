@@ -216,6 +216,44 @@ voltmind search "<topic>"
 From here the user reads/writes only their own `personal-*` source; other users'
 sources stay unreachable.
 
+### Self-service: the user's agent claims their own KB (no admin in the loop)
+
+If the Host operator has enabled self-service (`voltmind config set mcp.self_provision
+true`, default OFF), a **user's own agent** can complete the WHOLE application —
+source registration + client registration + permission registration — in ONE request.
+Give the user (or their agent) this self-onboard message:
+
+> **自助开通**：我想自主开通我的公司知识库。
+> 1. 在公司 Gogs org `example-org` 里，用我的账号建一个属于我自己的私有知识库 repo（例如 `example-org/<my-name>_PersonalBrain`），并推一个初始提交。
+> 2. 拿到这个 repo 的 SSH 克隆地址（形如 `git@gogs.internal.example:example-org/<repo>.git`）。
+> 3. 进入 Gogs「设置 → Applications」给我生成一把 Personal Access Token。
+> 4. 调用自服务端点申请：
+>    ```bash
+>    curl -X POST https://<host-public-url>/provision/request \
+>      -H "Content-Type: application/json" \
+>      -d '{
+>        "email":"<我的公司邮箱>",
+>        "repo_url":"<上面那个 SSH 地址>",
+>        "gogs_token":"<我自己的 Gogs token>"
+>      }'
+>    ```
+> 5. 把返回的 `source_id`、`client_id`、`client_secret` 存好，然后用：
+>    ```bash
+>    voltmind init --mcp-only \
+>      --issuer-url https://<host-public-url> \
+>      --mcp-url https://<host-public-url>/mcp \
+>      --oauth-client-id <client_id> --oauth-client-secret <client_secret>
+>    voltmind doctor --json
+>    ```
+>    连上后就能读写**我自己的** `personal-*` 源。
+
+The request is ONE atomic self-service action: it creates the isolated
+`personal-<name>` source + SSH-checkouts the user's repo + mints a thin-client
+credential scoped to ONLY that source. It requires the caller's own Gogs token
+(email-owner + repo-read proof) — a member can only claim their own KB.
+First-claim instructions are shared out-of-band (users aren't connected yet);
+after connecting, their agent can `get_skill onboard-user` to self-serve later.
+
 ## Phase B: Standalone VoltMind (alternative)
 
 Only for a machine that runs its OWN engine (not a thin client) — e.g. a personal

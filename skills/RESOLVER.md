@@ -74,6 +74,7 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | Trigger | Skill |
 |---------|-------|
 | "Set up VoltMind", first boot | `skills/setup/SKILL.md` |
+| "onboard a user", "给新用户开通知识库", "provision personal", "给 user 建个人知识库", "create a user's personal brain" | `skills/onboard-user/SKILL.md` (Host/admin: derive isolated source from company email + SSH-checkout their Gogs repo + mint thin-client credential) |
 | "Now what?", "fill my brain", "cold start", "bootstrap", "import my data", "what should I import first" | `skills/cold-start/SKILL.md` |
 | "Migrate from Obsidian/Notion/Logseq" | `skills/migrate/SKILL.md` |
 | Brain health check, maintenance run | `skills/maintain/SKILL.md` |

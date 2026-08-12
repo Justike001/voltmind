@@ -288,6 +288,11 @@
       "name": "eiirp",
       "path": "eiirp/SKILL.md",
       "description": "Everything In Its Right Place — post-work organizer. 7-phase audit: inventory, taxonomy, schema check, file, skill graph audit, verify, report."
+    },
+    {
+      "name": "onboard-user",
+      "path": "onboard-user/SKILL.md",
+      "description": "Onboard a new user's personal knowledge base to the company VoltMind Host in one command: derive an isolated source from their company email, SSH-checkout their private Gogs repo, and mint a source-scoped thin-client credential (admin/Host-agent self-serve)."
     }
   ],
   "dependencies": {
