@@ -172,7 +172,7 @@ describe('forgetFactInFence — fence path (happy)', () => {
     });
     seedFile('people/alice', `| 1 | I will hit $10M by Q4 | fact | 1.0 | world | medium | 2026-01-01 |  | s |  |`);
 
-    const r = await forgetFactInFence(engine, id, { reason: 'changed my mind' });
+    const r = await forgetFactInFence(engine, id, { reason: 'changed my mind', expectedSourceId: 'default' });
     expect(r.ok).toBe(true);
     expect(r.path).toBe('fence');
 
@@ -196,7 +196,7 @@ describe('forgetFactInFence — fence path (happy)', () => {
     });
     seedFile('people/alice', `| 1 | F1 | fact | 1.0 | world | medium | 2026-01-01 |  | s |  |`);
 
-    await forgetFactInFence(engine, id, { reason: 'test' });
+    await forgetFactInFence(engine, id, { reason: 'test', expectedSourceId: 'default' });
 
     const body = readFileSync(join(brainDir, 'people/alice.md'), 'utf-8');
     const parsed = parseFactsFence(body);
@@ -214,7 +214,7 @@ describe('forgetFactInFence — fence path (happy)', () => {
     });
     seedFile('people/alice', `| 1 | F | fact | 1.0 | world | medium | 2026-01-01 |  | s |  |`);
 
-    const r = await forgetFactInFence(engine, id);
+    const r = await forgetFactInFence(engine, id, { expectedSourceId: 'default' });
     expect(r.reason).toBe('forgotten');
 
     const body = readFileSync(join(brainDir, 'people/alice.md'), 'utf-8');
@@ -231,7 +231,7 @@ describe('forgetFactInFence — fence path (happy)', () => {
       `| 1 | F | fact | 1.0 | world | medium | 2026-01-01 |  | s | important note |`,
     );
 
-    await forgetFactInFence(engine, id, { reason: 'r' });
+    await forgetFactInFence(engine, id, { reason: 'r', expectedSourceId: 'default' });
 
     const body = readFileSync(join(brainDir, 'people/alice.md'), 'utf-8');
     expect(body).toContain('important note');
@@ -250,7 +250,7 @@ describe('forgetFactInFence — fallback paths', () => {
     );
     const id = r.rows[0].id;
 
-    const result = await forgetFactInFence(engine, id);
+    const result = await forgetFactInFence(engine, id, { expectedSourceId: 'default' });
     expect(result.ok).toBe(true);
     expect(result.path).toBe('legacy_db');
 
@@ -269,7 +269,7 @@ describe('forgetFactInFence — fallback paths', () => {
       row_num: 1, fact: 'F',
     });
 
-    const result = await forgetFactInFence(engine, id);
+    const result = await forgetFactInFence(engine, id, { expectedSourceId: 'default' });
     expect(result.ok).toBe(true);
     expect(result.path).toBe('legacy_db');
   });
@@ -282,7 +282,7 @@ describe('forgetFactInFence — fallback paths', () => {
     // No file created — page exists in DB but not on disk.
     expect(existsSync(join(brainDir, 'people/ghost.md'))).toBe(false);
 
-    const result = await forgetFactInFence(engine, id);
+    const result = await forgetFactInFence(engine, id, { expectedSourceId: 'default' });
     expect(result.ok).toBe(true);
     expect(result.path).toBe('legacy_db');
   });
@@ -294,13 +294,13 @@ describe('forgetFactInFence — fallback paths', () => {
     });
     seedFile('people/alice', `| 1 | Different fact | fact | 1.0 | world | medium | 2026-01-01 |  | s |  |`);
 
-    const result = await forgetFactInFence(engine, id);
+    const result = await forgetFactInFence(engine, id, { expectedSourceId: 'default' });
     expect(result.ok).toBe(true);
     expect(result.path).toBe('legacy_db');
   });
 
   test('unknown id returns ok:false path:not_found', async () => {
-    const result = await forgetFactInFence(engine, 999999);
+    const result = await forgetFactInFence(engine, 999999, { expectedSourceId: 'default' });
     expect(result.ok).toBe(false);
     expect(result.path).toBe('not_found');
   });
@@ -313,7 +313,7 @@ describe('forgetFactInFence — fallback paths', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (engine as any).db.query(`UPDATE facts SET expired_at = now() WHERE id = $1`, [id]);
 
-    const result = await forgetFactInFence(engine, id);
+    const result = await forgetFactInFence(engine, id, { expectedSourceId: 'default' });
     expect(result.ok).toBe(false);
     expect(result.path).toBe('already_expired');
   });
