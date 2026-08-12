@@ -113,6 +113,13 @@ only confirmed assertions enter canonical semantic pages. The clarification
 queue is operational metadata, not a semantic citation source and not an
 `affected_pages` target.
 
+For each `state/actions/*` target, registration also carries the source-derived
+`action_assignments` intermediate. Assignee identity must not be reconstructed
+from generated summary prose. The registration gate requires every assignee in
+`owner` or `related_people`, in an explicit action-body wikilink, and in a
+person-page backlink. A failure persists `semantic_status: review_required` and
+must not be reported as semantic completion.
+
 Default to deferred review after the available batch is durable. Reconcile
 against later messages, event versions, and Brain-First context before asking,
 then use `skills/ask-user/SKILL.md` one question per turn. Ask immediately only

@@ -1,6 +1,6 @@
 ---
 name: ingest
-description: Route content and external file references into VoltMind, including normalized Teams/meeting/email evidence and client-authored long-running project tracking. Use for ingestion, tracking-aware evidence submission, Teams/Outlook attachments, SharePoint/OneDrive links, mapped shared drives, or materializing a referenced file.
+description: Route generic content, Teams/Outlook evidence, project progress, and external file references into VoltMind. Use for generic ingest requests, Microsoft connector evidence, tracking-aware semantic writes, shared-drive references, or materialization. Read only the reference modules selected by the routing table, but always execute the core workflow and completion gates in this file.
 triggers:
   - "ingest this"
   - "save this to brain"
@@ -8,17 +8,10 @@ triggers:
   - "configure shared drive"
   - "configure raidrive"
   - "map z drive"
-  - "shared drive path mapping"
   - "sharepoint attachment"
   - "onedrive file"
-  - "raidrive path"
-  - "shared drive path"
-  - "配置共享盘"
-  - "配置 raidrive"
-  - "映射 z 盘"
   - "submit tracked evidence"
   - "ingest project progress"
-  - "提交项目进展证据"
 tools:
   - search
   - get_page
@@ -52,740 +45,170 @@ writes_to:
 
 # Ingest Skill
 
-> **Convention:** see [conventions/brain-first.md](../conventions/brain-first.md) for the lookup chain (search → query → get_page → external).
+This file is the mandatory ingest control plane. Detailed variants live one
+level below in `references/`; load only the modules selected below. A reference
+may add constraints but may not reorder or bypass this core workflow.
 
-Ingest meetings, articles, media, documents, and conversations into the brain.
+Before writing, read:
 
-> **Filing rule:** Read `skills/_brain-filing-rules.md` before creating any new page.
+- `skills/conventions/brain-first.md`
+- `skills/conventions/quality.md`
+- `skills/conventions/brain-routing.md`
+- `skills/conventions/client-ingest-control-plane.md`
+- `skills/conventions/page-template-contract.md`
+- `skills/_brain-filing-rules.md`
 
-> **Taxonomy rule:** For every new page, route through `brain-taxonomist` and the
-> active schema pack (`voltmind schema show --json`). Do not use `RESOLVER.md`
-> or a vault `index.md` as the runtime taxonomy source. Folder README files may
-> explain a type, but the active pack is the machine-readable authority.
+## Reference Router
+
+Read every matching reference completely before executing that part of the
+workflow. Multiple rows may apply.
+
+| Signal | Required reference |
+|---|---|
+| Any ingest that captures source material | [source-acquisition.md](references/source-acquisition.md) |
+| Any canonical person/company/project/state write | [semantic-projection.md](references/semantic-projection.md) |
+| Any `state/actions/*` candidate or write | [action-projection.md](references/action-projection.md) |
+| Teams, Outlook Email, Outlook Calendar, or Microsoft relay | [microsoft-connectors.md](references/microsoft-connectors.md) |
+| SharePoint, OneDrive, attachment, RaiDrive, SMB, UNC, mapped drive, or materialization | [file-references.md](references/file-references.md) |
+| Project/workstream tracking, ambiguity, receipts, or client/Host write-through | [tracking-registration.md](references/tracking-registration.md) |
+| Teams/Outlook cold start, history window, checkpoint, 99-result cap, saturation, or 429 | [cold-start-windows.md](references/cold-start-windows.md) |
+
+Specialized content still routes first: `idea-ingest`, `media-ingest`, and
+`meeting-ingestion`. They inherit this skill's evidence-first, citation,
+entity-linking, semantic-completion, and tracking-registration gates.
 
 ## Contract
 
-- Every fact written to a brain page carries an inline `[Source: ...]` citation with date and provenance.
-- Every entity mention creates a back-link from the entity's page to the page mentioning them (Iron Law).
-- Raw sources are preserved for provenance via `voltmind files upload-raw` with
-  automatic size routing. SharePoint/OneDrive and mapped shared-drive
-  references are the exception: metadata is preserved in `external_file_refs`
-  and projected onto the page; the binary is not copied until an explicit
-  materialization request.
-- State sections are rewritten with current best understanding, never appended to.
-- Entity detection fires on every inbound message; notable entities get pages or updates.
-- Structured events may carry `tracking_refs` and `evidence_type`; preserve
-  these fields when forwarding events so runtime can reconcile existing
-  project/workstream pages.
-- Canonical source evidence MUST retain stable identity in Frontmatter before
-  any tracking write: `event_id` (or `tracking_event_id`),
-  `event_version` (or `tracking_event_version`), `evidence_type`, and
-  `tracking_refs`. The company-server evidence sweep uses only these fields to
-  find a client crash or network failure between `put_page` and registration;
-  it does not infer identity from transcript text.
+- Persist canonical raw evidence before derived semantic pages.
+- Preserve stable event identity: `event_id`/`tracking_event_id`,
+  `event_version`/`tracking_event_version`, `evidence_type`, and
+  `tracking_refs` when available.
+- Classify statements as `observed`, `inferred`, or `confirmed`; canonical
+  semantic pages contain only confirmed assertions.
+- Run Brain-First Lookup before creating or updating entities and tracking
+  targets.
+- Cite every durable fact inline with date and provenance.
+- Maintain entity cross-links, backlinks, and relevant timelines.
+- Preserve structured intermediates such as action assignees; never recover
+  identity from generated summary prose.
+- Complete semantic ingest only after deterministic coverage checks and receipt
+  registration pass.
 - Client-agent ingest may write `projects/`, `workstreams/`, and canonical
-  action/decision/commitment/risk pages after Brain-First Lookup. Write raw
-  source evidence first, preserve user prose via managed blocks, cite the
-  evidence page, then call `register_tracking_evidence`. The server never
-  repeats this semantic write on the ingest hot path.
-- Client-authored ingest is **local-vault first**: write raw and derived
-  Markdown locally, validate it, then synchronize the exact files with remote
-  `put_page` and register receipts. A remote write is not a substitute for a
-  durable local source page.
-- Ambiguous but notable signals are durable work, not noise. Preserve the raw
-  evidence, keep uncertain inference out of canonical truth, and route a stable
-  candidate to `state/indexes/ingest-clarification-review` through
-  `skills/clarification-review/SKILL.md`.
+  action/decision/commitment/risk pages after Brain-First Lookup.
+- Keep client-authored ingest local-vault first. Host raw-ingest compatibility
+  is a separate path and never repeats client semantic interpretation.
 
-> **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
-> **Convention:** See `skills/conventions/page-template-contract.md` for the canonical draft-backed write format.
-> **Convention:** See `skills/conventions/client-ingest-control-plane.md` for
-> local-first synchronization, coverage, file references, candidate routing,
-> and receipt rules.
+## Core Workflow
 
-Every mention of a person or company with a brain page MUST create a back-link
-FROM that entity's page TO the page mentioning them. An unlinked mention is a
-broken brain. See `skills/_brain-filing-rules.md` for format.
+1. **Route the source.** Determine brain, source, specialized ingest skill, and
+   every matching reference module. Verify the active schema pack before filing.
+2. **Capture evidence.** Persist raw text/transcript or a durable raw pointer and
+   stable file-reference metadata before semantic interpretation. Record the
+   ingest manifest/control state when the selected connector workflow requires
+   it.
+3. **Parse once into structured evidence.** Extract people, companies, dates,
+   events, actions, decisions, commitments, risks, file references, and tracking
+   references. Retain exact excerpts and connector identities. Classify every
+   statement as observed, inferred, or confirmed.
+4. **Preserve action assignees before prose generation.** For every action
+   candidate, retain:
 
-## Citation Requirements (MANDATORY)
-
-Every fact written to a brain page must carry an inline `[Source: ...]` citation.
-
-- **User's statements:** `[Source: User, {context}, YYYY-MM-DD]`
-- **Meeting data:** `[Source: Meeting "{title}", YYYY-MM-DD]`
-- **Email/message:** `[Source: email from {name} re: {subject}, YYYY-MM-DD]`
-- **Web content:** `[Source: {publication}, {URL}, YYYY-MM-DD]`
-- **Social media:** `[Source: X/@handle, YYYY-MM-DD](URL)` (include link)
-- **Synthesis:** `[Source: compiled from {sources}]`
-
-## Phases
-
-> **Router note:** This skill is a router. For specialized ingestion, see: idea-ingest, media-ingest, meeting-ingestion.
-
-1. **Parse the source.** Extract people, companies, dates, events, and any
-   external file references from the input. Classify each statement as
-   `observed`, `inferred`, or `confirmed`. Preserve observed evidence;
-   canonical semantic pages may contain only confirmed assertions.
-2. **Route external file references.** Validate each
-   `ExternalFileReferenceV1` and attach it to the source page. Microsoft files
-   use tenant/drive/item identity. RaiDrive and mapped shared drives use a
-   cross-user logical `root_key` plus normalized `relative_path`, or
-   `root_key + file_id` when the storage system supplies a stable file ID.
-   The thin client converts a user's `Z:\...` or username-specific UNC path to
-   that logical locator before sending it; new events must omit `open_path`.
-   Search and query can then find the file by name or logical path without
-   copying it. Include `schema_version: 1` and the non-empty occurrence
-   identity required by the control-plane convention; a malformed file reference
-   is a retryable write error, not a reason to drop the reference. Use
-   `file_ref_materialize` only after a user explicitly requests file analysis.
-3. **Classify each new entity before writing:**
-   - Check for an existing page by stable external identity before using a name
-     match. For Teams data, prefer `conversation_id`, then `team_id + channel_id`,
-     then aliases/display name.
-   - Ask `brain-taxonomist` to resolve the page type and path from the active
-     schema pack. Never hardcode a folder because the source is Teams or because
-     a page resembles an existing page.
-   - An internal Teams group chat may be written to `orgs/` when no formal org
-     record is available, but it MUST be marked as a provisional communication
-     container rather than inferred as a Department, Function, or formal Team.
-     Use the stable Teams identifiers in frontmatter:
-
-     ```yaml
-     type: org
-     org_kind: teams_group_chat
-     classification_status: provisional
-     source_system: teams
-     conversation_id: <stable-id>
-     team_id: <stable-id>
-     channel_id: <stable-id>
-     ```
-
-     Omit identifiers that are not present. Do not create separate role pages;
-     keep role fields on `people/` and `orgs/` pages.
-4. **For each entity mentioned:**
-   - Read the entity's page from voltmind to check if it exists
-   - If exists: update compiled_truth (rewrite State section with new info, don't append)
-   - If new: check notability gate, then store the page in voltmind with the appropriate type and slug
-5. **Long-running tracking.** Persist canonical raw evidence first. The source
-   page must carry the stable event identity fields described above. Then run
-   Brain-First Lookup over `projects/`, `workstreams/`, bindings, aliases,
-   backlinks, and Timeline. A unique match is updated; an unbound event may
-   create a project when goal/owner/scope/status/completion condition are clear,
-   or a workstream when it is a durable responsibility domain with no fixed end
-   date. Multiple candidates are appended immediately to
-   `state/indexes/project-tracking-review`; this is non-blocking and must not
-   be held only in the current session. Identity, fact, relationship, owner,
-   time, privacy, or brain/source ambiguity instead goes to
-   `state/indexes/ingest-clarification-review`. If both ambiguity classes apply,
-   cross-reference the records rather than duplicating the question.
-   One evidence event may update multiple targets. Update Timeline, managed
-   current state, and canonical state objects with evidence links and
-   `[Source: ...]`; then call `register_tracking_evidence` with the actual
-   `client_outcome` and `affected_pages` (including `no_signal`).
-6. **Append to entity timelines.** Add timeline entries to all relevant pages,
-   including directly-bound projects/workstreams and canonical state objects.
-   Do not use `submit_ingestion_event` for this client-authored path; that
-   operation remains a server raw-ingest compatibility route.
-7. **Create cross-reference links.** Link entities in voltmind for every entity pair mentioned together, using the appropriate relationship type.
-8. **Back-link all entities.** Update EVERY mentioned entity's page with a back-link to this page (Iron Law).
-9. **Timeline merge.** The same event appears on ALL mentioned entities' timelines. If Alice met Bob at Acme Corp, the event goes on Alice's page, Bob's page, and Acme Corp's page.
-10. **Schedule executable actions.** After all canonical local
-    `state/actions/*.md` pages from this ingest are durable, invoke
-    `skills/schedule-actions/SKILL.md` in interview mode. Hand off the exact
-    local file paths and action slugs; do not read a database or remote action
-    index first. Ensure each action retains its raw `source_refs` even when the
-    semantic summary appears complete. That skill re-reads the locally preserved
-    Teams/Outlook evidence, enriches the action with omitted observed details
-    and citations, then asks about only the remaining gaps one action per turn.
-    It persists the user-confirmed execution contract and exact time and
-    registers the ChatGPT desktop scheduled task. Do not schedule directly from
-    the ingest summary and do not treat extraction as execution consent.
-
-### Deferred clarification and semantic commit
-
-Run `skills/clarification-review/SKILL.md` whenever partial evidence leaves a
-notable signal unresolved. The default policy is:
-
-1. Persist raw evidence and the ingest manifest first.
-2. Continue writing confirmed, independent facts and processing unrelated
-   events.
-3. Append a stable candidate to
-   `state/indexes/ingest-clarification-review` and set
-   `semantic_status: review_required` for the affected ingest unit.
-4. After the available batch is durable, reconcile candidates against later
-   events and Brain-First context; self-resolve or deduplicate before asking.
-5. Use `ask-user` one question per turn. Ask immediately only when an affected
-   write would merge/overwrite the wrong entity, cross an ownership/privacy
-   boundary, create an actionable owner/deadline, or materially corrupt
-   canonical state.
-6. Preserve the user's answer as separate clarification provenance, then run
-   the normal client-first local `voltmind put` write-through. Do not rewrite
-   the raw source as though it contained the later oral context.
-
-The generic clarification index is operational metadata. It is not a semantic
-source citation and must not appear in `affected_pages` when registering
-tracking evidence.
-
-### Teams group-chat identity and later reconciliation
-
-During MVP, a durable Teams group chat is an `orgs/` page with
-`org_kind: teams_group_chat` and `classification_status: provisional` when the
-connector cannot prove a formal organizational unit. This is an ingestion
-container, not a claim about the company's org chart.
-
-When deeper Graph permissions become available, reconcile in place by stable
-Teams identifiers. Update `org_kind`, ownership, membership, and scope on the
-same page; do not create a second org page merely because the chat is later
-resolved to a formal Team, Department, Function, Committee, or Working Group.
-
-### Microsoft reference ingest
-
-The connector owns Microsoft OAuth and delta cursors. VoltMind accepts only the
-OAuth-bound relay's normalized event and never accepts `source_id` from the
-payload. `POST /ingest/events` is idempotent by source, platform, event ID, and
-event version; replaying an older version cannot overwrite a newer page.
-
-The managed `voltmind:file-refs` block is searchable content. Human-authored
-content and non-relay references must remain untouched when a relay refreshes
-the block. `search_file_refs` is preferred for exact path, item ID, service, or
-MIME queries; normal `search`/`query` results also carry hydrated `file_refs`.
-
-### Outlook Email And Calendar Signal Policy
-
-When an ingest event comes from Outlook Email or Outlook Calendar, apply the
-same signal/noise policy used by cold start. Do not treat every connector event
-as a durable brain item. Filter low-signal records before creating pages, while
-still preserving stable event identity for idempotency and later reconciliation.
-
-#### Outlook Email
-
-Classify each message or thread as one of:
-
-- `email_thread` — a human conversation with durable context;
-- `decision` — a decision, approval, or strategy change;
-- `commitment` — an owner, obligation, or deadline;
-- `project_update` — meaningful project, customer, partner, vendor, or candidate
-  progress;
-- `relationship_signal` — a durable change in role, relationship, or
-  communication pattern;
-- `automated_notification` — system, marketing, or utility mail;
-- `duplicate_or_represented` — content already represented by Calendar, Teams,
-  or another event with the same stable identity.
-
-**Auto-skip unless the user explicitly requests it:**
-
-- `noreply@`, `no-reply@`, `notifications@`, `support@`, and
-  `mailer-daemon@` senders;
-- newsletters, marketing mail, vendor drip campaigns, and unsubscribe-heavy
-  senders;
-- GitHub, Jira, Linear, Instagram, and other system notifications;
-- raw calendar invitations already represented by a Calendar event;
-- Teams reminders already represented by Teams data;
-- routine announcements such as new-hire, work-anniversary, birthday,
-  promotion, employee-spotlight, and similar status mail.
-
-**Always import or review:**
-
-- direct mail from people already present in the brain;
-- mail sent by the user containing decisions, strategy, original thinking, or
-  commitments;
-- flagged, starred, or important threads;
-- threads naming projects, customers, partners, candidates, vendors, or
-  deadlines;
-- threads with attachments or SharePoint/OneDrive/mapped-drive references.
-
-For selected threads, extract the thread summary, entities, commitments and
-actions, relationship context, project changes, and only notable timeline
-entries. Cite every durable fact as `[Source: email from {name} re: {subject},
-YYYY-MM-DD]`.
-
-#### Outlook Calendar
-
-Classify each event as one of:
-
-- `meeting` — a meeting with attendees and durable context;
-- `recurring_one_on_one` — a recurring 1:1 whose relationship or cadence
-  matters;
-- `project_meeting` — a board, customer, partner, hiring, planning, or
-  incident meeting;
-- `decision_or_deadline` — an event whose subject or body reveals a decision,
-  deadline, or project milestone;
-- `utility_event` — a reminder, focus block, lunch, travel buffer, holiday, or
-  other scheduling utility;
-- `duplicate_or_represented` — an event already captured as a meeting or from
-  another source.
-
-**Auto-skip unless the user explicitly requests it:**
-
-- holidays, reminders, focus blocks, lunch, travel buffers, and private
-  personal events without approval;
-- events with no attendees and no useful context;
-- recurring utility blocks that do not reveal relationships or projects;
-- duplicate events or raw invites already represented elsewhere.
-
-**Always consider for import or review:**
-
-- events with external attendees;
-- meetings with three or more attendees;
-- recurring 1:1s;
-- board, customer, partner, hiring, planning, and incident meetings;
-- subjects that reveal a project, decision, deadline, or relationship.
-
-For selected events, extract the subject, time, organizer, attendees, location,
-online meeting link, body preview when available, entities, project context,
-and notable timeline entries. Cite durable facts as
-`[Source: Outlook Calendar, {event title}, YYYY-MM-DD]`.
-
-#### Shared ingest behavior
-
-1. Apply the source-specific classification before writing a page.
-2. Preserve `event_id`, `event_version`, `evidence_type`, and `tracking_refs`
-   when supplied by a connector relay.
-3. Deduplicate cross-source representations before creating a second page or
-   timeline entry.
-4. Route selected signal through the normal Brain-First Lookup, entity
-   classification, project tracking, citation, and back-linking phases.
-5. Keep validated Outlook attachments and file links as metadata references;
-   materialize or analyze the file only after an explicit user request.
-
-### Mapped shared-drive reference ingest
-
-When the user is configuring or repairing a mapped shared-drive path, run the
-following on the thin-client workstation, not on the Host server:
-
-```powershell
-voltmind client-roots add synology-public `
-  --local-root 'Z:\' `
-  --unc-root '\\RaiDrive-CurrentUser\Synology'
-voltmind client-roots test synology-public
-voltmind client-roots normalize 'Z:\Public\Finance\example.xlsx'
-```
-
-Use a stable organization-wide root key; substitute the current workstation's
-drive letter and UNC host. If the agent has no local shell on that workstation,
-give these commands to the user instead of calling a Host MCP tool. Never run
-`client-roots` through remote MCP: it belongs to the client file plane.
-
-For RaiDrive, SMB, or another mapped shared drive, configure the same logical
-`root_key` on every client (for example `synology-public`). Keep each
-workstation's local drive and UNC roots only in its file-plane
-`~/.voltmind/config.json` under `client_file_roots`. Before ingestion, call the
-client resolver to emit only `root_key`, `relative_path`, and optional
-`file_id`; never send or persist a drive letter or username-bearing RaiDrive
-host. At query time, resolve the returned logical locator locally.
-
-If the connector supplies a stable NAS/SMB file ID, send it as `file_id`; this
-lets a move or rename update one reference. Without `file_id`, identity is
-path-based, so a move or rename cannot be proven to be the same file and may
-appear as a new reference. Missing mappings or temporary access failures must
-not delete an existing reference.
-
-For lookup, prefer the local wrapper when a workstation path was supplied:
-
-```powershell
-voltmind file-refs search 'Z:\Public\Finance\example.xlsx'
-```
-
-It normalizes locally, calls `search_file_refs` on the Host, and adds
-`resolved_open_path` locally. Agents without client shell access should call
-`search_file_refs` with `root_key` and `relative_path` instead.
-
-## Entity Detection on Every Message
-
-Production agents should detect entity mentions on EVERY inbound message. This is
-the signal detection loop that makes the brain compound over time.
-
-### Protocol
-
-1. **Scan the message** for entity mentions: people, companies, concepts, original
-   thinking. Fire on every message (no exceptions unless purely operational).
-2. **For each entity detected:**
-   - `voltmind search "name"` -- does a page already exist?
-   - **If yes:** load context with `voltmind get <slug>`. Use the compiled truth to
-     inform your response. Update the page if the message contains new information.
-   - **If no:** assess notability (see `skills/_brain-filing-rules.md`). If the entity
-     is worth tracking, create a new page with `voltmind put <type/slug>` and populate
-     with what you know.
-3. **After creating or updating pages:** sync to voltmind:
-   ```bash
-   voltmind sync --no-pull --no-embed
+   ```yaml
+   action_slug: state/actions/example-action
+   assignees:
+     - slug: people/alice-example
+       display_name: Alice Example
+       source_text: Alice Example
    ```
-4. **Don't block the conversation.** Entity detection and enrichment should happen
-   alongside the response, not before it. The user shouldn't wait for brain writes
-   to get an answer.
 
-### What counts as notable
+   Resolve adjacent connector mentions from structured mention nodes or known
+   aliases. Do not re-extract or guess assignees from an action summary.
+5. **Run Brain-First Lookup and taxonomy routing.** Resolve stable identities,
+   existing entities, projects/workstreams, bindings, aliases, backlinks, and
+   the active schema type/path before writing.
+6. **Handle ambiguity without blocking independent work.** Preserve evidence;
+   route project candidate ambiguity to `state/indexes/project-tracking-review`
+   and identity/fact/relationship/owner/time/privacy/routing ambiguity to
+   `state/indexes/ingest-clarification-review`. Do not promote guesses.
+7. **Write canonical pages locally.** Update current state rather than appending
+   stale state. Write citations, entity links, backlinks, timelines, and
+   canonical state objects. Use local `voltmind put` for validated atomic
+   write-through.
+8. **Validate deterministic coverage.** Confirm source citations, affected
+   pages, entity backlinks, and action assignee coverage. Every action assignee
+   must appear in `owner` or `related_people`, as an explicit body wikilink, and
+   on the person page as a backlink to the action.
+9. **Synchronize and register.** After the exact local pages reach the Host,
+   call `register_tracking_evidence` with actual `client_outcome`,
+   `affected_pages`, and `action_assignments`. A review-index-only result uses
+   `review_needed` with an empty `affected_pages` list.
+10. **Set completion state conservatively.** Any failed deterministic check,
+    ambiguity affecting canonical truth, missing write, or failed receipt sets
+    `semantic_status: review_required` or another non-complete state. Never mark
+    semantic work complete until the same event revision passes.
+11. **Schedule only after durability.** If canonical `state/actions/*.md` pages
+    were created, hand their exact local paths and slugs to
+    `skills/schedule-actions/SKILL.md`. Extraction is not execution consent.
 
-- People the user interacts with or discusses (not random mentions)
-- Companies relevant to the user's work or interests
-- Concepts or frameworks the user references or creates
-- The user's own original thinking (ideas, theses, observations) -- highest value
-- See `skills/_brain-filing-rules.md` for the full notability gate
+## Citation Requirements
 
-### What to capture from the user's own thinking
+- User statement: `[Source: User, {context}, YYYY-MM-DD]`
+- Meeting: `[Source: Meeting "{title}", YYYY-MM-DD]`
+- Email/message: `[Source: email from {name} re: {subject}, YYYY-MM-DD]`
+- Web: `[Source: {publication}, {URL}, YYYY-MM-DD]`
+- Social: `[Source: X/@handle, YYYY-MM-DD](URL)`
+- Synthesis: `[Source: compiled from {sources}]`
 
-Original thinking is the most valuable signal. Capture exact phrasing -- the user's
-language IS the insight. Don't paraphrase.
+## Completion Gate
 
-- Novel observations or theses
-- Frameworks, mental models, heuristics
-- Connections between ideas that others miss
-- Contrarian positions with reasoning
-- Strong reactions to external stimuli (what triggered it and why)
+An ingest unit is complete only when:
 
-## Media Workflows
+- raw evidence or its durable pointer exists;
+- stable identity and source routing are recorded;
+- every confirmed semantic write exists locally and remotely;
+- every fact is cited;
+- every mentioned notable entity is resolved or durably queued for review;
+- links, backlinks, and timelines pass the applicable coverage checks;
+- every affected action has a preserved and validated `action_assignments`
+  projection;
+- `register_tracking_evidence` records the actual outcome without conflict.
 
-Content the user encounters should be captured in the brain. File by PRIMARY
-SUBJECT, not by format (see `skills/_brain-filing-rules.md`).
-
-### Articles & Web Content
-
-**Input:** URL shared by user, or article mentioned in conversation.
-
-**Process:**
-1. Fetch content (`web_fetch` or equivalent)
-2. Extract: title, author, publication, date, full text
-3. Summarize: executive summary + key arguments (not a rehash)
-4. Extract entities: people, companies, concepts mentioned
-5. **Save raw source** for provenance (see Raw Source Preservation below)
-6. Analyze for the user: don't just summarize. What's interesting given what you
-   know about them? Flag connections, contradictions, content opportunities.
-
-**Write to:** appropriate directory per filing rules (about a person -> `people/`,
-about a company -> `companies/`, reusable framework -> `concepts/`, raw data -> `sources/`)
-
-### Videos & Podcasts
-
-**Input:** URL (YouTube, podcast, etc.) or local audio/video file.
-
-**Process:**
-1. Get transcript -- speaker-diarized if possible (services like Diarize.io provide
-   speaker-labeled, word-level timing)
-2. **Save raw transcript** (both JSON and human-readable TXT)
-3. Analyze: executive summary, key ideas, key quotes with speaker attribution,
-   notable stories/anecdotes, people and companies mentioned
-4. Extract and cross-reference all entities mentioned
-5. **HARD RULE:** every video/podcast brain page MUST link to the raw diarized
-   transcript. A page without transcript links is incomplete.
-
-**Write to:** `media/videos/` or `media/podcasts/` with back-links to all entities.
-
-**Quality bar:**
-- Compelling headline (not "This video discusses...")
-- Executive summary that makes you want to watch/listen
-- Key Ideas as actual insights, not topic labels
-- Verbatim quotes with real speaker names (not "speaker_0")
-- All entities extracted with context and back-linked
-
-### PDFs & Documents
-
-**Input:** File path or URL.
-
-**Process:**
-1. Extract text (OCR if scanned/image PDF)
-2. **Save raw source** for provenance
-3. Summarize: executive summary + key sections + notable data
-4. Extract entities
-5. Cross-reference from entity pages
-
-**Write to:** per filing rules (file by primary subject, not format).
-
-### Screenshots & Images
-
-**Input:** Image file.
-
-**Process:**
-1. Analyze content (OCR for text-heavy images, description for photos)
-2. If tweet screenshot: extract text, author, date, route to social media workflow
-3. If article screenshot: extract text, route to article workflow
-4. If data/chart: extract data points, describe findings
-
-**Write to:** depends on content -- route to the appropriate workflow above.
-
-### Meeting Transcripts
-
-**Input:** Transcript from meeting recording service, or manual notes.
-
-**Process:**
-1. Pull full transcript (source of truth -- AI summaries are medium-low trust)
-2. **Save raw transcript** for provenance
-3. Write meeting page with YOUR analysis above the line, raw transcript below
-4. **Entity propagation (MANDATORY):** for each attendee and company discussed:
-   - Update their brain page State section if new info surfaced
-   - Append to their Timeline with link to the meeting page
-   - Create page if person/company is notable and has no page yet
-5. A meeting is NOT fully ingested until all entity pages are updated
-
-**Write to:** `meetings/YYYY-MM-DD-short-description.md`
-
-**What makes a good meeting page:**
-- Reveals the real crux, not a bullet dump
-- Connects to existing brain pages (people, companies, deals)
-- Flags what changed (status, decisions, new info)
-- Names tension or what was left unsaid
-- Captures actual dynamic, not performative summary
-
-### Social Media Content
-
-**Input:** Tweet, thread, or social media post.
-
-**Process:**
-1. Fetch full content (thread, quote tweets, context)
-2. If images present: OCR via vision model for full text extraction
-3. Summarize: what's being said, why it matters, who's involved
-4. Extract entities and update brain pages
-5. Include direct link to the original post (MANDATORY for citations)
-
-**Write to:** `media/x/` for daily aggregation, or entity-specific directories
-if the post is primarily about a person/company.
-
-## Raw Source Preservation
-
-Every ingested item must have its raw source preserved for provenance.
-
-**Use `voltmind files upload-raw` for automatic size routing:**
-```bash
-voltmind files upload-raw <file> --page <page-slug> --type <type>
-```
-
-- **< 100 MB text/PDF**: stays in git (brain repo `.raw/` sidecar directories)
-- **>= 100 MB OR media** (video, audio, images): uploaded to cloud storage
-  via TUS resumable upload, `.redirect.yaml` pointer left in the brain repo
-
-The `.redirect.yaml` pointer format:
-```yaml
-target: supabase://brain-files/page-slug/filename.mp4
-bucket: brain-files
-storage_path: page-slug/filename.mp4
-size: 524288000
-size_human: 500 MB
-hash: sha256:abc123...
-mime: video/mp4
-uploaded: 2026-04-11T...
-type: transcript
-```
-
-**Accessing stored files:**
-- `voltmind files signed-url <storage-path>` -- generate 1-hour signed URL for viewing/sharing
-- `voltmind files restore <dir>` -- download back to local from cloud storage
-
-Use `put_raw_data` in voltmind to store raw API responses and metadata (JSON, not binary).
-
-## Test Before Bulk
-
-When processing multiple items (batch video ingestion, bulk meeting processing, etc.):
-
-1. **Test on 3-5 items first.** Run in test mode if available.
-2. **Read the actual output.** Is the quality good? Are titles compelling (not
-   "This video discusses...")? Are entities extracted and back-linked? Is the
-   format clean?
-3. **Fix what's wrong** in the approach/skill, not via one-off patches.
-4. **Only then: bulk execute** with throttling, commits every 5-10 items.
-
-The marginal cost of testing 3 items first is near zero. The cost of cleaning
-up 100 bad pages is enormous.
-
-## Quality Rules
-
-- Executive summary in compiled_truth must be updated, not just timeline appended
-- State section is REWRITTEN, not appended to. Current best understanding only.
-- Timeline entries are reverse-chronological (newest first)
-- Every person/company mentioned gets a page if notable (see filing rules)
-- Link types: knows, works_at, invested_in, founded, met_at, discussed
-- Source attribution: every timeline entry includes [Source: ...] citation
-- Back-links: every entity mention creates a back-link (Iron Law)
-- Filing: file by primary subject, not format or source (see filing rules)
-
-## Anti-Patterns
-
-- **Appending to State sections.** State is rewritten with the current best understanding on every update. Append-only State sections grow stale and contradictory.
-- **Ingesting without back-links.** An unlinked mention is a broken brain. Every entity mentioned must have a back-link from their page to the page mentioning them.
-- **Skipping raw source preservation.** Every ingested item must have its raw source preserved. A brain page without provenance is unverifiable.
-- **Bulk processing without sample test.** Test on 3-5 items first. Fix quality issues in the approach, not via one-off patches.
-- **Paraphrasing the user's original thinking.** The user's exact language IS the insight. Capture verbatim phrasing for ideas, theses, and frameworks.
-- **Dropping or prematurely committing ambiguity.** Preserve notable unresolved
-  signals in the clarification queue; do not ignore them and do not write
-  inferred meaning into canonical truth.
-- **Writing project tracking state.** The client agent is the primary semantic
-  writer: evidence first, then direct `put_page` updates/creates for bound
-  projects, workstreams, and canonical state objects, followed by
-  `register_tracking_evidence`. Server Dream only audits and repairs anomalies.
+Otherwise preserve progress and use `review_required`, `partial`, `blocked`,
+`rate_limited`, or the applicable non-complete status.
 
 ## Output Format
 
-### Client-first local write and remote synchronization (MANDATORY)
-
-The existing server relay remains available for company-server raw-ingest
-compatibility. A client-authored run follows this order:
-
-1. Read Teams/Outlook evidence with the client connector and persist the raw
-   source Markdown to the local vault.
-2. Run Brain-First Lookup; write confirmed semantic pages locally and persist
-   ambiguous project candidates or generic clarification candidates in their
-   durable review indexes. Do not wait for human review to continue raw capture
-   or unrelated semantic work.
-3. For canonical semantic pages, invoke local
-   `voltmind put <slug> < page.md`. The command validates the canonical draft
-   before its atomic local-vault write. A validation failure means no semantic
-   page was written locally or remotely.
-4. Let that local command forward the exact persisted Markdown through remote
-   `put_page`; do not call the Host MCP tool directly for client-first semantic
-   writes. If remote synchronization fails after the local write, retain
-   `local_written_remote_pending` and retry from the local file.
-5. Call `register_tracking_evidence` only after the remote source write
-   succeeds. Pass only actual project/workstream/state slugs in
-   `affected_pages`; review-index-only evidence uses `review_needed` with
-   an empty list.
-
-Do not use `submit_ingestion_event` for this client-authored path; that operation
-remains company-server-only raw-ingest compatibility. The shared remote repo
-does not change this ownership boundary: runtime role and client tool bindings
-decide which path is allowed.
-
-For Teams incremental reads, keep one checkpoint per `chat_id` and query with
-`sent_after = checkpoint - overlap`; deduplicate by `message_id`. The connector
-result cap is 99 messages. The checkpoint is a **high watermark**: the newest
-durably captured message timestamp, never the oldest message in a batch. A
-result count below 99 may advance it to `newest_returned_at` only after every
-event in the batch has been registered. A result count at the cap is
-`saturated`: it proves an interval may have been lost; it cannot be replayed
-with this connector.
-Do not claim a complete historical window or perform a one-shot 30-day backfill
-for a high-volume chat while the connector exposes neither an upper time bound
-nor a continuation/delta cursor.
-
-### Teams bounded-window and rate-limit behavior (client connector)
-
-The client Teams connector is an official OAuth-bound connector; the agent does
-not modify its request schema or transport behavior. Skill rules therefore
-control call shape, pacing, and completeness claims only.
-
-- Prefer `top=50` or a smaller value for channel/chat history reads. Do not
-  probe larger values to work around the connector cap.
-- A one-day or half-day *logical* window is useful only while the returned count
-  stays comfortably below 99. It reduces saturation risk but does not remove the
-  need for `message_id` deduplication, raw-source persistence, and a completion
-  record. It is not a server-enforced `[start, end)` query when the connector
-  exposes only `sent_after`.
-- When the connector exposes only `sent_after`, post-filtering by an intended
-  end time cannot recover messages displaced by a newest-first capped response.
-  If the result is saturated, do not split and retry historical child windows:
-  mark the logical range `blocked` with
-  `last_error: blocked_by_connector_pagination`, retain the newest captured
-  batch, and do not call the older history covered.
-- On HTTP 429, do not immediately repeat the same call. Honor `Retry-After`
-  when available; otherwise use bounded exponential backoff (30s, 60s, 120s,
-  300s) with a maximum retry budget. Keep the affected chat/channel in a
-  `rate_limited` or `blocked` state and do not classify it as `no_signal`.
-- Rate-limit retries per chat/channel, keep unrelated chats progressing, and
-  avoid concurrent history reads for high-volume channels. If the connector
-  does not expose `Retry-After` or retry metadata, record the observed 429 and
-  the next retry time in the ingest status/manifest rather than fabricating
-  completion.
-- For recurring ingest, persist a lightweight per-container manifest (whether
-  in connector state or a local `state/indexes/` page) containing the window,
-  checkpoint, returned count, saturation flag, retry count, and completion
-  status. For a one-off bounded batch this can be one line per window; it need
-  not become a semantic project page.
-
-#### Local cold-start ingest manifest contract
-
-For every Teams/Outlook cold-start run, create or resume one local Markdown
-manifest under `state/indexes/` before the first connector read.
-The manifest is the durable client-side control plane for both cold-start phase
-progress and per-container ingestion; do not maintain a competing JSON cursor.
-Write observed results only—never create a completion record from an assumption.
-
-Use independent records for every chat/channel and time window `[start, end)`.
-The run manifest frontmatter records the requested scope, connector capability
-limits, and `phases_completed` / `next_phase`. Its ledger records the work
-units. Use two statuses because raw capture and semantic routing are separate:
-
-```yaml
-container_kind: chat # chat | channel
-container_id: <stable-chat-or-channel-id>
-team_id: null # required for a channel
-channel_id: null # required for a channel
-window_start: 2026-07-01T00:00:00Z
-window_end: 2026-07-02T00:00:00Z
-acquisition_status: pending # pending | reading | captured | saturated | rate_limited | blocked | failed | interrupted
-semantic_status: pending # pending | complete | no_signal | review_required | skipped
-returned_count: 0
-accepted_count: 0
-saturated: false
-oldest_returned_at: null
-newest_returned_at: null
-first_message_id: null # diagnostic only
-last_message_id: null # diagnostic only
-attempt_count: 0
-last_attempt_at: null
-retry_after: null
-last_error: null
-source_pages: []
-next_action: read_window
-updated_at: 2026-08-05T00:00:00Z
-```
-
-The canonical deduplication key is `teams:<container_id>:<message_id>`.
-`first_message_id` and `last_message_id` help diagnose a window but do not
-replace per-message deduplication. Preserve complete message identity in raw
-evidence pages or the local index, not in the manifest.
-
-State transitions are deliberately conservative:
-
-1. Select the next eligible work unit from the manifest: due `rate_limited`,
-   then children of `saturated`, then `captured` with semantic work pending,
-   then the oldest `pending` window. Do not repeatedly call `blocked` windows.
-2. Set `acquisition_status: reading` and increment `attempt_count` immediately
-   before a connector read.
-3. Persist raw evidence first. Deduplicate by `message_id`, then write returned
-   bounds/counts and source-page links into the manifest.
-4. Set `captured` only when raw evidence is durable and the result is not
-   saturated. Set `semantic_status` separately after routing has reached
-   `complete`, `no_signal`, `review_required`, or `skipped`.
-5. If the result is saturated, retain the logical range as `saturated` and set
-   `next_action: blocked_by_connector_pagination`. Do not create historical
-   child windows unless the connector has a verified upper-time-bound or
-   continuation cursor. For an ongoing incremental feed, record an explicit
-   `unrecoverable_gap` from the prior high watermark to `oldest_returned_at`,
-   then advance a separate `incremental_high_watermark` to
-   `newest_returned_at` so future messages can still be captured. Never label
-   the gap covered.
-6. If the connector returns HTTP 429, set `rate_limited`, preserve the prior
-   coverage, record `retry_after` / `last_error`, and set
-   `next_action: retry_after_backoff`.
-7. Treat `reading` records older than 20 minutes as `interrupted`; rerun them
-   idempotently from raw evidence and message IDs.
-8. Mark a window fully complete only when the requested interval is covered,
-   raw evidence is durable, and no saturation, retry, or write failure remains.
-
-The manifest is operational state, not semantic truth. Project, person, action,
-decision, and risk pages must cite raw evidence pages and must not be created
-merely because a manifest says a window was read.
-
-```
+```text
 INGESTED: [title]
-==================
-
 Page: [slug]
-Type: [person / company / meeting / media / concept]
+Type: [type]
 Source: [source description]
-
-Entities detected: N
-- [entity] -> [created / updated] ([slug])
-
-Back-links created: N
-Timeline entries: N
-Raw source: [preserved at path / uploaded to cloud]
+Entities: [created/updated/review-required]
+Back-links: [count/status]
+Timelines: [count/status]
+Raw source: [path/pointer]
+Semantic status: [complete/review_required/no_signal/blocked]
+Receipt: [registered/review_needed/conflict/pending]
 ```
+
+## Anti-Patterns
+
+- Generating semantic pages before durable raw evidence.
+- Reconstructing assignees, owners, or entities from generated summaries.
+- Treating an unlinked mention as complete ingest.
+- Marking saturated, rate-limited, ambiguous, partially written, or
+  receipt-pending work complete.
+- Calling Host `put_page` as a substitute for required client-first local files.
+- Reinterpreting client-authored semantic writes again on the server hot path.
+- Scheduling an extracted action without the schedule-actions interview gate.
 
 ## Tools Used
 
-- Read a page from voltmind (get_page)
-- Store/update a page in voltmind (put_page)
-- Add a timeline entry in voltmind (add_timeline_entry)
-- Link entities in voltmind (add_link)
-- List tags for a page (get_tags)
-- Tag a page in voltmind (add_tag)
-- Store raw data in voltmind (put_raw_data)
-- Check backlinks in voltmind (get_backlinks)
+- `search`, `query`, `get_page` — Brain-First Lookup.
+- `put_page` — validated semantic write-through.
+- `add_link`, `add_timeline_entry` — graph and timeline propagation.
+- `search_file_refs`, `list_page_file_refs`, `attach_file_refs`,
+  `file_ref_materialize` — external file reference lifecycle.
+- `register_tracking_evidence` — semantic receipt and deterministic completion
+  gate.
+- `submit_ingestion_event` — company-server raw-ingest compatibility only.
