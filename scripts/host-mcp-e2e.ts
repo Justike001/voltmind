@@ -16,6 +16,12 @@ type BrainIdentity = {
   chunk_count: number;
 };
 
+type CallerIdentity = {
+  transport: string;
+  client_id?: string;
+  scopes: string[];
+};
+
 type SchemaStats = {
   schema_version: number;
   aggregate: { total_pages: number; typed_pages: number };
@@ -60,6 +66,13 @@ async function call<T>(config: VoltMindConfig, name: string, args: Record<string
 }
 
 async function inspectHost(config: VoltMindConfig): Promise<void> {
+  const caller = await call<CallerIdentity>(config, 'whoami');
+  assert(caller.transport === 'oauth', `Host E2E must use OAuth, received ${JSON.stringify(caller.transport)}`);
+  assert(caller.client_id === config.remote_mcp?.oauth_client_id, 'Host whoami client_id does not match the configured CI client');
+  assert(Array.isArray(caller.scopes), 'Host whoami did not return scopes');
+  const scopes = [...caller.scopes].sort();
+  assert(scopes.length === 1 && scopes[0] === 'read', `Host E2E client must have exactly read scope, received ${JSON.stringify(scopes)}`);
+
   const identity = await call<BrainIdentity>(config, 'get_brain_identity');
   assert(identity.engine === 'postgres', `Host engine must be postgres, received ${JSON.stringify(identity.engine)}`);
   assert(typeof identity.version === 'string' && identity.version.length > 0, 'Host did not publish a version');
