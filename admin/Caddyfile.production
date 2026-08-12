@@ -1,0 +1,28 @@
+{$VOLTMIND_ADMIN_HOST:admin.voltmind.localhost} {
+	tls internal
+	encode zstd gzip
+
+	route {
+		@voltmind path /admin/api/* /admin/login /admin/auth/* /admin/events
+		reverse_proxy @voltmind {$VOLTMIND_ADMIN_UPSTREAM:127.0.0.1:3131} {
+			header_up Host {host}
+		}
+
+		redir / /admin/ 308
+		redir /admin /admin/ 308
+
+		handle_path /admin/* {
+			root * {$VOLTMIND_ADMIN_DIST:C:/voltmind-admin/dist}
+			try_files {path} /index.html
+			file_server
+		}
+	}
+
+	log {
+		output file {$VOLTMIND_ADMIN_LOG:C:/ProgramData/Caddy/logs/admin-access.log} {
+			roll_size 10MiB
+			roll_keep 10
+			roll_keep_for 720h
+		}
+	}
+}
