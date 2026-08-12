@@ -1,6 +1,11 @@
 ---
-name: setup
-description: Set up VoltMind as a thin client connected to the company brain Host over MCP (OAuth 2.1), agent instructions, first retrieval, and thin-client shared-drive roots. Use for first connect to the Host's MCP server, or for configuring RaiDrive/SMB/Z-drive mappings on a client workstation.
+name: setup-standalone
+version: 1.0.0
+description: |
+  Set up VoltMind as a thin client connected to the company brain Host over MCP,
+  including the standalone-engine and autopilot/minions-install sections for
+  self-hosted operators. Preserved variant — NOT routed in RESOLVER and NOT in
+  the skillpack.
 triggers:
   - "set up voltmind"
   - "initialize brain"

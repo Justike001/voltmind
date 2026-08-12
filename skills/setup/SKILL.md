@@ -1,6 +1,10 @@
 ---
 name: setup
-description: User-agent manual: get the user's personal knowledge base live on the company VoltMind Host — create their private repo in company Gogs, apply for their own sourceID + read/write via the self-provision endpoint, connect as a thin client over MCP (OAuth), and persist credentials into their repo's AGENTS.md / env.
+description: |
+  User-agent manual for the company VoltMind Host. Create your personal knowledge
+  repo in the company Gogs, apply for your own sourceID + read/write via the
+  self-provision endpoint, connect as a thin client over MCP (OAuth), and persist
+  credentials into your repo's AGENTS.md / env.
 triggers:
   - "set up voltmind"
   - "initialize brain"
