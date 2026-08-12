@@ -125,13 +125,13 @@ export const EXTERNAL_LOOKUP_PATTERNS: ReadonlyArray<{ name: string; re: RegExp 
  * canonical brain-tool invocations developers actually write.
  */
 export const BRAIN_REFERENCE_PATTERNS: ReadonlyArray<RegExp> = [
-  /\bgbrain[\s_]+search\b/i,
-  /\bgbrain[\s_]+query\b/i,
-  /\bgbrain[\s_]+get[_-]?page\b/i,
-  /\bgbrain[\s_]+find[_-]?experts\b/i,
-  /\bgbrain[\s_]+get[_-]?backlinks\b/i,
-  /\bgbrain[\s_]+get[_-]?timeline\b/i,
-  /\bgbrain[\s_]+traverse[_-]?graph\b/i,
+  /\b(?:voltmind|gbrain)[\s_]+search\b/i,
+  /\b(?:voltmind|gbrain)[\s_]+query\b/i,
+  /\b(?:voltmind|gbrain)[\s_]+get[_-]?page\b/i,
+  /\b(?:voltmind|gbrain)[\s_]+find[_-]?experts\b/i,
+  /\b(?:voltmind|gbrain)[\s_]+get[_-]?backlinks\b/i,
+  /\b(?:voltmind|gbrain)[\s_]+get[_-]?timeline\b/i,
+  /\b(?:voltmind|gbrain)[\s_]+traverse[_-]?graph\b/i,
   // Bare tool names (subagent context, OpenClaw plugin form):
   /\bsearch\s+the\s+brain\b/i,
   /\bquery\s+the\s+brain\b/i,

@@ -431,7 +431,9 @@ function walkGlob(packRoot: string, glob: string): string[] {
     for (const e of entries) {
       if (e === 'node_modules' || e.startsWith('.git')) continue;
       const full = join(dir, e);
-      const rel = relative(packRoot, full);
+      // Glob syntax is POSIX-style even when the doctor runs on Windows.
+      // path.relative() emits backslashes there, so normalize before testing.
+      const rel = relative(packRoot, full).replace(/\\/g, '/');
       let st;
       try {
         st = statSync(full);
