@@ -7,9 +7,9 @@
 // the request path the express handler sees to (resolved-path, mime).
 
 // @ts-ignore — type: 'file' is Bun ESM, not in lib.d.ts
-import A_0_assets_index_D5Q2Dw_J_js from '../admin/dist/assets/index-D5Q2Dw_J.js' with { type: 'file' };
+import A_0_assets_index_CZs6yXDX_js from '../admin/dist/assets/index-CZs6yXDX.js' with { type: 'file' };
 // @ts-ignore — type: 'file' is Bun ESM, not in lib.d.ts
-import A_1_assets_index_D_MVv4Wl_css from '../admin/dist/assets/index-D_MVv4Wl.css' with { type: 'file' };
+import A_1_assets_index_DnQHjKZs_css from '../admin/dist/assets/index-DnQHjKZs.css' with { type: 'file' };
 // @ts-ignore — type: 'file' is Bun ESM, not in lib.d.ts
 import A_2_assets_voltage_logo_v_Bdo37kTM_png from '../admin/dist/assets/voltage-logo-v-Bdo37kTM.png' with { type: 'file' };
 // @ts-ignore — type: 'file' is Bun ESM, not in lib.d.ts
@@ -21,8 +21,8 @@ export interface AdminAsset {
 }
 
 export const ADMIN_ASSETS: Record<string, AdminAsset> = {
-  "/admin/assets/index-D5Q2Dw_J.js": { path: A_0_assets_index_D5Q2Dw_J_js as unknown as string, mime: "application/javascript; charset=utf-8" },
-  "/admin/assets/index-D_MVv4Wl.css": { path: A_1_assets_index_D_MVv4Wl_css as unknown as string, mime: "text/css; charset=utf-8" },
+  "/admin/assets/index-CZs6yXDX.js": { path: A_0_assets_index_CZs6yXDX_js as unknown as string, mime: "application/javascript; charset=utf-8" },
+  "/admin/assets/index-DnQHjKZs.css": { path: A_1_assets_index_DnQHjKZs_css as unknown as string, mime: "text/css; charset=utf-8" },
   "/admin/assets/voltage-logo-v-Bdo37kTM.png": { path: A_2_assets_voltage_logo_v_Bdo37kTM_png as unknown as string, mime: "image/png" },
   "/admin/index.html": { path: A_3_index_html as unknown as string, mime: "text/html; charset=utf-8" },
 };
