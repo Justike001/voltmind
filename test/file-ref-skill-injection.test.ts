@@ -30,10 +30,12 @@ describe('external-file runtime skill injection', () => {
       expect(operationNames.has(tool)).toBe(true);
     }
     const body = read('skills/ingest/SKILL.md');
-    expect(body).toContain('voltmind client-roots add synology-public');
-    expect(body).toContain('voltmind client-roots test synology-public');
-    expect(body).toContain("voltmind file-refs search 'Z:\\Public\\Finance\\example.xlsx'");
-    expect(body).toContain('Never run\n`client-roots` through remote MCP');
+    const mappedDrive = read('skills/ingest/references/mapped-shared-drive.md');
+    expect(body).toContain('(references/mapped-shared-drive.md)');
+    expect(mappedDrive).toContain('voltmind client-roots add synology-public');
+    expect(mappedDrive).toContain('voltmind client-roots test synology-public');
+    expect(mappedDrive).toContain("voltmind file-refs search 'Z:\\Public\\Finance\\example.xlsx'");
+    expect(mappedDrive).toContain('Never run\n`client-roots` through remote MCP');
   });
 
   test('cold-start exposes file-reference operations to tool-filtering harnesses', () => {

@@ -150,4 +150,85 @@ describe('register_tracking_evidence', () => {
     );
     expect(receipt).toEqual([{ target_type: 'evidence', outcome: 'registered' }]);
   });
+
+  test('downgrades an incomplete action projection to semantic review_required', async () => {
+    const actionSlug = 'state/actions/collect-samples';
+    await engine.putPage(actionSlug, {
+      type: 'action',
+      title: 'Collect samples',
+      compiled_truth: 'Two participants should collect samples.',
+      timeline: '',
+      frontmatter: {},
+    }, { sourceId: 'default' });
+    await engine.putPage('people/alice-example', {
+      type: 'person', title: 'Alice Example', compiled_truth: 'No backlink yet.', timeline: '', frontmatter: {},
+    }, { sourceId: 'default' });
+
+    const result = await registerTrackingEvidence(engine, 'default', {
+      evidence_slug: 'sources/teams/chat-1',
+      event_id: 'message-action-1',
+      event_version: '1',
+      evidence_type: 'teams_thread',
+      client_outcome: 'created',
+      affected_pages: [actionSlug],
+      action_assignments: [{
+        action_slug: actionSlug,
+        assignees: [{ slug: 'people/alice-example', display_name: 'Alice Example', source_text: 'Alice Example' }],
+      }],
+    });
+
+    expect(result.status).toBe('review_needed');
+    expect(result.semantic_status).toBe('review_required');
+    const rows = await engine.executeRaw<{ outcome: string; details: Record<string, unknown> }>(
+      `SELECT outcome, details FROM project_tracking_receipts WHERE event_key='message-action-1'`,
+    );
+    expect(rows[0]?.outcome).toBe('review_needed');
+    expect(rows[0]?.details.semantic_status).toBe('review_required');
+    expect(rows[0]?.details.client_outcome).toBe('review_needed');
+    expect(rows[0]?.details.action_assignments).toEqual(expect.any(Array));
+  });
+
+  test('recovers review_required only after every assignee surface is complete', async () => {
+    const actionSlug = 'state/actions/collect-samples';
+    const assignment = {
+      action_slug: actionSlug,
+      assignees: [{ slug: 'people/alice-example', display_name: 'Alice Example', source_text: 'Alice Example' }],
+    };
+    await engine.putPage(actionSlug, {
+      type: 'action', title: 'Collect samples', compiled_truth: 'Anonymous participant.', timeline: '', frontmatter: {},
+    }, { sourceId: 'default' });
+    await engine.putPage('people/alice-example', {
+      type: 'person', title: 'Alice Example', compiled_truth: 'No backlink yet.', timeline: '', frontmatter: {},
+    }, { sourceId: 'default' });
+    const input = {
+      evidence_slug: 'sources/teams/chat-1',
+      event_id: 'message-action-2',
+      event_version: '1',
+      evidence_type: 'teams_thread' as const,
+      client_outcome: 'created' as const,
+      affected_pages: [actionSlug],
+      action_assignments: [assignment],
+    };
+    expect((await registerTrackingEvidence(engine, 'default', input)).semantic_status).toBe('review_required');
+
+    await engine.putPage(actionSlug, {
+      type: 'action',
+      title: 'Collect samples',
+      compiled_truth: 'Assigned to [[people/alice-example|Alice Example]].',
+      timeline: '',
+      frontmatter: { related_people: ['people/alice-example'] },
+    }, { sourceId: 'default' });
+    await engine.putPage('people/alice-example', {
+      type: 'person',
+      title: 'Alice Example',
+      compiled_truth: `Current action: [[${actionSlug}]].`,
+      timeline: '',
+      frontmatter: {},
+    }, { sourceId: 'default' });
+
+    const recovered = await registerTrackingEvidence(engine, 'default', input);
+    expect(recovered.status).toBe('registered');
+    expect(recovered.semantic_status).toBe('complete');
+    expect(recovered.recovered).toBe(true);
+  });
 });
