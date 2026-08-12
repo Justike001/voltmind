@@ -15,6 +15,37 @@ stuck at 08-06 08:35 while age climbed 1039→1069min). Now a successful no-op
 stops re-dispatching. Best-effort write, swallowed so it never flips an
 `up_to_date` result.
 
+**Self-service personal-KB onboarding (`/provision/request`).** A user's agent can
+claim their OWN personal knowledge base without admin in the loop: it POSTs their
+company email + their Gogs repo SSH URL + their own Gogs personal-access token, and
+the Host creates an isolated `personal-<name>` source, SSH-checks-out their repo, and
+mints a source-scoped (`read write` on that source only) thin-client credential —
+source + client + permission in one request.
+
+- **Anti-IDOR gate:** the Host calls Gogs `/api/v1/user` and requires the token owner's
+  email == the claimed email AND repo-read access, so a member can only claim their own
+  KB. A wrong token/order/missing token returns `gogs_token_required` /
+  `gogs_token_invalid` / `email_owner_mismatch` / `repo_not_owned`.
+- **Default OFF (security):** the endpoint returns 404 until the operator enables it
+  (`voltmind config set mcp.self_provision true` or `VOLTMIND_SELF_PROVISION=1`);
+  rate-limited per IP and every claim is audited in `mcp_request_log`.
+- **Gogs SSH checkout:** clones via the Host's Gogs key, confined to the company Gogs
+  host (`VOLTMIND_GOGS_SSH_HOST` allowlist); SSH checkout is an admin-privilege
+  capability (never honored for non-admin callers). CLI/`provision-personal` path for
+  admins remains local and token-free.
+
+**Onboarding skills split + local-only routing hygiene.**
+- `skills/setup/SKILL.md` is now the **user-agent manual** (create Gogs repo → get Gogs
+  API token → self-provision sourceID + read/write → connect thin client → persist
+  creds to AGENTS.md/env → clone vault + bind remote); real host/Gogs endpoints are
+  written in. Phase B (Standalone) and Phase C.5 (autopilot/minions) were removed from
+  this formal variant.
+- `skills/setup-standalone/SKILL.md` keeps Phase B + Phase C.5 (placeholder URLs) and is
+  **not** registered in RESOLVER or the skillpack.
+- `skills/onboard-user/` is committed-side **dereferenced**: the file is gitignored and
+  the manifest/RESOLVER references are local-only via `git update-index --skip-worktree`
+  (host agent still routes to it; commits carry no dangling reference).
+
 ## [0.41.20.0] - 2026-05-26
 
 **One command tells you if your brain is healthy. And `gbrain doctor`
