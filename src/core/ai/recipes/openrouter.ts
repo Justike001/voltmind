@@ -66,8 +66,8 @@ export const openrouter: Recipe = {
      // text-embedding-3-small was trained at MRL breakpoints 512/1024/1536
      // (Weaviate analysis); 768 is a practical intermediate. Users opt into
      // a smaller dim via `voltmind config set embedding_dimensions <N>`.
-      // 1280 added: matches VoltMind DEFAULT_EMBEDDING_DIMENSIONS so brains
-      // migrating from zembed-1 (1280d) can use OpenRouter without a schema resize.
+      // 1280 remains available so brains migrating from the historical
+      // zembed-1 1280d default can use OpenRouter without a schema resize.
       dims_options: [512, 768, 1024, 1280, 1536],
       cost_per_1m_tokens_usd: 0.02,
       price_last_verified: '2026-05-20',

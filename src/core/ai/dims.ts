@@ -34,9 +34,9 @@ const VOYAGE_OUTPUT_DIMENSION_MODELS = new Set([
 // Per Voyage's API docs (2026-05). Out-of-range requests are rejected with
 // HTTP 400 by the upstream — catching it locally produces a clearer error
 // with the valid-values hint. The most common way to hit this in
-// production: `embedding_model: voyage:voyage-4-large` configured without
-// `embedding_dimensions`, where the gateway falls back to
-// DEFAULT_EMBEDDING_DIMENSIONS=1536 (an OpenAI default, not a Voyage one).
+// production: a configured dimension outside Voyage's discrete allowlist.
+// The current 2048d VoltMind default is valid, but explicit overrides still
+// need this local validation before the first upstream request.
 export const VOYAGE_VALID_OUTPUT_DIMS = [256, 512, 1024, 2048] as const;
 
 export function supportsVoyageOutputDimension(modelId: string): boolean {
@@ -51,9 +51,9 @@ export function isValidVoyageOutputDim(dims: number): boolean {
 // from zerank-2 (Matryoshka-style); smaller dims trade quality for storage.
 // ZE rejects any other value with HTTP 400; catching it locally produces a
 // clearer error with the valid-values hint. Same failure mode as the Voyage
-// case: `embedding_model: zeroentropyai:zembed-1` configured without
-// `embedding_dimensions` falls back to DEFAULT_EMBEDDING_DIMENSIONS=1536
-// (an OpenAI default), which ZE doesn't accept.
+// case: `embedding_model: zeroentropyai:zembed-1` configured with a dimension
+// outside ZE's discrete allowlist. The current 2048d VoltMind default is not
+// valid for zembed-1, so callers must select one of the values below.
 const ZEROENTROPY_DIM_MODELS = new Set(['zembed-1']);
 export const ZEROENTROPY_VALID_DIMS = [2560, 1280, 640, 320, 160, 80, 40] as const;
 
