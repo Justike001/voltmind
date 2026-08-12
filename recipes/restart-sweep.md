@@ -68,7 +68,7 @@ means, and what to try. Never say "something went wrong."
    re-alert-every-5-minutes-forever" failure mode.
 6. Sends one alert per cycle to Telegram (or stdout if no Telegram
    config), then records the alert in
-   `~/.gbrain/integrations/restart-sweep/alerted.json`.
+   `${VOLTMIND_HOME:-~/.voltmind}/integrations/restart-sweep/alerted.json`.
 
 ## Prerequisites
 
@@ -179,8 +179,10 @@ class MessageSweepDetector {
         this.ALERT_TOPIC = process.env.OPENCLAW_ALERT_TOPIC ?? '';
         this.AGGRESSIVE = process.env.OPENCLAW_RESTART_SWEEP_AGGRESSIVE === '1';
 
-        const gbrainHome = process.env.GBRAIN_HOME ?? path.join(os.homedir(), '.gbrain');
-        this.STATE_DIR = path.join(gbrainHome, 'integrations', 'restart-sweep');
+        const voltmindHome = process.env.VOLTMIND_HOME
+            ?? process.env.GBRAIN_HOME
+            ?? path.join(os.homedir(), '.voltmind');
+        this.STATE_DIR = path.join(voltmindHome, 'integrations', 'restart-sweep');
         this.LOG_PATH = path.join(this.STATE_DIR, 'sweep.log.jsonl');
         this.ALERTED_PATH = path.join(this.STATE_DIR, 'alerted.json');
         this.BOOTSTRAP_LOG = process.env.OPENCLAW_BOOTSTRAP_LOG ?? '/tmp/bootstrap-services.log';
@@ -376,6 +378,7 @@ class MessageSweepDetector {
     }
 
     async saveAlerted() {
+        await fsp.mkdir(this.STATE_DIR, { recursive: true });
         const obj = Object.fromEntries(this.alerted);
         const json = JSON.stringify(obj, null, 2);
         const tmp = this.ALERTED_PATH + '.tmp';
@@ -520,7 +523,7 @@ Expected output (no drops):
 
 If you want to see the alert path, manually edit a session in OpenClaw
 to set `abortedLastRun: true` and re-run. After the alert fires, check
-`~/.gbrain/integrations/restart-sweep/alerted.json` — the sessionKey
+`${VOLTMIND_HOME:-~/.voltmind}/integrations/restart-sweep/alerted.json` — the sessionKey
 should be there with a `lastAlertedAt` timestamp. Re-running within 6
 hours suppresses the alert.
 
@@ -557,23 +560,23 @@ Add to crontab via `crontab -e`:
 
 ```cron
 PATH=/usr/local/bin:/usr/bin:/bin
-*/5 * * * * /bin/bash ~/openclaw/scripts/restart-sweep-wrapper.sh >> ~/.gbrain/integrations/restart-sweep/cron.log 2>&1
+*/5 * * * * /bin/bash ~/openclaw/scripts/restart-sweep-wrapper.sh >> ~/.voltmind/integrations/restart-sweep/cron.log 2>&1
 ```
 
 Verify with `crontab -l`. Wait 5 minutes, then check the cron log to
 confirm it ran:
 
 ```bash
-tail -20 ~/.gbrain/integrations/restart-sweep/cron.log
+tail -20 ~/.voltmind/integrations/restart-sweep/cron.log
 ```
 
 ## Step 6: Verification
 
-1. `gbrain integrations doctor restart-sweep` — should pass all three
+1. `voltmind integrations doctor restart-sweep` — should pass all three
    health checks
-2. `~/.gbrain/integrations/restart-sweep/sweep.log.jsonl` exists and
+2. `${VOLTMIND_HOME:-~/.voltmind}/integrations/restart-sweep/sweep.log.jsonl` exists and
    gets a new entry every 5 minutes
-3. `~/.gbrain/integrations/restart-sweep/cron.log` shows successful
+3. `${VOLTMIND_HOME:-~/.voltmind}/integrations/restart-sweep/cron.log` shows successful
    invocations (no PATH errors, no `command not found`)
 4. After a real OpenClaw restart with a stuck session, the Telegram
    alert fires once, then the cooldown layer suppresses repeats for 6h
@@ -594,13 +597,13 @@ group's normal cadence is daily.
 
 ### Alerts firing repeatedly on the same session
 
-Check `~/.gbrain/integrations/restart-sweep/alerted.json`. If the
+Check `${VOLTMIND_HOME:-~/.voltmind}/integrations/restart-sweep/alerted.json`. If the
 sessionKey is missing or `lastAlertedAt` is recent, the cooldown should
 suppress. If it's not suppressing:
 
 - The state file may not be writable. Check `ls -ld
-  ~/.gbrain/integrations/restart-sweep/`.
-- `GBRAIN_HOME` may be set to a different path under cron than under
+  ${VOLTMIND_HOME:-~/.voltmind}/integrations/restart-sweep/`.
+- `VOLTMIND_HOME` may be set to a different path under cron than under
   your shell. Check the wrapper script's env loading.
 - The script's `STATE_DIR` resolution prints in stderr if mkdir fails.
   Check the cron log.
@@ -640,11 +643,11 @@ two more knobs:
 
 This recipe is the v1 shape: a script copied into the host repo and
 wired to cron. The v2 shape is a plugin Minion handler registered in
-the OpenClaw repo against `gbrain/minions` (see
+the OpenClaw repo against `voltmind/minions` (see
 `docs/guides/plugin-handlers.md`). Plugin-handler advantages:
 
 - Built-in queue idempotency (no cooldown layer needed)
-- Submit via `gbrain jobs submit restart-sweep` from any cron / agent /
+- Submit via `voltmind jobs submit restart-sweep` from any cron / agent /
   manual trigger
 - Centralized retry / backoff / lock management
 - One less host script to maintain

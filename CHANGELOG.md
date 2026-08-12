@@ -27,7 +27,7 @@ unchanged, no syncable drift, no chunker-version bump), sync returned
 `up_to_date` without refreshing `last_sync_at` — only `last_commit` advances
 were bumping the freshness bookmark. Autopilot's per-source D17 freshness gate
 keys staleness off `last_sync_at`, so it re-dispatched a no-op `sync` job
-every interval forever (observed at `personal-justike-liu`: `last_sync_at`
+every interval forever (observed at `personal-alice-example`: `last_sync_at`
 stuck at 08-06 08:35 while age climbed 1039→1069min). Now a successful no-op
 `up_to_date` sync refreshes `last_sync_at`, so the gate sees a fresh probe and
 stops re-dispatching. Best-effort write, swallowed so it never flips an

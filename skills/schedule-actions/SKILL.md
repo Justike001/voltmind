@@ -92,7 +92,7 @@ Teams/Outlook source pages are the recovery layer.
      `<brain>/sources/teams/event-slug.md`.
    - For an unqualified reference not found in the default source, search
      `<brain>/.sources/*/<slug>.md`, for example
-     `<brain>/.sources/personal-justike-liu/sources/teams/event-slug.md`.
+     `<brain>/.sources/personal-alice-example/sources/teams/event-slug.md`.
    - Accept a non-default match only when it is unique. If multiple source IDs
      contain the same slug, record an evidence-routing ambiguity; do not choose
      by filename recency or query a database to guess.

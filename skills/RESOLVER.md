@@ -49,6 +49,9 @@ are designed to chain (e.g., ingest then enrich for each entity).
 
 | Trigger | Skill |
 |---------|-------|
+| Phase 1 meeting page preparation, reviewed meeting extraction, inherited meeting enrichment | `skills/meeting/SKILL.md` |
+| Phase 1 private daily plan/review, today brief, tomorrow plan | `skills/daily/SKILL.md` |
+| Review, approve, reject, or edit proposed Personal Brain page writes | `skills/review/SKILL.md` |
 | Task add/remove/complete/defer/review | `skills/daily-task-manager/SKILL.md` |
 | Morning prep, meeting context, day planning | `skills/daily-task-prep/SKILL.md` |
 | Daily briefing, "what's happening today" | `skills/briefing/SKILL.md` |
