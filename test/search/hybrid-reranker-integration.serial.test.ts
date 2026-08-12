@@ -43,6 +43,10 @@ beforeAll(async () => {
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
+  await engine.setConfig('embedding_model', 'openai:text-embedding-3-large');
+  await engine.setConfig('embedding_dimensions', String(DIMS));
+  process.env.VOLTMIND_EMBEDDING_MODEL = 'openai:text-embedding-3-large';
+  process.env.VOLTMIND_EMBEDDING_DIMENSIONS = String(DIMS);
 
   // Seed pages whose content includes a shared keyword so the keyword
   // path will match and produce a candidate pool of 4+ items. putPage
@@ -82,6 +86,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  delete process.env.VOLTMIND_EMBEDDING_MODEL;
+  delete process.env.VOLTMIND_EMBEDDING_DIMENSIONS;
   __setEmbedTransportForTests(null);
   resetGateway();
   await engine.disconnect();

@@ -1,0 +1,66 @@
+import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { load } from 'js-yaml';
+
+type Workflow = {
+  name?: string;
+  jobs?: Record<string, {
+    name?: string;
+    needs?: string | string[];
+    steps?: Array<{ run?: string; uses?: string; with?: Record<string, unknown> }>;
+  }>;
+};
+
+function workflow(name: string): Workflow {
+  return load(readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8')) as Workflow;
+}
+
+function rendered(value: unknown): string {
+  return JSON.stringify(value);
+}
+
+describe('VoltMind CI and release contracts', () => {
+  test('one Test workflow gates every required surface on the same commit', () => {
+    const ci = workflow('test.yml');
+    const jobs = ci.jobs ?? {};
+
+    expect(ci.name).toBe('Test');
+    expect(Object.keys(jobs)).toEqual(expect.arrayContaining([
+      'test',
+      'serial',
+      'heavy',
+      'windows-adapter',
+      'tier1-postgres',
+      'tier2-runtime',
+      'test-status',
+    ]));
+    expect(jobs['test-status']?.needs).toEqual(expect.arrayContaining([
+      'test',
+      'serial',
+      'heavy',
+      'windows-adapter',
+      'tier1-postgres',
+      'tier2-runtime',
+    ]));
+
+    const text = rendered(ci);
+    expect(text).toContain('test:e2e:tier1');
+    expect(text).toContain('test:e2e:tier2');
+    expect(text).not.toContain('OPENAI_API_KEY');
+    expect(text).not.toContain('ANTHROPIC_API_KEY');
+    expect(text).not.toContain('openclaw@');
+    expect(text).not.toContain('ci-pass-');
+  });
+
+  test('release requires the green SHA, checksums every binary, and attests provenance', () => {
+    const release = workflow('release.yml');
+    const text = rendered(release);
+
+    expect(text).toContain('head_sha=$GITHUB_SHA');
+    expect(text).toContain('git merge-base --is-ancestor');
+    expect(text).toContain('SHA256SUMS');
+    expect(text).toContain('actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6');
+    expect(text).toContain('softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228');
+    expect(text).toContain('voltmind-windows-x64.exe');
+  });
+});

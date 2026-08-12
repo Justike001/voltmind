@@ -30,12 +30,12 @@ describe('README hero anchors (D9 regression guard)', () => {
   // First 50 lines is enough headroom for hero + first sub-section.
   const hero = readme.split('\n').slice(0, 50).join('\n');
 
-  test('mentions OpenClaw (the public agent platform credit)', () => {
-    expect(hero).toContain('OpenClaw');
+  test('mentions Claude Code (the coding-agent integration)', () => {
+    expect(hero).toContain('Claude Code');
   });
 
-  test('mentions Hermes (the public agent platform credit)', () => {
-    expect(hero).toContain('Hermes');
+  test('mentions Codex (the coding-agent integration)', () => {
+    expect(hero).toContain('Codex');
   });
 
   test('leads with the search-vs-answer differentiator (v0.40.8.1+)', () => {
@@ -46,9 +46,8 @@ describe('README hero anchors (D9 regression guard)', () => {
     expect(hero).toMatch(/Search gives you raw pages\. VoltMind gives you the answer/);
   });
 
-  test('includes at least one production number (pages/people/companies)', () => {
-    // Matches "17,888 pages", "4,383 people", "723 companies" style.
-    expect(hero).toMatch(/\d{1,3},?\d{3}\s+(pages|people|companies)/i);
+  test('includes a concrete benchmark corpus size', () => {
+    expect(hero).toMatch(/\d+-page\s+[^\n]*corpus/i);
   });
 
   test('includes BrainBench framing (P@5 or R@5)', () => {

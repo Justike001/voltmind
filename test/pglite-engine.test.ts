@@ -6,6 +6,7 @@
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
+import { DEFAULT_EMBEDDING_DIMENSIONS } from '../src/core/ai/defaults.ts';
 import type { BrainEngine } from '../src/core/engine.ts';
 import type { PageInput, ChunkInput } from '../src/core/types.ts';
 
@@ -211,7 +212,7 @@ describe('PGLiteEngine: Search', () => {
   });
 
   test('searchVector returns empty when no embeddings', async () => {
-    const fakeEmbedding = new Float32Array(1536);
+    const fakeEmbedding = new Float32Array(DEFAULT_EMBEDDING_DIMENSIONS);
     const results = await engine.searchVector(fakeEmbedding);
     expect(results.length).toBe(0);
   });
@@ -1306,7 +1307,7 @@ describe('PGLiteEngine: v0.13.1 error-wrap on connect() (#223)', () => {
     // as a cause (that was conflating #218 and #223 — migrations run AFTER
     // create()).
     expect(src).toContain('this._db = await PGlite.create');
-    expect(src).toContain('https://github.com/garrytan/voltmind/issues/223');
+    expect(src).toContain('https://github.com/Justike001/voltmind/issues/223');
     expect(src).toContain('voltmind doctor');
     expect(src).toContain('Original error:');
     // Regression guard: the user-visible error MESSAGE must not re-introduce

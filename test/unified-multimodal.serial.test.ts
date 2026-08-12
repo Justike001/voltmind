@@ -36,9 +36,12 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
+  await engine.setConfig('embedding_model', 'openai:text-embedding-3-large');
+  await engine.setConfig('embedding_dimensions', '1536');
+  process.env.VOLTMIND_EMBEDDING_MODEL = 'openai:text-embedding-3-large';
+  process.env.VOLTMIND_EMBEDDING_DIMENSIONS = '1536';
   fetchHandler = async () => new Response(JSON.stringify({
-    data: [{ embedding: Array.from({ length: 1024 }, () => 0.1), index: 0 }],
-    model: 'voyage-multimodal-3',
+    embeddings: { float: [Array.from({ length: 2048 }, () => 0.1)] },
   }), { status: 200 });
   globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     if (!fetchHandler) throw new Error('no fetch handler');
@@ -47,13 +50,15 @@ beforeEach(async () => {
   configureGateway({
     embedding_model: 'openai:text-embedding-3-large',
     embedding_dimensions: 1536,
-    embedding_multimodal_model: 'voyage:voyage-multimodal-3',
+    base_urls: { 'qwen-vllm': 'http://qwen.test/v1' },
     env: { OPENAI_API_KEY: 'test', VOYAGE_API_KEY: 'test' },
   });
 });
 
 afterEach(() => {
   globalThis.fetch = origFetch;
+  delete process.env.VOLTMIND_EMBEDDING_MODEL;
+  delete process.env.VOLTMIND_EMBEDDING_DIMENSIONS;
   resetGateway();
 });
 
@@ -102,13 +107,13 @@ describe('reindex --multimodal command (Phase 3)', () => {
 describe('hybridSearch unified routing (Phase 3)', () => {
   test('search.unified_multimodal=true routes ALL queries through embedding_multimodal', async () => {
     await engine.setConfig('search.unified_multimodal', 'true');
-    let voyageCalled = 0;
+    let qwenCalled = 0;
     let openaiCalled = 0;
     fetchHandler = async (url) => {
-      if (url.includes('multimodalembeddings')) {
-        voyageCalled++;
+      if (url.includes('/v2/embed')) {
+        qwenCalled++;
         return new Response(JSON.stringify({
-          data: [{ embedding: Array.from({ length: 1024 }, () => 0.1), index: 0 }],
+          embeddings: { float: [Array.from({ length: 2048 }, () => 0.1)] },
         }), { status: 200 });
       }
       if (url.includes('api.openai.com') && url.includes('embeddings')) {
@@ -121,7 +126,7 @@ describe('hybridSearch unified routing (Phase 3)', () => {
 
     await hybridSearch(engine, 'totally text query', { limit: 5 });
     // Unified routing: text query forced to multimodal endpoint.
-    expect(voyageCalled).toBeGreaterThanOrEqual(1);
+    expect(qwenCalled).toBeGreaterThanOrEqual(1);
   });
 
   test('D8 fail-open: empty unified column + not strict → falls back to text', async () => {
@@ -129,9 +134,9 @@ describe('hybridSearch unified routing (Phase 3)', () => {
     await engine.setConfig('search.unified_multimodal', 'true');
     let openaiCalled = 0;
     fetchHandler = async (url) => {
-      if (url.includes('multimodalembeddings')) {
+      if (url.includes('/v2/embed')) {
         return new Response(JSON.stringify({
-          data: [{ embedding: Array.from({ length: 1024 }, () => 0.1), index: 0 }],
+          embeddings: { float: [Array.from({ length: 2048 }, () => 0.1)] },
         }), { status: 200 });
       }
       openaiCalled++;
@@ -151,9 +156,9 @@ describe('hybridSearch unified routing (Phase 3)', () => {
     await engine.setConfig('search.unified_multimodal_only', 'true');
     let openaiCalled = 0;
     fetchHandler = async (url) => {
-      if (url.includes('multimodalembeddings')) {
+      if (url.includes('/v2/embed')) {
         return new Response(JSON.stringify({
-          data: [{ embedding: Array.from({ length: 1024 }, () => 0.1), index: 0 }],
+          embeddings: { float: [Array.from({ length: 2048 }, () => 0.1)] },
         }), { status: 200 });
       }
       openaiCalled++;

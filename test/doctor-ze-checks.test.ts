@@ -110,12 +110,12 @@ describe('checkEmbeddingWidthConsistency', () => {
           AND attname = 'embedding'
           AND NOT attisdropped`,
     );
-    const m = rows[0].format_type.match(/vector\((\d+)\)/i);
+    const m = rows[0].format_type.match(/(?:halfvec|vector)\((\d+)\)/i);
     expect(m).not.toBeNull();
     const schemaDim = parseInt(m![1], 10);
 
     configureGateway({
-      embedding_model: 'openai:text-embedding-3-large',
+      embedding_model: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
       embedding_dimensions: schemaDim,
       env: { ...process.env },
     });

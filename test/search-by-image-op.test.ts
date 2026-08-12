@@ -47,8 +47,8 @@ beforeEach(async () => {
   tmpRoot = mkdtempSync(join(tmpdir(), 'voltmind-search-by-image-op-'));
   fetchHandler = async () => new Response(
     JSON.stringify({
-      data: [{ embedding: Array.from({ length: 1024 }, () => 0.1), index: 0 }],
-      model: 'voyage-multimodal-3',
+      embeddings: { float: [Array.from({ length: 2048 }, () => 0.1)] },
+      model: './models/Qwen3-VL-Embedding-2B',
     }),
     { status: 200 },
   );
@@ -57,10 +57,10 @@ beforeEach(async () => {
     return fetchHandler(typeof url === 'string' ? url : url.toString(), init ?? {});
   }) as typeof fetch;
   configureGateway({
-    embedding_model: 'openai:text-embedding-3-large',
-    embedding_dimensions: 1536,
-    embedding_multimodal_model: 'voyage:voyage-multimodal-3',
-    env: { OPENAI_API_KEY: 'test', VOYAGE_API_KEY: 'test' },
+    embedding_model: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
+    embedding_dimensions: 2048,
+    embedding_multimodal_model: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
+    env: { QWEN_VLLM_BASE_URL: 'http://qwen.test/v1' },
   });
 });
 
@@ -135,7 +135,7 @@ describe('search_by_image op — D23-#6 spend cap', () => {
       { image_data: PNG_BYTES.toString('base64') },
     ).catch((e: any) => e as Error);
     expect(err).toBeInstanceOf(Error);
-    expect((err as Error).message).toContain('Daily Voyage spend cap reached');
+    expect((err as Error).message).toContain('Daily image-query spend cap reached');
   });
 
   test('allows remote call when under budget', async () => {

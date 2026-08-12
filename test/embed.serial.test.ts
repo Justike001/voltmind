@@ -57,6 +57,9 @@ function mockEngine(overrides: Partial<Record<string, any>> = {}): BrainEngine {
     get(_, prop: string) {
       if (prop === '_calls') return calls;
       if (overrides[prop]) return overrides[prop];
+      // Page/chunk embedding now finishes by refreshing stale take vectors.
+      // Tests that only model page chunks use the correct empty fixture.
+      if (prop === 'listStaleTakes') return async () => [];
       return track(prop);
     },
   });

@@ -110,11 +110,8 @@ describe('resolveEmbeddingColumn — resolution chain', () => {
 
 describe('getEmbeddingColumnRegistry — builtins + merge', () => {
   test('builtin embedding always present even with empty user config', () => {
-    // v0.37 fix wave (Lane A.5 + CDX2-3): the registry's resolution
-    // chain is `cfg > gateway > DEFAULT_EMBEDDING_*`. Under the legacy
-    // preload (bunfig.toml), the gateway is set to OpenAI/1536, so an
-    // empty cfg picks up those values via the gateway tier. New tests
-    // that want the pure-DEFAULT behavior call `resetGateway()` first.
+    // The registry's primary column follows the configured/preloaded text
+    // gateway; only embedding_image is hard-pinned to Qwen3-VL.
     const reg = getEmbeddingColumnRegistry(cfg());
     expect(reg.embedding).toBeDefined();
     expect(reg.embedding!.type).toBe('halfvec');
@@ -122,11 +119,11 @@ describe('getEmbeddingColumnRegistry — builtins + merge', () => {
     expect(reg.embedding!.provider).toBe('openai:text-embedding-3-large');
   });
 
-  test('builtin embedding_image shares the configured native dimensions', () => {
+  test('builtin embedding_image uses the canonical Qwen3-VL dimensions', () => {
     const reg = getEmbeddingColumnRegistry(cfg());
     expect(reg.embedding_image).toBeDefined();
     expect(reg.embedding_image!.type).toBe('halfvec');
-    expect(reg.embedding_image!.dimensions).toBe(1536);
+    expect(reg.embedding_image!.dimensions).toBe(2048);
   });
 
   test('builtin embedding derives provider from cfg.embedding_model', () => {
@@ -137,11 +134,11 @@ describe('getEmbeddingColumnRegistry — builtins + merge', () => {
     expect(reg.embedding!.dimensions).toBe(1024);
   });
 
-  test('builtin embedding_image derives provider from cfg.embedding_multimodal_model', () => {
+  test('builtin embedding_image stays canonical despite a legacy multimodal override', () => {
     const reg = getEmbeddingColumnRegistry(
       cfg({ embedding_multimodal_model: 'voyage:voyage-multimodal-3' }),
     );
-    expect(reg.embedding_image!.provider).toBe('voyage:voyage-multimodal-3');
+    expect(reg.embedding_image!.provider).toBe('qwen-vllm:./models/Qwen3-VL-Embedding-2B');
   });
 
   test('user-declared columns merge with builtins', () => {
@@ -454,9 +451,7 @@ describe('codex /ship #2 — descriptor passthrough validates', () => {
 describe('codex /ship #4 — isCacheSafe (embedding-space-based skip)', () => {
   test('default name + matching dim + matching model → safe', () => {
     // v0.37 fix wave (Lane A.6 + CDX2-3): isCacheSafe baselines against
-    // `cfg > gateway > DEFAULT`. Under the legacy preload (bunfig.toml),
-    // the gateway is set to OpenAI/1536, so a matching resolved column
-    // is cache-safe even with empty cfg.
+    // `cfg > gateway > DEFAULT`; the test preload is OpenAI/1536.
     const r: ResolvedColumn = {
       name: 'embedding',
       type: 'vector',
@@ -511,8 +506,7 @@ describe('codex /ship #4 — isCacheSafe (embedding-space-based skip)', () => {
 
   test('zero-config brain (cfg has no embedding_dimensions/model) → defaults match → safe', () => {
     // v0.37 fix wave: with empty cfg, registry + isCacheSafe fall
-    // through to gateway state. Preload sets OpenAI/1536; matching
-    // column is safe.
+    // through to the preloaded OpenAI/1536 gateway state.
     const r: ResolvedColumn = {
       name: 'embedding',
       type: 'vector',

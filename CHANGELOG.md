@@ -4,6 +4,33 @@ All notable changes to VoltMind will be documented in this file.
 
 ## [Unreleased]
 
+## [0.41.21.1] - 2026-08-12
+
+**VoltMind-native release gates and verifiable binaries.** This patch replaces
+the inherited gbrain/OpenClaw E2E and CI/CD assumptions with a release contract
+that exercises the current VoltMind runtime. PostgreSQL Tier 1 now runs fresh
+bootstrap and migration replay, JSONB round-trips, and multi-source isolation
+one file at a time against PostgreSQL 16 with pgvector. Tier 2 runs authenticated
+HTTP/MCP dispatch and remote-source lifecycle tests against a separate real
+PostgreSQL service, without requiring OpenAI, Anthropic, or ZeroEntropy secrets.
+
+- Test, Serial, Heavy, Windows adapter, Tier 1, and Tier 2 are mandatory jobs in
+  one workflow and one commit-level release gate. The old content-hash shortcut
+  was removed so a release SHA cannot inherit another commit's green result.
+- Heavy tests now run on every push and pull request, collect diagnostics from
+  `.voltmind`, and inspect the current `voltmind_cycle_locks` schema.
+- Windows validates the full adapter contract and compiles the Windows release
+  binary with the same pinned Bun toolchain used by the Linux jobs.
+- A release tag must match `package.json`, point into `master`, and reference an
+  exact SHA whose push-triggered Test workflow succeeded before builders start.
+- Release assets include individual SHA-256 files plus a consolidated
+  `SHA256SUMS`. GitHub's OIDC-backed artifact attestation records signed build
+  provenance for all three platform binaries before the Release is published.
+
+To take advantage, verify downloads with `sha256sum --check SHA256SUMS` and use
+`gh attestation verify <binary> --repo Justike001/voltmind` to validate the
+GitHub-hosted provenance.
+
 ## [0.41.21.0] - 2026-08-12
 
 **Release hardening and VoltMind naming finalization.** This release closes the

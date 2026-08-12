@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 
 const skillPath = 'skills/ingest/SKILL.md';
-const originalSha256 = '25adf6022a4e10859a9f09e40035bf97549c5ff4fddfebc4c1b229d7a0f934fb';
+const originalSha256 = '33b1e0b9581829672c3cba9d6699bd2d7c6e42217d8b6128593835eef3efb090';
 const referenceNames = [
   'clarification-and-semantic-commit',
   'microsoft-connectors',

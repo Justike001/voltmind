@@ -283,8 +283,8 @@ describe('Lane D.2 — embed pre-flight catches dim mismatch before worker pool'
     }
     expect(caught).toBeInstanceOf(EmbeddingDimMismatchError);
     const err = caught as InstanceType<typeof EmbeddingDimMismatchError>;
-    expect(err.recipeMessage).toContain('vector(1536)');
-    expect(err.recipeMessage).toContain('vector(1280)');
+    expect(err.recipeMessage).toContain('halfvec(1536)');
+    expect(err.recipeMessage).toContain('halfvec(1280)');
     // The transport must never have fired — pre-flight's whole point is
     // to kill the N-parallel-API-call-fail-pattern.
     expect(transportCalled).toBe(false);

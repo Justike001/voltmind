@@ -43,12 +43,12 @@ function fakeCtx(remote = false): OperationContext {
 }
 
 describe('loadActivePackBestEffort', () => {
-  it('returns ResolvedPack when load succeeds (default bundled voltmind-base)', async () => {
-    // No locator override → defaults to bundled voltmind-base resolution.
+  it('returns ResolvedPack when load succeeds (default personal-brain pack)', async () => {
+    // No locator override → resolves the canonical personal-brain default.
     await withEnv({ VOLTMIND_HOME: tmpDir, VOLTMIND_SCHEMA_PACK: undefined }, async () => {
       const result = await loadActivePackBestEffort(fakeCtx());
       expect(result).not.toBeNull();
-      expect(result?.manifest.name).toBe('voltmind-base');
+      expect(result?.manifest.name).toBe('voltmind-personal-brain');
     });
   });
 

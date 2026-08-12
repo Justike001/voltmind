@@ -3,14 +3,14 @@
 # Sync writer-lock concurrency regression test.
 #
 # Spawns N concurrent `voltmind sync` processes against one DB; asserts:
-#   1. Exactly one wins the writer lock (`voltmind-sync` row in `gbrain_cycle_locks`).
+#   1. Exactly one wins the writer lock (`voltmind-sync` row in `voltmind_cycle_locks`).
 #   2. N-1 lose with "Another sync is in progress" — they fail FAST, they don't queue.
 #      (Per src/commands/sync.ts:377 — performSync uses `tryAcquireDbLock`, no wait.)
-#   3. After all processes exit, zero leaked `gbrain_cycle_locks` rows remain.
+#   3. After all processes exit, zero leaked `voltmind_cycle_locks` rows remain.
 #
 # Why the test matters: the eng-review-flagged v1 plan was wrong — the original
 # plan asserted the wrong semantics ("N-1 wait then complete one at a time")
-# and snapshot the wrong table (`pg_locks` instead of `gbrain_cycle_locks`).
+# and snapshot the wrong table (`pg_locks` instead of `voltmind_cycle_locks`).
 # Both reviewers caught it; this script tests the actual contract.
 #
 # Postgres-only (no DATABASE_URL = graceful skip with hint).
@@ -125,10 +125,9 @@ rm -f "${EXIT_FILES[@]}" "${OUT_FILES[@]}"
 
 echo "[sync_lock_regression] outcomes: winners=$WINNERS losers=$LOSERS unknown=$UNKNOWN" | tee -a "$LOG"
 
-# Step 5: assert no leaked gbrain_cycle_locks rows. The pkey column is `id`,
-# not `lock_id` (column name confirmed via \d gbrain_cycle_locks).
-LEAKED=$(psql "$DATABASE_URL" -t -A -c "SELECT COUNT(*) FROM gbrain_cycle_locks WHERE id = 'voltmind-sync';" 2>>"$LOG" | tr -d ' ')
-echo "[sync_lock_regression] post-run gbrain_cycle_locks(voltmind-sync) row count: $LEAKED" | tee -a "$LOG"
+# Step 5: assert no leaked voltmind_cycle_locks rows. The pkey column is `id`.
+LEAKED=$(psql "$DATABASE_URL" -t -A -c "SELECT COUNT(*) FROM voltmind_cycle_locks WHERE id = 'voltmind-sync';" 2>>"$LOG" | tr -d ' ')
+echo "[sync_lock_regression] post-run voltmind_cycle_locks(voltmind-sync) row count: $LEAKED" | tee -a "$LOG"
 
 # Step 6: verdict
 FAIL=0
@@ -151,7 +150,7 @@ fi
 
 # The lock row must be cleaned up on exit (release via try/finally).
 if [ "$LEAKED" != "0" ]; then
-  echo "[sync_lock_regression] FAIL: $LEAKED leaked gbrain_cycle_locks(voltmind-sync) row(s) after all syncs exited" >&2
+  echo "[sync_lock_regression] FAIL: $LEAKED leaked voltmind_cycle_locks(voltmind-sync) row(s) after all syncs exited" >&2
   FAIL=1
 fi
 

@@ -10,10 +10,17 @@
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
-import type { ChunkInput } from '../src/core/types.ts';
+import type { ChunkInput, ResolvedColumn } from '../src/core/types.ts';
 import { configureGateway, resetGateway } from '../src/core/ai/gateway.ts';
 
 let engine: PGLiteEngine;
+
+const LEGACY_EMBEDDING_COLUMN: ResolvedColumn = {
+  name: 'embedding',
+  type: 'vector',
+  dimensions: 1536,
+  embeddingModel: 'openai:text-embedding-3-large',
+};
 
 function basisEmbedding(idx: number, dim = 1536): Float32Array {
   const emb = new Float32Array(dim);
@@ -146,7 +153,10 @@ describe('searchKeyword — types filter', () => {
 
 describe('searchVector — types filter', () => {
   test('no types filter: returns all matching types', async () => {
-    const results = await engine.searchVector(basisEmbedding(10), { limit: 10 });
+    const results = await engine.searchVector(basisEmbedding(10), {
+      embeddingColumn: LEGACY_EMBEDDING_COLUMN,
+      limit: 10,
+    });
     // Vector search may return all by similarity; the assertion is that
     // the result set is non-empty and the filter is opt-in.
     expect(results.length).toBeGreaterThan(0);
@@ -154,6 +164,7 @@ describe('searchVector — types filter', () => {
 
   test('types: [person, company] excludes concept from vector results', async () => {
     const results = await engine.searchVector(basisEmbedding(10), {
+      embeddingColumn: LEGACY_EMBEDDING_COLUMN,
       types: ['person', 'company'],
       limit: 10,
     });
@@ -165,6 +176,7 @@ describe('searchVector — types filter', () => {
 
   test('types: [concept] returns only concept-typed results from vector', async () => {
     const results = await engine.searchVector(basisEmbedding(12), {
+      embeddingColumn: LEGACY_EMBEDDING_COLUMN,
       types: ['concept'],
       limit: 10,
     });

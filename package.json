@@ -54,6 +54,8 @@
     "check:wasm": "scripts/check-wasm-embedded.sh",
     "check:newlines": "scripts/check-trailing-newline.sh",
     "test:e2e": "bash scripts/run-e2e.sh",
+    "test:e2e:tier1": "bash scripts/run-e2e.sh test/e2e/postgres-bootstrap.test.ts test/e2e/jsonb-roundtrip.test.ts test/e2e/multi-source.test.ts",
+    "test:e2e:tier2": "bash scripts/run-e2e.sh test/e2e/http-transport.test.ts test/e2e/sources-remote-mcp.test.ts",
     "test:slow": "bash scripts/run-slow-tests.sh",
     "test:heavy": "bash scripts/run-heavy.sh",
     "test:profile": "bash scripts/profile-tests.sh",
@@ -150,5 +152,5 @@
     "bun": ">=1.3.10"
   },
   "license": "MIT",
-  "version": "0.41.21.0"
+  "version": "0.41.21.1"
 }

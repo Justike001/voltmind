@@ -1,7 +1,7 @@
 // v0.27.1 follow-up: end-to-end smoke for `voltmind query --image <path>`.
 //
 // Exercises the full op-layer wiring without going through the CLI dispatch:
-// seed two image pages with known 1024-dim image vectors, invoke the `query`
+// seed two image pages with known 2048-dim image vectors, invoke the `query`
 // op with a base64'd payload, assert the closer page wins. Mocks
 // embedMultimodal so the test runs without a real Voyage key.
 
@@ -26,9 +26,9 @@ beforeEach(async () => {
   await resetPgliteState(engine);
 });
 
-function fakeImage1024(seed: number): Float32Array {
-  const out = new Float32Array(1024);
-  for (let i = 0; i < 1024; i++) out[i] = (i + seed) / 1024;
+function fakeImage2048(seed: number): Float32Array {
+  const out = new Float32Array(2048);
+  for (let i = 0; i < 2048; i++) out[i] = (i + seed) / 2048;
   return out;
 }
 
@@ -54,15 +54,15 @@ async function seedImagePage(slug: string, vec: Float32Array) {
 describe('query op with --image (v0.27.1 follow-up)', () => {
   test('returns image-similarity hits ordered by cosine', async () => {
     // Seed two image pages with distinct vectors.
-    const vecA = fakeImage1024(0);
-    const vecB = fakeImage1024(500);
+    const vecA = fakeImage2048(0);
+    const vecB = fakeImage2048(500);
     await seedImagePage('photos/a', vecA);
     await seedImagePage('photos/b', vecB);
 
     // Mock embedMultimodal so the op call doesn't try to hit Voyage.
     // Returns whatever vector the test's "query" prefix encodes — we
     // shadow the gateway by patching the imported binding via mock.module.
-    const stubVec = fakeImage1024(500); // closest to 'photos/b'
+    const stubVec = fakeImage2048(500); // closest to 'photos/b'
     mock.module('../src/core/ai/gateway.ts', () => ({
       embedMultimodal: async () => [stubVec],
     }));
@@ -97,7 +97,7 @@ describe('query op with --image (v0.27.1 follow-up)', () => {
     await engine.putPage('notes/text', {
       type: 'note', title: 'text', compiled_truth: 'hello text', timeline: '',
     });
-    // 1536-dim text embedding (matches the brain's primary embedding column).
+    // The primary text column remains 1536d in this legacy PGLite fixture.
     const textVec = new Float32Array(1536);
     for (let i = 0; i < 1536; i++) textVec[i] = i / 1536;
     await engine.upsertChunks('notes/text', [
@@ -109,7 +109,7 @@ describe('query op with --image (v0.27.1 follow-up)', () => {
         modality: 'text',
       },
     ]);
-    const imgVec = fakeImage1024(7);
+    const imgVec = fakeImage2048(7);
     await seedImagePage('photos/img', imgVec);
 
     mock.module('../src/core/ai/gateway.ts', () => ({

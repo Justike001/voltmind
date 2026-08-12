@@ -177,6 +177,7 @@ describe('op-layer capture — query', () => {
 
   test('explicit source_id overrides ctx.sourceId for query retrieval', async () => {
     const ctx = makeCtx({
+      remote: false,
       sourceId: 'default',
       config: makeConfig({ capture: false }),
     });
@@ -190,6 +191,21 @@ describe('op-layer capture — query', () => {
 
     expect(results.map(r => r.slug)).toContain('notes/source-override-testsrc');
     expect(results.map(r => r.slug)).not.toContain('notes/source-override-default');
+  });
+
+  test('remote query cannot override its source scope', async () => {
+    const ctx = makeCtx({
+      remote: true,
+      sourceId: 'default',
+      config: makeConfig({ capture: false }),
+    });
+
+    await expect(queryOp.handler(ctx, {
+      query: 'sourceoverrideunique',
+      source_id: 'testsrc',
+      expand: false,
+      use_cache: false,
+    })).rejects.toThrow(/outside your granted sources/i);
   });
 });
 

@@ -25,6 +25,12 @@ beforeAll(async () => {
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
+  // Keep the documented OpenAI availability contract instead of inheriting
+  // the fresh-brain Qwen3-VL default (which needs no API key).
+  await engine.setConfig('embedding_model', 'openai:text-embedding-3-large');
+  await engine.setConfig('embedding_dimensions', '1536');
+  process.env.VOLTMIND_EMBEDDING_MODEL = 'openai:text-embedding-3-large';
+  process.env.VOLTMIND_EMBEDDING_DIMENSIONS = '1536';
   const page: PageInput = {
     type: 'person',
     title: 'Alice Example',
@@ -34,6 +40,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  delete process.env.VOLTMIND_EMBEDDING_MODEL;
+  delete process.env.VOLTMIND_EMBEDDING_DIMENSIONS;
   if (savedKey === undefined) delete process.env.OPENAI_API_KEY;
   else process.env.OPENAI_API_KEY = savedKey;
   await engine.disconnect();

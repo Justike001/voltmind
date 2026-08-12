@@ -26,6 +26,10 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetPgliteState(engine);
+  await engine.setConfig('embedding_model', 'openai:text-embedding-3-large');
+  await engine.setConfig('embedding_dimensions', '1536');
+  process.env.VOLTMIND_EMBEDDING_MODEL = 'openai:text-embedding-3-large';
+  process.env.VOLTMIND_EMBEDDING_DIMENSIONS = '1536';
   globalThis.fetch = (async (url: string | URL | Request) => {
     const u = typeof url === 'string' ? url : url.toString();
     if (u.includes('multimodalembeddings')) {
@@ -48,6 +52,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   globalThis.fetch = origFetch;
+  delete process.env.VOLTMIND_EMBEDDING_MODEL;
+  delete process.env.VOLTMIND_EMBEDDING_DIMENSIONS;
   resetGateway();
   __setChatTransportForTests(null);
 });

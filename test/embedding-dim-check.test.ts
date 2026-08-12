@@ -19,6 +19,7 @@ import {
   resolveSchemaMultimodalDim,
   PGVECTOR_COLUMN_MAX_DIMS,
 } from '../src/core/embedding-dim-check.ts';
+import { DEFAULT_EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_MODEL } from '../src/core/ai/defaults.ts';
 
 // Canonical pattern: single engine per file, init once, disconnect once.
 // The two tests below diverge in whether they want a migrated brain or a
@@ -37,19 +38,12 @@ afterAll(async () => {
 });
 
 describe('readContentChunksEmbeddingDim', () => {
-  test('returns dims from a migrated brain (1536d via legacy-embedding preload)', async () => {
-    // The test preload configures the gateway to OpenAI/1536 before any test
-    // runs to preserve legacy Float32Array fixtures.
-    // However, `bunfig.toml` preloads `test/helpers/legacy-embedding-preload.ts`
-    // which configures the gateway to OpenAI/1536 BEFORE any test runs.
-    // This preserves the 20+ test files with hardcoded 1536-d
-    // Float32Array fixtures. So initSchema() under tests produces a
-    // 1536-d column.
-    //
-    // Tests that need the Qwen/2048 default configure the gateway explicitly.
+  test('returns canonical dims from a fully migrated brain', async () => {
+    // Migration 121 normalizes the built-in embedding columns to the
+    // canonical Qwen 2048d contract, independent of legacy test preloads.
     const result = await readContentChunksEmbeddingDim(engine);
     expect(result.exists).toBe(true);
-    expect(result.dims).toBe(1536);
+    expect(result.dims).toBe(DEFAULT_EMBEDDING_DIMENSIONS);
   }, 30000);
 
   test('returns { exists: false, dims: null } on a fresh brain (no initSchema)', async () => {
@@ -273,13 +267,19 @@ describe('resolveSchemaEmbeddingDim', () => {
 });
 
 describe('resolveSchemaMultimodalDim', () => {
-  test('voyage voyage-multimodal-3 accepted', () => {
-    const got = resolveSchemaMultimodalDim({ embedding_multimodal_model: 'voyage:voyage-multimodal-3' });
+  test('canonical Qwen multimodal model accepted', () => {
+    const got = resolveSchemaMultimodalDim({ embedding_multimodal_model: DEFAULT_EMBEDDING_MODEL });
     expect(got.ok).toBe(true);
     if (got.ok) {
-      expect(got.provider).toBe('voyage');
-      expect(got.dim).toBeGreaterThan(0);
+      expect(got.provider).toBe('qwen-vllm');
+      expect(got.dim).toBe(DEFAULT_EMBEDDING_DIMENSIONS);
     }
+  });
+
+  test('legacy Voyage multimodal model requires a custom column', () => {
+    const got = resolveSchemaMultimodalDim({ embedding_multimodal_model: 'voyage:voyage-multimodal-3' });
+    expect(got.ok).toBe(false);
+    if (!got.ok) expect(got.error).toMatch(/custom or legacy multimodal models/i);
   });
 
   test('OpenAI text-embedding-3-large rejected — not multimodal', () => {

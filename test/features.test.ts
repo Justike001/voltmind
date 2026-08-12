@@ -87,6 +87,6 @@ describe('CLI routing', () => {
 
   it('help text mentions features', async () => {
     const cliSource = await Bun.file('src/cli.ts').text();
-    expect(cliSource).toContain('features [--json] [--auto-fix]');
+    expect(cliSource).toContain('features [--auto-fix]');
   });
 });

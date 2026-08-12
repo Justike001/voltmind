@@ -19,8 +19,8 @@ describe('Mode bundle defaults (D6)', () => {
     expect(MODE_BUNDLES.balanced.reranker_enabled).toBe(true);
   });
 
-  test('balanced reranker model is zeroentropyai:zerank-2', () => {
-    expect(MODE_BUNDLES.balanced.reranker_model).toBe('zeroentropyai:zerank-2');
+  test('balanced reranker model is the canonical Qwen3-VL reranker', () => {
+    expect(MODE_BUNDLES.balanced.reranker_model).toBe('qwen-vllm-reranker:Qwen3-VL-Reranker-2B');
   });
 
   test('conservative reranker stays off (cheap tier)', () => {
