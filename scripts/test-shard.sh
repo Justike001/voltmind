@@ -106,6 +106,15 @@ if [ "$SHARD_COUNT" -eq 0 ]; then
   exit 0
 fi
 
-# Convert newline-separated file list to argv. xargs handles the
-# whitespace correctly without word-splitting on spaces in paths.
-printf '%s\n' "$SHARD_FILES" | xargs bun test --timeout=60000
+# Run each file in its own Bun process. Bun's module registry, gateway config,
+# operation registry, preload hooks, and mock.module() state are process-wide;
+# passing the whole shard to one `bun test` invocation lets otherwise unrelated
+# files race and makes results depend on the LPT packing. Keep bounded file-level
+# parallelism for wall-clock performance while preserving a hard isolation
+# boundary between files. xargs returns non-zero when any child test fails.
+FILE_CONCURRENCY="${VOLTMIND_TEST_FILE_CONCURRENCY:-4}"
+if ! [[ "$FILE_CONCURRENCY" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: VOLTMIND_TEST_FILE_CONCURRENCY must be a positive integer" >&2
+  exit 2
+fi
+printf '%s\n' "$SHARD_FILES" | xargs -n 1 -P "$FILE_CONCURRENCY" bun test --timeout=60000

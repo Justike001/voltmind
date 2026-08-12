@@ -1,6 +1,11 @@
 /**
  * v0.40.1.0 Track D / T5 — Hermetic retrieval qrels gate.
  *
+ * PROCESS ISOLATION: PGLiteEngine.initSchema() intentionally snapshots the
+ * process-wide AI gateway dimensions. scripts/test-shard.sh runs every test
+ * file in its own Bun process, and this fixture explicitly selects canonical
+ * 2048d because all qrels vectors use that product contract.
+ *
  * Gates PRs touching src/core/search/** against a hand-curated qrels fixture
  * (test/fixtures/eval-baselines/qrels-search.json). Fully hermetic via basis-
  * vector embeddings — no API keys, no DATABASE_URL, no network.
@@ -27,6 +32,8 @@ import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { resetPgliteState } from './helpers/reset-pglite.ts';
 import { withEnv } from './helpers/with-env.ts';
 import type { ChunkInput } from '../src/core/types.ts';
+import { DEFAULT_EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_MODEL } from '../src/core/ai/defaults.ts';
+import { configureGateway, resetGateway } from '../src/core/ai/gateway.ts';
 
 // ---------------------------------------------------------------------------
 // Canonical PGLite block (CLAUDE.md R3+R4)
@@ -35,6 +42,11 @@ import type { ChunkInput } from '../src/core/types.ts';
 let engine: PGLiteEngine;
 
 beforeAll(async () => {
+  configureGateway({
+    embedding_model: DEFAULT_EMBEDDING_MODEL,
+    embedding_dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
+    env: { ...process.env },
+  });
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
@@ -42,6 +54,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await engine.disconnect();
+  resetGateway();
 });
 
 beforeEach(async () => {
@@ -73,7 +86,7 @@ function loadFixture(): QrelFixture {
 }
 
 /** Basis vector with 1.0 at `idx` and 0.0 elsewhere. Mirrors search-quality.test.ts. */
-function basisEmbedding(idx: number, dim = 2048): Float32Array {
+function basisEmbedding(idx: number, dim = DEFAULT_EMBEDDING_DIMENSIONS): Float32Array {
   const emb = new Float32Array(dim);
   emb[idx % dim] = 1.0;
   return emb;

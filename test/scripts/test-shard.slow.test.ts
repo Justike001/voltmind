@@ -29,10 +29,15 @@
 
 import { describe, it, expect, beforeAll } from 'bun:test';
 import { execFileSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 const SHARD_SH = resolve(REPO_ROOT, 'scripts/test-shard.sh');
+// Pass a cwd-relative path to Bash. Windows adapters may resolve `bash` to WSL
+// (/mnt/c), Git Bash (/c), or MSYS; a native absolute `C:\...` path is not
+// portable across those mount conventions.
+const SHARD_SH_BASH = 'scripts/test-shard.sh';
 
 // LPT partition via sharding.ts is ~30ms per shard (much faster than the
 // pure-bash FNV-1a it replaced). Cache results so repeated assertions
@@ -42,7 +47,7 @@ const shardCache: Record<string, string[]> = {};
 function dryRunList(shard: number, total: number): string[] {
   const key = `${shard}/${total}`;
   if (shardCache[key]) return shardCache[key];
-  const out = execFileSync('bash', [SHARD_SH, '--dry-run-list', String(shard), String(total)], {
+  const out = execFileSync('bash', [SHARD_SH_BASH, '--dry-run-list', String(shard), String(total)], {
     cwd: REPO_ROOT,
     encoding: 'utf-8',
   });
@@ -98,6 +103,14 @@ describe('test-shard.sh — exclusion contract', () => {
       }
     }
     expect(seen.size).toBeGreaterThan(0);
+  });
+});
+
+describe('test-shard.sh — process isolation contract', () => {
+  it('runs one test file per Bun process with bounded parallelism', () => {
+    const script = readFileSync(SHARD_SH, 'utf8');
+    expect(script).toContain('VOLTMIND_TEST_FILE_CONCURRENCY:-4');
+    expect(script).toContain('xargs -n 1 -P "$FILE_CONCURRENCY" bun test --timeout=60000');
   });
 });
 

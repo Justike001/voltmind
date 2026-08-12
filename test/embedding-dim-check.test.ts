@@ -1,6 +1,11 @@
 /**
  * v0.28.5 (A4) — Existing-brain dimension-mismatch detection unit tests.
  *
+ * PROCESS ISOLATION: PGLiteEngine.initSchema() intentionally snapshots the
+ * process-wide AI gateway dimensions. scripts/test-shard.sh runs every test
+ * file in its own Bun process, and this file explicitly selects the product
+ * default below instead of inheriting the legacy test preload.
+ *
  * Pairs with `voltmind init` and `voltmind doctor`'s loud-failure paths. Validates
  * that:
  *   1. readContentChunksEmbeddingDim correctly reports null on a fresh brain.
@@ -20,6 +25,7 @@ import {
   PGVECTOR_COLUMN_MAX_DIMS,
 } from '../src/core/embedding-dim-check.ts';
 import { DEFAULT_EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_MODEL } from '../src/core/ai/defaults.ts';
+import { configureGateway, resetGateway } from '../src/core/ai/gateway.ts';
 
 // Canonical pattern: single engine per file, init once, disconnect once.
 // The two tests below diverge in whether they want a migrated brain or a
@@ -28,6 +34,11 @@ import { DEFAULT_EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_MODEL } from '../src/co
 let engine: PGLiteEngine;
 
 beforeAll(async () => {
+  configureGateway({
+    embedding_model: DEFAULT_EMBEDDING_MODEL,
+    embedding_dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
+    env: { ...process.env },
+  });
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
@@ -35,6 +46,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await engine.disconnect();
+  resetGateway();
 });
 
 describe('readContentChunksEmbeddingDim', () => {

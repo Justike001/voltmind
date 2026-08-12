@@ -2,6 +2,10 @@
  * v0.35.4 — BrainEngine.findTrajectory (T4) + trajectory.ts derived
  * metrics tests.
  *
+ * PROCESS ISOLATION: this integration fixture intentionally pins legacy 1536d
+ * fact vectors. scripts/test-shard.sh runs each file in its own Bun process so
+ * provider configuration tests cannot change this file's schema width.
+ *
  * Pins:
  *   - Chronological ordering by (valid_from ASC, fact_id ASC) — R3.
  *   - Source scoping (scalar + federated array, D-CDX-6).
