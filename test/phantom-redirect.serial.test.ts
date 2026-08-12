@@ -3,6 +3,12 @@
  *
  * Hermetic PGLite. Pins all 12 codex findings + cascade-table regressions
  * + the corner-cases derived from Sections 1/2/4 of /plan-eng-review.
+ *
+ * Serial by design: the suite owns one file-wide PGLite engine, resets it in
+ * beforeEach, and temporarily changes process env for audit/cap behavior.
+ * Running this file inside a multi-file Bun shard has intermittently raced
+ * those shared resources (CI #86), turning successful redirects into zero
+ * counts. The Serial gate gives this file its own Bun process.
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';

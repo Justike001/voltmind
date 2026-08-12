@@ -458,7 +458,7 @@
   "test/pglite-lock.test.ts": 1007,
   "test/phantom-redirect-engine-parity.test.ts": 3605,
   "test/phantom-redirect-per-source-lock.test.ts": 3,
-  "test/phantom-redirect.test.ts": 7303,
+  "test/phantom-redirect.serial.test.ts": 7303,
   "test/phase-scope-coverage.test.ts": 3,
   "test/plugin-loader.test.ts": 12,
   "test/post-install-advisory.test.ts": 15,
