@@ -3,14 +3,23 @@
 Read this entire file, then follow the steps. Ask the user for API keys when needed.
 Target: ~30 minutes to a fully working brain.
 
+This guide's default topology is a **remote thin client**. Every target user must
+provision a personal private Gogs source, receive a source-scoped OAuth client, and
+connect to the company VoltMind Host. A plain `git clone` never grants brain access.
+
+The local PGLite path is retained only as an explicit standalone exception for
+offline development or runtime testing. Do not select it for normal user onboarding.
+
 ## Before Step 0: Prepare the computer
 
 This checklist assumes a clean computer where nothing has been installed yet and
 the operator is not familiar with command-line tools. Complete it before reading
-or following Step 0. The commands below are checks only; they do not install
-anything.
+or following Step 0. The agent should install missing prerequisites when it has a
+shell and the user has approved machine-level software installation; if the host
+requires an approval prompt, stop at that prompt instead of pretending the
+dependency is available.
 
-### Required for the standard local install
+### Required for the standard remote thin-client install
 
 You need all of the following:
 
@@ -64,9 +73,36 @@ After installing anything, close and reopen the terminal so the updated PATH is
 loaded. Do not continue to Step 0 until `git --version`, `node --version`, and
 `bun --version` all work in that new terminal.
 
-### Not required for the default first install
+### Agent action: install missing prerequisites
 
-Do **not** block the local PGLite setup on these optional components:
+The agent must not assume that ChatGPT Desktop provides a JavaScript runtime.
+ChatGPT Desktop is the agent interface; Bun and Node.js are separate local
+software. If a check fails, install only the missing prerequisite, then repeat the
+checks in a new terminal.
+
+On Windows, use the official installers or the Windows package manager when it is
+available:
+
+```powershell
+# Git is already present when this repository was successfully cloned.
+winget install --id OpenJS.NodeJS.LTS -e
+powershell -c "irm https://bun.sh/install.ps1|iex"
+```
+
+If `winget` is unavailable or blocked, use the official Node.js LTS download at
+<https://nodejs.org/en/download> and the official Bun instructions at
+<https://bun.sh/docs/installation>. Do not install a similarly named third-party
+package. Bun's Windows installer may place the executable at
+`$env:USERPROFILE\.bun\bin\bun`; if `bun --version` is not found after the
+installer, verify that path, add it to the user's `PATH`, and open a new terminal.
+
+On macOS/Linux, use the operating system's official package source for Node.js LTS
+and Git, then install Bun from <https://bun.sh/docs/installation>. The exact
+package-manager command is intentionally left to the detected distribution.
+
+### Not required for the default remote thin-client install
+
+Do **not** block client onboarding on these optional components:
 
 - Docker or a local PostgreSQL server
 - A Supabase account or database
@@ -74,10 +110,36 @@ Do **not** block the local PGLite setup on these optional components:
 - An IDE or code editor
 - `npm`
 
-The default `voltmind init` path uses an embedded local database and does not need
-those components. Cloud API keys are checked and requested later in Step 2. A
-PostgreSQL/Supabase setup or platform integrations may introduce additional
-requirements; install those only if the operator chooses that path.
+The default remote path keeps the database, embeddings, and background workers on
+the Host, so the client does not need Docker, PostgreSQL, Supabase, Python, or
+embedding/chat API keys. A local PGLite setup or platform integration may introduce
+additional requirements; install those only for the explicit standalone exception.
+
+### Source checkout bootstrap (the path for this cloned repository)
+
+Run this from the root of the cloned VoltMind repository. This installs the local
+CLI client that the agent uses to complete Gogs/source provisioning and connect to
+the Host; cloning alone is not an installation:
+
+```bash
+bun install --frozen-lockfile       # install package dependencies
+bun run build                       # compile bin/voltmind (bin/voltmind.exe on Windows)
+bun run src/cli.ts --version        # source-runtime smoke test
+bun link                            # optional: expose this checkout as `voltmind`
+voltmind --version                  # run this only if `bun link` succeeded
+```
+
+The compiled binary is useful for a stable local runtime or an MCP process, but it
+is not a prerequisite for editing Markdown skills. When `voltmind` is not on
+`PATH`, use `bun run src/cli.ts <command>` for every command in this guide. Do not
+run `bun run build` before `bun install`.
+
+If the package install hook fails only because `node` is unavailable, install Node
+LTS and rerun the normal command. As a controlled fallback, an agent may run
+`bun install --frozen-lockfile --ignore-scripts`, then use the source runtime; if
+the initialized brain reports a stale schema, run
+`bun run src/cli.ts apply-migrations --yes`. Do not hide a real dependency or
+network error by permanently using `--ignore-scripts`.
 
 ## Step 0: If you are not Claude Code
 
@@ -114,7 +176,15 @@ restart the shell or add the PATH export to the shell profile.
 > bun install && bun link
 > ```
 
-## Step 2: API Keys
+## Step 2: Host credentials and optional API keys
+
+For the default remote thin-client route, do **not** ask the user for embedding,
+reranker, chat-model, database, or Supabase keys. The Host owns those credentials.
+The user needs the Gogs token and the source-scoped OAuth credentials described in
+Step 3 and `skills/setup/SKILL.md`.
+
+The provider sections below apply to a company Host operator or to the explicit
+local standalone exception only.
 
 ### Company-internal Qwen deployment
 
@@ -139,12 +209,50 @@ Save to shell profile or `.env`. Keys are picked up by `voltmind config set` aut
 or can be stored in `~/.voltmind/config.json` (file plane). Without any embedding provider,
 keyword search still works. Without Anthropic, search works but skips query expansion.
 
-## Step 3: Create the Brain
+## Step 3: Remote Host onboarding (required for end users)
+
+Read and follow `skills/setup/SKILL.md` now. The end-user path is:
+
+1. Create a private personal knowledge repo in company Gogs and make an initial
+   commit.
+2. Create the user's Gogs token and submit the Host self-provision request (or ask
+   the Host operator to run the admin provisioning path).
+3. Use the returned source ID, OAuth client ID, and client secret:
 
 ```bash
-voltmind init                           # PGLite, no server needed
-voltmind doctor --json                  # verify all checks pass
+voltmind init --mcp-only \
+  --issuer-url https://<host-public-url> \
+  --mcp-url https://<host-public-url>/mcp \
+  --oauth-client-id <client_id> \
+  --oauth-client-secret <client_secret>
+voltmind doctor --json
+voltmind search "<topic you know is in the brain>"
 ```
+
+Do not run local `voltmind init --pglite` for normal user onboarding. Imports,
+sync, embeddings, graph extraction, and Autopilot run on the Host. Continue with
+the remote phases in `skills/setup/SKILL.md`.
+
+## Local standalone exception: create a local brain
+
+Use the explicit local PGLite path. A fresh agent shell is often non-interactive,
+so do not make the first install depend on an embedding provider or an interactive
+prompt:
+
+```bash
+# If an embedding provider key is already configured:
+voltmind init --pglite
+
+# If no embedding key is configured (recommended first boot):
+voltmind init --pglite --no-embedding
+
+voltmind doctor --json                  # verify the local engine
+```
+
+With a source checkout, replace `voltmind` with `bun run src/cli.ts` unless the
+checkout was linked. `--no-embedding` still gives working keyword search; configure
+an embedding provider later and run `voltmind embed --stale` to add semantic
+search. Do not request a Supabase URL just to get the first local brain running.
 
 The user's markdown files (notes, docs, brain repo) are SEPARATE from this tool repo.
 Ask the user where their files are, or create a new brain repo:
@@ -267,6 +375,20 @@ bundled copy at `~/voltmind/skills/RESOLVER.md` when running from the cloned rep
 the skill dispatcher — tells you which skill to read for any task. Save this to your
 memory permanently.
 
+If the cloned VoltMind repository is already the agent workspace, do **not** copy
+the skills back into the same repository. Read and edit `skills/` in place. After a
+skill edit, validate the resolver and runtime from the checkout:
+
+```bash
+bun run src/cli.ts check-resolvable --strict --mvp-only --skills-dir skills/
+bun run typecheck
+bun run build
+```
+
+`bun run build` is required after runtime/source changes; Markdown-only skill edits
+primarily need the resolver check. The full `bun run verify` suite also uses shell
+scripts and is not the first-install prerequisite on Windows.
+
 The three most important skills to adopt immediately:
 
 1. **Signal detector** (`skills/signal-detector/SKILL.md`) — fire this on EVERY
@@ -295,6 +417,12 @@ If skipped, minimal defaults are installed automatically.
 
 Set up using your platform's scheduler (OpenClaw cron, Railway cron, crontab), or skip the
 platform glue entirely with `voltmind autopilot --install` (built-in self-maintaining daemon):
+
+For the first local PGLite install, do not install Autopilot just to make the brain
+usable. Windows Autopilot/Minions requires a Postgres/Supabase topology; local
+PGLite is single-writer and should use explicit `sync`/`embed` commands or the
+agent's normal task loop. Configure Autopilot only after migrating to a supported
+Postgres/Supabase setup and reading its platform-specific guide.
 
 `voltmind autopilot --install` is platform-aware. On Ubuntu/Linux it selects
 `linux-systemd`, `ephemeral-container`, or `linux-cron`; it never installs the

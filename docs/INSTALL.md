@@ -4,21 +4,27 @@ Three install paths. Pick one. Mix later if needed.
 
 For the complete agent-led setup flow, see [`INSTALL_FOR_AGENTS.md`](../INSTALL_FOR_AGENTS.md).
 
+If the user only has ChatGPT Desktop and a clone of this repository, start with
+the prerequisite and source-checkout bootstrap in `INSTALL_FOR_AGENTS.md`, then
+follow the remote Gogs/source-provision/OAuth flow in `skills/setup/SKILL.md`.
+`git clone` does not install Bun, Node.js, dependencies, or a global `voltmind`
+command. The source checkout requires Bun `>=1.3.10` and Node.js LTS; after
+installing them, run `bun install --frozen-lockfile` and `bun run build`. Do not
+initialize a local PGLite brain unless standalone local operation was explicitly
+requested.
+
 For the company-internal Qwen embedding + reranking stack (text, image, and
 mixed embedding in a single 2048d Supabase schema), follow
 [`ai-providers/qwen-vllm.md`](ai-providers/qwen-vllm.md). It is the required
 path when embeddings or reranking must not leave the company network.
 
-## 1. Run with an agent platform (recommended)
+## 1. Run with an agent platform (remote Host default)
 
 Already running [OpenClaw](https://github.com/openclawagents/openclaw) or [Hermes](https://github.com/openclawagents/hermes)?
 
-```bash
-bun install -g github:Justike001/voltmind
-voltmind init --pglite                  # 2 seconds; no server
-voltmind skillpack scaffold --all       # 43 skills scaffolded into your agent workspace
-voltmind doctor                         # green checks all the way down
-```
+Install the CLI prerequisites and follow the remote onboarding runbook in
+`INSTALL_FOR_AGENTS.md` and `skills/setup/SKILL.md`. The user must provision a
+private Gogs source and OAuth client before connecting with `init --mcp-only`.
 
 Your agent now reads `skills/RESOLVER.md` once per request, routes intent to the right skill, executes. New entity mentions create new pages. For Postgres/Supabase deployments, the host-local Autopilot scheduler can run enrichment overnight; PGLite uses manual or inline maintenance.
 
@@ -26,13 +32,22 @@ Scaffolded skills are first-class files in your agent repo — edit freely. To p
 
 To upgrade later: `voltmind upgrade` runs schema migrations + post-upgrade prompts (chunker bumps, the v0.36.2.0 ZeroEntropy switch). Always TTY-only; non-TTY upgrades skip prompts with informational stderr lines.
 
-## 2. CLI standalone
+## 2. CLI standalone (explicit local exception)
 
 No agent platform, just shell + MCP-aware editor.
 
+The commands below assume the runtime prerequisites are already installed. If you
+are operating from this checkout, use:
+
+```bash
+bun install --frozen-lockfile
+bun run build
+bun link                         # optional; otherwise use bun run src/cli.ts
+```
+
 ```bash
 bun install -g github:Justike001/voltmind
-voltmind init --pglite
+voltmind init --pglite --no-embedding   # omit the flag when a provider key exists
 ```
 
 > **If `bun install -g` hits a postinstall error** (Bun blocks postinstall hooks in some environments), the CLI prints a recovery hint pointing at [#218](https://github.com/Justike001/voltmind/issues/218). Run `voltmind doctor` to diagnose, then `voltmind apply-migrations --yes` manually. The deterministic fallback is `git clone https://github.com/Justike001/voltmind.git ~/voltmind && cd ~/voltmind && bun install && bun link`.

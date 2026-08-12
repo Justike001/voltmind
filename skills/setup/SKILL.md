@@ -1,10 +1,6 @@
 ---
 name: setup
-description: |
-  User-agent manual for the company VoltMind Host. Create your personal knowledge
-  repo in the company Gogs, apply for your own sourceID + read/write via the
-  self-provision endpoint, connect as a thin client over MCP (OAuth), and persist
-  credentials into your repo's AGENTS.md / env.
+description: User-agent setup manual: provision a personal Gogs source, obtain source-scoped read/write OAuth credentials, connect as a thin client to the company VoltMind Host, and persist the connection; local checkout/runtime setup is an explicit standalone exception.
 triggers:
   - "set up voltmind"
   - "initialize brain"
@@ -26,6 +22,75 @@ mutating: true
 ---
 
 # Setup VoltMind — User Agent Manual
+
+## Route setup before asking for credentials
+
+This skill's target topology is a **remote company VoltMind Host**. All target
+users must go through the Gogs + source provisioning + OAuth flow before the agent
+tries to use the brain. A plain `git clone`, ChatGPT Desktop, or a local checkout
+does not replace that flow and is not a reason to skip it.
+
+- **Remote route (default and required):** follow the Host connection manual below.
+  If the user has no credentials yet, guide them through the private Gogs repo,
+  self-provision request, source ID, and OAuth client steps first.
+- **Local standalone exception:** only use **Local checkout bootstrap** when the
+  user explicitly asks for an isolated local engine, offline development, or a
+  local runtime test. This is not the normal user onboarding path.
+
+### Local standalone exception: checkout bootstrap
+
+This is the path for “ChatGPT Desktop + `git clone` and nothing else”. A clone is
+source code, not an installed CLI. Read [`INSTALL_FOR_AGENTS.md`](../../INSTALL_FOR_AGENTS.md)
+completely and follow its prerequisite section before running any `voltmind`
+command.
+
+1. Detect the OS and check `git --version`, `node --version`, and `bun --version`.
+   Git is normally already present because the repository was cloned. Install
+   Node.js LTS and Bun `>=1.3.10` when missing. ChatGPT Desktop is not a substitute
+   for either runtime. Restart the terminal after installers update `PATH`.
+2. From the repository root, install the locked dependencies and compile the local
+   executable:
+
+   ```bash
+   bun install --frozen-lockfile
+   bun run build
+   bun run src/cli.ts --version
+   bun link                         # optional convenience command
+   ```
+
+   The source runtime (`bun run src/cli.ts <command>`) is always the fallback. The
+   compiled `bin/voltmind`/`bin/voltmind.exe` is a packaging/runtime artifact, not
+   a replacement for installing the package dependencies first.
+3. Create a local brain. If no embedding provider key is available, use the
+   non-interactive-safe path:
+
+   ```bash
+   bun run src/cli.ts init --pglite --no-embedding
+   bun run src/cli.ts doctor --json
+   ```
+
+   If an embedding key is already configured, `init --pglite` may be used instead.
+   Keyword search works without embeddings; configure a provider later and run
+   `embed --stale` when semantic search is wanted.
+4. Keep the user's brain repo separate from this VoltMind source checkout. Ask for
+   a notes/brain path before importing files; never import the repository's own
+   `node_modules`, `dist`, `.git`, or build output into the brain by accident.
+5. Because this checkout already contains `skills/`, read `skills/RESOLVER.md` and
+   edit skills in place. Do not scaffold the same skillpack over itself. Validate
+   edits with:
+
+   ```bash
+   bun run src/cli.ts check-resolvable --strict --mvp-only --skills-dir skills/
+   bun run typecheck
+   bun run build
+   ```
+
+6. Continue with the local import, brain-first, and verification guidance below.
+   Skip the company Host phases that start at **Phase A: Create your personal
+   knowledge repo in company Gogs**. If a command is written as `voltmind ...` but
+   `bun link` was not used, run it as `bun run src/cli.ts ...` instead.
+
+## Remote route: Host connection manual
 
 This is the operating instruction manual for a **user's agent** connecting to the
 company VoltMind Host. Follow it in order to: create your own personal knowledge
@@ -57,7 +122,9 @@ data. The Host keeps the Gogs-admin key and all admin credentials to itself.
 - You never receive a database connection string, the Gogs-admin SSH key, or any
   admin credential.
 
-## Phase A: Create your personal knowledge repo in the company Gogs
+### Phase A — create your personal knowledge repo in the company Gogs
+
+Only execute this section after the remote-route check above succeeds.
 
 1. You already have a company Gogs account. In Gogs (`http://192.168.5.6:3000`),
    under the org `VoltMind`, create a **private** personal knowledge repo, e.g.

@@ -63,6 +63,32 @@ This is the difference between a search engine and a brain. Search finds the pag
 
 VoltMind is designed to be installed and operated by an AI agent. The fastest path is to have your agent do it for you. The CLI and MCP paths below are for people who want to wire it up themselves.
 
+### Starting with ChatGPT Desktop and an existing clone
+
+If your starting point is exactly **ChatGPT Desktop + a `git clone` of this
+repository**, the clone is only the source tree. It does not install Bun, Node.js,
+package dependencies, or a runnable `voltmind` command.
+
+Give your agent this instruction from the cloned repository:
+
+```
+Read INSTALL_FOR_AGENTS.md and skills/setup/SKILL.md in this repository and follow
+the remote Host path. All end users must create/provision their private Gogs source
+and obtain source-scoped OAuth credentials before using the brain.
+First detect the OS and check git, node, and bun. Install the missing prerequisites
+(Bun >=1.3.10 and Node.js LTS), run bun install --frozen-lockfile, run bun run build,
+and verify the CLI. Then guide me through the Gogs/source-provision/OAuth flow and
+connect with voltmind init --mcp-only. Do not initialize a local PGLite brain unless
+I explicitly request standalone local operation.
+```
+
+On Windows, the agent should use PowerShell and open a fresh terminal after an
+installer changes `PATH`. The complete prerequisite, source-checkout, binary-build,
+remote source-provision, and verification procedure is in
+[`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). Docker, PostgreSQL, Supabase,
+Python, and npm are not required on the client for the default thin-client setup;
+the Host owns the database and background runtime.
+
 ### Have your agent install it (recommended)
 
 If you don't already have an AI agent platform running, start with one of these. Both are designed to read VoltMind's install protocol and execute it:
@@ -85,11 +111,22 @@ The agent installs VoltMind, creates the brain, asks for your API keys, loads 43
 
 Already running Claude Code or Codex? There are two ways to wire VoltMind in, depending on what you want.
 
-**Just want a memory for your coding agent (recommended starting point).** Spin up a local brain and connect it in two commands — zero server, zero token, zero tunnel:
+The commands in this section assume that `voltmind` has already been installed or
+linked. If you only cloned the repository, complete the previous bootstrap first;
+from the checkout you can always use `bun run src/cli.ts <command>` instead of a
+global `voltmind <command>`.
+
+**Want to connect your provisioned personal brain (recommended starting point).**
+Complete the Gogs/source-provision/OAuth flow first, then connect your coding agent
+as a thin client:
 
 ```bash
-voltmind init --pglite                     # 2-second local brain (no Docker)
-claude mcp add voltmind -- voltmind serve    # or: codex mcp add voltmind -- voltmind serve
+voltmind init --mcp-only \
+  --issuer-url https://<host-public-url> \
+  --mcp-url https://<host-public-url>/mcp \
+  --oauth-client-id <client_id> \
+  --oauth-client-secret <client_secret>
+voltmind doctor --json
 ```
 
 **Already have a brain on a remote host** (OpenClaw, Hermes, or any `voltmind serve --http`)? Point your laptop agents at it with one command each — `--install` wires it up and smoke-tests the token before handoff:
@@ -103,7 +140,9 @@ voltmind connect https://your-host/mcp --token voltmind_xxx --agent codex --inst
 
 ### Install the full autonomous setup into your existing agent
 
-Want the whole thing — local brain, 43 skills, the overnight dream cycle that enriches while you sleep? Paste this into Codex, Claude Code, Cursor, or another coding agent:
+Want the whole thing — the Host-connected brain, 43 skills, and the overnight
+dream cycle that enriches while you sleep? Paste this into Codex, Claude Code,
+Cursor, or another coding agent:
 
 ```
 Retrieve and follow the instructions at:
@@ -112,7 +151,15 @@ https://raw.githubusercontent.com/Justike001/voltmind/master/INSTALL_FOR_AGENTS.
 
 This works in any agent that can read files over HTTPS and execute shell commands. Tested with Codex, Claude Code, Claude Cowork, Cursor, and AlphaClaw.
 
-### CLI standalone (no agent)
+### CLI standalone (explicit local exception)
+
+This path also assumes Bun `>=1.3.10` and Node.js LTS are installed. For a local
+checkout, run `bun install --frozen-lockfile`, then `bun link` (or use
+`bun run src/cli.ts` directly) before the commands below.
+
+Use this only for offline development or an explicitly requested local PGLite
+brain. Normal users should complete Gogs/source provisioning and use the remote
+thin-client path above.
 
 ```bash
 bun install -g github:Justike001/voltmind
