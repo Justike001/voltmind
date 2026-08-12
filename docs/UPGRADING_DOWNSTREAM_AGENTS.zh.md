@@ -296,7 +296,7 @@ v0.13 edges 携带新的 `link_type` 值。若 fork 中有按 type 过滤的 gra
    ```cron
    3 13,16,19,22,1,4,7,10 * * * \
      voltmind jobs submit shell \
-       --params '{"cmd":"node scripts/your-script.mjs","cwd":"/data/.openclaw/workspace"}' \
+      --params '{"cmd":"node scripts/your-script.mjs","cwd":"<agent-workspace>"}' \
        --max-attempts 3 --timeout-ms 300000
    ```
 4. 每次触发后查看 `voltmind jobs get <id>` 的 exit_code / stdout_tail / stderr_tail。与迁移前行为对比，再批准下一批。

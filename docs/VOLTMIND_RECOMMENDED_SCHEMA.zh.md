@@ -178,7 +178,7 @@ aliases 包括 transcripts 误拼、旧姓、昵称、emails、social handles、
 
 创建新页面前，agent 必须：
 1. 按名称搜索现有 pages（exact + fuzzy）
-2. 搜索所有 pages 的 aliases：`grep -rl "NAME_VARIANT" /data/brain/people/ --include="*.md"`
+2. 搜索所有 pages 的 aliases：`grep -rl "NAME_VARIANT" <brain-vault>/people/ --include="*.md"`
 3. 检查 .raw/ sidecars 中的 email addresses 或 social handles
 4. 找到 match → UPDATE 现有页面（新 name variant 则加 alias）
 5. 无 match → CREATE 新页面

@@ -80,11 +80,11 @@ Rewrite crontab to submit shell jobs (no `--follow`):
 
 ```cron
 # Before (LLM gateway):
-#   OpenClaw cron: x-garrytan-unified
+#   OpenClaw cron: legacy-llm-cron
 # After (Minions worker):
 3 13,16,19,22,1,4,7,10 * * * \
   voltmind jobs submit shell \
-    --params '{"cmd":"node scripts/x-garrytan-daily.mjs","cwd":"/data/.openclaw/workspace"}' \
+    --params '{"cmd":"node scripts/legacy-daily.mjs","cwd":"<agent-workspace>"}' \
     --max-attempts 3 --timeout-ms 300000
 ```
 
@@ -101,7 +101,7 @@ uses `--follow` to run inline:
 # Each cron tick spawns a short-lived worker that runs the job inline.
 3 13,16,19,22,1,4,7,10 * * * \
   VOLTMIND_ALLOW_SHELL_JOBS=1 voltmind jobs submit shell \
-    --params '{"cmd":"node scripts/x-garrytan-daily.mjs","cwd":"/data/.openclaw/workspace"}' \
+  --params '{"cmd":"node scripts/legacy-daily.mjs","cwd":"<agent-workspace>"}' \
     --follow --timeout-ms 300000
 ```
 

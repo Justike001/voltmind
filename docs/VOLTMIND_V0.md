@@ -501,7 +501,7 @@ The CLI connects directly to Supabase Postgres. Trigger.dev and Vercel are for a
 
 ## Verification checklist
 
-1. `voltmind import /data/brain/` migrates all 7,471 files losslessly
+1. `voltmind import <brain-vault>/` migrates all indexed files losslessly
 2. `voltmind export` round-trips to semantically identical markdown
 3. `voltmind query "what does PG say about doing things that don't scale?"` returns relevant hybrid search results
 4. `voltmind serve` starts MCP server connectable by Claude Code

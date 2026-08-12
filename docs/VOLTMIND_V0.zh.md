@@ -339,7 +339,7 @@ CLI 直接连接 Supabase Postgres。Trigger.dev 和 Vercel 用于 async/schedul
 
 ## Verification checklist
 
-1. `voltmind import /data/brain/` 无损迁移所有 7,471 files
+1. `voltmind import <brain-vault>/` 无损迁移所有 files
 2. `voltmind export` round-trip 到语义相同的 markdown
 3. `voltmind query "what does PG say about doing things that don't scale?"` 返回相关 hybrid search results
 4. `voltmind serve` 启动可由 Claude Code 连接的 MCP server

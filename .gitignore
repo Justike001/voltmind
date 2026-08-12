@@ -47,6 +47,13 @@ test/fixtures/pglite-snapshot.version
 
 # Private brain reports — never check these in (per CLAUDE.md privacy rule)
 reports/network-intelligence/
+reports/source-audit/source-audit-*.json
+reports/source-audit/source-audit-*.md
+
+# Brain action pages may contain private people, messages, and execution details.
+# Keep the generic README tracked while excluding generated action pages.
+/brain/state/actions/*.md
+!/brain/state/actions/README.md
 tmptxt/
 
 # VoltMind interactive action runner temp dirs.

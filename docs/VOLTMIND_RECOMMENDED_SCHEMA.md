@@ -180,7 +180,7 @@ Aliases include: misspellings from meeting transcripts, maiden names, nicknames,
 
 Before creating any new page, the agent must:
 1. Search existing pages by name (exact and fuzzy)
-2. Search aliases across all pages: `grep -rl "NAME_VARIANT" /data/brain/people/ --include="*.md"`
+2. Search aliases across all pages: `grep -rl "NAME_VARIANT" <brain-vault>/people/ --include="*.md"`
 3. Check .raw/ sidecars for matching email addresses or social handles
 4. If a match is found → UPDATE the existing page (add alias if the name variant is new)
 5. If no match → CREATE a new page
@@ -671,7 +671,7 @@ A cron job fires at 3:00 PM daily with the prompt: "Read skills/meeting-ingestio
 
 **Step 2: Pull new meetings.** The agent calls the meeting history data source skill (in this system, Circleback). It checks a state file (`memory/meeting-notes-state.json`) that tracks the last processed meeting ID. Finds 2 new meetings since last run.
 
-**Step 3: Process Meeting 1 — "Product Review with Sarah Chen and Mike Torres."**
+**Step 3: Process Meeting 1 — "Product Review with Alice Example and Bob Example."**
 
 The agent creates `brain/meetings/2026-04-07-product-review.md` with:
 - Its own analysis above the line (not a copy of the AI summary — reframed through what the brain already knows about the attendees and the project)
@@ -680,18 +680,18 @@ The agent creates `brain/meetings/2026-04-07-product-review.md` with:
 
 **Step 4: Enrich attendees.**
 
-For **Sarah Chen** — the agent searches the brain: `grep -rl "Sarah Chen" /data/brain/people/`. Finds `people/sarah-chen.md`. Reads it. Page was last enriched 2 weeks ago and has good coverage. → **Tier 3**: extract signal from this meeting only. Appends to her timeline: "2026-04-07 | Meeting — Pushed back on timeline for launch, wants more QA. Concerned about API stability." Updates her Open Threads with the new follow-up item.
+For **Alice Example** — the agent searches the brain: `grep -rl "Alice Example" <brain-vault>/people/`. Finds `people/alice-example.md`. Reads it. Page was last enriched 2 weeks ago and has good coverage. → **Tier 3**: extract signal from this meeting only. Appends to her timeline: "2026-04-07 | Meeting — Pushed back on timeline for launch, wants more QA. Concerned about API stability." Updates her Open Threads with the new follow-up item.
 
-For **Mike Torres** — brain search finds `people/mike-torres.md`. Page exists but is thin: just a name, title, and one previous meeting entry. → **Tier 2**: web search + social + brain cross-reference. Agent finds his recent blog posts (feeds into What They Believe), his X activity (feeds into Hobby Horses), and cross-references him with two other brain pages that mention him. Updates compiled truth above the line.
+For **Bob Example** — brain search finds `people/bob-example.md`. Page exists but is thin: just a name, title, and one previous meeting entry. → **Tier 2**: web search + social + brain cross-reference. Agent finds his recent blog posts (feeds into What They Believe), his X activity (feeds into Hobby Horses), and cross-references him with two other brain pages that mention him. Updates compiled truth above the line.
 
-For **"Alex from Meridian Labs"** (mentioned in the meeting but not an attendee) — brain search finds nothing. → **CREATE path**:
+For **"Casey from Acme Example"** (mentioned in the meeting but not an attendee) — brain search finds nothing. → **CREATE path**:
 1. Reads RESOLVER.md: "a specific named person" → `people/`
-2. Creates `people/alex-rivera.md` using the person template from schema.md
-3. Runs **Tier 1 enrichment** (full pipeline): network search → finds LinkedIn URL. People enrichment API → full structured profile. Semantic search → finds a conference talk. Web search → finds press coverage of Meridian Labs' recent funding.
-4. Saves raw API responses to `people/.raw/alex-rivera.json`
-5. Cross-references: updates `companies/meridian-labs.md` to link to Alex's page
+2. Creates `people/casey-example.md` using the person template from schema.md
+3. Runs **Tier 1 enrichment** (full pipeline): network search → finds LinkedIn URL. People enrichment API → full structured profile. Semantic search → finds a conference talk. Web search → finds press coverage of Acme Example's recent funding.
+4. Saves raw API responses to `people/.raw/casey-example.json`
+5. Cross-references: updates `companies/acme-example.md` to link to Casey's page
 
-**Step 5: Enrich companies discussed.** Meridian Labs was discussed extensively. Agent checks `companies/meridian-labs.md` — exists but funding data is 4 months stale. Calls company intelligence API → gets fresh round data. Updates the page.
+**Step 5: Enrich companies discussed.** Acme Example was discussed extensively. Agent checks `companies/acme-example.md` — exists but funding data is 4 months stale. Calls company intelligence API → gets fresh round data. Updates the page.
 
 **Step 6: Extract action items.** Finds 3 action items in the transcript → appends to `ops/tasks.md`.
 
@@ -699,9 +699,9 @@ For **"Alex from Meridian Labs"** (mentioned in the meeting but not an attendee)
 
 **Step 8: Commit and notify.**
 ```bash
-cd /data/brain && git add -A && git commit -m "meetings: 2026-04-07 product review, investor sync" && git push
+cd <brain-vault> && git add -A && git commit -m "meetings: 2026-04-07 product review, investor sync" && git push
 ```
-Posts summary to the Meetings notification channel: "Processed 2 meetings. Created 1 new person page (Alex Rivera). Updated 4 entity pages. 5 action items extracted."
+Posts summary to the Meetings notification channel: "Processed 2 meetings. Created 1 new person page (Casey Example). Updated 4 entity pages. 5 action items extracted."
 
 **Files touched in this run:**
 ```
@@ -710,13 +710,13 @@ brain/
 │   ├── 2026-04-07-product-review.md          (CREATED)
 │   └── 2026-04-07-investor-sync.md           (CREATED)
 ├── people/
-│   ├── sarah-chen.md                          (UPDATED — timeline + open threads)
-│   ├── mike-torres.md                         (UPDATED — Tier 2 enrichment)
-│   ├── alex-rivera.md                         (CREATED — Tier 1 enrichment)
+│   ├── alice-example.md                       (UPDATED — timeline + open threads)
+│   ├── bob-example.md                         (UPDATED — Tier 2 enrichment)
+│   ├── casey-example.md                       (CREATED — Tier 1 enrichment)
 │   └── .raw/
-│       └── alex-rivera.json                   (CREATED — raw API responses)
+│       └── casey-example.json                 (CREATED — raw API responses)
 ├── companies/
-│   └── meridian-labs.md                       (UPDATED — fresh funding data)
+│   └── acme-example.md                        (UPDATED — fresh funding data)
 ops/
 └── tasks.md                                   (UPDATED — 5 new action items)
 memory/
@@ -731,37 +731,37 @@ An email monitor cron fires at 12:00 PM. Its prompt: "Read skills/executive-assi
 
 **Step 2: Classify and handle.** Most emails are routine: 2 scheduling confirmations (handled directly — checks calendar, sends confirmations), 3 newsletters (archived), 1 internal FYI (noted). But one stands out:
 
-**An email from "David Park, GP at Ridgeline Ventures"** — subject: "Series A for NovaTech — co-invest opportunity." The agent has never seen this person before.
+**An email from "Dana Example, GP at Northstar Capital"** — subject: "Series A for Acme Product — co-invest opportunity." The agent has never seen this person before.
 
 **Step 3: Enrich the unknown sender.**
 
 The agent calls the enrich skill. Enrich searches the brain:
 ```bash
-grep -rl "David Park" /data/brain/people/ --include="*.md"  # no results
-grep -rl "Ridgeline" /data/brain/companies/ --include="*.md"  # no results
-grep -rl "david.park@ridgeline" /data/brain/people/ --include="*.md"  # no results (alias search)
+grep -rl "Dana Example" <brain-vault>/people/ --include="*.md"  # no results
+grep -rl "Northstar" <brain-vault>/companies/ --include="*.md"  # no results
+grep -rl "dana@example.test" <brain-vault>/people/ --include="*.md"  # no results (alias search)
 ```
 
 No match. → **CREATE path.**
 
 1. Reads RESOLVER.md: "a specific named person" → `people/`
 2. Runs **Tier 2 enrichment** (this is an unsolicited email, not a key relationship yet):
-   - Web search: finds David Park's profile on Ridgeline's website. GP, focuses on enterprise SaaS. Previously at two other funds.
-   - Social search: finds his X account. Recent posts about AI infrastructure, developer tools. Reposted an article about NovaTech last week.
-   - Brain cross-reference: searches for NovaTech → finds `companies/novatech.md` exists (from a meeting 2 months ago). Cross-links.
-3. Creates `people/david-park.md` with what it found — role, fund, investment focus, public voice, connection to NovaTech.
-4. Also checks `companies/ridgeline-ventures.md` — doesn't exist. Creates a thin page with what's known from the web search.
+   - Web search: finds Dana Example's profile on Northstar's website. GP, focuses on enterprise SaaS. Previously at two other funds.
+   - Social search: finds their X account. Recent posts about AI infrastructure, developer tools. Reposted an article about Acme Product last week.
+   - Brain cross-reference: searches for Acme Product → finds `companies/acme-product.md` exists (from a meeting 2 months ago). Cross-links.
+3. Creates `people/dana-example.md` with what it found — role, fund, investment focus, public voice, connection to Acme Product.
+4. Also checks `companies/northstar-capital.md` — doesn't exist. Creates a thin page with what's known from the web search.
 
 **Step 4: Back in the EA skill.** Now the agent has context. It classifies the email:
 - Priority: Medium (co-invest opportunity, not urgent)
-- Context: David Park is a GP at a fund that focuses on enterprise SaaS. NovaTech is already in the brain from a previous meeting.
+- Context: Dana Example is a GP at a fund that focuses on enterprise SaaS. Acme Product is already in the brain from a previous meeting.
 - Action needed: User should review
 
 Posts to the Emails notification channel:
-> **Co-invest opportunity — NovaTech Series A**
-> From: David Park, GP at Ridgeline Ventures
-> He's reaching out about co-investing in NovaTech's Series A. Ridgeline focuses on enterprise SaaS.
-> NovaTech is already in the brain — you met their founder in February.
+> **Co-invest opportunity — Acme Product Series A**
+> From: Dana Example, GP at Northstar Capital
+> They're reaching out about co-investing in Acme Product's Series A. Northstar focuses on enterprise SaaS.
+> Acme Product is already in the brain — you met their founder in February.
 > [Open in Gmail](link)
 
 **The email monitor didn't just triage — it grew the brain by two pages** (one person, one company) and cross-linked them to an existing entity.
@@ -772,19 +772,19 @@ This example shows how a completely unknown person becomes a rich brain page acr
 
 **Hour 0 — Social radar cron (Tuesday, 3:00 PM)**
 
-The social radar cron scans for mentions and engagement on X. It detects a reply to one of the user's posts from an account named `@lena_builds` — a thoughtful, technical response about developer tooling that got 50+ likes.
+The social radar cron scans for mentions and engagement on X. It detects a reply to one of the user's posts from an account named `@taylor_builds` — a thoughtful, technical response about developer tooling that got 50+ likes.
 
-The agent calls enrich. Brain search: no match for "Lena" or "lena_builds." → **CREATE, Tier 3** (minor mention — just a social interaction, not a relationship yet).
+The agent calls enrich. Brain search: no match for "Taylor" or "taylor_builds." → **CREATE, Tier 3** (minor mention — just a social interaction, not a relationship yet).
 
-Creates `people/lena-kovac.md` with minimal data: X handle, display name, the reply text, and a note that she seems technical. No API calls — Tier 3 is source-extraction only.
+Creates `people/taylor-example.md` with minimal data: X handle, display name, the reply text, and a note that they seem technical. No API calls — Tier 3 is source-extraction only.
 
 ```markdown
-# Lena Kovac
+# Taylor Example
 
 > Technical builder. Engaged with a post about developer tooling on X.
 
 ## State
-- **X:** @lena_builds
+- **X:** @taylor_builds
 - **Relationship:** None yet — social interaction only
 - **Confidence:** low (1 interaction)
 
@@ -797,47 +797,47 @@ Creates `people/lena-kovac.md` with minimal data: X handle, display name, the re
 
 **Hour 18 — Email monitor cron (Wednesday, 9:00 AM)**
 
-The morning email sweep finds an email from `lena@kovac.dev` — subject: "Loved your talk at the devtools summit — would love to chat about what we're building."
+The morning email sweep finds an email from `taylor@example.test` — subject: "Loved your talk at the devtools summit — would love to chat about what we're building."
 
 The agent calls enrich. Searches the brain:
 ```bash
-grep -rl "lena" /data/brain/people/ --include="*.md"  # finds people/lena-kovac.md
-grep -rl "kovac.dev" /data/brain/people/ --include="*.md"  # no alias match yet
+grep -rl "taylor" <brain-vault>/people/ --include="*.md"  # finds people/taylor-example.md
+grep -rl "example.test" <brain-vault>/people/ --include="*.md"  # no alias match yet
 ```
 
 Finds the existing page. Reads it — it's thin (Tier 3, just the X reply). The email adds a new signal AND an email address. → **Upgrade to Tier 2.**
 
-- Adds `lena@kovac.dev` to aliases in frontmatter
-- Web search: finds her personal site (`kovac.dev`) — she's building a developer tools startup called Lattice. Previously at a major tech company on their compiler team.
+- Adds `taylor@example.test` to aliases in frontmatter
+- Web search: finds their personal site (`example.test`) — they're building a developer tools startup called Acme Tools. Previously at a major tech company on their compiler team.
 - Social search: deeper X dive. She posts regularly about developer experience, compilers, and Rust. Has 3K followers.
-- Brain cross-reference: searches for "Lattice" and "compiler" — finds a concept page about developer tooling that links to 2 companies in the same space.
-- Updates `people/lena-kovac.md` with real substance: career history, what she's building, what she believes about developer tooling, her public voice.
+- Brain cross-reference: searches for "Acme Tools" and "compiler" — finds a concept page about developer tooling that links to 2 companies in the same space.
+- Updates `people/taylor-example.md` with real substance: career history, what they're building, what they believe about developer tooling, their public voice.
 
 **Hour 26 — Executive assistant cron (Wednesday, 5:00 PM)**
 
 The afternoon EA sweep processes scheduling requests. One of the emails it triages is Lena's — she asked to chat. The user's calendar is open Thursday at 2 PM.
 
-But the EA skill also checks: is there a calendar event already scheduled with this person? It searches the calendar — finds that Lena's email (`lena@kovac.dev`) appears in a calendar event for Thursday at 2 PM (she booked through the user's public booking link).
+But the EA skill also checks: is there a calendar event already scheduled with this person? It searches the calendar — finds that Taylor's email (`taylor@example.test`) appears in a calendar event for Thursday at 2 PM (they booked through the user's public booking link).
 
 The EA skill sees the meeting is tomorrow. Calls enrich again. Page exists and is now Tier 2 with decent coverage, but there's a meeting tomorrow. → **Upgrade to Tier 1.**
 
 - Network search: finds her LinkedIn URL. She has 2 mutual connections with the user.
-- People enrichment API: full structured profile — Stanford CS, 4 years at a major tech company, founded Lattice 8 months ago.
+- People enrichment API: full structured profile — a CS degree, 4 years at a major tech company, founded Acme Tools 8 months ago.
 - Semantic search: finds a conference talk she gave on "Why Developer Tools Are Stuck in 2015."
-- Saves everything to `people/.raw/lena-kovac.json`
+- Saves everything to `people/.raw/taylor-example.json`
 - Updates the brain page with full Tier 1 depth: beliefs, trajectory, what she's building, assessment, network connections.
 
 **Hour 40 — Morning briefing cron (Thursday, 7:30 AM)**
 
-The morning briefing cron builds the daily prep. It reads the calendar: meeting with Lena Kovac at 2 PM. It reads `people/lena-kovac.md` — which is now a rich page.
+The morning briefing cron builds the daily prep. It reads the calendar: meeting with Taylor Example at 2 PM. It reads `people/taylor-example.md` — which is now a rich page.
 
 Produces a prep note in the daily briefing:
 
-> **2:00 PM — Lena Kovac (Lattice)**
-> Building a developer tools startup focused on compiler-driven UX. Stanford CS, 4 years on compilers at [major tech co]. Founded Lattice 8 months ago.
+> **2:00 PM — Taylor Example (Acme Tools)**
+> Building a developer tools startup focused on compiler-driven UX. CS background, 4 years on compilers at [major tech co]. Founded Acme Tools 8 months ago.
 > She replied to your devtools post on X last Tuesday (the technical one about compiler-driven UX that got traction). Then emailed the next morning — "loved your talk, want to chat about what we're building."
 > Her public writing argues that developer tools are stuck in a 2015 paradigm and that compiler intelligence should drive the entire editing experience. She gave a talk on this at DevTools Summit.
-> 2 mutual connections. She's technical, has founder energy, and is building in a space you care about.
+> 2 mutual connections. They're technical, have founder energy, and are building in a space you care about.
 
 **The compound effect:** Lena went from unknown → thin Tier 3 page → substantive Tier 2 page → rich Tier 1 page → meeting prep note. Four cron runs over 48 hours. Zero manual enrichment requests. The user walks into the meeting knowing exactly who Lena is, what she cares about, and why she reached out — because every pipeline is wired to call enrich, and enrich knows how to escalate tier based on relationship signals.
 
