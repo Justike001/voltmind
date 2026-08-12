@@ -40,6 +40,9 @@ export/
 # Codex local workspace config — never commit
 .codex/
 
+# Per-checkout source routing is user-specific and must never be published.
+/.voltmind-source
+
 
 # Tier 3 PGLite snapshot fixture (built on demand by build:pglite-snapshot)
 test/fixtures/pglite-snapshot.tar
