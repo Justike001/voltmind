@@ -4,6 +4,17 @@ All notable changes to VoltMind will be documented in this file.
 
 ## [Unreleased]
 
+- **Schema cold-start fix (`929e395`).** `migration_impact_log` FK-references
+  `minion_jobs`, but that table is created later in `schema.sql` — PostgreSQL
+  rejects forward FK references, so `initSchema()` could not apply the schema to
+  a fresh/empty database (0 tables). Reordered `migration_impact_log` (and its
+  indexes) to after `minion_jobs`, regenerated `src/core/schema-embedded.ts`;
+  cold-start now creates all 47 tables. Unblocks the Postgres E2E gate.
+- **Security fuzz arg-order fix (`929e395`).** `validateUploadPath(filePath,
+  root)` in `test/fuzz/filesystem-validators.test.ts` had the two arguments
+  swapped at all three call sites, so the confinement contract was never
+  asserted. Corrected to `validateUploadPath(probe, confinementDir)`.
+
 ## [0.41.21.2] - 2026-08-13
 
 **Green native CI on a read-only Host client.** The Tier 2 and Heavy gates now
