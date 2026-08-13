@@ -1,130 +1,102 @@
-# VoltMind release-gate — CI boundary & setup guide
+# VoltMind release-gate — CI setup (the REAL, running gate)
 
-> Hand this file to the agent configuring the GitHub CI. It defines the exact
-> security boundary, the secrets to create, the tailnet ACL, and the rotation
-> discipline. **Do not commit real secret values to the repo.**
-
----
-
-## 1. What this integration is
-
-A GitHub Actions job connects briefly to the private tailnet as an **ephemeral,
-tagged node**, mints a short-lived **`read`-only** OAuth `client_credentials`
-token, and makes one read MCP call to VoltMind as a release gate. It has no
-write/admin capability and can reach only one service on one port.
+> The actual release gate in this repo is **`.github/workflows/test.yml`** — the
+> `tier2-host-mcp`, `heavy`, and `test-status` jobs against the live Host's
+> authenticated, **read-only** MCP surface. It uses the harness's native
+> thin-client OAuth path, driven by the `VOLTMIND_REMOTE_*` vars/secrets.
+>
+> A standalone tailnet-based `release-gate.yml` was drafted earlier and then
+> **removed as redundant** — it duplicated what `test.yml` already does with a
+> different secret namespace. Do not reintroduce a parallel gate; extend this
+> one instead.
 
 ---
 
-## 2. Network boundary (the ACL is the linchpin)
+## 1. The gate, end to end
 
-| Direction | src (CI node) | dst (VoltMind host) | Allowed |
-|---|---|---|---|
-| allowed | `tag:ci` | `100.69.5.107:3131` | `accept` |
-| **everything else** | `tag:ci` | any | **deny (implicit)** |
+`scripts/host-mcp-e2e.ts` is the probe (`bun run test:e2e:tier2` / `test:heavy:host`).
 
-Tailscale ACL (`/api/v2/tailnet/<t>/acl` or admin console → Access Controls).
-**Do NOT add anything broader.**
+- `inspectHost()`:
+  - `whoami` → transport is `oauth`; `client_id` equals the CI client; **exactly
+    one scope: `read`** (a broader client fails the gate on purpose).
+  - `get_brain_identity` → engine `postgres`, a version string, valid
+    page_count / chunk_count.
+  - `schema_stats` → schema_version `1`; per-source array; totals agree with
+    identity page_count.
+  - `recall { limit:1, include_pending:true }` → facts array, total,
+    pending_consolidation_count (proves the Host prepared-statement read path).
+- `runHeavy()` → 10 sequential identity/schema iterations (bounded soak, not a load test).
+- `test-status` (in `test.yml`) aggregates **every** job and fails the release if any fail.
 
-```json
-{
-  "tagOwners": {
-    "tag:ci": ["autogroup:admin"]
-  },
-  "acls": [
-    {
-      "action": "accept",
-      "src": ["tag:ci"],
-      "dst": ["100.69.5.107:3131"]
-    }
-  ],
-  "ssh": []
-}
+Boundary: the CI runner is a **thin client — it never opens a PostgreSQL
+connection**. Every assertion goes through the Host's read-scope MCP surface.
+
+---
+
+## 2. Secrets / Variables to configure on GitHub
+
+Repo → **Settings → Secrets and variables → Actions**.
+
+| Name | Kind | Example value |
+|---|---|---|
+| `VOLTMIND_REMOTE_ISSUER_URL` | **variable** | `https://voltage3d.tailce7d39.ts.net` |
+| `VOLTMIND_REMOTE_MCP_URL` | **variable** | `https://voltage3d.tailce7d39.ts.net/mcp` |
+| `VOLTMIND_REMOTE_CLIENT_ID` | **variable** | `voltmind_cl_...` (read-only client) |
+| `VOLTMIND_REMOTE_CLIENT_SECRET` | **secret** | `voltmind_cs_...` |
+
+> `tier2`/`heavy` read these from `vars.VOLTMIND_REMOTE_*` and
+> `secrets.VOLTMIND_REMOTE_CLIENT_SECRET` directly (see `test.yml`). The issuer
+> URL must serve `/.well-known/oauth-authorization-server` and the MCP URL the
+> `/mcp` tools endpoint.
+
+---
+
+## 3. VoltMind client requirement (the one this gate needs)
+
+- grant `client_credentials`, auth `client_secret_post`
+- scope **exactly `read`** (the gate hard-asserts exactly one `read` scope)
+- `source_id = personal-justike-liu`, `federated_read = {personal-justike-liu}`
+- optional `budget_usd_per_day` cap (e.g. `1.00`) as hardening
+
+The current **`voltmind-ci-release-gate`** client matches and is the intended one.
+`git log`/`voltmind auth list` (post-`auth list` enhancement) will show it.
+
+Verify from the runner side with:
+
+```bash
+bun run scripts/host-mcp-e2e.ts   # needs the 4 VOLTMIND_REMOTE_* above
 ```
 
-- The `dst` IP MUST equal the VoltMind host's tailscale IP (`100.69.5.107`).
-- The host runs `voltmind serve --http --port 3131 --bind 0.0.0.0
-  --public-url https://voltage3d.tailce7d39.ts.net --admin-api-only`.
-  `--admin-api-only` only hides the admin SPA; `/mcp` + OAuth endpoints serve.
-- Persist the public base URL: `https://voltage3d.tailce7d39.ts.net`.
+---
+
+## 4. Reachability note
+
+The runner must reach both `VOLTMIND_REMOTE_ISSUER_URL` and
+`VOLTMIND_REMOTE_MCP_URL`. `test.yml`'s tier2/heavy already pass today, so a
+working path exists (public tunnel or otherwise). **If that path ever goes away,
+restore reachability before touching the gate's secrets.** The Host runs
+`voltmind serve --http --port 3131 --bind 0.0.0.0 --public-url
+https://voltage3d.tailce7d39.ts.net --admin-api-only` (`--admin-api-only` only
+hides the admin SPA; `/mcp` + OAuth endpoints still serve).
 
 ---
 
-## 3. Data boundary (VoltMind side)
+## 5. Operation / rotation
 
-- Client: **`voltmind-ci-release-gate`**
-- Grant: `client_credentials` • Auth: `client_secret_post`
-- Scope: **`read`** ONLY — never admin, never write.
-- `source_id`: `personal-justike-liu`
-- `federated_read`: `{personal-justike-liu}` (reads only this source)
-- Access tokens: short-lived (3600s), auto-rotating; no persistent bearer token.
-
-Anything a leaked credential can do is bounded to: **read pages of the
-`personal-justike-liu` source over the tailnet for 1 hour.**
+- Rotating the Host client: `voltmind auth revoke-client <id>` on the Host, then
+  `register-client` a new read-only one, then update
+  `VOLTMIND_REMOTE_CLIENT_ID` (var) + `VOLTMIND_REMOTE_CLIENT_SECRET` (secret).
+- Any suspected leak, repo-provenance change, or action compromise ⇒ rotate both.
+- Review the Host MCP **reachability** (whether it is public or tunnel-only) as a
+  deliberate decision; don't widen it casually.
 
 ---
 
-## 4. Secrets to create in GitHub (Settings → Secrets and variables → Actions)
-
-| Secret name | Value | Notes |
-|---|---|---|
-| `VOLTMIND_CLIENT_ID` | <from chat> | VoltMind OAuth client id |
-| `VOLTMIND_CLIENT_SECRET` | <from chat> | VoltMind OAuth client secret |
-| `TS_OAUTH_CLIENT_ID` | <from chat> | Tailscale OAuth client id |
-| `TS_OAUTH_SECRET` | <from chat> | Tailscale OAuth client secret |
-
-Repo must be **Private**. Limit repo/org write access.
-
----
-
-## 5. Workflow file
-
-`release-gate.yml` (sibling template in the repo) — copy into the target repo:
-
-- `on:` — `push` to `main`, `tags v*`, and `workflow_dispatch`. **No fork PR.**
-- `permissions: contents: read` — least privilege.
-- Pinned `tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd`
-  (commit SHA, not `@v4`).
-- Runner joins with `tags: 'tag:ci'` (must match Tailscale OAuth client tags).
-- `VOLTMIND_READ_TOOL` / page-slug placeholder (`RELEASE-PLACEHOLDER`) must be
-  filled with the real read check.
-
----
-
-## 6. Setup checklist (for the configuring agent)
-
-1. Create a **dedicated** Tailscale OAuth client (Admin → Settings → OAuth
-   Clients) with **`auth_keys` scope** only, tags = `tag:ci`. **Do not** reuse a
-   broad/full-scope client. Record id/secret.
-2. Apply the **ACL block in §2** verbatim. Verify: `tailscale ping
-   voltage3d.tailce7d39.ts.net` from a `tag:ci` node succeeds; no other tailnet
-   targets are reachable.
-3. Add the **4 secrets in §4** (real values from the operator).
-4. Drop the **workflow file** into the target repo, set the read check, push.
-5. Confirm the job: joins tailnet → mints read token → read MCP call → pass/fail.
-6. Confirm the job does **not** print the token or secrets in logs.
-
----
-
-## 7. Operation / rotation
-
-- **Both secrets rotate** by: `voltmind auth revoke-client <id>` + re-register
-  (VoltMind), and re-generate in Tailscale admin (TS). Then update the secrets.
-- Suspicion of leak, repo provenance change, or security incident on the
-  action/repo ⇒ rotate both immediately.
-- Optional hardening on VoltMind client (both now applied/available):
-  - `budget_usd_per_day = 1.00` on `voltmind-ci-release-gate` (set 2026-08-13,
-    enforced by the budget-meter; adjust up/down as needed).
-  - Narrow `federated_read` further if the gate only needs a subset.
-- The tailnet ACL is reviewed/changed only deliberately (any ACL edit widens or
-  narrows the entire CI blast radius).
-
----
-
-## 8. Residual risks (accepted, with mitigations)
+## 6. Residual risks (accepted)
 
 | Risk | Mitigation | Residual |
 |---|---|---|
-| Tailscale/VoltMind secret leak | SHA-pin, rotation, least-privilege ACL | Low if ACL stays narrow |
-| Third-party action compromise | Commit-SHA pin | Low |
-| Read-only data exposure on runner compromise | `read`-only + LAN-off network path | Low |
-| Auth/network outage blocks release | None (gate is hard-fail) | Operational, accepted |
+| Client secret exposed via GitHub | read-only client, rotation, private repo | Low |
+| Runner compromise reads Host data | read scope only, thin-client (no DB creds) | Low |
+| Public MCP path reachable by third parties | read-only scope + budget cap | Low |
+| Reachability/tunnel outage blocks release | hard-fail gate | Operational, accepted |

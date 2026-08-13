@@ -641,35 +641,6 @@ CREATE INDEX IF NOT EXISTS op_checkpoints_updated_at_idx
 -- migration_impact_log: before/after metric stats per onboard remediation
 -- ============================================================
 -- v0.41.18.0 (gbrain onboard wave). Every completion captured by the
--- onboard remediation pipeline records before/after metric stats so
--- \`gbrain onboard --history --json\` can show "you reduced orphans 47%".
--- delta computed at read time (NOT a stored GENERATED column —
--- zero PGLite parity risk per eng-review D2).
---
--- Attribution columns (job_id, source_id, brain_id, started_at,
--- idempotency_key) per codex finding #10 so concurrent onboard /
--- autopilot / manual runs can't misattribute deltas to the wrong
--- migration when overlapping runs change the same metric.
-CREATE TABLE IF NOT EXISTS migration_impact_log (
-  id              BIGSERIAL PRIMARY KEY,
-  remediation_id  TEXT      NOT NULL,
-  metric_name     TEXT      NOT NULL,
-  metric_before   NUMERIC,
-  metric_after    NUMERIC,
-  job_id          BIGINT    REFERENCES minion_jobs(id) ON DELETE SET NULL,
-  source_id       TEXT,
-  brain_id        TEXT,
-  started_at      TIMESTAMPTZ,
-  idempotency_key TEXT,
-  applied_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  applied_by      TEXT,
-  details         JSONB     DEFAULT '{}'::jsonb
-);
-CREATE INDEX IF NOT EXISTS migration_impact_log_remediation_idx
-  ON migration_impact_log(remediation_id, applied_at DESC);
-CREATE INDEX IF NOT EXISTS migration_impact_log_attribution_idx
-  ON migration_impact_log(job_id, source_id) WHERE job_id IS NOT NULL;
-
 -- ============================================================
 -- files: binary attachments stored in Supabase Storage
 -- ============================================================
@@ -976,6 +947,35 @@ CREATE INDEX IF NOT EXISTS idx_minion_jobs_timeout ON minion_jobs (timeout_at) W
 CREATE INDEX IF NOT EXISTS idx_minion_jobs_parent_status ON minion_jobs (parent_job_id, status) WHERE parent_job_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_minion_jobs_idempotency ON minion_jobs (idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_minion_jobs_source_id ON minion_jobs (source_id, id DESC) WHERE source_id IS NOT NULL;
+
+-- onboard remediation pipeline records before/after metric stats so
+-- \`gbrain onboard --history --json\` can show "you reduced orphans 47%".
+-- delta computed at read time (NOT a stored GENERATED column —
+-- zero PGLite parity risk per eng-review D2).
+--
+-- Attribution columns (job_id, source_id, brain_id, started_at,
+-- idempotency_key) per codex finding #10 so concurrent onboard /
+-- autopilot / manual runs can't misattribute deltas to the wrong
+-- migration when overlapping runs change the same metric.
+CREATE TABLE IF NOT EXISTS migration_impact_log (
+  id              BIGSERIAL PRIMARY KEY,
+  remediation_id  TEXT      NOT NULL,
+  metric_name     TEXT      NOT NULL,
+  metric_before   NUMERIC,
+  metric_after    NUMERIC,
+  job_id          BIGINT    REFERENCES minion_jobs(id) ON DELETE SET NULL,
+  source_id       TEXT,
+  brain_id        TEXT,
+  started_at      TIMESTAMPTZ,
+  idempotency_key TEXT,
+  applied_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  applied_by      TEXT,
+  details         JSONB     DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS migration_impact_log_remediation_idx
+  ON migration_impact_log(remediation_id, applied_at DESC);
+CREATE INDEX IF NOT EXISTS migration_impact_log_attribution_idx
+  ON migration_impact_log(job_id, source_id) WHERE job_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS admin_audit_log (
   id BIGSERIAL PRIMARY KEY, request_id TEXT NOT NULL, session_hash TEXT NOT NULL,
