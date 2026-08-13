@@ -264,4 +264,14 @@ describe('handler invocation — historically-broken trust-boundary classes', ()
     expect(message.toLowerCase()).toContain('image_path');
     expect(message.toLowerCase()).toContain('permission_denied');
   });
+
+  test('search_by_image treats an omitted remote flag as untrusted', async () => {
+    const searchByImage = operations.find(op => op.name === 'search_by_image')!;
+    const ctx = makeContext() as any;
+    delete ctx.remote;
+    const err = await searchByImage.handler(ctx, { image_path: '/tmp/some-image.png' })
+      .catch((e: unknown) => e as Error);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain('permission_denied');
+  });
 });

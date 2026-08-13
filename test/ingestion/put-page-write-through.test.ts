@@ -51,10 +51,10 @@ beforeEach(async () => {
   fs.mkdirSync(brainDir, { recursive: true });
   // Wire sync.repo_path so write-through can find the repo.
   await engine.setConfig('sync.repo_path', brainDir);
-  // These tests cover write-through / trust-gating mechanics, not canonical
-  // template contracts. With a repo_path configured, template enforcement
-  // defaults to strict and rejects the minimal inbox fixtures; disable it so
-  // the harness stays focused on the behavior under test.
+  // These fixtures exercise write-through and trust-gating mechanics with
+  // intentionally minimal inbox pages. Canonical entity-format enforcement is
+  // covered by the strict project test below; disable it here so the harness
+  // stays focused on the behavior under test.
   await engine.setConfig('writer.template_contract', 'off');
 });
 
@@ -90,6 +90,30 @@ function makeCtx(overrides: Partial<OperationContext> = {}): OperationContext {
 const putPage = operations.find((o) => o.name === 'put_page')!;
 
 describe('put_page write-through — happy path', () => {
+  test('client-first remote writes are strict without sync.repo_path', async () => {
+    await engine.executeRaw("DELETE FROM config WHERE key IN ('sync.repo_path', 'writer.template_contract')");
+    const ctx = makeCtx({ remote: true });
+    await expect(
+      putPage.handler(ctx, {
+        slug: 'state/actions/client-first-incomplete',
+        content: '---\ntype: action\ntitle: 不完整行动\n---\n\n# 不完整行动\n',
+      }),
+    ).rejects.toMatchObject({ code: 'template_contract_violation' });
+    await expect(engine.getPage('state/actions/client-first-incomplete')).resolves.toBeNull();
+  });
+
+  test('strict local-vault writes reject an incomplete canonical project page', async () => {
+    const ctx = makeCtx();
+    await engine.setConfig('writer.template_contract', 'strict');
+    await expect(
+      putPage.handler(ctx, {
+        slug: 'projects/incomplete-project',
+        content: '---\ntype: project\ntitle: Incomplete\n---\n\n# Incomplete\n',
+      }),
+    ).rejects.toMatchObject({ code: 'template_contract_violation' });
+    await expect(engine.getPage('projects/incomplete-project')).resolves.toBeNull();
+  });
+
   test('writes the markdown file to disk at brainDir/<slug>.md', async () => {
     const ctx = makeCtx();
     const content = '---\ntitle: Test\n---\n\n# WT body';
