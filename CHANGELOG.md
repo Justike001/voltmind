@@ -4,6 +4,19 @@ All notable changes to VoltMind will be documented in this file.
 
 ## [Unreleased]
 
+## [0.41.21.2] - 2026-08-13
+
+**Green native CI on a read-only Host client.** The Tier 2 and Heavy gates now
+run against a dedicated `read`-scope OAuth client and assert exactly that scope
+via `whoami`, so CI can never pass using an admin or write-scope credential.
+
+- Tier 1, Tier 2, Heavy, Test (10 shards), Serial, and Windows adapter all pass
+  on the same commit with `VOLTMIND_REMOTE_CLIENT_ID/SECRET` configured as a
+  `read`-only `client_credentials` client.
+- Added a hardened, reusable `release-gate` workflow template (SHA-pinned
+  Tailscale node, read-only MCP probe) with a guard so it stays skipped in this
+  repo until the Tailscale/VoltMind secrets are configured in the target repo.
+
 ## [0.41.21.1] - 2026-08-12
 
 **VoltMind-native release gates and verifiable binaries.** This patch replaces

@@ -46,6 +46,10 @@ env:
 jobs:
   release-gate:
     runs-on: ubuntu-latest
+    # Template guard: skip (not fail) until the operator configures the
+    # Tailscale + VoltMind CI secrets in the target repo. Prevents this template
+    # from producing a failing check on every v* tag push before it is enabled.
+    if: ${{ secrets.TS_OAUTH_CLIENT_ID != '' && secrets.TS_OAUTH_SECRET != '' && secrets.VOLTMIND_CLIENT_ID != '' && secrets.VOLTMIND_CLIENT_SECRET != '' }}
     # R2/R4: only glue-level events already filtered by `on:` above.
     steps:
       - name: Connect to tailnet (SHA-pinned, ephemeral tag:ci)
