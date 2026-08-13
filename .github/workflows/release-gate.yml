@@ -1,0 +1,119 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# VoltMind release-gate (READ-ONLY) — hardened template
+#
+# What this does:
+#   1. Brings the runner onto the tailnet via a SHA-pinned, tagged ephemeral node.
+#   2. Mints a short-lived `read`-scope bearer token via OAuth client_credentials.
+#   3. Makes ONE read-only MCP call to verify a page/version exists.
+#   4. Fails the job (release gate) if the check does not pass.
+#
+# Security posture (do NOT loosen the numbered "DO NOT" comments):
+#   R1  tailscale/github-action is pinned to a commit SHA, NOT a mutable tag.
+#   R2  Runner joins as an ephemeral `tag:ci` node whose tailnet ACL only
+#       permits tcp:3131 -> 100.69.5.107. It can reach NOTHING else.
+#   R3  VoltMind client is `read`-scope only, bound to source personal-justike-liu.
+#   R4  This job NEVER runs on untrusted input (external fork PRs).
+#   R5  Secrets are never echoed; the access token is consumed via $GITHUB_OUTPUT.
+#
+# ⚠️  COPY THIS FILE into the TARGET release repo as .github/workflows/release-gate.yml
+#     and fill the marked TODO items (secret names / the read check you want).
+#     Do NOT commit the real VOLTMIND / Tailscale secrets into the repo.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: voltmind-release-gate
+
+# R4 — trusted triggers ONLY. Never `pull_request:` from external forks here.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch: {}   # manual, human-triggered
+
+permissions:
+  contents: read           # least privilege: the job needs nothing else
+  # TODO(R6): only if you want to leave a status/comment — omit otherwise.
+
+concurrency:
+  group: voltmind-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VOLTMIND_MCP_BASE: https://voltage3d.tailce7d39.ts.net
+  VOLTMIND_MCP_IP: 100.69.5.107    # must match the ACL dst below
+  VOLTMIND_MCP_PORT: "3131"
+  VOLTMIND_READ_TOOL: get_page       # TODO(R7): the read tool your gate uses
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    # R2/R4: only glue-level events already filtered by `on:` above.
+    steps:
+      - name: Connect to tailnet (SHA-pinned, ephemeral tag:ci)
+        # R1 — pinned to commit SHA (NOT @v4). Rotate this SHA deliberately.
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: 'tag:ci'
+          version: 'latest'
+        # NOTE: ephemeral node gets `tag:ci`; Tailscale OAuth client owning that
+        # tag is created in Tailscale admin (see docs/ci/release-gate-boundary.md).
+
+      - name: Liveness probe (VoltMind /health)
+        run: |
+          curl -fsS -m 10 "${{ env.VOLTMIND_MCP_BASE }}/health"
+          echo ""
+
+      - name: Mint read-scoped bearer token (client_credentials)
+        id: token
+        env:
+          VM_CID: ${{ secrets.VOLTMIND_CLIENT_ID }}
+          VM_CSEC: ${{ secrets.VOLTMIND_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          # R5: response is parsed in-process; the raw body (incl. token) is NEVER
+          # echoed to logs. GitHub also auto-masks env vars sourced from secrets.
+          resp="$(curl -fsS -m 15 \
+            "${{ env.VOLTMIND_MCP_BASE }}/token" \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            -H 'Accept: application/json' \
+            --data-urlencode 'grant_type=client_credentials' \
+            --data-urlencode "client_id=${VM_CID}" \
+            --data-urlencode "client_secret=${VM_CSEC}" \
+            --data-urlencode 'scope=read')"
+          tok="$(printf '%s' "$resp" | jq -er '.access_token')"
+          scope="$(printf '%s' "$resp" | jq -r '.scope // "read"')"
+          # Scope guard: refuse to proceed unless it is EXACTLY read. R3.
+          if [ "$scope" != "read" ]; then
+            echo "::error::expected read scope, got '${scope}' — aborting (R3)"
+            exit 1
+          fi
+          echo "token=${tok}" >> "$GITHUB_OUTPUT"
+          echo "scope=${scope}" >> "$GITHUB_OUTPUT"
+
+      - name: Read-only MCP check
+        id: check
+        env:
+          VM_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          set -euo pipefail
+          # TODO(R7): replace this example `get_page` with the actual read check
+          # your release gate needs (e.g. list_pages filtered, get_page <slug>).
+          body='{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_page","arguments":{"slug":"RELEASE-PLACEHOLDER"}}}'
+          raw="$(curl -fsS -m 20 \
+            "${{ env.VOLTMIND_MCP_BASE }}/mcp" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -H "Authorization: Bearer ${VM_TOKEN}" \
+            -d "$body")"
+          # /mcp returns SSE: drop the `event:`/`data:` envelope and parse JSON.
+          out="$(printf '%s' "$raw" | grep '^data:' | sed 's/^data: //')"
+          # TODO(R7): parse `out` appropriately. Example: fail if the page is missing.
+          printf '%s' "$out" | jq -er '.result' >/dev/null || {
+            echo "::error::VoltMind read check failed"
+            exit 1
+          }
+
+      - name: Gate result
+        run: |
+          echo "✅ VoltMind release-gate passed (scope=${{ steps.token.outputs.scope }}, tool=${{ env.VOLTMIND_READ_TOOL }})"
