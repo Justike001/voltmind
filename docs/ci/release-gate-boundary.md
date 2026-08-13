@@ -111,8 +111,9 @@ Repo must be **Private**. Limit repo/org write access.
   (VoltMind), and re-generate in Tailscale admin (TS). Then update the secrets.
 - Suspicion of leak, repo provenance change, or security incident on the
   action/repo ⇒ rotate both immediately.
-- Optional hardening on VoltMind client:
-  - `budget_usd_per_day` cap on `voltmind-ci-release-gate`.
+- Optional hardening on VoltMind client (both now applied/available):
+  - `budget_usd_per_day = 1.00` on `voltmind-ci-release-gate` (set 2026-08-13,
+    enforced by the budget-meter; adjust up/down as needed).
   - Narrow `federated_read` further if the gate only needs a subset.
 - The tailnet ACL is reviewed/changed only deliberately (any ACL edit widens or
   narrows the entire CI blast radius).
