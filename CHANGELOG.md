@@ -15,6 +15,35 @@ All notable changes to VoltMind will be documented in this file.
   swapped at all three call sites, so the confinement contract was never
   asserted. Corrected to `validateUploadPath(probe, confinementDir)`.
 
+---
+
+### Known technical debt (non-blocking, tracked for a follow-up workstream)
+
+**Embedding-dimension desync in the local Postgres/PGLite E2E suite.** 46 tests
+across 21 `test/e2e/*.test.ts` files fail when run locally with a `DATABASE_URL`
+(via `scripts/run-e2e.sh`). This is **not a release gate** — CI's release gate
+(`.github/workflows/test.yml`) verifies Postgres through read-only Tier 2 Host
+MCP and never runs this local suite, and Tier 2 is already green on
+0.41.21.2. Root cause is a harness/architecture inconsistency, not a
+user-facing production regression:
+
+- The test harness deliberately pins the gateway to legacy OpenAI/1536
+  (`bunfig.toml` preload → `test/helpers/legacy-embedding-preload.ts`) so legacy
+  1536-d fixtures match the schema, but `buildVectorCastFragment()`
+  (`src/core/search/embedding-column.ts`) resolves the search-vector cast
+  dimension from config/defaults (2048, `DEFAULT_EMBEDDING_DIMENSIONS`), not
+  the actual stored column dimension. Result: query cast `halfvec(2048)` vs
+  stored `halfvec(1536)` → `expected 2048 dimensions, not 1536`.
+- A few other failures are stale expectations for hardening that already landed
+  (e.g. `find_contradictions` / MCP ops now local-only) and two environmental
+  cases (live embed TOS-rejected by the sandbox proxy; fresh-install ambiguity
+  with multiple embedding providers).
+
+**Follow-up options** (do not touch before release): (a) make the search cast
+introspect the actual column dimension like `query-cache.ts`'s
+`resolveEmbeddingCast()`, or (b) migrate the test preload + all 1536-d fixtures
++ runtime default coherently to one dimension (2048 or 1536).
+
 ## [0.41.21.2] - 2026-08-13
 
 **Green native CI on a read-only Host client.** The Tier 2 and Heavy gates now
