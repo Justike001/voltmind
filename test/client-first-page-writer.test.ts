@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { VoltMindConfig } from '../src/core/config.ts';
 import { writeClientFirstPage } from '../src/core/client-first-page-writer.ts';
+import { withEnv } from './helpers/with-env.ts';
 
 const VALID_PROJECT = `---
 id: project-example
@@ -58,15 +59,12 @@ tags: []
 
 let root: string;
 let vault: string;
-let previousHome: string | undefined;
 let config: VoltMindConfig;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'voltmind-client-first-'));
   vault = join(root, 'vault');
   Bun.write(join(vault, '.keep'), '');
-  previousHome = process.env.VOLTMIND_HOME;
-  process.env.VOLTMIND_HOME = root;
   config = {
     engine: 'postgres',
     schema_pack: 'voltmind-personal-brain',
@@ -75,17 +73,17 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  if (previousHome === undefined) delete process.env.VOLTMIND_HOME;
-  else process.env.VOLTMIND_HOME = previousHome;
   rmSync(root, { recursive: true, force: true });
 });
 
 describe('client-first semantic page writer', () => {
   test('validates and persists the exact Markdown before remote synchronization', async () => {
-    const receipt = await writeClientFirstPage(config, {
-      slug: 'projects/example',
-      content: VALID_PROJECT,
-    });
+    const receipt = await withEnv({ VOLTMIND_HOME: root }, () =>
+      writeClientFirstPage(config, {
+        slug: 'projects/example',
+        content: VALID_PROJECT,
+      }),
+    );
 
     const target = join(vault, 'projects', 'example.md');
     expect(receipt.status).toBe('local_written_remote_pending');
@@ -97,29 +95,36 @@ describe('client-first semantic page writer', () => {
 
   test('rejects an invalid canonical page without touching the vault', async () => {
     const target = join(vault, 'projects', 'incomplete.md');
-    await expect(writeClientFirstPage(config, {
-      slug: 'projects/incomplete',
-      content: '---\ntype: project\ntitle: Incomplete\n---\n\n# Incomplete\n',
-    })).rejects.toMatchObject({
-      code: 'template_contract_violation',
+    await withEnv({ VOLTMIND_HOME: root }, async () => {
+      await expect(writeClientFirstPage(config, {
+        slug: 'projects/incomplete',
+        content: '---\ntype: project\ntitle: Incomplete\n---\n\n# Incomplete\n',
+      })).rejects.toMatchObject({
+        code: 'template_contract_violation',
+      });
     });
     expect(existsSync(target)).toBe(false);
   });
 
   test('rejects path traversal before creating a file', async () => {
-    await expect(writeClientFirstPage(config, {
-      slug: '../outside',
-      content: VALID_PROJECT,
-    })).rejects.toMatchObject({ code: 'invalid_page_slug' });
+    await withEnv({ VOLTMIND_HOME: root }, async () => {
+      await expect(writeClientFirstPage(config, {
+        slug: '../outside',
+        content: VALID_PROJECT,
+      })).rejects.toMatchObject({ code: 'invalid_page_slug' });
+    });
     expect(existsSync(join(root, 'outside.md'))).toBe(false);
   });
 
   test('backs up an existing page and atomically replaces it', async () => {
-    await writeClientFirstPage(config, { slug: 'projects/example', content: VALID_PROJECT });
-    const updated = VALID_PROJECT.replace('当前状态说明。', '当前状态已经更新。');
-    const receipt = await writeClientFirstPage(config, {
-      slug: 'projects/example',
-      content: updated,
+    let updated = VALID_PROJECT;
+    const receipt = await withEnv({ VOLTMIND_HOME: root }, async () => {
+      await writeClientFirstPage(config, { slug: 'projects/example', content: VALID_PROJECT });
+      updated = VALID_PROJECT.replace('当前状态说明。', '当前状态已经更新。');
+      return writeClientFirstPage(config, {
+        slug: 'projects/example',
+        content: updated,
+      });
     });
 
     expect(receipt.backup_path).toBeDefined();
