@@ -381,9 +381,16 @@ export async function runAutopilot(engine: BrainEngine, args: string[]) {
     // Inject the RSS watchdog default (2048 MB) for the autopilot-supervised
     // worker. Bare `voltmind jobs work` has no default; the supervisor and
     // autopilot are the production paths that opt in.
+    // Run several jobs in parallel (config autopilot.worker_concurrency, default 3):
+    // at concurrency 1 a single slow multi-turn subagent occupies the only slot
+    // while the rest queue and burn wall-clock, surfacing as wall-clock timeouts.
+    const workerRaws = cfg?.autopilot?.worker_concurrency;
+    const workerConcurrency = workerRaws === undefined || !Number.isFinite(workerRaws)
+      ? 3
+      : Math.max(1, Math.floor(workerRaws));
     childSupervisor = new ChildWorkerSupervisor({
       cliInvocation,
-      args: ['jobs', 'work', '--max-rss', '2048', '--runtime-role', runtimeRole],
+      args: ['jobs', 'work', '--max-rss', '2048', '--concurrency', String(workerConcurrency), '--runtime-role', runtimeRole],
       // process.env clone; the worker daemon is a public host-local command
       // and receives the same runtime environment as Autopilot.
       env: { ...process.env, VOLTMIND_RUNTIME_ROLE: runtimeRole },

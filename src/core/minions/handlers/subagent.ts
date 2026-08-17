@@ -782,10 +782,85 @@ async function runSubagentViaGateway(args: GatewayRunArgs): Promise<SubagentResu
   // Convert prior Anthropic-shape messages → ChatMessage with ChatBlock content.
   // v1 rows store Anthropic content blocks ({type:'tool_use'|'tool_result'|...});
   // we adapt them to ChatBlock shape (type: 'tool-call' | 'tool-result' | 'text').
-  const priorChatMessages: ChatMessage[] = priorMessages.map(m => ({
-    role: m.role as 'user' | 'assistant',
-    content: adaptContentBlocksToChatBlocks(m.content_blocks),
-  }));
+  //
+  // Tool RESULTS are NOT persisted as messages — they live in
+  // subagent_tool_executions keyed by (job_id, message_idx, ordinal). A resumed
+  // history is therefore a bare sequence of user/assistant rows with NO
+  // tool-result message between them. Handing that to the LLM makes the AI SDK
+  // throw AI_MissingToolResultsError ("Tool results are missing for tool calls
+  // ..."), which surfaced against DeepSeek/OpenRouter on multi-turn
+  // parallel-tool-call resumes (jobs 3837/3838, 3960). Interleave a 'tool'
+  // message after every prior assistant turn whose executions are known,
+  // re-running idempotent tools that never completed and failing hard on
+  // non-idempotent pending ones.
+  const priorChatMessages: ChatMessage[] = [];
+  const priorToolExecs = await loadPriorToolExecs(engine, ctx.id);
+  const execByKey = new Map<string, PriorToolExecRow>();
+  for (const ex of priorToolExecs) {
+    execByKey.set(
+      ex.ordinal != null ? `${ex.message_idx}:${ex.ordinal}` : `${ex.message_idx}:name:${ex.tool_name}`,
+      ex,
+    );
+  }
+  const toolDefByIdent = new Map(toolDefs.map(t => [t.name, t]));
+  for (const m of priorMessages) {
+    const blocks = adaptContentBlocksToChatBlocks(m.content_blocks);
+    priorChatMessages.push({ role: m.role as 'user' | 'assistant', content: blocks });
+    if (m.role !== 'assistant') continue;
+    const toolCalls = (Array.isArray(blocks) ? blocks : []).filter(
+      (b): b is Extract<ChatBlock, { type: 'tool-call' }> => b.type === 'tool-call',
+    );
+    if (toolCalls.length === 0) continue;
+    const toolResults: ChatBlock[] = [];
+    for (let o = 0; o < toolCalls.length; o++) {
+      const call = toolCalls[o];
+      const exec = execByKey.get(`${m.message_idx}:${o}`) ?? execByKey.get(`${m.message_idx}:name:${call.toolName}`);
+      if (exec?.status === 'complete') {
+        toolResults.push({ type: 'tool-result', toolCallId: call.toolCallId, toolName: call.toolName, output: replayToolResultOutput(exec.output ?? null) });
+        continue;
+      }
+      if (exec?.status === 'failed') {
+        toolResults.push({ type: 'tool-result', toolCallId: call.toolCallId, toolName: call.toolName, output: replayToolResultOutput(exec.error ?? 'tool failed', true), isError: true });
+        continue;
+      }
+      // pending, or no row at all (crash before onToolCallStart persisted the
+      // pending row). Write-ordering invariant means no row ⇒ no side effect,
+      // so a never-started tool is always safe to re-run; a pending row is only
+      // safe for idempotent tools.
+      const def = toolDefByIdent.get(call.toolName);
+      if (!def) {
+        toolResults.push({ type: 'tool-result', toolCallId: call.toolCallId, toolName: call.toolName, output: replayToolResultOutput(`tool ${call.toolName} is not registered`, true), isError: true });
+        continue;
+      }
+      if (exec?.status === 'pending' && def.idempotent !== true) {
+        throw new UnrecoverableError(
+          `non-idempotent tool "${call.toolName}" pending on resume; cannot safely re-run`,
+        );
+      }
+      try {
+        const output = await def.execute(call.input, { engine, jobId: ctx.id, remote: true, signal: ctx.signal });
+        if (exec) {
+          await engine.executeRaw(
+            `UPDATE subagent_tool_executions SET status='complete', output=$3::text::jsonb, ended_at=now()
+              WHERE job_id=$1 AND message_idx=$2 AND (($4::int IS NULL AND ordinal IS NULL) OR ordinal=$4)`,
+            [ctx.id, m.message_idx, JSON.stringify(output ?? null), exec.ordinal],
+          );
+        } else {
+          await engine.executeRaw(
+            `INSERT INTO subagent_tool_executions (job_id, message_idx, tool_use_id, tool_name, input, status, schema_version, ordinal, voltmind_tool_use_id, provider_id)
+             VALUES ($1,$2,$3,$4,$5::text::jsonb,'complete',2,$6,$7,$8)
+             ON CONFLICT (job_id, message_idx, ordinal) DO NOTHING`,
+            [ctx.id, m.message_idx, call.toolCallId, call.toolName, JSON.stringify(call.input ?? null), o, randomUUIDv7(), recipeIdFromModel(model)],
+          );
+        }
+        toolResults.push({ type: 'tool-result', toolCallId: call.toolCallId, toolName: call.toolName, output: replayToolResultOutput(output) });
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        toolResults.push({ type: 'tool-result', toolCallId: call.toolCallId, toolName: call.toolName, output: replayToolResultOutput(errMsg, true), isError: true });
+      }
+    }
+    if (toolResults.length > 0) priorChatMessages.push({ role: 'tool', content: toolResults });
+  }
 
   // Initial seed message if no prior state.
   const initialMessages: ChatMessage[] = priorChatMessages.length === 0
@@ -793,7 +868,7 @@ async function runSubagentViaGateway(args: GatewayRunArgs): Promise<SubagentResu
     : [];
 
   // Persist seed user message at idx 0 if fresh start.
-  let nextMessageIdx = priorChatMessages.length;
+  let nextMessageIdx = priorMessages.length;
   if (nextMessageIdx === 0) {
     await persistMessage(engine, ctx.id, {
       message_idx: 0,
@@ -1058,6 +1133,63 @@ async function loadPriorToolsV2(engine: BrainEngine, jobId: number): Promise<Pri
       error: (r.error as string | null) ?? null,
     };
   });
+}
+
+interface PriorToolExecRow {
+  message_idx: number;
+  ordinal: number | null;
+  tool_name: string;
+  tool_use_id: string;
+  status: 'pending' | 'complete' | 'failed';
+  output: unknown;
+  error: string | null;
+}
+
+/**
+ * Mirror of gateway.ts `gatewayToolResultOutput` — the AI SDK's ModelMessage
+ * schema expects tool-result `output` in the wrapped `{ type, value }` shape,
+ * not the raw value (a raw string/object fails with "messages do not match
+ * the ModelMessage[] schema" against strict OpenAI-compatible endpoints).
+ * Kept local so the handler doesn't depend on a module-private gateway helper.
+ */
+function replayToolResultOutput(output: unknown, isError = false): unknown {
+  if (isError) {
+    const value = typeof output === 'string' ? output : (JSON.stringify(output) ?? String(output));
+    return { type: 'error-text', value };
+  }
+  if (typeof output === 'string') return { type: 'text', value: output };
+  try {
+    return { type: 'json', value: JSON.parse(JSON.stringify(output ?? null)) };
+  } catch {
+    return { type: 'text', value: String(output) };
+  }
+}
+
+/**
+ * Load prior tool executions WITH their (message_idx, ordinal) positions.
+ * Unlike `loadPriorToolsV2` (stable-key view for the gateway loop's replay
+ * short-circuit), this is used to RECONSTRUCT tool-result messages in the
+ * resumed message history.
+ */
+async function loadPriorToolExecs(engine: BrainEngine, jobId: number): Promise<PriorToolExecRow[]> {
+  const rows = await engine.executeRaw<Record<string, unknown>>(
+    `SELECT message_idx, ordinal, tool_name, tool_use_id, status, output, error
+       FROM subagent_tool_executions
+      WHERE job_id = $1
+      ORDER BY message_idx, COALESCE(ordinal, 0), id`,
+    [jobId],
+  );
+  return rows.map(r => ({
+    message_idx: r.message_idx as number,
+    ordinal: r.ordinal as number | null,
+    tool_name: r.tool_name as string,
+    tool_use_id: r.tool_use_id as string,
+    status: r.status as 'pending' | 'complete' | 'failed',
+    output: r.output == null
+      ? null
+      : (typeof r.output === 'string' ? JSON.parse(r.output as string) : r.output),
+    error: (r.error as string | null) ?? null,
+  }));
 }
 
 // ── Internal: persistence ───────────────────────────────────

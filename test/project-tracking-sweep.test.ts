@@ -3,6 +3,7 @@ import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { runTrackingMaintenance } from '../src/core/cycle/tracking-maintenance.ts';
 import { sweepUnregisteredTrackingEvidence } from '../src/core/cycle/tracking-evidence-sweep.ts';
 import { buildBrainTools } from '../src/core/minions/tools/brain-allowlist.ts';
+import { computeContentHash } from '../src/core/ingestion/types.ts';
 import type { VoltMindConfig } from '../src/core/config.ts';
 import { resetPgliteState } from './helpers/reset-pglite.ts';
 import { withEnv } from './helpers/with-env.ts';
@@ -63,13 +64,13 @@ describe('server evidence sweep', () => {
 
   test('maintenance runs the sweep before queuing repair and carries source scope', async () => {
     await withEnv({ VOLTMIND_RUNTIME_ROLE: 'company-server' }, async () => {
-      const submitted: Array<{ name: string; data?: Record<string, unknown> }> = [];
+      const submitted: Array<{ name: string; data?: Record<string, unknown>; opts?: Record<string, unknown> }> = [];
       const result = await runTrackingMaintenance(engine, {
         sourceId: 'default',
         maxEvents: 10,
         queue: {
-          add: async (name, data) => {
-            submitted.push({ name, data });
+          add: async (name, data, opts) => {
+            submitted.push({ name, data, opts });
             return { id: 101 };
           },
         },
@@ -83,6 +84,57 @@ describe('server evidence sweep', () => {
       expect(data.source_id).toBe('default');
       expect(data.tracking_maintenance).toBe(true);
       expect(data.allowed_tools).toContain('register_tracking_evidence');
+      // Regression (A5): the repair prompt must pass the CANONICAL event_key as the
+      // event identity — not event_source_id/event_kind/event_key concatenated (the
+      // key is already source-qualified, so concatenating over-qualifies it). The
+      // over-qualified form made agents register under a shadow identity, leaving
+      // the real receipt stuck in 'repairing' forever.
+      expect(String(data.prompt)).toContain('Event identity: unregistered-event-1');
+      expect(String(data.prompt)).not.toContain('default/teams_thread/unregistered-event-1');
+      expect(String(data.prompt)).toContain('Evidence type: teams_thread');
+      // Regression: an 8-turn repair job must not fall into the worker's 180s
+      // wall-clock default. The submit must carry a real timeout_ms so the hard
+      // deadline is timeout_ms and wall-clock headroom is 2*timeout_ms.
+      const timeoutMs = submitted[0].opts?.timeout_ms as number | undefined;
+      expect(typeof timeoutMs).toBe('number');
+      expect(timeoutMs!).toBeGreaterThan(5 * 60 * 1000);
+    });
+  });
+
+  test('maintenance prioritizes actionable receipts over closed ones inside the scan budget', async () => {
+    await withEnv({ VOLTMIND_RUNTIME_ROLE: 'company-server' }, async () => {
+      const page = await engine.getPage('sources/teams/unregistered-1', { sourceId: 'default' });
+      const hash = page?.content_hash ?? computeContentHash('x');
+      // 10 closed receipts whose event_keys sort BEFORE the actionable one. In the
+      // old ordering (by event_key, LIMIT 10) these fill the whole scan budget and
+      // the actionable receipt is starved forever.
+      for (let i = 0; i < 10; i++) {
+        await engine.executeRaw(
+          `INSERT INTO project_tracking_receipts
+             (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,render_hash,evidence_slug,outcome,matched_by,details,updated_at)
+           VALUES ('default','default','teams_thread','a-closed-${i}','evidence','sources/teams/unregistered-1','v1',$1,$1,'sources/teams/unregistered-1','verified','client','{}'::jsonb,now())`,
+          [hash],
+        );
+      }
+      // One actionable pending receipt whose key sorts AFTER the closed ones.
+      await engine.executeRaw(
+        `INSERT INTO project_tracking_receipts
+           (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,event_version,content_hash,render_hash,evidence_slug,outcome,matched_by,details,updated_at)
+         VALUES ('default','default','teams_thread','z-pending-1','evidence','sources/teams/unregistered-1','v1',$1,$1,'sources/teams/unregistered-1','pending','evidence_sweep','{}'::jsonb,now())`,
+        [hash],
+      );
+      const submitted: Array<{ name: string; data?: Record<string, unknown> }> = [];
+      await runTrackingMaintenance(engine, {
+        sourceId: 'default',
+        maxEvents: 10,
+        queue: {
+          add: async (name, data) => { submitted.push({ name, data }); return { id: 1 }; },
+        },
+      });
+      // The actionable receipt must be inside the 10-row scan budget despite
+      // sorting last alphabetically.
+      expect(submitted.some(s => String(s.data?.prompt).includes('z-pending-1'))).toBe(true);
+      expect(submitted.filter(s => s.name === 'subagent').length).toBeGreaterThanOrEqual(1);
     });
   });
 

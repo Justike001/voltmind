@@ -270,6 +270,73 @@ async function seedCrashedState(
   return { jobId, toolUseId, gbrainId };
 }
 
+/**
+ * Seed a MULTI-TURN crashed state mirroring the production failure (job 3960):
+ *
+ *   - user@0
+ *   - assistant@1: 3 tool-calls + 3 complete executions (message_idx 1)
+ *   - assistant@3: 3 tool-calls + 3 complete executions (message_idx 3)
+ *   - assistant@5: 4 tool-calls and NO executions (crash before the
+ *     onToolCallStart persist of the last turn)
+ *
+ * The persisted history is [user, a1, a3, a5] with NO tool-result messages in
+ * between. A resumed run MUST reconstruct the tool messages or the AI SDK
+ * throws AI_MissingToolResultsError ("Tool results are missing for tool calls
+ * call_0, call_1, call_2, call_7da32d…, call_3") — the exact production
+ * symptom.
+ */
+async function seedMultiTurnCrashedState(): Promise<{ jobId: number }> {
+  const jobRows = await engine.executeRaw<{ id: number }>(
+    `INSERT INTO minion_jobs (name, status, data, queue, priority, created_at)
+     VALUES ('subagent', 'active', '{}'::jsonb, 'default', 0, now())
+     RETURNING id`,
+  );
+  const jobId = jobRows[0].id;
+  await engine.executeRaw(
+    `INSERT INTO subagent_messages (job_id, message_idx, role, content_blocks) VALUES ($1,0,'user',$2::jsonb)`,
+    [jobId, JSON.stringify([{ type: 'text', text: 'multi find foo' }])],
+  );
+  const turns: Array<{ idx: number; calls: Array<{ id: string }> }> = [
+    { idx: 1, calls: [{ id: 'call_0' }, { id: 'call_1' }, { id: 'call_2' }] },
+    {
+      idx: 3,
+      calls: [
+        { id: 'call_7da32d029c614155a6e44acd' },
+        { id: 'call_e38fa83eb0a44ab29f531e36' },
+        { id: 'call_f69afa96dbcb45b59f8d06d9' },
+      ],
+    },
+    { idx: 5, calls: [{ id: 'call_3' }, { id: 'call_4' }, { id: 'call_5' }, { id: 'call_6' }] },
+  ];
+  let uuidCounter = 0;
+  for (const t of turns) {
+    const blocks: Array<Record<string, unknown>> = [{ type: 'text', text: `turn ${t.idx}` }];
+    for (const c of t.calls) {
+      blocks.push({ type: 'tool-call', toolCallId: c.id, toolName: 'search', input: { q: 'foo' } });
+    }
+    await engine.executeRaw(
+      `INSERT INTO subagent_messages (job_id, message_idx, role, content_blocks) VALUES ($1,$2,'assistant',$3::jsonb)`,
+      [jobId, t.idx, JSON.stringify(blocks)],
+    );
+    // Only turns 1 and 3 have persisted executions; turn 5 crashed before any
+    // onToolCallStart row was written.
+    if (t.idx === 5) continue;
+    for (let o = 0; o < t.calls.length; o++) {
+      await engine.executeRaw(
+        `INSERT INTO subagent_tool_executions
+           (job_id, message_idx, tool_use_id, tool_name, input, status, schema_version, ordinal, voltmind_tool_use_id, output)
+         VALUES ($1,$2,$3,'search','{}'::jsonb,'complete',2,$4,$5::uuid,$6::jsonb)`,
+        [
+          jobId, t.idx, t.calls[o].id, o,
+          `01987654-3210-7000-8000-${String(uuidCounter++).padStart(12, '0')}`,
+          JSON.stringify({ results: [`prior-${t.idx}-${o}`] }),
+        ],
+      );
+    }
+  }
+  return { jobId };
+}
+
 async function makeCrashedCtx(jobId: number, prompt: string, modelId: string): Promise<MinionJobContext> {
   const abortCtrl = new AbortController();
   const shutdownCtrl = new AbortController();
@@ -507,6 +574,38 @@ describe('SIGKILL crash-replay reconciliation across provider matrix (v0.38 LOAD
         [jobId],
       );
       expect(Number(toolRows[0].n)).toBe(1);
+    });
+
+    it('multi-turn resume reconstructs tool messages for every prior turn and re-runs never-started tools', async () => {
+      // Regression for the production failure (jobs 3837/3838, 3960): a resumed
+      // history is a bare sequence of user/assistant rows with NO tool-result
+      // messages between them, because tool results live in
+      // subagent_tool_executions, not subagent_messages. Feeding that to the LLM
+      // makes the AI SDK throw AI_MissingToolResultsError. The handler must
+      // interleave a 'tool' message after every prior assistant turn (from the
+      // persisted executions) and re-run the never-started turn's tools.
+      const executions: Array<{ name: string; input: unknown }> = [];
+      const tools = makeStubTools(executions);
+      const handler = buildHandler(tools);
+      const { jobId } = await seedMultiTurnCrashedState();
+      const ctx = await makeCrashedCtx(jobId, 'multi find foo', PROVIDER_MATRIX[4].modelId);
+
+      let captured: Array<{ role: string }> = [];
+      __setChatTransportForTests(async (opts) => {
+        captured = opts.messages as Array<{ role: string }>;
+        return PROVIDER_MATRIX[4].finalResponse;
+      });
+
+      const result = await handler(ctx);
+
+      // Turns at message_idx 1 and 3 were already complete → NOT re-executed;
+      // the never-started turn at message_idx 5 re-ran its 4 tools exactly once.
+      expect(executions.length).toBe(4);
+      // The reconstructed history interleaves a tool message after every prior
+      // assistant turn, so the LLM never sees unresolved tool-calls.
+      expect(captured.filter(m => m.role === 'tool').length).toBe(3);
+      expect(result.result).toBe(PROVIDER_MATRIX[4].finalResponse.text);
+      expect(result.stop_reason).toBe('end_turn');
     });
   });
 });

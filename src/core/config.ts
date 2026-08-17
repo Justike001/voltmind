@@ -105,6 +105,14 @@ export interface VoltMindConfig {
        */
       max_usd?: number;
     };
+    /**
+     * Concurrency of the minion worker child autopilot spawns (`voltmind
+     * jobs work`). Defaults to 3. At concurrency 1 a single slow multi-turn
+     * subagent occupies the only slot while the rest queue, so slow tasks
+     * surface as wall-clock timeouts more often; a higher value lets several
+     * repair/synthesize jobs run in parallel. Clamped to >= 1.
+     */
+    worker_concurrency?: number;
   };
   /**
    * Invocation-riding self-upgrade notification state. This is file-plane only:
