@@ -54,10 +54,15 @@ voltmind capture "the thought I want to remember"
 voltmind capture --file ./notes/today.md
 echo "from a pipe" | voltmind capture --stdin
 voltmind capture "..." --slug daily/2026-05-21
-voltmind capture "..." --type idea --source voice-whisper
+voltmind capture "..." --type idea --source voice-whisper  # local runtime only
 voltmind capture "..." --quiet          # script-friendly: prints just the slug
 voltmind capture "..." --json           # structured output for agents
 ```
+
+`--source` is a local-runtime option for trusted source selection. Thin-client
+invocations must not pass `--source`; the Host binds the OAuth client to its
+source scope. A thin-client attempt with `--source` is rejected before any
+remote write.
 
 ## Defaults
 

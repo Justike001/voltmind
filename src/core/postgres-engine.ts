@@ -822,6 +822,27 @@ export class PostgresEngine implements BrainEngine {
     }
   }
 
+  /**
+   * Install the transaction-local federated read set. The scalar
+   * `app.source_id` remains the write authority; RLS policies use this array
+   * only in USING predicates. Source ids are validated before they reach the
+   * GUC and the comma-separated encoding is safe under SOURCE_ID_RE because
+   * commas are not valid source-id characters.
+   */
+  async setSourceReadScope(sourceIds: string[]): Promise<void> {
+    if (sourceIds.length === 0) throw new Error('source_read_scope_empty');
+    const unique = [...new Set(sourceIds)];
+    for (const sourceId of unique) assertValidSourceId(sourceId);
+    const encoded = unique.join(',');
+    await this.sql`SELECT set_config('app.source_ids', ${encoded}, true)`;
+    const rows = await this.sql<{ source_ids: string }[]>`
+      SELECT current_setting('app.source_ids', true) AS source_ids
+    `;
+    if (rows[0]?.source_ids !== encoded) {
+      throw new Error('source_read_scope_not_applied');
+    }
+  }
+
   async withReservedConnection<T>(fn: (conn: ReservedConnection) => Promise<T>): Promise<T> {
     const pool = this._sql || db.getConnection();
     const reserved = await pool.reserve();

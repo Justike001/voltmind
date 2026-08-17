@@ -26,10 +26,14 @@
 import { describe, test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
+import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
 import type { Subprocess } from 'bun';
 
-const REPO = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+// URL.pathname produces `/E:/...` on Windows, which Bun treats as a POSIX
+// absolute path. Convert the file URL so the spawned CLI receives a native
+// Windows path (and keep POSIX behavior unchanged).
+const REPO = fileURLToPath(new URL('..', import.meta.url));
 
 interface ServeProc {
   proc: Subprocess;

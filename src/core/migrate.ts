@@ -5881,6 +5881,247 @@ export const MIGRATIONS: Migration[] = [
     `,
     idempotent: true,
   },
+  {
+    version: 124,
+    name: 'rls_federated_read_scope',
+    // The scalar app.source_id remains the write authority. Read policies use
+    // app.source_ids when present so a federated client can read A+B without
+    // making source B writable. Falling back to app.source_id preserves the
+    // pre-124 single-source transaction contract.
+    sql: `
+      CREATE OR REPLACE FUNCTION public.voltmind_source_read_scope_matches(target_source TEXT)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT target_source = ANY(string_to_array(
+          COALESCE(NULLIF(current_setting('app.source_ids', true), ''), current_setting('app.source_id', true)), ','
+        ));
+      $fn$;
+
+      CREATE OR REPLACE FUNCTION public.voltmind_chunk_source_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND public.voltmind_source_read_scope_matches(p.source_id)
+        );
+      $fn$;
+
+      CREATE OR REPLACE FUNCTION public.voltmind_chunk_source_write_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND p.source_id = current_setting('app.source_id', true)
+        );
+      $fn$;
+
+      -- Federated IDs are read-only scope. Every mutating command remains
+      -- bound to scalar app.source_id; do not use a FOR ALL policy here,
+      -- because DELETE only consults USING and could delete another source.
+      DROP POLICY IF EXISTS pages_source_isolation ON pages;
+      DROP POLICY IF EXISTS pages_source_read ON pages;
+      DROP POLICY IF EXISTS pages_source_insert ON pages;
+      DROP POLICY IF EXISTS pages_source_update ON pages;
+      DROP POLICY IF EXISTS pages_source_delete ON pages;
+      CREATE POLICY pages_source_read ON pages
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY pages_source_insert ON pages
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY pages_source_update ON pages
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY pages_source_delete ON pages
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      DROP POLICY IF EXISTS content_chunks_source_isolation ON content_chunks;
+      DROP POLICY IF EXISTS content_chunks_source_read ON content_chunks;
+      DROP POLICY IF EXISTS content_chunks_source_insert ON content_chunks;
+      DROP POLICY IF EXISTS content_chunks_source_update ON content_chunks;
+      DROP POLICY IF EXISTS content_chunks_source_delete ON content_chunks;
+      CREATE POLICY content_chunks_source_read ON content_chunks
+        FOR SELECT
+        USING (public.voltmind_chunk_source_scope_matches(page_id));
+      CREATE POLICY content_chunks_source_insert ON content_chunks
+        FOR INSERT
+        WITH CHECK (public.voltmind_chunk_source_write_scope_matches(page_id));
+      CREATE POLICY content_chunks_source_update ON content_chunks
+        FOR UPDATE
+        USING (public.voltmind_chunk_source_write_scope_matches(page_id))
+        WITH CHECK (public.voltmind_chunk_source_write_scope_matches(page_id));
+      CREATE POLICY content_chunks_source_delete ON content_chunks
+        FOR DELETE
+        USING (public.voltmind_chunk_source_write_scope_matches(page_id));
+
+      DROP POLICY IF EXISTS files_source_isolation ON files;
+      DROP POLICY IF EXISTS files_source_read ON files;
+      DROP POLICY IF EXISTS files_source_insert ON files;
+      DROP POLICY IF EXISTS files_source_update ON files;
+      DROP POLICY IF EXISTS files_source_delete ON files;
+      CREATE POLICY files_source_read ON files
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY files_source_insert ON files
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY files_source_update ON files
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY files_source_delete ON files
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      DROP POLICY IF EXISTS access_tokens_source_isolation ON access_tokens;
+      DROP POLICY IF EXISTS access_tokens_source_read ON access_tokens;
+      DROP POLICY IF EXISTS access_tokens_source_insert ON access_tokens;
+      DROP POLICY IF EXISTS access_tokens_source_update ON access_tokens;
+      DROP POLICY IF EXISTS access_tokens_source_delete ON access_tokens;
+      CREATE POLICY access_tokens_source_read ON access_tokens
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY access_tokens_source_insert ON access_tokens
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY access_tokens_source_update ON access_tokens
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY access_tokens_source_delete ON access_tokens
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      DROP POLICY IF EXISTS mcp_request_log_source_isolation ON mcp_request_log;
+      DROP POLICY IF EXISTS mcp_request_log_source_read ON mcp_request_log;
+      DROP POLICY IF EXISTS mcp_request_log_source_insert ON mcp_request_log;
+      DROP POLICY IF EXISTS mcp_request_log_source_update ON mcp_request_log;
+      DROP POLICY IF EXISTS mcp_request_log_source_delete ON mcp_request_log;
+      CREATE POLICY mcp_request_log_source_read ON mcp_request_log
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY mcp_request_log_source_insert ON mcp_request_log
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY mcp_request_log_source_update ON mcp_request_log
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY mcp_request_log_source_delete ON mcp_request_log
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      DROP POLICY IF EXISTS external_file_refs_source_isolation ON external_file_refs;
+      DROP POLICY IF EXISTS external_file_refs_source_read ON external_file_refs;
+      DROP POLICY IF EXISTS external_file_refs_source_insert ON external_file_refs;
+      DROP POLICY IF EXISTS external_file_refs_source_update ON external_file_refs;
+      DROP POLICY IF EXISTS external_file_refs_source_delete ON external_file_refs;
+      CREATE POLICY external_file_refs_source_read ON external_file_refs
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY external_file_refs_source_insert ON external_file_refs
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY external_file_refs_source_update ON external_file_refs
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY external_file_refs_source_delete ON external_file_refs
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      CREATE OR REPLACE FUNCTION public.voltmind_file_ref_page_source_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND public.voltmind_source_read_scope_matches(p.source_id)
+        );
+      $fn$;
+
+      CREATE OR REPLACE FUNCTION public.voltmind_file_ref_page_source_write_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND p.source_id = current_setting('app.source_id', true)
+        );
+      $fn$;
+
+      DROP POLICY IF EXISTS page_external_file_refs_source_isolation ON page_external_file_refs;
+      DROP POLICY IF EXISTS page_external_file_refs_source_read ON page_external_file_refs;
+      DROP POLICY IF EXISTS page_external_file_refs_source_insert ON page_external_file_refs;
+      DROP POLICY IF EXISTS page_external_file_refs_source_update ON page_external_file_refs;
+      DROP POLICY IF EXISTS page_external_file_refs_source_delete ON page_external_file_refs;
+      CREATE POLICY page_external_file_refs_source_read ON page_external_file_refs
+        FOR SELECT
+        USING (public.voltmind_file_ref_page_source_scope_matches(page_id));
+      CREATE POLICY page_external_file_refs_source_insert ON page_external_file_refs
+        FOR INSERT
+        WITH CHECK (public.voltmind_file_ref_page_source_write_scope_matches(page_id));
+      CREATE POLICY page_external_file_refs_source_update ON page_external_file_refs
+        FOR UPDATE
+        USING (public.voltmind_file_ref_page_source_write_scope_matches(page_id))
+        WITH CHECK (public.voltmind_file_ref_page_source_write_scope_matches(page_id));
+      CREATE POLICY page_external_file_refs_source_delete ON page_external_file_refs
+        FOR DELETE
+        USING (public.voltmind_file_ref_page_source_write_scope_matches(page_id));
+
+      DROP POLICY IF EXISTS ingestion_event_state_source_isolation ON ingestion_event_state;
+      DROP POLICY IF EXISTS ingestion_event_state_source_read ON ingestion_event_state;
+      DROP POLICY IF EXISTS ingestion_event_state_source_insert ON ingestion_event_state;
+      DROP POLICY IF EXISTS ingestion_event_state_source_update ON ingestion_event_state;
+      DROP POLICY IF EXISTS ingestion_event_state_source_delete ON ingestion_event_state;
+      CREATE POLICY ingestion_event_state_source_read ON ingestion_event_state
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY ingestion_event_state_source_insert ON ingestion_event_state
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY ingestion_event_state_source_update ON ingestion_event_state
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY ingestion_event_state_source_delete ON ingestion_event_state
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+    `,
+    idempotent: true,
+    sqlFor: { pglite: '' },
+    verify: async (engine) => {
+      if (engine.kind === 'pglite') return true;
+      const rows = await engine.executeRaw<{ n: number }>(
+        `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'voltmind_source_read_scope_matches'`,
+      );
+      return (rows[0]?.n ?? 0) === 1;
+    },
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS.length > 0

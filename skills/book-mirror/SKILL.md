@@ -248,7 +248,7 @@ before submission.
 After the brain page is written, render to PDF using `skills/brain-pdf`:
 
 ```bash
-voltmind put_page  # already done by the CLI; nothing to add here
+# The CLI already writes the page; there is no separate `voltmind put_page` CLI command.
 # Then invoke brain-pdf:
 # (see skills/brain-pdf/SKILL.md for the make-pdf invocation)
 ```

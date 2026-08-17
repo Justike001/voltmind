@@ -655,6 +655,12 @@ export interface BrainEngine {
    */
   setSourceScope(sourceId: string): Promise<void>;
   /**
+   * Install the transaction-local set of sources permitted for reads. Writes
+   * remain governed by setSourceScope(sourceId), which is always scalar.
+   * Engines without database RLS may validate and no-op this hook.
+   */
+  setSourceReadScope?(sourceIds: string[]): Promise<void>;
+  /**
    * Run `fn` with a dedicated connection (Postgres: reserved backend;
    * PGLite: pass-through). See `ReservedConnection` for semantics and
    * usage constraints. Release is automatic.

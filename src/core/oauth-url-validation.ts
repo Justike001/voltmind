@@ -11,6 +11,18 @@ export interface OAuthEndpointValidationOptions {
   allowInsecureLoopback?: boolean;
 }
 
+/**
+ * Trust policy for the endpoint that receives OAuth bearer tokens. Kept
+ * separate from `allowedTokenEndpointOrigins`: a token endpoint allowlist
+ * does not authorize a different MCP server to receive that token.
+ */
+export interface RemoteMcpEndpointValidationOptions {
+  /** Additional origins explicitly trusted to receive bearer tokens over MCP. */
+  allowedMcpEndpointOrigins?: readonly string[];
+  /** OAuth permits loopback HTTP for local/native development. Default true. */
+  allowInsecureLoopback?: boolean;
+}
+
 export type OAuthUrlValidationResult<T> =
   | { ok: true; value: T }
   | { ok: false; message: string };
@@ -49,6 +61,23 @@ function parseHttpsOrLoopbackUrl(
   };
 }
 
+function validatedAllowedOrigins(
+  rawOrigins: readonly string[] | undefined,
+  label: string,
+  allowInsecureLoopback: boolean,
+): OAuthUrlValidationResult<Set<string>> {
+  const origins = new Set<string>();
+  for (const rawOrigin of rawOrigins ?? []) {
+    const parsed = parseHttpsOrLoopbackUrl(rawOrigin, `${label} allowlist entry`, allowInsecureLoopback);
+    if (!parsed.ok) return parsed;
+    if (parsed.value.origin !== rawOrigin.replace(/\/$/, '')) {
+      return { ok: false, message: `${label} allowlist entries must be origins: ${rawOrigin}` };
+    }
+    origins.add(parsed.value.origin);
+  }
+  return { ok: true, value: origins };
+}
+
 /** Validate the issuer URL the host publishes and embeds in access tokens. */
 export function validateOAuthIssuerUrl(
   issuerUrl: string,
@@ -61,6 +90,33 @@ export function validateOAuthIssuerUrl(
     return { ok: false, message: 'issuer_url must not contain a query string' };
   }
   return parsed;
+}
+
+/**
+ * Validate the public Admin origin before it is used for session cookies or
+ * magic links. An explicit non-loopback HTTP origin would make an HttpOnly
+ * session cookie observable on the network, so production Admin endpoints
+ * follow the same HTTPS-or-loopback policy as the OAuth issuer.
+ */
+export function validateAdminPublicUrl(
+  adminUrl: string,
+  opts: Pick<OAuthEndpointValidationOptions, 'allowInsecureLoopback'> = {},
+): OAuthUrlValidationResult<URL> {
+  const allowInsecureLoopback = opts.allowInsecureLoopback ?? true;
+  const parsed = parseHttpsOrLoopbackUrl(adminUrl, 'admin_public_url', allowInsecureLoopback);
+  if (!parsed.ok) return parsed;
+  if (parsed.value.search) return { ok: false, message: 'admin_public_url must not contain a query string' };
+  if (parsed.value.pathname !== '/') return { ok: false, message: 'admin_public_url must be an origin, not a path' };
+  return parsed;
+}
+
+/**
+ * The built-in Express transport is mounted at the root `/mcp` route. OAuth
+ * issuers may carry a public proxy path, but that path is not an Express route
+ * unless an operator explicitly supplies the complete public MCP resource.
+ */
+export function deriveDefaultMcpResourceUrl(issuerUrl: URL): URL {
+  return new URL('/mcp', issuerUrl);
 }
 
 /**
@@ -98,22 +154,13 @@ export function validateOAuthMetadataEndpoints(
   );
   if (!tokenEndpoint.ok) return tokenEndpoint;
 
-  const allowedOrigins = new Set<string>([issuer.value.origin]);
-  for (const rawOrigin of opts.allowedTokenEndpointOrigins ?? []) {
-    let allowed: URL;
-    try {
-      allowed = new URL(rawOrigin);
-    } catch {
-      return { ok: false, message: `Invalid token endpoint allowlist origin: ${rawOrigin}` };
-    }
-    if (allowed.origin !== rawOrigin.replace(/\/$/, '')) {
-      return { ok: false, message: `Token endpoint allowlist entries must be origins: ${rawOrigin}` };
-    }
-    if (allowed.protocol !== 'https:' && !(allowInsecureLoopback && allowed.protocol === 'http:' && isLoopbackHostname(allowed.hostname))) {
-      return { ok: false, message: `Token endpoint allowlist origin must use HTTPS: ${rawOrigin}` };
-    }
-    allowedOrigins.add(allowed.origin);
-  }
+  const configuredAllowedOrigins = validatedAllowedOrigins(
+    opts.allowedTokenEndpointOrigins,
+    'Token endpoint',
+    allowInsecureLoopback,
+  );
+  if (!configuredAllowedOrigins.ok) return configuredAllowedOrigins;
+  const allowedOrigins = new Set<string>([issuer.value.origin, ...configuredAllowedOrigins.value]);
   if (!allowedOrigins.has(tokenEndpoint.value.origin)) {
     return {
       ok: false,
@@ -122,4 +169,37 @@ export function validateOAuthMetadataEndpoints(
   }
 
   return { ok: true, value: { issuer: issuer.value, tokenEndpoint: tokenEndpoint.value } };
+}
+
+/**
+ * Validate the MCP endpoint before an OAuth bearer token can be sent to it.
+ * By default it must share the issuer origin; cross-origin routing is an
+ * explicit operator decision via a distinct MCP endpoint allowlist.
+ */
+export function validateRemoteMcpUrl(
+  configuredIssuer: string,
+  mcpUrl: string,
+  opts: RemoteMcpEndpointValidationOptions = {},
+): OAuthUrlValidationResult<{ issuer: URL; mcpEndpoint: URL }> {
+  const allowInsecureLoopback = opts.allowInsecureLoopback ?? true;
+  const issuer = validateOAuthIssuerUrl(configuredIssuer, { allowInsecureLoopback });
+  if (!issuer.ok) return issuer;
+
+  const mcpEndpoint = parseHttpsOrLoopbackUrl(mcpUrl, 'mcp_url', allowInsecureLoopback);
+  if (!mcpEndpoint.ok) return mcpEndpoint;
+
+  const configuredAllowedOrigins = validatedAllowedOrigins(
+    opts.allowedMcpEndpointOrigins,
+    'MCP endpoint',
+    allowInsecureLoopback,
+  );
+  if (!configuredAllowedOrigins.ok) return configuredAllowedOrigins;
+  const allowedOrigins = new Set<string>([issuer.value.origin, ...configuredAllowedOrigins.value]);
+  if (!allowedOrigins.has(mcpEndpoint.value.origin)) {
+    return {
+      ok: false,
+      message: `MCP endpoint origin ${mcpEndpoint.value.origin} is not trusted by issuer ${issuer.value.origin}`,
+    };
+  }
+  return { ok: true, value: { issuer: issuer.value, mcpEndpoint: mcpEndpoint.value } };
 }

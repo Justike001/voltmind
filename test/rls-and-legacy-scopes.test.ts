@@ -54,6 +54,30 @@ describe('v0.42 #6 — RLS source-isolation policies (schema + migration)', () =
     expect(LATEST_REAL).toBeGreaterThanOrEqual(113);
   });
 
+  test('migrate.ts ships v124 federated-read RLS with scalar write checks', () => {
+    const v124 = MIGRATIONS_REAL.find((m) => m.version === 124);
+    expect(v124).toBeDefined();
+    expect(v124!.name).toBe('rls_federated_read_scope');
+    expect(v124!.sql).toContain("current_setting('app.source_ids', true)");
+    for (const table of [
+      'pages', 'content_chunks', 'files', 'access_tokens',
+      'mcp_request_log', 'external_file_refs',
+      'page_external_file_refs', 'ingestion_event_state',
+    ]) {
+      expect(v124!.sql).toContain(`CREATE POLICY ${table}_source_read ON ${table}`);
+      expect(v124!.sql).toContain(`CREATE POLICY ${table}_source_insert ON ${table}`);
+      expect(v124!.sql).toContain(`CREATE POLICY ${table}_source_update ON ${table}`);
+      expect(v124!.sql).toContain(`CREATE POLICY ${table}_source_delete ON ${table}`);
+    }
+    expect(v124!.sql).not.toContain('CREATE POLICY pages_source_isolation');
+    expect(v124!.sql).toContain('FOR SELECT');
+    expect(v124!.sql).toContain('FOR INSERT');
+    expect(v124!.sql).toContain('FOR UPDATE');
+    expect(v124!.sql).toContain('FOR DELETE');
+    expect(v124!.sql).toContain("WITH CHECK (source_id = current_setting('app.source_id', true))");
+    expect(v124!.sqlFor?.pglite).toBe('');
+  });
+
   test('access_tokens.source_id column exists (PGLite parity)', async () => {
     const cols = await engine.executeRaw<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
@@ -62,7 +86,7 @@ describe('v0.42 #6 — RLS source-isolation policies (schema + migration)', () =
     expect(cols.length).toBe(1);
   });
 
-  test('schema.sql fresh-install RLS block installs the 5 policies (Postgres source)', async () => {
+  test('schema.sql fresh-install RLS block installs scoped read/write policies (Postgres source)', async () => {
     // Read the canonical schema source and assert the policy CREATE
     // statements are present for every reviewed table. This pins the
     // "RLS is decorative" regression: if a future edit drops the policies
@@ -70,15 +94,16 @@ describe('v0.42 #6 — RLS source-isolation policies (schema + migration)', () =
     const { readFileSync } = await import('fs');
     const schema = readFileSync('src/schema.sql', 'utf8');
     for (const table of [
-      'pages_source_isolation',
-      'content_chunks_source_isolation',
-      'files_source_isolation',
-      'access_tokens_source_isolation',
-      'mcp_request_log_source_isolation',
+      'pages', 'content_chunks', 'files', 'access_tokens',
+      'mcp_request_log', 'external_file_refs',
+      'page_external_file_refs', 'ingestion_event_state',
     ]) {
-      expect(schema).toContain(`CREATE POLICY ${table} ON`);
-      expect(schema).toContain(`DROP POLICY IF EXISTS ${table} ON`);
+      for (const command of ['read', 'insert', 'update', 'delete']) {
+        expect(schema).toContain(`CREATE POLICY ${table}_source_${command} ON ${table}`);
+        expect(schema).toContain(`DROP POLICY IF EXISTS ${table}_source_${command} ON ${table}`);
+      }
     }
+    expect(schema).not.toContain('CREATE POLICY pages_source_isolation');
     expect(schema).toContain("current_setting('app.source_id', true)");
   });
 
@@ -97,6 +122,11 @@ describe('v0.42 #6 — RLS source-isolation policies (schema + migration)', () =
 
   test('setSourceScope rejects invalid source ids on PGLite just like Postgres', async () => {
     await expect(engine.setSourceScope('../escape')).rejects.toThrow('Invalid source_id');
+  });
+
+  test('setSourceReadScope validates federated ids and is a no-op on PGLite', async () => {
+    await expect(engine.setSourceReadScope?.(['default', 'any-source'])).resolves.toBeUndefined();
+    await expect(engine.setSourceReadScope?.(['../escape'])).rejects.toThrow('Invalid source_id');
   });
 });
 

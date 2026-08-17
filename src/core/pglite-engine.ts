@@ -821,6 +821,11 @@ export class PGLiteEngine implements BrainEngine {
     assertValidSourceId(_sourceId);
   }
 
+  /** PGLite has no RLS; validate the federated read scope for engine parity. */
+  async setSourceReadScope(sourceIds: string[]): Promise<void> {
+    for (const sourceId of sourceIds) assertValidSourceId(sourceId);
+  }
+
   // Pages CRUD
   async getPage(slug: string, opts?: { sourceId?: string; includeDeleted?: boolean }): Promise<Page | null> {
     // v0.26.5: hide soft-deleted by default; opt-in via opts.includeDeleted.

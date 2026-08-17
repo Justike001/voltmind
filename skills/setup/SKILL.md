@@ -98,17 +98,21 @@ repo in the company Gogs, get your own **sourceID** + **read/write** permission 
 the Host, connect as a thin client to the Host's MCP server, and persist those
 credentials so your agent can use them on every run.
 
-## Real endpoints (this Host)
+## Host-provided endpoints
+
+The Host operator must provide the following values for the deployment. Keep
+these as deployment-local configuration; do not copy a particular company's
+URLs, LAN addresses, or repository names into a published skill:
 
 | What | Value |
 |---|---|
-| MCP / OAuth issuer | `https://voltage3d.tailce7d39.ts.net` |
-| MCP endpoint | `https://voltage3d.tailce7d39.ts.net/mcp` |
-| Self-provision (`/provision/request`) | `https://voltage3d.tailce7d39.ts.net/provision/request` |
-| Company Gogs (web) | `http://192.168.5.6:3000` |
-| Gogs org | `http://192.168.5.6:3000/VoltMind` |
-| Gogs API | `http://192.168.5.6:3000/api/v1` |
-| Gogs SSH (clone form) | `voltage@192.168.5.6:VoltMind/<repo>.git` |
+| MCP / OAuth issuer | `<https://brain.example.invalid>` |
+| MCP endpoint | `<https://brain.example.invalid/mcp>` |
+| Self-provision (`/provision/request`) | `<https://brain.example.invalid/provision/request>` |
+| Company Git service | `<https://git.example.invalid>` |
+| Git organization | `<https://git.example.invalid/<org>>` |
+| Git API | `<https://git.example.invalid/api/v1>` |
+| Git SSH clone form | `<git-user@git.example.invalid:<org>/<repo>.git>` |
 
 **Security boundary you rely on:** you (the user's agent) only ever get
 **read/write on your OWN `personal-*` source** — never admin, never anyone else's
@@ -126,11 +130,10 @@ data. The Host keeps the Gogs-admin key and all admin credentials to itself.
 
 Only execute this section after the remote-route check above succeeds.
 
-1. You already have a company Gogs account. In Gogs (`http://192.168.5.6:3000`),
+1. You already have a company Git account. In the Git service (`<git-web-url>`),
    under the org `VoltMind`, create a **private** personal knowledge repo, e.g.
    `VoltMind/<name>_PersonalBrain`, and push an initial commit (e.g. `README.md`).
-2. Get the repo's **SSH clone address** (Gogs → your repo → Clone → SSH) — the form
-   is `voltage@192.168.5.6:VoltMind/<repo>.git`.
+2. Get the repo's **SSH clone address** from the repository's Clone → SSH menu.
 3. Create a **Gogs personal access token** for your account: Gogs → Settings →
    Applications → Generate New Token (read scope is enough).
 
@@ -141,11 +144,11 @@ One request to the Host creates your **source**, **checks out your repo**, and
 one step. Use the Gogs API token you just made:
 
 ```bash
-curl -X POST https://voltage3d.tailce7d39.ts.net/provision/request \
+curl -X POST "<issuer-url>/provision/request" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "<your company email>",
-    "repo_url": "voltage@192.168.5.6:VoltMind/<repo>.git",
+    "repo_url": "<ssh-clone-url>",
     "gogs_token": "<your Gogs personal access token>"
   }'
 ```
@@ -162,54 +165,61 @@ and that you can read the repo — so you get **only your own** source. Response
 > If `/provision/request` returns `404` (the operator keeps self-provision OFF by
 > default), ask the Host's agent / admin to run the admin path or switch it on.
 
-## Phase A.6: Connect as a thin client
+## Phase A.6: Clone and bind the local vault first
+
+Client-first writes require a local `client_vault_path`. Complete this phase
+before initializing the thin client:
+
+```bash
+git clone "<vault-or-personal-repo-ssh-url>" ~/vault
+cd ~/vault
+git remote -v
+```
+
+The checkout must be the personal source granted by the Host. Never use a
+shared or another teammate's vault.
+
+## Phase A.7: Connect as a thin client
 
 ```bash
 voltmind init --mcp-only \
-  --issuer-url https://voltage3d.tailce7d39.ts.net \
-  --mcp-url https://voltage3d.tailce7d39.ts.net/mcp \
-  --oauth-client-id <client_id> \
-  --oauth-client-secret <client_secret>
+  --vault-path ~/vault \
+  --issuer-url "<issuer-url>" \
+  --mcp-url "<mcp-url>" \
+  --oauth-client-id "<client_id>"
 voltmind doctor --json       # expect "status": "ok"
 voltmind search "<a topic>"  # first retrieval
 ```
 
-## Phase A.7: Persist your credentials (so the agent reads them on every run)
+Before running this command, have the OS secret manager inject
+`VOLTMIND_REMOTE_CLIENT_SECRET` into the process environment. The variable is
+intentionally omitted from the command so the secret cannot land in shell
+history or an instruction file.
 
-Write into your **own repo's `AGENTS.md`** and/or your environment so your agent
-always has them at run time:
+## Phase A.8: Persist non-secret configuration safely
 
-```bash
-export VOLTMIND_SOURCE=personal-<name>
-export VOLTMIND_REMOTE_ISSUER_URL=https://voltage3d.tailce7d39.ts.net
-export VOLTMIND_REMOTE_MCP_URL=https://voltage3d.tailce7d39.ts.net/mcp
-export VOLTMIND_REMOTE_CLIENT_ID=<client_id>
-export VOLTMIND_REMOTE_CLIENT_SECRET=<client_secret>
-```
-
-Mirror these into your repo's `AGENTS.md` under a `## voltmind credentials`
-section so your agent picks them up automatically. Treat `client_secret` as
-sensitive (`.env` / secret manager, never a public repo).
-
-## Phase A.8: Clone your vault and bind your remote repo
-
-After your source is provisioned, set up your local working copy and bind it to
-your personal remote repo so your local writes stay in sync with what the Host
-checks out:
+The source id, issuer URL, MCP URL, and client id are non-secret routing
+configuration and may be recorded in your agent's local configuration or
+`AGENTS.md`. The client secret is different: keep it only in an OS secret
+manager or an untracked, permission-protected environment file. Never put it in
+`AGENTS.md`, a brain page, a prompt, shell history, or a committed repository.
 
 ```bash
-# clone the vault template or your own personal repo:
-git clone voltage@192.168.5.6:VoltMind/brain.git ~/vault
-# (or) git clone voltage@192.168.5.6:VoltMind/<repo>.git ~/vault
-
-# bind the remote so your local vault tracks your personal KB repo:
-cd ~/vault
-git remote add origin voltage@192.168.5.6:VoltMind/<repo>.git   # if not already set
-git remote -v
+export VOLTMIND_SOURCE="personal-<name>"
+export VOLTMIND_REMOTE_ISSUER_URL="<issuer-url>"
+export VOLTMIND_REMOTE_MCP_URL="<mcp-url>"
+export VOLTMIND_REMOTE_CLIENT_ID="<client_id>"
 ```
 
-From then on: write to your vault → `git push` → the Host syncs it into your
-source → `voltmind search` returns it.
+If an environment file is used, keep it outside version control with restrictive
+permissions and load it through the platform's secret mechanism as
+`VOLTMIND_REMOTE_CLIENT_SECRET` before running `voltmind init`; the runtime gives
+the environment value precedence and does not persist it to the client config.
+Do not paste it into an instruction file or shell command line.
+
+From then on, `voltmind put`/`capture` writes the local vault first and records
+the remote receipt. Host synchronization may follow; a direct remote
+`put_page` is not a substitute for the client-first write.
 
 ## Phase C: First Import
 
@@ -381,8 +391,9 @@ index stays current:
 voltmind sync --no-pull --no-embed
 ```
 
-> **Thin client:** `sync` is refused locally. Writes made via MCP `put_page` are
-> picked up by the Host's autopilot sync; trigger a cycle with `voltmind remote ping`.
+> **Thin client:** `sync` is refused locally. Use `voltmind put` or `voltmind
+> capture` so the local vault and pending receipt are written first; then let
+> the Host process the receipt or trigger a cycle with `voltmind remote ping`.
 
 This indexes new/changed files without pulling from git or regenerating embeddings.
 Embeddings can be refreshed later in batch (`voltmind embed --stale`).

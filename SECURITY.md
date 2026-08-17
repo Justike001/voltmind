@@ -117,11 +117,12 @@ to me but the agent can't reach the upstream" misconfigurations.
 
 ### Postgres-only
 
-`gbrain serve --http` requires a Postgres engine. PGLite is local-only by
-design and the `access_tokens` / `mcp_request_log` tables don't exist in
-the PGLite schema. Local agents continue to use stdio (`gbrain serve`).
-Running `--http` against a PGLite-backed install fails fast with a clear
-error message at startup.
+`gbrain serve --http` requires a Postgres engine for remote HTTP deployment.
+PGLite remains local-only by design, while its schema now contains local
+`access_tokens` and `mcp_request_log` tables for parity and audit tests. Local
+agents continue to use stdio (`gbrain serve`); the HTTP transport still refuses
+to run against a PGLite-backed install and fails fast with a clear startup
+error.
 
 ### CORS
 
@@ -254,7 +255,7 @@ of raw JSON-RPC payloads. Declared keys (intersected against the operation's
 spec) preserve for debug visibility; unknown keys are counted but never
 named so attackers can't probe key existence; byte sizes bucket to 1KB so
 content sizes can't be binary-searched. The same shape is broadcast on the
-admin SSE feed at `/admin/events`. Operators on a personal laptop who want
-raw payloads back can pass `gbrain serve --http --log-full-params` (loud
-stderr warning at startup). Multi-tenant deployments should leave it
-on the redacted default.
+admin SSE feed at `/admin/events`. `--log-full-params` is retained only as a
+compatibility flag and no longer enables raw payload persistence: values may
+contain secrets or PII that cannot be generically redacted safely. All
+deployments receive the structural summary.

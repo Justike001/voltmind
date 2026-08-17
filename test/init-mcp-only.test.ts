@@ -32,6 +32,8 @@ let tmp: string;
 let discoveryStatus = 200;
 let tokenStatus = 200;
 let mcpStatus = 200;
+let tokenRequestCount = 0;
+let tokenResources: Array<string | null> = [];
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -45,14 +47,20 @@ beforeAll(async () => {
       return;
     }
     if (req.url === '/token') {
-      res.statusCode = tokenStatus;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({
-        access_token: 'token-' + Date.now(),
-        token_type: 'bearer',
-        expires_in: 3600,
-        scope: 'read write admin',
-      }));
+      tokenRequestCount++;
+      const chunks: Buffer[] = [];
+      req.on('data', chunk => chunks.push(chunk as Buffer));
+      req.on('end', () => {
+        tokenResources.push(new URLSearchParams(Buffer.concat(chunks).toString('utf8')).get('resource'));
+        res.statusCode = tokenStatus;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({
+          access_token: 'token-' + Date.now(),
+          token_type: 'bearer',
+          expires_in: 3600,
+          scope: 'read write admin',
+        }));
+      });
       return;
     }
     if (req.url === '/mcp') {
@@ -79,6 +87,8 @@ beforeEach(() => {
   discoveryStatus = 200;
   tokenStatus = 200;
   mcpStatus = 200;
+  tokenRequestCount = 0;
+  tokenResources = [];
 });
 
 afterEach(() => {
@@ -105,6 +115,7 @@ async function run(args: string[], extraEnv: Record<string, string | undefined> 
   delete env.VOLTMIND_REMOTE_CLIENT_SECRET;
   delete env.VOLTMIND_REMOTE_ISSUER_URL;
   delete env.VOLTMIND_REMOTE_MCP_URL;
+  delete env.VOLTMIND_REMOTE_MCP_ALLOWED_ORIGINS;
   delete env.VOLTMIND_REMOTE_CLIENT_ID;
   for (const [k, v] of Object.entries(extraEnv)) {
     if (v === undefined) delete env[k];
@@ -203,6 +214,22 @@ describe('voltmind init --mcp-only — happy path', () => {
     const cfg = JSON.parse(readFileSync(configPath(), 'utf-8'));
     expect(cfg.remote_mcp.issuer_url).toBe(`http://127.0.0.1:${port}`);
   });
+
+  test('persists an explicit cross-origin MCP allowlist', async () => {
+    const crossOrigin = `http://localhost:${port}`;
+    const r = await run([
+      'init', '--mcp-only', '--json',
+      '--issuer-url', `http://127.0.0.1:${port}`,
+      '--mcp-url', `${crossOrigin}/mcp`,
+      '--mcp-allowed-origin', crossOrigin,
+      '--oauth-client-id', 'cid',
+      '--oauth-client-secret', 'csecret',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const cfg = JSON.parse(readFileSync(configPath(), 'utf-8'));
+    expect(cfg.remote_mcp.mcp_endpoint_allowed_origins).toEqual([crossOrigin]);
+    expect(tokenResources).toEqual([`${crossOrigin}/mcp`]);
+  });
 });
 
 describe('voltmind init --mcp-only — required-flag errors', () => {
@@ -228,6 +255,21 @@ describe('voltmind init --mcp-only — required-flag errors', () => {
     expect(r.exitCode).toBe(1);
     const parsed = JSON.parse(r.stdout.trim().split('\n').pop()!);
     expect(parsed.reason).toBe('missing_mcp_url');
+  });
+
+  test('rejects an untrusted MCP origin before minting a bearer token', async () => {
+    const r = await run([
+      'init', '--mcp-only', '--json',
+      '--issuer-url', `http://127.0.0.1:${port}`,
+      '--mcp-url', 'https://attacker.example/mcp',
+      '--oauth-client-id', 'cid',
+      '--oauth-client-secret', 'csecret',
+    ]);
+    expect(r.exitCode).toBe(1);
+    expect(tokenRequestCount).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split('\n').pop()!);
+    expect(parsed.reason).toBe('invalid_mcp_url');
+    expect(parsed.message).not.toContain('csecret');
   });
 
   test('missing --oauth-client-id exits 1', async () => {

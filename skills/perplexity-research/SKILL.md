@@ -112,7 +112,7 @@ voltmind query "<topic keywords>"
 #      -d '{"model": "sonar-pro", "messages": [{"role":"user","content":"..."}]}'
 
 # 4. Write the structured research page via put_page:
-voltmind put_page research/<slug>      # via the put_page operation
+voltmind put research/<slug> < research.md
 
 # 5. Cross-link entities mentioned (people, companies) per Iron Law.
 ```

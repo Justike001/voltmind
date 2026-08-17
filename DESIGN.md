@@ -93,9 +93,11 @@ Server-rendered SVG via `src/core/calibration/svg-renderer.ts`. Pure
 functions: data → SVG string. No DOM, no React component, no chart library.
 
 XSS posture: server-side `escapeXml()` on every caller-controlled string.
-Numeric inputs `.toFixed()`-coerced. Admin SPA renders via
-`<TrustedSVG>` wrapper with `dangerouslySetInnerHTML`. Endpoint gated by
-`requireAdmin` middleware.
+Numeric inputs are `.toFixed()`-coerced. The SVG endpoints are gated by
+`requireAdmin` middleware and return `image/svg+xml`; the current Admin SPA
+does not inject those responses into the DOM. If an inline chart surface is
+added later, it requires a separately reviewed sanitizer/wrapper and XSS tests
+before any `dangerouslySetInnerHTML` use is introduced.
 
 Why server-rendered SVG (per D23):
 - Chart logic stays close to the data math.

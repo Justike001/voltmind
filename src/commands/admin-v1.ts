@@ -136,6 +136,7 @@ export async function rotateOAuthClient(engine: BrainEngine, oldId: string) {
       [clientId, secretHash, String(old.client_name), old.contact_email ?? null, pgArray([]), pgArray(grantTypes), scopes, authMethod, Math.floor(Date.now() / 1000), String(old.source_id), pgArray(federatedRead)],
     );
     await tx.executeRaw("DELETE FROM oauth_tokens WHERE client_id=$1", [oldId]);
+    await tx.executeRaw("DELETE FROM oauth_codes WHERE client_id=$1", [oldId]);
     await tx.executeRaw("UPDATE oauth_clients SET deleted_at=now() WHERE client_id=$1", [oldId]);
     return { replacedClientId: oldId, clientId, clientSecret, sourceId: String(old.source_id) };
   });
@@ -284,7 +285,9 @@ export function createAdminV1Router(options: AdminV1Options): express.Router {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::text::jsonb,$9,$10)`,
         [res.locals.requestId, createHash('sha256').update(session.sessionId).digest('hex'), audit.source_id ?? null,
           audit.client_id ?? null, audit.job_id ?? null, audit.action ?? `${req.method} ${req.path}`,
-          res.statusCode < 400 ? 'ok' : 'error', JSON.stringify(summary), req.ip ?? null, res.locals.errorCode ?? null],
+          // IP addresses are personal data and add no operator value to the
+          // source/client/job-scoped Admin audit. Do not persist them.
+          res.statusCode < 400 ? 'ok' : 'error', JSON.stringify(summary), null, res.locals.errorCode ?? null],
       ).catch(err => console.error('[admin-v1] audit insert failed:', err instanceof Error ? err.message : err));
     });
     next();
@@ -371,6 +374,7 @@ export function createAdminV1Router(options: AdminV1Options): express.Router {
           config=COALESCE(config,'{}'::jsonb)||'{"federated":false}'::jsonb WHERE id=$1 AND archived IS NOT TRUE RETURNING id,archive_expires_at`, [id]);
         if (!source[0]) return null;
         await tx.executeRaw(`DELETE FROM oauth_tokens WHERE client_id IN (SELECT client_id FROM oauth_clients WHERE source_id=$1)`, [id]);
+        await tx.executeRaw(`DELETE FROM oauth_codes WHERE client_id IN (SELECT client_id FROM oauth_clients WHERE source_id=$1)`, [id]);
         const revoked = await tx.executeRaw<any>(`UPDATE oauth_clients SET deleted_at=now() WHERE source_id=$1 AND deleted_at IS NULL RETURNING client_id`, [id]);
         return { source_id: id, archive_expires_at: source[0].archive_expires_at, revoked_client_count: revoked.length };
       });
@@ -479,6 +483,7 @@ export function createAdminV1Router(options: AdminV1Options): express.Router {
       res.locals.audit = { action: 'oauth_client.revoke', client_id: clientId };
       const rows = await engine.transaction(async tx => {
         await tx.executeRaw('DELETE FROM oauth_tokens WHERE client_id=$1', [clientId]);
+        await tx.executeRaw('DELETE FROM oauth_codes WHERE client_id=$1', [clientId]);
         return tx.executeRaw<any>('UPDATE oauth_clients SET deleted_at=COALESCE(deleted_at,now()) WHERE client_id=$1 RETURNING source_id', [clientId]);
       });
       if (!rows[0]) return fail(res, 404, 'oauth_client_not_found', 'OAuth client not found');

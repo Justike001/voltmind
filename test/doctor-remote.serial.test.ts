@@ -38,6 +38,7 @@ let discoveryStatus = 200;
 let discoveryBody: unknown = null;
 let tokenStatus = 200;
 let tokenBody: unknown = null;
+let tokenResources: Array<string | null> = [];
 let mcpStatus = 200;
 let mcpBodyOverride: string | null = null;
 let mcpContentType = 'application/json';
@@ -59,14 +60,19 @@ beforeAll(async () => {
       return;
     }
     if (req.url === '/token') {
-      res.statusCode = tokenStatus;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(tokenBody ?? {
-        access_token: 'test-token-' + Date.now(),
-        token_type: 'bearer',
-        expires_in: 3600,
-        scope: 'read write admin',
-      }));
+      const chunks: Buffer[] = [];
+      req.on('data', chunk => chunks.push(chunk as Buffer));
+      req.on('end', () => {
+        tokenResources.push(new URLSearchParams(Buffer.concat(chunks).toString('utf8')).get('resource'));
+        res.statusCode = tokenStatus;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(tokenBody ?? {
+          access_token: 'test-token-' + Date.now(),
+          token_type: 'bearer',
+          expires_in: 3600,
+          scope: 'read write admin',
+        }));
+      });
       return;
     }
     if (req.url === '/mcp') {
@@ -126,6 +132,7 @@ function reset() {
   discoveryBody = null;
   tokenStatus = 200;
   tokenBody = null;
+  tokenResources = [];
   mcpStatus = 200;
   mcpBodyOverride = null;
   mcpContentType = 'application/json';
@@ -159,6 +166,7 @@ describe('collectRemoteDoctorReport', () => {
     expect(checkNames).toContain('oauth_token');
     expect(checkNames).toContain('mcp_smoke');
     expect(report.checks.every(c => c.status === 'ok')).toBe(true);
+    expect(tokenResources).toEqual([`http://localhost:${port}/mcp`]);
     expect(report.oauth_scope).toBe('read write admin');
   });
 
@@ -307,6 +315,17 @@ describe('collectRemoteDoctorReport', () => {
     const report = await collectRemoteDoctorReport(config);
     const cfg = report.checks.find(c => c.name === 'config_integrity')!;
     expect(cfg.status).toBe('fail');
+  });
+
+  test('cross-origin MCP endpoint fails config_integrity before OAuth token mint', async () => {
+    reset();
+    const config = makeConfig({ mcp_url: 'https://attacker.example/mcp' });
+    const report = await collectRemoteDoctorReport(config, SKIP_PROBE_OPTS);
+    const cfg = report.checks.find(c => c.name === 'config_integrity')!;
+    expect(cfg.status).toBe('fail');
+    expect(cfg.message).toContain('not trusted');
+    expect(report.checks.find(c => c.name === 'oauth_discovery')).toBeUndefined();
+    expect(report.checks.find(c => c.name === 'oauth_token')).toBeUndefined();
   });
 
   test('missing client_secret entirely — fails before any HTTP call', async () => {

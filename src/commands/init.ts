@@ -9,6 +9,7 @@ const __dirname = dirname(__filename);
 import { saveConfig, loadConfig, loadConfigFileOnly, toEngineConfig, voltmindPath, configPath, isThinClient, type VoltMindConfig } from '../core/config.ts';
 import { createEngine } from '../core/engine-factory.ts';
 import { createRemoteProbeDeadline, discoverOAuth, mintClientCredentialsToken, smokeTestMcp } from '../core/remote-mcp-probe.ts';
+import { validateRemoteMcpUrl } from '../core/oauth-url-validation.ts';
 import { defaultPersonalBrainRoot, installPersonalBrainScaffold } from '../core/personal-brain-scaffold.ts';
 
 export async function runInit(args: string[]) {
@@ -545,6 +546,7 @@ async function initMigrateOnly(opts: { jsonOutput: boolean }) {
  * Required flags (or env vars):
  *   --issuer-url <url>          (or VOLTMIND_REMOTE_ISSUER_URL)
  *   --mcp-url <url>             (or VOLTMIND_REMOTE_MCP_URL)
+ *   --mcp-allowed-origin <url>  Explicit cross-origin MCP endpoint allowlist
  *   --oauth-client-id <id>      (or VOLTMIND_REMOTE_CLIENT_ID)
  *   --oauth-client-secret <s>   (or VOLTMIND_REMOTE_CLIENT_SECRET; preferred)
  *   --vault-path <dir>          (or VOLTMIND_CLIENT_VAULT_PATH; required for put)
@@ -565,6 +567,14 @@ async function initRemoteMcp(opts: {
   };
   const issuerUrl = (arg('--issuer-url') ?? process.env.VOLTMIND_REMOTE_ISSUER_URL ?? '').trim();
   const mcpUrl = (arg('--mcp-url') ?? process.env.VOLTMIND_REMOTE_MCP_URL ?? '').trim();
+  const configuredMcpAllowedOrigins = args
+    .flatMap((value, index) => value === '--mcp-allowed-origin' && args[index + 1] ? [args[index + 1]] : []);
+  const mcpAllowedOrigins = configuredMcpAllowedOrigins.length > 0
+    ? configuredMcpAllowedOrigins
+    : (process.env.VOLTMIND_REMOTE_MCP_ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean);
   const clientId = (arg('--oauth-client-id') ?? process.env.VOLTMIND_REMOTE_CLIENT_ID ?? '').trim();
   const clientSecret = (arg('--oauth-client-secret') ?? process.env.VOLTMIND_REMOTE_CLIENT_SECRET ?? '').trim();
   const clientVaultPath = (arg('--vault-path') ?? process.env.VOLTMIND_CLIENT_VAULT_PATH ?? '').trim();
@@ -582,6 +592,12 @@ async function initRemoteMcp(opts: {
   if (!mcpUrl) fail('missing_mcp_url', '--mcp-url is required (or set VOLTMIND_REMOTE_MCP_URL). Example: --mcp-url https://brain-host.local:3001/mcp');
   if (!clientId) fail('missing_client_id', '--oauth-client-id is required (or set VOLTMIND_REMOTE_CLIENT_ID). Get it from `voltmind auth register-client` on the host.');
   if (!clientSecret) fail('missing_client_secret', '--oauth-client-secret is required (or set VOLTMIND_REMOTE_CLIENT_SECRET). Get it from `voltmind auth register-client` on the host.');
+  const endpointValidation = validateRemoteMcpUrl(issuerUrl, mcpUrl, {
+    allowedMcpEndpointOrigins: mcpAllowedOrigins,
+  });
+  if (!endpointValidation.ok) {
+    fail('invalid_mcp_url', `--mcp-url is not trusted: ${endpointValidation.message}`);
+  }
   if (clientVaultPath && (!existsSync(resolve(clientVaultPath)) || !lstatSync(resolve(clientVaultPath)).isDirectory())) {
     fail('client_vault_not_found', `--vault-path must point to an existing local Markdown vault: ${resolve(clientVaultPath)}`);
   }
@@ -626,7 +642,7 @@ async function initRemoteMcp(opts: {
     disco.metadata.token_endpoint,
     clientId,
     clientSecret,
-    { signal: probeDeadline.signal },
+    { signal: probeDeadline.signal, resource: endpointValidation.value.mcpEndpoint },
   );
   if (!tokenRes.ok) {
     fail(
@@ -642,7 +658,11 @@ async function initRemoteMcp(opts: {
   const mcpRes = await smokeTestMcp(
     mcpUrl,
     tokenRes.token.access_token,
-    { signal: probeDeadline.signal },
+    {
+      signal: probeDeadline.signal,
+      issuerUrl,
+      allowedMcpEndpointOrigins: mcpAllowedOrigins,
+    },
   );
   if (!mcpRes.ok) {
     fail(
@@ -671,6 +691,7 @@ async function initRemoteMcp(opts: {
     remote_mcp: {
       issuer_url: issuerUrl.replace(/\/+$/, ''),
       mcp_url: mcpUrl,
+      ...(mcpAllowedOrigins.length > 0 ? { mcp_endpoint_allowed_origins: mcpAllowedOrigins } : {}),
       oauth_client_id: clientId,
       // Only persist the secret to disk if it didn't come from the env var.
       // Env-var-supplied secrets stay in env; on-disk copy is opt-in via
@@ -1517,6 +1538,8 @@ ENGINE SELECTION (mutually exclusive)
   --url <URL>           Use a manual Postgres connection string
   --mcp-only            Thin-client mode: connect to a remote voltmind MCP, no local engine
   --vault-path <DIR>     Client-first local Markdown vault written before remote put_page
+  --mcp-allowed-origin <ORIGIN>
+                        Explicitly trust a cross-origin MCP endpoint (repeatable)
 
 OPTIONS
   --force               Overwrite an existing config (gated by default)

@@ -26,4 +26,25 @@ describe('Admin keyboard accessibility', () => {
     expect(src).toContain('previousFocus?.focus()');
     expect(src).toContain('aria-labelledby={titleId}');
   });
+
+  test('OAuth, Jobs, and Audit pages distinguish initial loading from refreshes and empty results', () => {
+    const src = readFileSync('admin/src/pages/AdminConsole.tsx', 'utf8');
+    // These data-driven pages must not briefly report an empty system while
+    // their initial request or an explicit refresh is still in flight.
+    expect(src.match(/const \[loading, setLoading\] = useState\(true\)/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(src.match(/const \[loaded, setLoaded\] = useState\(false\)/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(src.match(/finally \{ setLoading\(false\); \}/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(src).toContain('{loading && !loaded ? <Loading /> : loaded ? <OAuthTable');
+    expect(src).toContain('{loading && !loaded ? <Loading /> : loaded ? visibleJobs.length');
+    expect(src).toContain('{loading && !loaded ? <Loading /> : loaded ? entries.length');
+  });
+
+  test('published Admin SPA has no raw HTML or browser-persisted credential sink', () => {
+    const src = readFileSync('admin/src/pages/AdminConsole.tsx', 'utf8');
+    const api = readFileSync('admin/src/api.ts', 'utf8');
+    const login = readFileSync('admin/src/pages/Login.tsx', 'utf8');
+    const published = `${src}\n${api}\n${login}`;
+    expect(published).not.toContain('dangerouslySetInnerHTML');
+    expect(published).not.toMatch(/\b(?:localStorage|sessionStorage)\b/);
+  });
 });

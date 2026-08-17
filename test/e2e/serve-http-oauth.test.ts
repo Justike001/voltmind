@@ -14,6 +14,7 @@
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { hasDatabase } from './helpers.ts';
+import { hashToken } from '../../src/core/utils.ts';
 
 const skip = !hasDatabase();
 const describeE2E = skip ? describe.skip : describe;
@@ -163,6 +164,66 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     expect(body).toContain('search'); // search tool should be in the list
     expect(body).toContain('query');  // query tool too
   }, 15_000);
+
+  test('read bearer lists only authorized canonical tool definitions and cannot call hidden writes', async () => {
+    const { access_token } = await mintToken('read');
+    const listed = await mcpCall(access_token, 'tools/list');
+    const listBody = await listed.json() as { result: { tools: Array<{ name: string; scope?: string; _meta?: Record<string, string> }> } };
+    expect(listBody.result.tools.some(tool => tool.name === 'put_page')).toBe(false);
+    const search = listBody.result.tools.find(tool => tool.name === 'search');
+    expect(search?.scope).toBe('read');
+    expect(search?._meta?.['voltmind/requiredScope']).toBe('read');
+
+    const call = await mcpCall(access_token, 'tools/call', {
+      name: 'put_page',
+      arguments: { slug: 'ideas/scope-denied', content: 'denied' },
+    });
+    const callBody = await call.text();
+    expect(callBody).toContain('insufficient_scope');
+  }, 15_000);
+
+  test('client credentials rejects a token resource other than this MCP endpoint', async () => {
+    const res = await fetch(`${BASE}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${clientSecret}&scope=read&resource=${encodeURIComponent('https://attacker.example/mcp')}`,
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error?: string };
+    expect(body.error).toBe('invalid_target');
+  });
+
+  test('MCP returns a standard 401 Bearer invalid_token challenge for missing or wrong token resource', async () => {
+    const postgres = (await import('postgres')).default;
+    const sql = postgres(process.env.VOLTMIND_DATABASE_URL || process.env.DATABASE_URL || '', { prepare: false });
+    const expiry = Math.floor(Date.now() / 1000) + 300;
+    const tokens = [
+      { raw: `e2e-null-resource-${Date.now()}`, resource: null },
+      { raw: `e2e-wrong-resource-${Date.now()}`, resource: 'https://attacker.example/mcp' },
+    ];
+    try {
+      for (const token of tokens) {
+        await sql`
+          INSERT INTO oauth_tokens (token_hash, token_type, client_id, scopes, expires_at, resource)
+          VALUES (${hashToken(token.raw)}, 'access', ${clientId!}, ARRAY['read'], ${expiry}, ${token.resource})
+        `;
+      }
+      for (const token of tokens) {
+        const res = await mcpCall(token.raw, 'tools/list');
+        expect(res.status).toBe(401);
+        expect(res.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+        const body = await res.json() as { error?: string; error_description?: string };
+        expect(body.error).toBe('invalid_token');
+        expect(body.error_description).toBe('Bearer token is not valid for this resource');
+        expect(JSON.stringify(body)).not.toContain('attacker.example');
+      }
+    } finally {
+      for (const token of tokens) {
+        await sql`DELETE FROM oauth_tokens WHERE token_hash = ${hashToken(token.raw)}`;
+      }
+      await sql.end({ timeout: 5 });
+    }
+  });
 
   test('minted token works for tools/call — search executes', async () => {
     const { access_token } = await mintToken('read');

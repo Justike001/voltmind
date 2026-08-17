@@ -95,15 +95,16 @@ export async function runServe(
     const publicUrlIdx = args.indexOf('--public-url');
     const publicUrl = publicUrlIdx >= 0 ? args[publicUrlIdx + 1] : undefined;
 
+    const mcpPublicUrlIdx = args.indexOf('--mcp-public-url');
+    const mcpPublicUrl = mcpPublicUrlIdx >= 0 ? args[mcpPublicUrlIdx + 1] : process.env.VOLTMIND_MCP_PUBLIC_URL;
+
     const adminPublicUrlIdx = args.indexOf('--admin-public-url');
     const adminPublicUrl = adminPublicUrlIdx >= 0 ? args[adminPublicUrlIdx + 1] : process.env.VOLTMIND_ADMIN_PUBLIC_URL;
     const adminApiOnly = args.includes('--admin-api-only');
 
-    // F8 escape hatch: --log-full-params writes raw payloads to mcp_request_log
-    // and the admin SSE feed instead of redacted summaries. Off by default
-    // (privacy-first); operators running voltmind on their own laptop can flip
-    // it on for debug visibility. Loud startup warning fires in serve-http.ts
-    // when set so the posture change is visible in stderr.
+    // Compatibility flag only: raw payload persistence has been removed.
+    // serve-http accepts the flag but keeps structural summaries, preventing
+    // secrets and PII from reaching the audit database or Admin SSE feed.
     const logFullParams = args.includes('--log-full-params');
 
     // v0.34.1 (#864, D11): `--bind HOST` lets operators choose the network
@@ -129,6 +130,7 @@ export async function runServe(
       enableDcr,
       enableDcrInsecure,
       publicUrl,
+      mcpPublicUrl,
       adminPublicUrl,
       adminApiOnly,
       logFullParams,

@@ -30,7 +30,7 @@ interface FakeEngine {
   // expected after the migration, but harmless if it sticks around).
   executeRaw: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
   sql: ReturnType<typeof makeSqlTag>;
-  audit: { token_name: string | null; operation: string; status: string; latency_ms: number }[];
+  audit: { token_name: string | null; operation: string; status: string; latency_ms: number; params?: unknown }[];
 }
 
 function makeSqlTag(handler: SqlHandler) {
@@ -66,7 +66,7 @@ interface FakeEngineConfig {
    * `permissions` JSONB column. Default permissions = {takes_holders: ['world']}
    * when unset, matching the migration v33 default.
    */
-  validTokens?: Map<string, { id: string; name: string; permissions?: { takes_holders?: string[] } }>;
+  validTokens?: Map<string, { id: string; name: string; permissions?: { takes_holders?: string[] }; scopes?: string[] }>;
   /** Tokens that are present but revoked (revoked_at IS NOT NULL — query returns empty). */
   revokedTokens?: Set<string>;
   /** If true, every SELECT throws (simulating DB outage). */
@@ -92,12 +92,17 @@ function makeFakeEngine(cfg: FakeEngineConfig = {}): FakeEngine {
 
     // SELECT id, name, permissions FROM access_tokens WHERE token_hash = $1 AND revoked_at IS NULL
     if (norm.startsWith('select id, name from access_tokens') ||
-        norm.startsWith('select id, name, permissions from access_tokens')) {
+        norm.startsWith('select id, name, permissions from access_tokens') ||
+        norm.startsWith('select id, name, permissions, scopes from access_tokens')) {
       const tokenHash = values[0] as string;
       if (revokedTokens.has(tokenHash)) return [];
       const row = validTokens.get(tokenHash);
       if (!row) return [];
-      const rowWithPerms = { ...row, permissions: row.permissions ?? { takes_holders: ['world'] } };
+      const rowWithPerms = {
+        ...row,
+        permissions: row.permissions ?? { takes_holders: ['world'] },
+        scopes: row.scopes ?? ['read', 'write'],
+      };
       return [rowWithPerms];
     }
 
@@ -112,6 +117,7 @@ function makeFakeEngine(cfg: FakeEngineConfig = {}): FakeEngine {
         operation: values[1] as string,
         latency_ms: values[2] as number,
         status: values[3] as string,
+        params: values[6],
       });
       return [];
     }
@@ -619,6 +625,58 @@ describe('http-transport: mcp_request_log audit', () => {
       const row = srv.engine.audit[srv.engine.audit.length - 1];
       expect(row.token_name).toBeNull();
       expect(row.status).toBe('auth_failed');
+    } finally { srv.stop(); }
+  });
+
+  test('read-scoped legacy bearer only lists readable canonical tool definitions', async () => {
+    const token = 'read-only-token';
+    const scoped = await startTest({
+      validTokens: new Map([[hash(token), { id: 'read-id', name: 'read-only', scopes: ['read'] }]]),
+    });
+    try {
+      const r = await fetch(`${scoped.url}/mcp`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: rpc('tools/list'),
+      });
+      const body = await r.json() as { result: { tools: Array<{ name: string; scope?: string; _meta?: Record<string, string> }> } };
+      expect(body.result.tools.some(tool => tool.name === 'put_page')).toBe(false);
+      const search = body.result.tools.find(tool => tool.name === 'search');
+      expect(search?.scope).toBe('read');
+      expect(search?._meta?.['voltmind/requiredScope']).toBe('read');
+    } finally { scoped.stop(); }
+  });
+
+  test('read-scoped legacy bearer cannot call a write operation omitted from tools/list', async () => {
+    const token = 'read-only-call-token';
+    const scoped = await startTest({
+      validTokens: new Map([[hash(token), { id: 'read-call-id', name: 'read-only-call', scopes: ['read'] }]]),
+    });
+    try {
+      const r = await fetch(`${scoped.url}/mcp`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: rpc('tools/call', { name: 'put_page', arguments: { slug: 'ideas/nope', content: 'nope' } }),
+      });
+      const body = await r.json() as { result: { isError: boolean; content: Array<{ text: string }> } };
+      expect(body.result.isError).toBe(true);
+      expect(body.result.content[0]?.text).toContain('insufficient_scope');
+    } finally { scoped.stop(); }
+  });
+
+  test('23. tool payloads are structurally summarized without durable values', async () => {
+    const TOK = 'audit-redaction-tok';
+    const srv = await startTest({ validTokens: new Map([[hash(TOK), { id: 'a-2', name: 'audit-redaction' }]]) });
+    try {
+      await fetch(`${srv.url}/mcp`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${TOK}`, 'Content-Type': 'application/json' },
+        body: rpc('tools/call', { name: 'put_page', arguments: { slug: 'people/alice', content: 'private secret payload' } }),
+      });
+      await new Promise(r => setTimeout(r, 10));
+      const row = srv.engine.audit.at(-1)!;
+      expect(JSON.stringify(row.params)).not.toContain('private secret payload');
+      expect(row.params).toMatchObject({ redacted: true, declared_keys: expect.arrayContaining(['slug', 'content']) });
     } finally { srv.stop(); }
   });
 });

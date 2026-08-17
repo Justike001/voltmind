@@ -30,10 +30,12 @@ import type { BrainEngine } from '../core/engine.ts';
 import { buildToolDefs } from './tool-defs.ts';
 import { operations } from '../core/operations.ts';
 import { VERSION } from '../version.ts';
-import { dispatchToolCall } from './dispatch.ts';
+import { dispatchToolCall, summarizeMcpParams } from './dispatch.ts';
 import { buildDefaultLimiters, type RateLimiter } from './rate-limit.ts';
 import { sqlQueryForEngine } from '../core/sql-query.ts';
+import { executeRawJsonb } from '../core/sql-query.ts';
 import { resolveBrainId } from '../core/brain-resolver.ts';
+import { filterOperationsForScopes, hasScope } from '../core/scope.ts';
 
 const DEFAULT_BODY_CAP = 1024 * 1024; // 1 MiB
 
@@ -75,6 +77,8 @@ interface AuthResult {
    * for narrower scoping.
    */
   sourceId?: string;
+  /** Explicit legacy bearer scopes; absent pre-v113 rows fail closed to read+write. */
+  scopes?: string[];
 }
 
 /** Read up to `cap` bytes off req.body. Returns null if cap exceeded. */
@@ -136,7 +140,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
   const limiters = opts.limiters || buildDefaultLimiters();
   const bodyCap = envInt('VOLTMIND_HTTP_MAX_BODY_BYTES', DEFAULT_BODY_CAP);
   const corsAllowlist = parseCorsAllowlist();
-  const tools = buildToolDefs(operations.filter(op => !op.localOnly));
+  const mcpOperations = operations.filter(op => !op.localOnly);
 
   // v0.42 (#861 audit follow-up): resolve the brain (mount) id once at
   // transport startup so every mcp_request_log row this server writes is
@@ -186,7 +190,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
     const hash = hashToken(token);
     try {
       const [row] = await sql`
-        SELECT id, name, permissions FROM access_tokens
+        SELECT id, name, permissions, scopes FROM access_tokens
         WHERE token_hash = ${hash} AND revoked_at IS NULL
       `;
       if (!row) return { ok: false };
@@ -205,6 +209,9 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
       const allowList = Array.isArray(perms?.takes_holders)
         ? (perms!.takes_holders as unknown[]).filter(h => typeof h === 'string') as string[]
         : ['world'];
+      const storedScopes = Array.isArray((row as { scopes?: unknown }).scopes)
+        ? ((row as { scopes: unknown[] }).scopes.filter(scope => typeof scope === 'string') as string[])
+        : ['read', 'write'];
       return {
         ok: true,
         tokenId: rowId,
@@ -216,6 +223,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
         // (migration v60 backfills oauth_clients.source_id). This path
         // is for the older v0.22.7 access_tokens transport.
         sourceId: 'default',
+        scopes: storedScopes.length > 0 ? storedScopes : ['read', 'write'],
       };
     } catch {
       return { ok: false };
@@ -228,6 +236,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
     status: string,
     latencyMs: number,
     sourceId?: string | null,
+    params?: unknown,
   ) {
     // v0.42 (#861 audit follow-up): thread the resolved source_id so the
     // audit trail can be sliced per-source. NULL for pre-auth failures
@@ -236,9 +245,14 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
     // the life of this transport so every row from this server is
     // attributable to the brain it served.
     const brainId = brainIdForProcess;
-    const values = [tokenName, operation, latencyMs, status, sourceId ?? null, brainId];
-    sql`INSERT INTO mcp_request_log (token_name, operation, latency_ms, status, source_id, brain_id)
-        VALUES (${values[0]}, ${values[1]}, ${values[2]}, ${values[3]}, ${values[4]}, ${values[5]})`
+    const summary = params === undefined ? null : summarizeMcpParams(operation.replace(/^tools\/call:/, ''), params);
+    void executeRawJsonb(
+      engine,
+      `INSERT INTO mcp_request_log (token_name, operation, latency_ms, status, source_id, brain_id, params)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+      [tokenName, operation, latencyMs, status, sourceId ?? null, brainId],
+      [summary],
+    )
       .catch(() => { /* best-effort */ });
   }
 
@@ -367,7 +381,13 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
       if (method === 'tools/list') {
         logRequest(auth.tokenName!, 'tools/list', 'success', Date.now() - startedMs, auth.sourceId);
         return Response.json(
-          { result: { tools }, jsonrpc: '2.0', id },
+          {
+            result: {
+              tools: buildToolDefs(filterOperationsForScopes(mcpOperations, auth.scopes ?? ['read', 'write'])),
+            },
+            jsonrpc: '2.0',
+            id,
+          },
           { headers: corsHeaders(origin) },
         );
       }
@@ -376,6 +396,27 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
       if (method === 'tools/call') {
         const toolName: string = params?.name ?? 'unknown';
         const args: Record<string, unknown> = params?.arguments ?? {};
+        const op = mcpOperations.find(candidate => candidate.name === toolName);
+        if (op && !hasScope(auth.scopes ?? ['read', 'write'], op.scope ?? 'read')) {
+          logRequest(auth.tokenName!, `tools/call:${toolName}`, 'insufficient_scope', Date.now() - startedMs, auth.sourceId);
+          return Response.json(
+            {
+              result: {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    error: 'insufficient_scope',
+                    message: `Operation ${toolName} requires '${op.scope ?? 'read'}' scope`,
+                  }),
+                }],
+                isError: true,
+              },
+              jsonrpc: '2.0',
+              id,
+            },
+            { headers: corsHeaders(origin) },
+          );
+        }
         // v0.28: thread per-token takes-holder allow-list so takes_list /
         // takes_search / query (when it returns takes) can server-side filter.
         // v0.34.1 (#861): thread source-isolation scope. Legacy access_tokens
@@ -386,7 +427,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
           sourceId: auth.sourceId,
         });
         const status = result.isError ? 'error' : 'success';
-        logRequest(auth.tokenName!, `tools/call:${toolName}`, status, Date.now() - startedMs, auth.sourceId);
+        logRequest(auth.tokenName!, `tools/call:${toolName}`, status, Date.now() - startedMs, auth.sourceId, args);
         return Response.json(
           { result, jsonrpc: '2.0', id },
           { headers: corsHeaders(origin) },

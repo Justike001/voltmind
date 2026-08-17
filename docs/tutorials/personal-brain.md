@@ -17,7 +17,7 @@ A personal AI agent with four pieces:
 - **A brain** (git repo). Your knowledge base, constantly ingesting and growing.
 - **A harness** (OpenClaw via AlphaClaw). The runtime that gives the LLM tools, memory, and integrations.
 - **A chat interface** (Telegram). How you talk to it.
-- **Skills** (60+ installed via VoltMind). Reusable capabilities the agent can invoke.
+- **Skills** (the published set in `skills/manifest.json`). Reusable capabilities the agent can invoke.
 
 Architecture:
 

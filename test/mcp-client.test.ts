@@ -36,6 +36,7 @@ let mcpStatusOverride: number | null = null;
 let mcpRejectRemaining = 0;
 let mcpRequestCount = 0;
 let tokenMintCount = 0;
+let tokenResources: Array<string | null> = [];
 let tokenError = 'invalid_client';
 let discoveryDelayMs = 0;
 let tokenDelayMs = 0;
@@ -59,6 +60,7 @@ beforeAll(async () => {
         const chunks: Buffer[] = [];
         for await (const chunk of req) chunks.push(chunk as Buffer);
         const form = new URLSearchParams(Buffer.concat(chunks).toString('utf-8'));
+        tokenResources.push(form.get('resource'));
         res.end(JSON.stringify({
           access_token: `token-${form.get('client_id')}-${form.get('client_secret')}-${tokenMintCount}`,
           token_type: 'bearer',
@@ -79,6 +81,7 @@ beforeAll(async () => {
           tokenError = 'invalid_grant';
         }
         res.statusCode = 401;
+        res.setHeader('WWW-Authenticate', 'Bearer error="invalid_token"');
         res.end();
         return;
       }
@@ -132,6 +135,7 @@ afterAll(async () => {
 beforeEach(() => {
   tokenStatus = 200;
   tokenMintCount = 0;
+  tokenResources = [];
   mcpStatusOverride = null;
   mcpRejectRemaining = 0;
   mcpRequestCount = 0;
@@ -161,6 +165,7 @@ describe('callRemoteTool — happy path', () => {
     const res = await callRemoteTool(makeConfig(), 'echo', {});
     const parsed = unpackToolResult<{ greeting: string }>(res);
     expect(parsed.greeting).toBe('hello');
+    expect(tokenResources).toEqual([`http://127.0.0.1:${port}/mcp`]);
   });
 
   test('caches the access token across multiple calls', async () => {
@@ -267,6 +272,29 @@ describe('callRemoteTool — error surfaces', () => {
       expect(e).toBeInstanceOf(RemoteMcpError);
       expect((e as RemoteMcpError).reason).toBe('auth');
     }
+  });
+
+  test('rejects an untrusted MCP origin before minting or sending a token', async () => {
+    const config = makeConfig();
+    config.remote_mcp!.mcp_url = 'https://attacker.example/mcp';
+    try {
+      await callRemoteTool(config, 'foo', {});
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(RemoteMcpError);
+      expect((e as RemoteMcpError).reason).toBe('config');
+      expect((e as Error).message).not.toContain('csecret');
+    }
+    expect(tokenMintCount).toBe(0);
+  });
+
+  test('allows an explicitly configured cross-origin MCP endpoint', async () => {
+    const config = makeConfig();
+    config.remote_mcp!.mcp_url = `http://localhost:${port}/mcp`;
+    config.remote_mcp!.mcp_endpoint_allowed_origins = [`http://localhost:${port}`];
+    await callRemoteTool(config, 'noop', {});
+    expect(tokenMintCount).toBe(1);
+    expect(tokenResources).toEqual([`http://localhost:${port}/mcp`]);
   });
 
   test('invalid_grant from token endpoint is classified as credential auth failure', async () => {

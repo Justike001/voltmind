@@ -286,7 +286,7 @@ describe('put_page write-through — multi-source filing', () => {
     await engine.executeRaw(
       "INSERT INTO sources (id, name) VALUES ('remote-x', 'remote-x')",
     );
-    const ctx = makeCtx({ sourceId: 'remote-x' });
+    const ctx = makeCtx({ sourceId: 'remote-x', remote: true });
     const result = (await putPage.handler(ctx, {
       slug: 'shared/remote-page',
       content: '---\ntitle: R\n---\n\nbody',

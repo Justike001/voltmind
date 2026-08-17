@@ -93,21 +93,37 @@ export interface DispatchOpts {
 }
 
 /** Execute database work with the request source installed transaction-locally. */
-export async function withOperationSourceScope<T>(
+export function withOperationSourceScope<T>(
   engine: BrainEngine,
   sourceId: string,
   fn: (scopedEngine: BrainEngine) => Promise<T>,
+): Promise<T>;
+export function withOperationSourceScope<T>(
+  engine: BrainEngine,
+  sourceId: string,
+  readSourceIds: string[],
+  fn: (scopedEngine: BrainEngine) => Promise<T>,
+): Promise<T>;
+export async function withOperationSourceScope<T>(
+  engine: BrainEngine,
+  sourceId: string,
+  readSourceIdsOrFn: string[] | ((scopedEngine: BrainEngine) => Promise<T>),
+  maybeFn?: (scopedEngine: BrainEngine) => Promise<T>,
 ): Promise<T> {
+  const readSourceIds = typeof readSourceIdsOrFn === 'function' ? [sourceId] : readSourceIdsOrFn;
+  const fn = typeof readSourceIdsOrFn === 'function' ? readSourceIdsOrFn : maybeFn!;
   // PGLite has no RLS/session GUC. Validate the id through the engine parity
   // hook, then avoid wrapping handlers in a transaction: several operations
   // already own atomic subtransactions (notably put_page/importFromContent),
   // and PGLite does not support beginning a transaction from its tx object.
   if (engine.kind === 'pglite') {
     await engine.setSourceScope(sourceId);
+    await engine.setSourceReadScope?.(readSourceIds);
     return fn(engine);
   }
   return engine.transaction(async (tx) => {
     await tx.setSourceScope(sourceId);
+    await tx.setSourceReadScope?.(readSourceIds);
     return fn(tx);
   });
 }
@@ -168,7 +184,7 @@ async function auditStdioRequest(
     // brainId is the resolved mount id. Both nullable for forward-compat
     // with transports that don't resolve them.
     const scopedSourceId = sourceId ?? 'default';
-    await withOperationSourceScope(engine, scopedSourceId, async (tx) => {
+    await withOperationSourceScope(engine, scopedSourceId, [scopedSourceId], async (tx) => {
       await executeRawJsonb(
         tx,
         `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
@@ -474,7 +490,10 @@ export async function dispatchToolCall(
       resolveWriteSourceId(ctx, safeParams.source_id);
     }
 
-    const out = await withOperationSourceScope(engine, ctx.sourceId, async (tx) => {
+    const readSourceIds = ctx.auth?.allowedSources && ctx.auth.allowedSources.length > 0
+      ? ctx.auth.allowedSources
+      : [ctx.sourceId];
+    const out = await withOperationSourceScope(engine, ctx.sourceId, readSourceIds, async (tx) => {
       const scopedCtx: OperationContext = { ...ctx, engine: tx };
       const result = await op.handler(scopedCtx, safeParams);
       const scopedOut: ToolResult = { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };

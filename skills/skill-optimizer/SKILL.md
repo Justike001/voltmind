@@ -8,6 +8,8 @@ triggers:
   - "make the skill better"
   - "run skillopt"
   - "skillopt for"
+  - "benchmark skill routing"
+  - "improve skill performance"
 mutating: true
 brain_first: exempt
 ---

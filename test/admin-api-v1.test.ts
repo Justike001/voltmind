@@ -226,9 +226,19 @@ describe('Admin API v1 OAuth clients', () => {
     const old = await provider.registerClientManual(
       'Rotate Example', ['client_credentials'], 'read', [], activeSource, [activeSource], 'client_secret_post', contactEmail,
     );
+    await engine.executeRaw(
+      "INSERT INTO oauth_tokens (token_hash,token_type,client_id,scopes,expires_at) VALUES ('rotate-token','access',$1,ARRAY['read'],9999999999)",
+      [old.clientId],
+    );
+    await engine.executeRaw(
+      "INSERT INTO oauth_codes (code_hash,client_id,scopes,code_challenge,redirect_uri,expires_at) VALUES ('rotate-code',$1,ARRAY['read'],'challenge','https://localhost/callback',9999999999)",
+      [old.clientId],
+    );
     const replacement = await rotateOAuthClient(engine, old.clientId);
     expect(replacement?.clientId).not.toBe(old.clientId);
     expect(replacement?.clientSecret).toStartWith('voltmind_cs_');
+    expect((await engine.executeRaw<any>('SELECT 1 FROM oauth_tokens WHERE client_id=$1', [old.clientId]))).toHaveLength(0);
+    expect((await engine.executeRaw<any>('SELECT 1 FROM oauth_codes WHERE client_id=$1', [old.clientId]))).toHaveLength(0);
     const row = await engine.executeRaw<any>(
       'SELECT client_name,contact_email,source_id,federated_read,grant_types,scope,token_endpoint_auth_method FROM oauth_clients WHERE client_id=$1',
       [replacement?.clientId],
@@ -237,6 +247,23 @@ describe('Admin API v1 OAuth clients', () => {
       client_name: 'Rotate Example', contact_email: contactEmail, source_id: activeSource,
       federated_read: [activeSource], grant_types: ['client_credentials'], scope: 'read', token_endpoint_auth_method: 'client_secret_post',
     });
+  });
+
+  test('revoke clears tokens and pending authorization codes', async () => {
+    const created = await createClient();
+    const clientId = created.json.data.client_id;
+    await engine.executeRaw(
+      "INSERT INTO oauth_tokens (token_hash,token_type,client_id,scopes,expires_at) VALUES ('revoke-token','access',$1,ARRAY['read'],9999999999)",
+      [clientId],
+    );
+    await engine.executeRaw(
+      "INSERT INTO oauth_codes (code_hash,client_id,scopes,code_challenge,redirect_uri,expires_at) VALUES ('revoke-code',$1,ARRAY['read'],'challenge','https://localhost/callback',9999999999)",
+      [clientId],
+    );
+    const revoked = await request(`/oauth-clients/${clientId}/revoke`, { method: 'POST' });
+    expect(revoked.response.status).toBe(200);
+    expect((await engine.executeRaw<any>('SELECT 1 FROM oauth_tokens WHERE client_id=$1', [clientId]))).toHaveLength(0);
+    expect((await engine.executeRaw<any>('SELECT 1 FROM oauth_codes WHERE client_id=$1', [clientId]))).toHaveLength(0);
   });
 
   test('PATCH writes oauth_client.scope_update audit action', async () => {

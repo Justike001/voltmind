@@ -50,7 +50,7 @@ Compile a daily briefing from brain context.
 
    The `--since-last-run` flag advances `~/.voltmind/recall-cursors/<source>.json`
    so the next briefing picks up exactly where this one left off. If you're
-   running this as a cron job, pass `--source <slug>` or set `voltmind_SOURCE`
+   running this as a cron job, pass `--source <slug>` or set `VOLTMIND_SOURCE`
    explicitly — cron doesn't start in your repo-root cwd, so dotfile resolution
    may miss the right source. Thin-client installs (`voltmind init --mcp-only`)
    route through the remote brain transparently.

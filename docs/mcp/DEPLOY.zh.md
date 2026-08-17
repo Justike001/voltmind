@@ -69,7 +69,7 @@ Open http://localhost:3131/admin and paste it to log in.
 保存这个 token。打开 `http://localhost:3131/admin` 并粘贴它以访问 dashboard。Dashboard 会显示 live activity、已注册客户端、request logs 和 per-client config export。
 
 > **v0.26.9+:** `mcp_request_log.params` 和 live SSE activity feed 默认使用脱敏摘要 `{redacted, kind, declared_keys, unknown_key_count, approx_bytes}`。
-> 声明过的参数键会保留（与 operation spec 求交）；未知键只计数不命名，字节大小向上取整到 1KB，因此 size-probe attack 无法二分搜索秘密内容。个人笔记本上的 operator 如需恢复原始 payload，可传入 `voltmind serve --http --log-full-params`（启动时会有醒目的 stderr warning）。多租户部署应保持脱敏默认值。
+> 声明过的参数键会保留（与 operation spec 求交）；未知键只计数不命名，字节大小向上取整到 1KB，因此 size-probe attack 无法二分搜索秘密内容。`voltmind serve --http --log-full-params` 仅为兼容性保留，不能恢复原始 payload：请求值可能包含无法可靠泛化脱敏的 secret 或 PII。所有部署均使用结构化摘要。
 
 ### 2. 注册 OAuth clients
 

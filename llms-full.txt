@@ -457,8 +457,11 @@ audit trail lives in the source repo's git history.
 
 ## Skills
 
-Read the skill files in `skills/` before doing brain operations. VoltMind ships 30 skills
-organized by `skills/RESOLVER.md` (`AGENTS.md` is also accepted as of v0.19):
+Read the skill files in `skills/` before doing brain operations. The checked-in
+skill inventory is authoritative: `skills/manifest.json` currently publishes
+58 skills and records 3 explicit excluded operator variants (61 skill
+directories on disk). `skills/RESOLVER.md` is the only routing source
+(`AGENTS.md` may mirror it for downstream agents):
 
 **Original 8 (conformance-migrated):** ingest (thin router), query, maintain, enrich,
 briefing, migrate, setup, publish.
@@ -1563,6 +1566,7 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | Save or load reports | `skills/reports/SKILL.md` |
 | "Create a skill", "improve this skill" | `skills/skill-creator/SKILL.md` |
 | "Skillify this", "is this a skill?", "make this proper" | `skills/skillify/SKILL.md` |
+| "optimize this skill", "benchmark skill routing", "improve skill performance" | `skills/skill-optimizer/SKILL.md` |
 | "Compress my resolver", "AGENTS.md too large", "RESOLVER.md too big", "functional area dispatcher", "shrink routing table" | `skills/functional-area-resolver/SKILL.md` |
 | "Is voltmind healthy?", morning health check, skillpack-check | `skills/skillpack-check/SKILL.md` |
 | "harvest this skill into voltmind", "publish this skill to voltmind", "lift this skill upstream", "share this skill with other voltmind clients", "promote my skill to voltmind" | `skills/skillpack-harvest/SKILL.md` |
@@ -3796,10 +3800,10 @@ and per-client config export.
 > to a redacted summary `{redacted, kind, declared_keys, unknown_key_count, approx_bytes}`.
 > Declared param keys are kept (intersected against the operation's spec); unknown
 > keys are counted but never named, and byte sizes round up to 1KB so size-probe
-> attacks can't binary-search secret content. Operators on a personal laptop who
-> want raw payloads back can pass `voltmind serve --http --log-full-params` (loud
-> stderr warning fires at startup). Multi-tenant deployments should leave it on
-> the redacted default.
+> attacks can't binary-search secret content. `voltmind serve --http
+> --log-full-params` is retained only for compatibility and cannot restore raw
+> payload persistence: request values can contain secrets or PII. All deployments
+> use the structural summary.
 
 ### 2. Register OAuth clients
 

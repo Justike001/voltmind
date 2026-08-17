@@ -219,10 +219,12 @@ Before you hand the brain to teammates, verify isolation. Two terminal windows o
 
 ```bash
 # Terminal 1, as Alice
-export VOLTMIND_REMOTE_CLIENT_ID=<Alice's client_id>
-export VOLTMIND_REMOTE_CLIENT_SECRET=<Alice's client_secret>
+export VOLTMIND_REMOTE_CLIENT_ID="<Alice's client_id>"
 export VOLTMIND_REMOTE_MCP_URL=https://brain.acme-co.com/mcp
 
+# Inject VOLTMIND_REMOTE_CLIENT_SECRET into this process with your OS secret
+# manager. Do not paste it into the command line, shell history, agent prompt,
+# repository, or brain.
 voltmind search "performance review" --remote
 ```
 
@@ -280,7 +282,7 @@ To install the cron schedule, commit the file to the workspace repo and let Alph
 
 ## Part 7: Add per-person skills
 
-The 60+ skills VoltMind installs are generic. Your team probably wants a few that are specific to them. Examples:
+The skills published by VoltMind's manifest are generic. Your team probably wants a few that are specific to them. Examples:
 
 - `onboarding-new-hire`. Only Carol (HR) runs this. Walks through generating a welcome packet, scheduling intro meetings, provisioning accounts.
 - `customer-success-followup`. Only Alice (sales) runs this. Pulls latest customer page, drafts a follow-up email, posts to her review queue.
@@ -399,22 +401,20 @@ voltmind init --mcp-only \
 
 The thin-client install creates a local config that knows how to talk to your brain but never opens its own database. Most CLI commands route through the remote server transparently.
 
-Now they configure their AI client. For Claude Desktop, the teammate adds an MCP server entry in `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Now they configure their AI client using that client's documented **remote MCP
+connector**. Provide the Host-issued MCP URL, OAuth issuer, client id, and the
+secret through the connector's protected credential flow. The exact settings
+surface is client-specific; do not copy a local command or invent a stdio
+wrapper configuration.
 
-```jsonc
-{
-  "mcpServers": {
-    "company-brain": {
-      "command": "voltmind",
-      "args": ["serve"]
-    }
-  }
-}
-```
+The thin-client CLI is a command-line consumer of the remote MCP service. It
+does not provide a `voltmind serve` stdio bridge in thin-client mode. For
+clients that only support local stdio MCP, the Host operator must deploy a
+separately reviewed OAuth-aware proxy; do not treat the local standalone
+`voltmind serve` process as that proxy.
 
-When Claude Desktop launches, it talks to the local `voltmind serve` stdio bridge, which forwards every request to your remote brain over HTTPS with their OAuth token attached. From Claude Desktop's perspective it's just one MCP server.
-
-For Claude Code, Cursor, OpenClaw, Hermes, and other clients, per-client setup steps live in [`docs/mcp/`](../mcp/). They all follow the same shape: point the agent at the local `voltmind serve` bridge, which knows about the remote.
+For Claude Code, Cursor, OpenClaw, Hermes, and other clients, use their current
+remote MCP documentation and the protocol notes in [`docs/mcp/`](../mcp/).
 
 ---
 

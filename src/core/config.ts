@@ -251,6 +251,8 @@ export interface VoltMindConfig {
     oauth_client_secret?: string;
     /** Explicit HTTPS origins trusted to host the OAuth token endpoint. */
     token_endpoint_allowed_origins?: string[];
+    /** Explicit origins trusted to receive bearer tokens at the MCP endpoint. */
+    mcp_endpoint_allowed_origins?: string[];
   };
 
   /**

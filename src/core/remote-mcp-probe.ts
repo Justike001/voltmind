@@ -17,7 +17,9 @@
 import {
   validateOAuthIssuerUrl,
   validateOAuthMetadataEndpoints,
+  validateRemoteMcpUrl,
   type OAuthEndpointValidationOptions,
+  type RemoteMcpEndpointValidationOptions,
 } from './oauth-url-validation.ts';
 
 export type ProbeFailureReason =
@@ -172,7 +174,7 @@ export async function mintClientCredentialsToken(
   tokenEndpoint: string,
   clientId: string,
   clientSecret: string,
-  opts: ProbeRequestOptions & { scope?: string } = {},
+  opts: ProbeRequestOptions & { scope?: string; resource?: URL } = {},
 ): Promise<{ ok: true; token: TokenResponse } | { ok: false; reason: ProbeFailureReason; status?: number; code?: string; message: string }> {
   if (!clientId) return { ok: false, reason: 'config', message: 'client_id is required' };
   if (!clientSecret) return { ok: false, reason: 'config', message: 'client_secret is required' };
@@ -182,6 +184,10 @@ export async function mintClientCredentialsToken(
   body.set('client_id', clientId);
   body.set('client_secret', clientSecret);
   if (opts.scope) body.set('scope', opts.scope);
+  // RFC 8707: bind the token to the exact protected MCP resource.  This is
+  // intentionally the complete endpoint URL (including any public path), not
+  // merely the OAuth issuer origin.
+  if (opts.resource) body.set('resource', opts.resource.href);
 
   const request = probeSignal(opts, 10_000);
   try {
@@ -235,8 +241,12 @@ export async function mintClientCredentialsToken(
 export async function smokeTestMcp(
   mcpUrl: string,
   accessToken: string,
-  opts: ProbeRequestOptions = {},
+  opts: ProbeRequestOptions & RemoteMcpEndpointValidationOptions & { issuerUrl: string },
 ): Promise<{ ok: true } | { ok: false; reason: ProbeFailureReason; status?: number; message: string }> {
+  const endpointValidation = validateRemoteMcpUrl(opts.issuerUrl, mcpUrl, opts);
+  if (!endpointValidation.ok) {
+    return { ok: false, reason: 'config', message: endpointValidation.message };
+  }
   const request = probeSignal(opts, 15_000);
   try {
     const res = await fetch(mcpUrl, {

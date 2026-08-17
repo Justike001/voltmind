@@ -460,12 +460,31 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     // Use `redirectUri !== undefined` rather than truthy — an attacker
     // submitting `redirect_uri=""` (empty string) at /token would otherwise
     // hit the falsy branch and bypass the binding entirely.
-    const rows = redirectUri !== undefined
+    const rows = redirectUri !== undefined && resource !== undefined
       ? await this.sql`
           DELETE FROM oauth_codes
           WHERE code_hash = ${codeHash}
             AND client_id = ${client.client_id}
             AND redirect_uri = ${redirectUri}
+            AND resource = ${resource.toString()}
+            AND expires_at > ${now}
+          RETURNING client_id, scopes, resource
+        `
+      : redirectUri !== undefined
+        ? await this.sql`
+          DELETE FROM oauth_codes
+          WHERE code_hash = ${codeHash}
+            AND client_id = ${client.client_id}
+            AND redirect_uri = ${redirectUri}
+            AND expires_at > ${now}
+          RETURNING client_id, scopes, resource
+        `
+      : resource !== undefined
+        ? await this.sql`
+          DELETE FROM oauth_codes
+          WHERE code_hash = ${codeHash}
+            AND client_id = ${client.client_id}
+            AND resource = ${resource.toString()}
             AND expires_at > ${now}
           RETURNING client_id, scopes, resource
         `
@@ -480,9 +499,11 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
 
     const codeRow = rows[0];
 
-    // Issue tokens
+    // The authorization-code resource is authoritative. A caller may omit
+    // resource at /token, but can never substitute another audience.
+    const storedResource = codeRow.resource ? new URL(codeRow.resource as string) : undefined;
     const scopes = (codeRow.scopes as string[]) || [];
-    return this.issueTokens(client.client_id, scopes, resource, true);
+    return this.issueTokens(client.client_id, scopes, storedResource, true);
   }
 
   // -------------------------------------------------------------------------
@@ -506,12 +527,21 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     // legitimate client. With the predicate in the DELETE, wrong-client
     // attempts get zero rows back; the legitimate client retains the row
     // for one valid rotation.
-    const rows = await this.sql`
+    const rows = resource !== undefined
+      ? await this.sql`
       DELETE FROM oauth_tokens
       WHERE token_hash = ${tokenHash}
         AND token_type = 'refresh'
         AND client_id = ${client.client_id}
-      RETURNING client_id, scopes, expires_at
+        AND resource = ${resource.toString()}
+      RETURNING client_id, scopes, expires_at, resource
+    `
+      : await this.sql`
+      DELETE FROM oauth_tokens
+      WHERE token_hash = ${tokenHash}
+        AND token_type = 'refresh'
+        AND client_id = ${client.client_id}
+      RETURNING client_id, scopes, expires_at, resource
     `;
     if (rows.length === 0) throw new Error('Refresh token not found');
 
@@ -539,8 +569,9 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     if (scopes && scopes.some(s => !hasScope(grantedScopes, s))) {
       throw new Error('Requested scope exceeds refresh token grant');
     }
+    const storedResource = row.resource ? new URL(row.resource as string) : undefined;
     const tokenScopes = scopes ?? grantedScopes;
-    return this.issueTokens(client.client_id, tokenScopes, resource, true);
+    return this.issueTokens(client.client_id, tokenScopes, storedResource, true);
   }
 
   // -------------------------------------------------------------------------
@@ -755,6 +786,7 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     clientId: string,
     clientSecret: string,
     requestedScope?: string,
+    resource?: URL,
   ): Promise<OAuthTokens> {
     const client = await this._clientsStore.getClient(clientId);
     if (!client) throw new Error('Client not found');
@@ -806,7 +838,7 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     }
 
     // Client credentials: access token only, NO refresh token (RFC 6749 4.4.3)
-    return this.issueTokens(clientId, grantedScopes, undefined, false, clientTtl);
+    return this.issueTokens(clientId, grantedScopes, resource, false, clientTtl);
   }
 
   // -------------------------------------------------------------------------

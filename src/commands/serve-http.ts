@@ -38,7 +38,7 @@ import type { SqlQuery } from '../core/oauth-provider.ts';
 import { hasScope, filterOperationsForScopes, ALLOWED_SCOPES_LIST, normalizeScopesInput } from '../core/scope.ts';
 import { summarizeMcpParams, dispatchToolCall, withOperationSourceScope } from '../mcp/dispatch.ts';
 import type { DispatchOpts, ToolResult } from '../mcp/dispatch.ts';
-import { paramDefToSchema } from '../mcp/tool-defs.ts';
+import { buildToolDefs } from '../mcp/tool-defs.ts';
 import { getBrainHotMemoryMeta } from '../core/facts/meta-hook.ts';
 import { loadConfig } from '../core/config.ts';
 import { resolveBrainId } from '../core/brain-resolver.ts';
@@ -58,7 +58,7 @@ import {
   type TrackingReference,
 } from '../core/ingestion/types.ts';
 import { normalizeExternalFileRefs } from '../core/external-file-refs.ts';
-import { validateOAuthIssuerUrl } from '../core/oauth-url-validation.ts';
+import { deriveDefaultMcpResourceUrl, validateAdminPublicUrl, validateOAuthIssuerUrl, validateRemoteMcpUrl } from '../core/oauth-url-validation.ts';
 
 const RELAY_EVIDENCE_TYPES = new Set<SourceEvidenceType>([
   'teams_thread',
@@ -417,18 +417,20 @@ interface ServeHttpOptions {
    * issuer claim in tokens MUST match the discovery URL clients hit.
    */
   publicUrl?: string;
+  /**
+   * Public MCP resource URL when a gateway exposes /mcp on a different
+   * origin or path than the OAuth issuer. Defaults to <public-url>/mcp.
+   * This is the RFC 8707 audience accepted by the token and MCP endpoints.
+   */
+  mcpPublicUrl?: string;
   /** Public origin of the Windows-hosted Admin SPA. */
   adminPublicUrl?: string;
   /** Serve APIs/auth only; do not mount the embedded Admin SPA. */
   adminApiOnly?: boolean;
   /**
-   * When true, write raw request payloads to mcp_request_log + the admin SSE
-   * feed. Default false: payloads are summarized via dispatch.summarizeMcpParams
-   * (declared keys only, no values, no attacker-controlled key names).
-   *
-   * Operators running voltmind on their own laptop and debugging agent behavior
-   * can flip this on with `--log-full-params`. The flag prints a loud warning
-   * at startup so the privacy posture change is visible.
+   * Deprecated compatibility flag. Raw request payload persistence is no longer
+   * supported: all requests are structurally summarized to avoid durable PII
+   * and secrets in either mcp_request_log or the Admin SSE feed.
    */
   logFullParams?: boolean;
   /**
@@ -874,7 +876,7 @@ export async function queryAgentClientSpend(engine: BrainEngine): Promise<AgentC
 }
 
 export async function runServeHttp(engine: BrainEngine, options: ServeHttpOptions) {
-  const { port, tokenTtl, enableDcr, enableDcrInsecure, publicUrl, adminPublicUrl, logFullParams } = options;
+  const { port, tokenTtl, enableDcr, enableDcrInsecure, publicUrl, mcpPublicUrl, adminPublicUrl, logFullParams } = options;
   // v0.34.1 (#864, D11): default bind flipped from 0.0.0.0 to 127.0.0.1.
   // voltmind's primary use case is a personal-knowledge brain on a laptop;
   // the pre-v0.34 default exposed brains on every interface. Server
@@ -889,7 +891,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
 
   if (logFullParams) {
     console.error(
-      '[serve-http] WARNING: --log-full-params writes raw request payloads to mcp_request_log + SSE feed. Disable for shared dashboards or production.',
+      '[serve-http] WARNING: --log-full-params is deprecated and ignored; audit payloads remain redacted.',
     );
   }
 
@@ -1062,7 +1064,12 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         return;
       }
 
-      const tokens = await oauthProvider.exchangeClientCredentials(client_id, client_secret, scope);
+      const resource = resolveMcpResource(req.body?.resource);
+      if (!resource) {
+        res.status(400).json({ error: 'invalid_target', error_description: `resource must equal ${mcpResourceUrl.href}` });
+        return;
+      }
+      const tokens = await oauthProvider.exchangeClientCredentials(client_id, client_secret, scope, resource);
       res.json(tokens);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
@@ -1116,15 +1123,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       return;
     }
 
-    const resourceValue = value('resource');
-    let resource: URL | undefined;
-    if (resourceValue !== undefined) {
-      try {
-        resource = new URL(resourceValue);
-      } catch {
-        res.status(400).json({ error: 'invalid_request', error_description: 'resource must be a valid URL' });
-        return;
-      }
+    const resource = resolveMcpResource(value('resource'));
+    if (!resource) {
+      res.status(400).json({ error: 'invalid_target', error_description: `resource must equal ${mcpResourceUrl.href}` });
+      return;
     }
 
     try {
@@ -1181,6 +1183,11 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
 
     try {
       const client = await oauthProvider.verifyConfidentialClientSecret(clientId, presentedSecret);
+      const resource = resolveMcpResource(req.body?.resource);
+      if (!resource) {
+        res.status(400).json({ error: 'invalid_target', error_description: `resource must equal ${mcpResourceUrl.href}` });
+        return;
+      }
       let tokens;
       if (grantType === 'authorization_code') {
         const code = req.body.code;
@@ -1190,7 +1197,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
           res.status(400).json({ error: 'invalid_request', error_description: 'code required' });
           return;
         }
-        tokens = await oauthProvider.exchangeAuthorizationCode(client, code, codeVerifier, redirectUri);
+        tokens = await oauthProvider.exchangeAuthorizationCode(client, code, codeVerifier, redirectUri, resource);
       } else {
         const refreshToken = req.body.refresh_token;
         const scopeParam = typeof req.body.scope === 'string' ? req.body.scope.split(/\s+/) : undefined;
@@ -1198,7 +1205,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
           res.status(400).json({ error: 'invalid_request', error_description: 'refresh_token required' });
           return;
         }
-        tokens = await oauthProvider.exchangeRefreshToken(client, refreshToken, scopeParam);
+        tokens = await oauthProvider.exchangeRefreshToken(client, refreshToken, scopeParam, resource);
       }
       res.json(tokens);
     } catch (e) {
@@ -1225,7 +1232,44 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     throw new Error(`Invalid OAuth public URL: ${issuerValidation.message}`);
   }
   const issuerUrl = issuerValidation.value;
-  const adminUrl = new URL(adminPublicUrl || publicUrl || `http://localhost:${port}`);
+  const configuredAdminUrl = adminPublicUrl || publicUrl || `http://localhost:${port}`;
+  const adminValidation = validateAdminPublicUrl(configuredAdminUrl);
+  if (!adminValidation.ok) {
+    throw new Error(`Invalid Admin public URL: ${adminValidation.message}`);
+  }
+  const adminUrl = adminValidation.value;
+  // `publicUrl` identifies the OAuth issuer. A reverse proxy can publish MCP
+  // at a different public URL, so never derive the resource from issuer origin
+  // alone. Operators make cross-origin routing explicit with --mcp-public-url.
+  const defaultMcpResourceUrl = deriveDefaultMcpResourceUrl(issuerUrl);
+  let configuredMcpOrigin: string | undefined;
+  if (mcpPublicUrl) {
+    try {
+      configuredMcpOrigin = new URL(mcpPublicUrl).origin;
+    } catch {
+      throw new Error('Invalid MCP public URL: mcp_public_url must be an absolute URL');
+    }
+  }
+  const mcpResourceValidation = validateRemoteMcpUrl(
+    issuerUrl.href,
+    mcpPublicUrl || defaultMcpResourceUrl.href,
+    { allowedMcpEndpointOrigins: configuredMcpOrigin ? [configuredMcpOrigin] : undefined },
+  );
+  if (!mcpResourceValidation.ok) {
+    throw new Error(`Invalid MCP public URL: ${mcpResourceValidation.message}`);
+  }
+  const mcpResourceUrl = mcpResourceValidation.value.mcpEndpoint;
+
+  function resolveMcpResource(raw: unknown): URL | null {
+    if (raw === undefined || raw === null || raw === '') return mcpResourceUrl;
+    if (typeof raw !== 'string') return null;
+    try {
+      const resource = new URL(raw);
+      return resource.href === mcpResourceUrl.href ? resource : null;
+    } catch {
+      return null;
+    }
+  }
 
   // F9: cookie `secure` flag honors both the request's TLS state (req.secure
   // is set when express trust-proxy lands an X-Forwarded-Proto: https) AND
@@ -1959,7 +2003,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   });
 
   // v0.36.1.0 (T15 / E6 / D23) — Calibration tab data endpoints.
-  // Server-rendered SVG charts; admin SPA renders via TrustedSVG wrapper.
+  // Server-rendered SVG chart endpoints. The current Admin SPA does not inject
+  // them into the DOM; future inline consumers require a separate XSS review.
   // v0.36.1.0 (TD3) — pattern drill-down. Returns the source takes that
   // produced the pattern statement at index `id` of the active profile.
   // v0.36.1.0 ship state: returns the top N takes in the holder's overall
@@ -2274,6 +2319,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       await sql`UPDATE oauth_clients SET deleted_at = now() WHERE client_id = ${clientId} AND deleted_at IS NULL`;
       // Revoke all active tokens for this client
       await sql`DELETE FROM oauth_tokens WHERE client_id = ${clientId}`;
+      // Soft-deletion does not activate the FK cascade. Pending PKCE codes
+      // are bearer-equivalent grants and must be cleared with tokens.
+      await sql`DELETE FROM oauth_codes WHERE client_id = ${clientId}`;
       res.json({ revoked: true });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : 'Revoke failed' });
@@ -2400,6 +2448,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   // MCP tool calls (bearer auth + scope enforcement)
   // ---------------------------------------------------------------------------
   const mcpOperations = operations.filter(op => !op.localOnly);
+  const mcpToolDefs = buildToolDefs(mcpOperations);
 
   // v0.36.x #1076: MCP Streamable HTTP spec — GET /mcp opens an optional SSE
   // backchannel for server-initiated messages. voltmind's transport is stateless
@@ -2424,20 +2473,24 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   // credential. Rate-limited per IP; every request is audited.
   async function auditSelfProvision(
     status: 'success' | 'error',
-    ip: string,
+    _ip: string,
     details: Record<string, unknown>,
     errorMessage?: string,
     sourceId?: string,
   ): Promise<void> {
     try {
-      const auditSourceId = sourceId ?? 'default';
+        const auditSourceId = sourceId ?? 'default';
+        // Provisioning is unauthenticated by design, so raw IPs, emails,
+        // repo URLs, Gogs usernames, and server error text must never become
+        // a durable correlation trail. Keep only a stable outcome code.
+        const code = typeof details.code === 'string' ? details.code : 'unknown';
       await withOperationSourceScope(engine, auditSourceId, async (tx) => {
         await executeRawJsonb(
           tx,
           `INSERT INTO mcp_request_log (operation, status, error_message, source_id, params)
            VALUES ($1, $2, $3, $4, $5::jsonb)`,
-          ['self_provision', status, errorMessage ?? null, auditSourceId],
-          [{ ip, ...details }],
+          ['self_provision', status, errorMessage ? code : null, auditSourceId],
+          [{ redacted: true, kind: 'self_provision', code }],
         );
       });
     } catch { /* best-effort audit must not change the HTTP result */ }
@@ -2543,13 +2596,25 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         : 'invalid_request';
       const message = e instanceof Error ? e.message : String(e);
       await auditSelfProvision('error', ip, { code, email: typeof email === 'string' ? email : undefined }, message);
-      res.status(code === 'source_owner_mismatch' ? 409 : 400).json({ error: { code, message, ip } });
+      res.status(code === 'source_owner_mismatch' ? 409 : 400).json({ error: { code, message } });
     }
   });
 
   app.post('/mcp', requireBearerAuth({ verifier: oauthProvider }), async (req: Request, res: Response) => {
     const startTime = Date.now();
     const authInfo = (req as any).auth as AuthInfo;
+    const tokenResource = (authInfo as AuthInfo & { resource?: URL }).resource;
+    if (!tokenResource || tokenResource.href !== mcpResourceUrl.href) {
+      // RFC 6750 §3.1: an unusable bearer (including an audience mismatch)
+      // is a 401 Bearer challenge, so generic MCP OAuth clients re-authorize
+      // rather than treating this as a permanent authorization denial.
+      res.set('WWW-Authenticate', 'Bearer error="invalid_token"');
+      res.status(401).json({
+        error: 'invalid_token',
+        error_description: 'Bearer token is not valid for this resource',
+      });
+      return;
+    }
 
     // Human-readable agent name is now threaded through AuthInfo by
     // verifyAccessToken (which JOINs oauth_clients in its existing token
@@ -2589,20 +2654,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         status: 'success',
         timestamp: new Date().toISOString(),
       });
-      const visibleOperations = filterOperationsForScopes(mcpOperations, authInfo.scopes);
+      const visibleOperations = new Set(filterOperationsForScopes(mcpOperations, authInfo.scopes).map(op => op.name));
       return {
-        tools: visibleOperations.map(op => ({
-          name: op.name,
-          description: op.description,
-          inputSchema: {
-            type: 'object' as const,
-            properties: Object.fromEntries(
-              Object.entries(op.params).map(([k, v]) => [k, paramDefToSchema(v)]),
-            ),
-            required: Object.entries(op.params).filter(([, v]) => v.required).map(([k]) => k),
-            additionalProperties: false,
-          },
-        })),
+        tools: mcpToolDefs.filter(tool => visibleOperations.has(tool.name)),
       };
     });
 
@@ -2683,11 +2737,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         };
       }
 
-      // F8: redact request payload by default (declared keys only via the
-      // op's `params` allow-list; values + attacker-controlled key names
-      // never written to mcp_request_log or the SSE feed). --log-full-params
-      // bypasses this for operators debugging on their own laptop, with the
-      // startup warning printed earlier.
+      // Persist only declared-key structural summaries. `--log-full-params`
+      // remains accepted for CLI compatibility but intentionally cannot
+      // bypass this boundary: arbitrary payload values can contain secrets or
+      // PII that no generic redactor can safely recognize.
       //
       // D1 (v0.31 wave): mcp_request_log.params is JSONB. Pre-v0.31 wrote
       // a JSON-string into that JSONB column via the postgres.js template
@@ -2698,10 +2751,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       // 'tools/list'. Pre-existing string-shaped rows are normalized by
       // migration v41 in src/core/migrate.ts.
       const safeParamsSummary = summarizeMcpParams(name, params);
-      const logParamsObj: unknown = logFullParams
-        ? (params || null)
-        : (safeParamsSummary || null);
-      const broadcastParams = logFullParams ? (params || {}) : safeParamsSummary;
+      const logParamsObj: unknown = safeParamsSummary || null;
+      const broadcastParams = safeParamsSummary;
 
       // v0.31 (D12 / eE1): refactor the inlined op.handler call to go through
       // src/mcp/dispatch.ts so HTTP MCP shares the same dispatch path as

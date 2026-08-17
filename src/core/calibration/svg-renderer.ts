@@ -2,8 +2,8 @@
  * v0.36.1.0 (T15 / D23) — server-rendered SVG charts for the admin SPA.
  *
  * Pure functions: data → SVG string. No DOM, no React, no chart library.
- * Admin tab fetches these endpoints and dangerouslySetInnerHTML's the
- * markup inside a TrustedSVG wrapper.
+ * Authenticated HTTP endpoints may return this markup as `image/svg+xml`.
+ * The current Admin SPA does not inject the SVG into the DOM.
  *
  * Why server-rendered SVG (per D23):
  *   - Chart logic stays close to the data math.
@@ -24,9 +24,9 @@
  * XSS posture:
  *   Output is generated server-side from typed inputs. Numeric inputs are
  *   coerced via `.toFixed(...)`. String inputs (pattern statements, abandoned
- *   thread claims) pass through `escapeXml()`. Admin SPA renders via a
- *   sandboxed <div dangerouslySetInnerHTML> wrapper that's gated by
- *   requireAdmin middleware on the endpoint.
+ *   thread claims) pass through `escapeXml()`. HTTP callers must keep the
+ *   endpoint behind requireAdmin and serve the result as `image/svg+xml`;
+ *   adding an inline HTML injection sink requires a separate security review.
  */
 
 /** Min-safe XML attribute / text node escape. */
@@ -188,9 +188,8 @@ export function renderAbandonedThreadsCard(threads: AbandonedThread[], width = 6
 
   const rows = threads.map((t, i) => {
     const y = padT + i * rowH;
-    // Truncate claim for SVG layout — full claim shown in admin via tooltip
-    // (admin SPA renders the SVG, then layers HTML tooltips). Server side
-    // can't measure text width so we cap at 70 chars.
+    // Truncate claim for SVG layout. Server side cannot measure text width, so
+    // cap at 70 chars; consumers can fetch full details from the JSON endpoint.
     const claim = t.claim.length > 70 ? t.claim.slice(0, 70) + '…' : t.claim;
     const meta = `conviction ${t.conviction.toFixed(2)} · ${t.monthsSilent} months silent`;
     const href = t.revisitHref ?? `/admin/calibration/revisit/${t.takeId}`;

@@ -24,6 +24,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { createHash } from 'crypto';
 import type { VoltMindConfig } from './config.ts';
 import { discoverOAuth, mintClientCredentialsToken } from './remote-mcp-probe.ts';
+import { validateRemoteMcpUrl } from './oauth-url-validation.ts';
 
 interface CachedToken {
   access_token: string;
@@ -202,6 +203,14 @@ async function getAccessToken(
   signal?: AbortSignal,
 ): Promise<string> {
   const remote = requireRemoteMcp(config);
+  const endpointValidation = validateRemoteMcpUrl(remote.issuer_url, remote.mcp_url, {
+    allowedMcpEndpointOrigins: remote.mcp_endpoint_allowed_origins,
+  });
+  if (!endpointValidation.ok) {
+    throw new RemoteMcpError('config', `Invalid remote MCP endpoint: ${endpointValidation.message}`, {
+      mcp_url: remote.mcp_url,
+    });
+  }
   const secret = resolveSecret(remote);
   const cacheKey = tokenCacheKey(remote, secret);
   const cached = tokenCache.get(cacheKey);
@@ -232,7 +241,7 @@ async function getAccessToken(
     disco.metadata.token_endpoint,
     remote.oauth_client_id,
     secret,
-    { signal },
+    { signal, resource: endpointValidation.value.mcpEndpoint },
   );
   if (!tokenRes.ok) {
     const kind = tokenRes.reason === 'timeout'
@@ -357,6 +366,18 @@ export async function callRemoteTool(
   opts: CallRemoteToolOptions = {},
 ): Promise<unknown> {
   const remote = requireRemoteMcp(config);
+  // This guard MUST precede token minting. A valid issuer may be paired with
+  // an attacker-controlled mcp_url in a malformed or edited config.
+  const endpointValidation = validateRemoteMcpUrl(remote.issuer_url, remote.mcp_url, {
+    allowedMcpEndpointOrigins: remote.mcp_endpoint_allowed_origins,
+  });
+  if (!endpointValidation.ok) {
+    throw new RemoteMcpError(
+      'config',
+      `Invalid remote MCP endpoint: ${endpointValidation.message}`,
+      { mcp_url: remote.mcp_url },
+    );
+  }
 
   // v0.31.1 (CDX-4): wrap the WHOLE call in normalize-on-error so the
   // exhaustive switch on RemoteMcpError.reason at the dispatcher is sound.

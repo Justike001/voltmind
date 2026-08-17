@@ -20,6 +20,8 @@ writes_to:
   - people/
   - companies/
   - concepts/
+  - originals/
+  - ideas/
   - state/indexes/
 ---
 
@@ -46,6 +48,9 @@ This skill guarantees:
 - Logs a one-line summary of what was captured
 - Back-links all entity mentions (Iron Law)
 - Citations on every fact written
+- In thin-client mode, semantic writes follow the client-first `voltmind put`
+  path; do not call remote `put_page` as a replacement for the local evidence
+  write.
 
 > **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
 

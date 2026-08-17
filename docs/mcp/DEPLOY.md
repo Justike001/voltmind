@@ -89,10 +89,10 @@ and per-client config export.
 > to a redacted summary `{redacted, kind, declared_keys, unknown_key_count, approx_bytes}`.
 > Declared param keys are kept (intersected against the operation's spec); unknown
 > keys are counted but never named, and byte sizes round up to 1KB so size-probe
-> attacks can't binary-search secret content. Operators on a personal laptop who
-> want raw payloads back can pass `voltmind serve --http --log-full-params` (loud
-> stderr warning fires at startup). Multi-tenant deployments should leave it on
-> the redacted default.
+> attacks can't binary-search secret content. `voltmind serve --http
+> --log-full-params` is retained only for compatibility and cannot restore raw
+> payload persistence: request values can contain secrets or PII. All deployments
+> use the structural summary.
 
 ### 2. Register OAuth clients
 

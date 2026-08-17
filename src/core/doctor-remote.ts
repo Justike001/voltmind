@@ -15,6 +15,7 @@
 import type { VoltMindConfig } from './config.ts';
 import { discoverOAuth, mintClientCredentialsToken, smokeTestMcp } from './remote-mcp-probe.ts';
 import { buildAbortController, callRemoteTool, RemoteMcpError, unpackToolResult } from './mcp-client.ts';
+import { validateRemoteMcpUrl } from './oauth-url-validation.ts';
 import { safeCompare, driftLevel, loadPromptState } from './thin-client-upgrade-prompt.ts';
 import { VERSION } from '../version.ts';
 
@@ -104,14 +105,16 @@ export async function collectRemoteDoctorReport(
     };
   }
 
-  const issuerOk = /^https?:\/\//i.test(remote.issuer_url);
-  const mcpOk = /^https?:\/\//i.test(remote.mcp_url);
-  if (!issuerOk || !mcpOk) {
+  const endpointValidation = validateRemoteMcpUrl(remote.issuer_url, remote.mcp_url, {
+    allowedMcpEndpointOrigins: remote.mcp_endpoint_allowed_origins,
+  });
+  if (!endpointValidation.ok) {
     checks.push({
       name: 'config_integrity',
       status: 'fail',
-      message: `URL fields malformed: issuer_url=${remote.issuer_url}, mcp_url=${remote.mcp_url}`,
+      message: endpointValidation.message,
     });
+    return finalize(remote, checks);
   } else {
     checks.push({
       name: 'config_integrity',
@@ -181,7 +184,7 @@ export async function collectRemoteDoctorReport(
     disco.metadata.token_endpoint,
     remote.oauth_client_id,
     clientSecret,
-    { signal: probeDeadline.signal },
+    { signal: probeDeadline.signal, resource: endpointValidation.value.mcpEndpoint },
   );
   if (!tokenRes.ok) {
     probeDeadline.cleanup();
@@ -204,7 +207,11 @@ export async function collectRemoteDoctorReport(
   const mcpRes = await smokeTestMcp(
     remote.mcp_url,
     tokenRes.token.access_token,
-    { signal: probeDeadline.signal },
+    {
+      signal: probeDeadline.signal,
+      issuerUrl: remote.issuer_url,
+      allowedMcpEndpointOrigins: remote.mcp_endpoint_allowed_origins,
+    },
   );
   if (!mcpRes.ok) {
     probeDeadline.cleanup();

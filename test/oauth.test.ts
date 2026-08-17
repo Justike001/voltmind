@@ -13,6 +13,7 @@ import {
 import { hashToken, generateToken } from '../src/core/utils.ts';
 import { PGLITE_SCHEMA_SQL } from '../src/core/pglite-schema.ts';
 import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 describe('loopback callback redirect matching', () => {
   test('accepts the registered URI exactly', () => {
     expect(matchesLoopbackCallbackRedirect(
@@ -398,6 +399,57 @@ describe('revokeToken', () => {
 // ---------------------------------------------------------------------------
 
 describe('authorization code flow', () => {
+  test('resource-bound code cannot be redeemed for a different audience and remains redeemable for its original resource', async () => {
+    const { clientId } = await provider.registerClientManual(
+      'resource-code-test', ['authorization_code'], 'read', ['http://localhost:3000/callback'],
+    );
+    const client = (await provider.clientsStore.getClient(clientId))!;
+    let redirectUrl = '';
+    const mockRes = { redirect: (url: string) => { redirectUrl = url; } } as any;
+    const mcpResource = new URL('https://brain.example/mcp');
+    await provider.authorize(client, {
+      codeChallenge: 'resource-challenge',
+      redirectUri: 'http://localhost:3000/callback',
+      scopes: ['read'],
+      resource: mcpResource,
+    }, mockRes);
+    const code = new URL(redirectUrl).searchParams.get('code')!;
+
+    await expect(provider.exchangeAuthorizationCode(
+      client, code, undefined, 'http://localhost:3000/callback', new URL('https://attacker.example/mcp'),
+    )).rejects.toThrow(/not found|expired/i);
+
+    const tokens = await provider.exchangeAuthorizationCode(
+      client, code, undefined, 'http://localhost:3000/callback', mcpResource,
+    );
+    const auth = await provider.verifyAccessToken(tokens.access_token) as AuthInfo & { resource?: URL };
+    expect(auth.resource?.href).toBe(mcpResource.href);
+  });
+
+  test('refresh preserves the original resource and rejects a substituted resource without consuming the token', async () => {
+    const { clientId } = await provider.registerClientManual(
+      'resource-refresh-test', ['authorization_code'], 'read', ['http://localhost:3000/callback'],
+    );
+    const client = (await provider.clientsStore.getClient(clientId))!;
+    let redirectUrl = '';
+    const mockRes = { redirect: (url: string) => { redirectUrl = url; } } as any;
+    const mcpResource = new URL('https://brain.example/mcp');
+    await provider.authorize(client, {
+      codeChallenge: 'resource-refresh-challenge',
+      redirectUri: 'http://localhost:3000/callback',
+      scopes: ['read'],
+      resource: mcpResource,
+    }, mockRes);
+    const code = new URL(redirectUrl).searchParams.get('code')!;
+    const tokens = await provider.exchangeAuthorizationCode(client, code, undefined, 'http://localhost:3000/callback', mcpResource);
+    await expect(provider.exchangeRefreshToken(
+      client, tokens.refresh_token!, undefined, new URL('https://attacker.example/mcp'),
+    )).rejects.toThrow(/not found/i);
+    const rotated = await provider.exchangeRefreshToken(client, tokens.refresh_token!, undefined, mcpResource);
+    const auth = await provider.verifyAccessToken(rotated.access_token) as AuthInfo & { resource?: URL };
+    expect(auth.resource?.href).toBe(mcpResource.href);
+  });
+
   test('code issuance and exchange', async () => {
     const { clientId } = await provider.registerClientManual(
       'authcode-test', ['authorization_code'], 'read write',

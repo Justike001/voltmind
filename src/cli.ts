@@ -2465,6 +2465,8 @@ JOBS
 MCP
   serve                              MCP server (stdio)
   serve --http [--port N]            HTTP MCP server
+    --public-url URL                  Public OAuth issuer URL
+    --mcp-public-url URL              Public MCP resource URL (when distinct from issuer)
     --enable-dcr                     Enable DCR; defaults to authorization_code
     --enable-dcr-insecure            Also allow DCR client_credentials
     --admin-public-url URL            Windows-hosted Admin SPA public origin

@@ -242,8 +242,11 @@ audit trail lives in the source repo's git history.
 
 ## Skills
 
-Read the skill files in `skills/` before doing brain operations. VoltMind ships 30 skills
-organized by `skills/RESOLVER.md` (`AGENTS.md` is also accepted as of v0.19):
+Read the skill files in `skills/` before doing brain operations. The checked-in
+skill inventory is authoritative: `skills/manifest.json` currently publishes
+58 skills and records 3 explicit excluded operator variants (61 skill
+directories on disk). `skills/RESOLVER.md` is the only routing source
+(`AGENTS.md` may mirror it for downstream agents):
 
 **Original 8 (conformance-migrated):** ingest (thin router), query, maintain, enrich,
 briefing, migrate, setup, publish.
