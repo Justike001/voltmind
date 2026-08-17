@@ -22,8 +22,9 @@ handles both local and thin-client installs the same way.
 ## Contract
 
 - **Input:** the content to save (inline arg, `--file PATH`, or `--stdin`).
-- **Output:** a page in the brain DB AND a markdown file on disk under
-  `<sync.repo_path>/<slug>.md`. Receipt printed to stdout.
+- **Output:** a page in the brain DB AND a markdown file on disk. Thin clients
+  write the exact Markdown to `client_vault_path` first and persist a pending
+  synchronization receipt before any remote MCP call. Receipt printed to stdout.
 - **Side effect:** the page becomes immediately queryable via `voltmind query`,
   `voltmind search`, or any MCP-bound agent.
 - **Idempotency:** same content → same `inbox/YYYY-MM-DD-<hash8>` slug. The
@@ -39,9 +40,10 @@ handles both local and thin-client installs the same way.
 
 ## What it does
 
-`voltmind capture` resolves to a `put_page` call (local) or a remote MCP call
-(thin-client). Either way the page lands in the DB AND on disk in one move
-via the v0.38 write-through plumbing. The default slug is
+`voltmind capture` resolves to a local `put_page` call or, on a thin client, the
+client-first writer followed by remote MCP `put_page`. A thin-client remote
+failure keeps the local Markdown plus a `local_written_remote_pending` receipt
+for idempotent retry; it never creates remote-only semantic state. The default slug is
 `inbox/YYYY-MM-DD-<hash8>` so captures cluster in a predictable triage
 location.
 

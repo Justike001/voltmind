@@ -2,6 +2,7 @@
   "name": "voltmind",
   "version": "0.41.21.3",
   "conformance_version": "1.0.0",
+  "enforce_resolver_inventory": true,
   "description": "VoltMind Personal Brain skills for hybrid RAG search and workflow loops",
   "skills": [
     {
@@ -293,6 +294,20 @@
       "name": "eiirp",
       "path": "eiirp/SKILL.md",
       "description": "Everything In Its Right Place — post-work organizer. 7-phase audit: inventory, taxonomy, schema check, file, skill graph audit, verify, report."
+    }
+  ],
+  "excluded_skills": [
+    {
+      "name": "install",
+      "reason": "Deprecated compatibility pointer replaced by the published setup skill; intentionally unrouted."
+    },
+    {
+      "name": "setup-standalone",
+      "reason": "Preserved operator-specific setup variant; intentionally not published or routed."
+    },
+    {
+      "name": "voltmind-action-runtime",
+      "reason": "Internal Craft headless runtime contract loaded by its adapter, not a user-routed skill."
     }
   ],
   "dependencies": {

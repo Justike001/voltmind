@@ -55,7 +55,9 @@ export interface ResolvableIssue {
     | 'filing_missing_writes_to'
     | 'filing_unknown_directory'
     // D-CX-9: scaffolded skill still carries SKILLIFY_STUB sentinel.
-    | 'skillify_stub_unreplaced';
+    | 'skillify_stub_unreplaced'
+    | 'skill_inventory_unregistered'
+    | 'skill_inventory_invalid_exclusion';
   severity: 'error' | 'warning';
   skill: string;
   message: string;
@@ -359,11 +361,67 @@ export function checkResolvable(skillsDir: string): ResolvableReport {
   // and lint stages that still take string content. Re-emits both
   // frontmatter-derived AND RESOLVER.md-derived entries as one table.
   const resolverContent = entriesToResolverContent(triggerEntries);
-  const { skills: manifest } = loadOrDeriveManifest(skillsDir);
+  const manifestLoad = loadOrDeriveManifest(skillsDir);
+  const { skills: manifest, excludedSkills } = manifestLoad;
+
+  // Canonical inventory closure: every on-disk */SKILL.md is either published
+  // in manifest.json or explicitly excluded with a non-empty reason. This
+  // prevents the manifest/RESOLVER count from going green while silently
+  // ignoring preserved variants or deprecated runtime-only skills.
+  if (!manifestLoad.derived && manifestLoad.enforceResolverInventory) {
+    const publishedNames = new Set(manifest.map((skill) => skill.name));
+    const publishedDirs = new Set(manifest.map((skill) => skill.path.replace(/\/SKILL\.md$/, '')));
+    const excludedNames = new Set(excludedSkills.map((skill) => skill.name));
+    for (const exclusion of excludedSkills) {
+      const duplicateCount = excludedSkills.filter((entry) => entry.name === exclusion.name).length;
+      if (
+        !exclusion.name.trim()
+        || !exclusion.reason.trim()
+        || publishedNames.has(exclusion.name)
+        || publishedDirs.has(exclusion.name)
+        || duplicateCount !== 1
+      ) {
+        issues.push({
+          type: 'skill_inventory_invalid_exclusion',
+          severity: 'error',
+          skill: exclusion.name || '(empty)',
+          message: `Invalid manifest exclusion for '${exclusion.name || '(empty)'}'`,
+          action: 'Give each excluded skill a unique name, a non-empty reason, and do not also publish it.',
+        });
+      }
+    }
+    for (const dirent of readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!dirent.isDirectory() || dirent.name.startsWith('.') || dirent.name.startsWith('_')) continue;
+      if (!existsSync(join(skillsDir, dirent.name, 'SKILL.md'))) continue;
+      if (!publishedDirs.has(dirent.name) && !excludedNames.has(dirent.name)) {
+        issues.push({
+          type: 'skill_inventory_unregistered',
+          severity: 'error',
+          skill: dirent.name,
+          message: `On-disk skill '${dirent.name}' is neither published nor explicitly excluded in manifest.json`,
+          action: `Add '${dirent.name}' to manifest.skills and RESOLVER.md, or to manifest.excluded_skills with a reason.`,
+        });
+      }
+    }
+    for (const exclusion of excludedSkills) {
+      if (!existsSync(join(skillsDir, exclusion.name, 'SKILL.md'))) {
+        issues.push({
+          type: 'skill_inventory_invalid_exclusion',
+          severity: 'error',
+          skill: exclusion.name,
+          message: `Manifest excludes '${exclusion.name}', but no matching SKILL.md exists on disk`,
+          action: `Remove the stale excluded_skills entry for '${exclusion.name}'.`,
+        });
+      }
+    }
+  }
 
   // Build lookup sets
+  const explicitResolverEntries = manifestLoad.enforceResolverInventory && existsSync(resolverPath)
+    ? parseResolverEntries(readFileSync(resolverPath, 'utf8'))
+    : entries;
   const resolverSkillPaths = new Set(
-    entries.filter(e => !e.isGStack).map(e => e.skillPath)
+    explicitResolverEntries.filter(e => !e.isGStack).map(e => e.skillPath)
   );
 
   // 1. Check every manifest skill is reachable from RESOLVER.md
@@ -376,7 +434,7 @@ export function checkResolvable(skillsDir: string): ResolvableReport {
       reachable++;
     } else {
       // Also check if the skill name appears in any resolver entry
-      const nameInResolver = entries.some(
+      const nameInResolver = explicitResolverEntries.some(
         e => e.skillPath.includes(skill.name) || e.trigger.includes(skill.name)
       );
       if (nameInResolver) {

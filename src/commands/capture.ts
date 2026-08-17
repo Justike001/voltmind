@@ -39,6 +39,12 @@ import { computeContentHash } from '../core/ingestion/types.ts';
 import { operations } from '../core/operations.ts';
 import type { OperationContext } from '../core/operations.ts';
 import { resolveSourceWithTier } from '../core/source-resolver.ts';
+import {
+  ClientFirstPageWriteError,
+  markClientFirstPageSynchronized,
+  writeClientFirstPage,
+  type ClientFirstLocalWriteReceipt,
+} from '../core/client-first-page-writer.ts';
 
 interface RunOpts {
   content?: string;
@@ -449,13 +455,26 @@ export async function runCapture(engine: BrainEngine | null, args: string[]): Pr
   const capturedAt = new Date().toISOString();
   const contentHash = computeContentHash(normalizedBody);
 
-  // Thin-client install: route through put_page over MCP. The server's
-  // write-through plumbing handles disk persistence. Per CV6 trust gate,
+  // Thin-client install: persist the exact Markdown in the client vault first,
+  // then route through put_page over MCP. The local write + durable pending
+  // receipt are the write-ahead truth when the remote call fails. Per CV6 trust gate,
   // the server overrides ANY provenance params we send to `mcp:put_page`
   // — so we deliberately do NOT thread source_kind/source_uri/ingested_via
   // through the wire (would be discarded server-side, and we don't want
   // to suggest the values reached the DB column when they didn't).
   if (isThinClient(cfg)) {
+    let localWrite: ClientFirstLocalWriteReceipt;
+    try {
+      localWrite = await writeClientFirstPage(cfg!, { slug, content: fullContent });
+    } catch (e) {
+      if (e instanceof ClientFirstPageWriteError) {
+        console.error(`voltmind capture: local write failed [${e.code}]: ${e.message}`);
+        if (e.suggestion) console.error(`  Fix: ${e.suggestion}`);
+      } else {
+        console.error(`voltmind capture: local write failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      process.exit(1);
+    }
     let raw: unknown;
     try {
       raw = await callRemoteTool(
@@ -480,6 +499,9 @@ export async function runCapture(engine: BrainEngine | null, args: string[]): Pr
         );
         console.error('Run `voltmind remote doctor` to diagnose the connection.');
       }
+      console.error(
+        `voltmind capture: local_written_remote_pending path=${localWrite.path} receipt=${localWrite.receipt_path}`,
+      );
       process.exit(1);
     }
     const remoteResult = unpackToolResult<{
@@ -489,13 +511,14 @@ export async function runCapture(engine: BrainEngine | null, args: string[]): Pr
       write_through?: { written: boolean; path?: string };
       signal_enrichment?: unknown;
     }>(raw);
+    markClientFirstPageSynchronized(localWrite);
     const result: CaptureResult = {
       slug: remoteResult.slug,
       status: remoteResult.status,
       chunks: remoteResult.chunks,
       content_hash: contentHash,
-      written: remoteResult.write_through?.written ?? false,
-      path: remoteResult.write_through?.path,
+      written: true,
+      path: localWrite.path,
       // CV3: source_kind ALWAYS 'capture-cli' for capture invocations,
       // regardless of --source. --source maps to source_id (the DB FK),
       // not the ingestion-channel taxonomy. Conflating these was the

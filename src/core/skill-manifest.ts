@@ -36,6 +36,10 @@ export interface ManifestEntry {
 
 export interface ManifestLoadResult {
   skills: ManifestEntry[];
+  /** Explicit non-published SKILL.md directories with a durable reason. */
+  excludedSkills: Array<{ name: string; reason: string }>;
+  /** When true, every published skill must have an explicit RESOLVER.md row. */
+  enforceResolverInventory: boolean;
   /** True when manifest.json was missing/unparseable and the skill set
    *  was derived from walking skillsDir. Surfaces in --verbose output. */
   derived: boolean;
@@ -135,7 +139,20 @@ export function loadOrDeriveManifest(skillsDir: string): ManifestLoadResult {
             ((s as ManifestEntry).description === undefined || typeof (s as ManifestEntry).description === 'string')
         );
         if (valid) {
-          return { skills: skills as ManifestEntry[], derived: false };
+          const excludedSkills = Array.isArray(content.excluded_skills)
+            ? content.excluded_skills.filter(
+                (entry: unknown): entry is { name: string; reason: string } =>
+                  typeof entry === 'object' && entry !== null
+                  && typeof (entry as { name?: unknown }).name === 'string'
+                  && typeof (entry as { reason?: unknown }).reason === 'string',
+              )
+            : [];
+          return {
+            skills: skills as ManifestEntry[],
+            excludedSkills,
+            enforceResolverInventory: content.enforce_resolver_inventory === true,
+            derived: false,
+          };
         }
       }
       // Non-array skills or entries missing keys → derive
@@ -144,5 +161,10 @@ export function loadOrDeriveManifest(skillsDir: string): ManifestLoadResult {
     }
   }
 
-  return { skills: deriveManifest(skillsDir), derived: true };
+  return {
+    skills: deriveManifest(skillsDir),
+    excludedSkills: [],
+    enforceResolverInventory: false,
+    derived: true,
+  };
 }

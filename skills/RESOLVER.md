@@ -61,6 +61,7 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | Save or load reports | `skills/reports/SKILL.md` |
 | "Create a skill", "improve this skill" | `skills/skill-creator/SKILL.md` |
 | "Skillify this", "is this a skill?", "make this proper" | `skills/skillify/SKILL.md` |
+| "optimize this skill", "benchmark skill routing", "improve skill performance" | `skills/skill-optimizer/SKILL.md` |
 | "Compress my resolver", "AGENTS.md too large", "RESOLVER.md too big", "functional area dispatcher", "shrink routing table" | `skills/functional-area-resolver/SKILL.md` |
 | "Is voltmind healthy?", morning health check, skillpack-check | `skills/skillpack-check/SKILL.md` |
 | "harvest this skill into voltmind", "publish this skill to voltmind", "lift this skill upstream", "share this skill with other voltmind clients", "promote my skill to voltmind" | `skills/skillpack-harvest/SKILL.md` |

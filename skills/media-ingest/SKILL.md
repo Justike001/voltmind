@@ -23,7 +23,6 @@ tools:
   - put_page
   - add_link
   - add_timeline_entry
-  - file_upload
 mutating: true
 writes_pages: true
 writes_to:
@@ -45,7 +44,9 @@ This skill guarantees:
 - Every ingested media item has a brain page with analysis (not just a transcript dump)
 - Transcripts (video/audio) saved in raw and human-readable formats
 - Entity extraction: every person and company mentioned gets back-linked
-- Raw source files preserved via `voltmind files upload-raw`
+- Raw provenance preserved according to topology: Host-local uploads may use
+  `voltmind files upload-raw`; thin clients persist an external file reference
+  and never invoke the Host-only `file_upload` operation.
 - Filing by primary subject, not by media format
 
 > **Convention:** See `skills/conventions/quality.md` for Iron Law back-linking.
@@ -65,9 +66,23 @@ Every mention of a person or company with a brain page MUST create a back-link.
 | Screenshot/image | OCR via vision model, extract text and entities |
 | GitHub repo | Clone, read README + key files, summarize architecture |
 
-### Phase 2: Upload raw source
+### Phase 2: Preserve raw provenance (topology gate)
 
-Save the original file for provenance: `voltmind files upload-raw <file> --page <slug>`
+First determine whether the agent is running on the Host or as a thin client.
+
+- **Host-local CLI only:** save the original file with
+  `voltmind files upload-raw <file> --page <slug>`. `file_upload` is an admin,
+  `localOnly` operation and is intentionally unavailable through remote MCP.
+- **Thin client:** do not call `file_upload` and do not send a workstation path
+  to the Host. Persist the provider's stable `ExternalFileReferenceV1` (service,
+  tenant/drive/item ids, canonical URL, MIME type, availability, and occurrence
+  identity) in the local evidence page. Write semantic Markdown through the
+  local `voltmind put`/client-first writer so the local vault exists before MCP
+  synchronization. Ask the Host operator to materialize bytes only when the
+  user explicitly requests it.
+
+See `skills/conventions/client-ingest-control-plane.md` for the complete
+file-reference and local-write-ahead contract.
 
 ### Phase 3: Create brain page
 
@@ -118,4 +133,7 @@ Brain page created with summary, highlights, and entity cross-links. Report to u
 - Skipping entity extraction ("I'll do that separately")
 - Filing **raw ingest** by format (all videos in `media/videos/`) instead of by subject. Note: format-prefixed paths under `media/<format>/<slug>` ARE sanctioned for **synthesized one-of-one output** like book-mirror's `media/books/<slug>-personalized.md`. The anti-pattern is for raw ingest, not for sui generis synthesis. See `skills/_brain-filing-rules.md` "Sanctioned exception: synthesis output is sui generis."
 - Not preserving raw source files
+- Calling `file_upload` or `voltmind files upload-raw` from a thin client
+- Treating a client-local path as if the Host could open it; use an
+  `ExternalFileReferenceV1` instead
 - Creating stub pages without meaningful content

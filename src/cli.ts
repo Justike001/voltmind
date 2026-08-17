@@ -495,6 +495,10 @@ async function runThinClientRouted(
       signal: sigintController.signal,
     });
     const result = unpackToolResult(raw) as unknown;
+    if (localWriteReceipt) {
+      const { markClientFirstPageSynchronized } = await import('./core/client-first-page-writer.ts');
+      markClientFirstPageSynchronized(localWriteReceipt);
+    }
     if (localWriteReceipt && result && typeof result === 'object' && !Array.isArray(result)) {
       Object.assign(result as Record<string, unknown>, {
         client_local_write: { ...localWriteReceipt, status: 'synchronized' },
@@ -1433,10 +1437,13 @@ async function handleCliOnly(command: string, args: string[]) {
   // of the way, but the dispatch case at :1229 still needs an engine. The
   // pre-engine-bind branch here exposes the HELP constant without requiring
   // a configured brain (fresh-tmpdir parity with brainstorm/lsd/sync).
-  if (command === 'capture' && (args.includes('--help') || args.includes('-h'))) {
-    const { runCapture } = await import('./commands/capture.ts');
-    await runCapture(null, args);
-    return;
+  if (command === 'capture') {
+    const cfgPre = loadConfig();
+    if (args.includes('--help') || args.includes('-h') || isThinClient(cfgPre)) {
+      const { runCapture } = await import('./commands/capture.ts');
+      await runCapture(null, args);
+      return;
+    }
   }
 
   if (command === 'source-audit' && (args.includes('--help') || args.includes('-h'))) {

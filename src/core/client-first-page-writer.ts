@@ -34,6 +34,17 @@ export interface ClientFirstLocalWriteReceipt {
   template_type?: string;
   template_section?: string;
   backup_path?: string;
+  /** Durable client-local synchronization ledger entry. */
+  receipt_path: string;
+}
+
+interface ClientFirstSyncReceiptFile extends Omit<ClientFirstLocalWriteReceipt, 'status'> {
+  schema_version: 1;
+  created_at: string;
+  updated_at: string;
+  attempts: number;
+  status: 'local_written_remote_pending' | 'synchronized';
+  synchronized_at?: string;
 }
 
 export class ClientFirstPageWriteError extends Error {
@@ -153,7 +164,15 @@ export async function writeClientFirstPage(
     );
   }
 
-  return {
+  const receiptPath = clientFirstReceiptPath(vaultPath, input.slug);
+  const now = new Date().toISOString();
+  let priorReceipt: Partial<ClientFirstSyncReceiptFile> = {};
+  try {
+    priorReceipt = JSON.parse(readFileSync(receiptPath, 'utf8')) as Partial<ClientFirstSyncReceiptFile>;
+  } catch {
+    // First attempt or corrupt prior ledger: start a fresh durable receipt.
+  }
+  const receipt: ClientFirstLocalWriteReceipt = {
     status: 'local_written_remote_pending',
     slug: input.slug,
     path: targetPath,
@@ -161,7 +180,60 @@ export async function writeClientFirstPage(
     bytes: Buffer.byteLength(input.content, 'utf8'),
     ...(validation ? { template_type: validation.type, template_section: validation.section } : {}),
     ...(backupPath ? { backup_path: backupPath } : {}),
+    receipt_path: receiptPath,
   };
+  atomicWriteJson(receiptPath, {
+    schema_version: 1,
+    ...receipt,
+    created_at: priorReceipt.created_at ?? now,
+    updated_at: now,
+    attempts: typeof priorReceipt.attempts === 'number' ? priorReceipt.attempts + 1 : 1,
+  } satisfies ClientFirstSyncReceiptFile);
+  return receipt;
+}
+
+/**
+ * Mark a durable client-first receipt synchronized only after remote MCP
+ * accepts the exact page. A crash/network failure before this call leaves the
+ * receipt in local_written_remote_pending for an idempotent retry.
+ */
+export function markClientFirstPageSynchronized(receipt: ClientFirstLocalWriteReceipt): void {
+  const now = new Date().toISOString();
+  let existing: Partial<ClientFirstSyncReceiptFile> = {};
+  try {
+    existing = JSON.parse(readFileSync(receipt.receipt_path, 'utf8')) as Partial<ClientFirstSyncReceiptFile>;
+  } catch {
+    // Reconstruct from the in-memory receipt if the ledger was lost/corrupt.
+  }
+  atomicWriteJson(receipt.receipt_path, {
+    schema_version: 1,
+    ...receipt,
+    ...existing,
+    status: 'synchronized',
+    created_at: existing.created_at ?? now,
+    updated_at: now,
+    attempts: typeof existing.attempts === 'number' ? existing.attempts : 1,
+    synchronized_at: now,
+  } satisfies ClientFirstSyncReceiptFile);
+}
+
+function clientFirstReceiptPath(vaultPath: string, slug: string): string {
+  const key = createHash('sha256').update(slug, 'utf8').digest('hex');
+  return join(vaultPath, '.voltmind', 'pending-remote', `${key}.json`);
+}
+
+function atomicWriteJson(path: string, value: unknown): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const tempPath = `${path}.tmp.${process.pid}.${randomBytes(4).toString('hex')}`;
+  try {
+    writeFileSync(tempPath, JSON.stringify(value, null, 2) + '\n', {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    renameSync(tempPath, path);
+  } finally {
+    if (existsSync(tempPath)) rmSync(tempPath, { force: true });
+  }
 }
 
 function validateClientPageSlug(slug: string): void {

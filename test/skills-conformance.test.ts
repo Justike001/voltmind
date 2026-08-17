@@ -28,14 +28,16 @@ function parseFrontmatter(content: string): Record<string, unknown> | null {
 
 /** Get all skill directories (those containing SKILL.md) */
 function getSkillDirs(): string[] {
+  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+  const excluded = new Set(
+    (manifest.excluded_skills ?? []).map((entry: { name: string }) => entry.name),
+  );
   const entries = readdirSync(SKILLS_DIR, { withFileTypes: true });
   return entries
     .filter((e) => e.isDirectory())
     .filter((e) => existsSync(join(SKILLS_DIR, e.name, "SKILL.md")))
     .map((e) => e.name)
-    // Preserved operator variants are intentionally not routed or published
-    // in the skillpack manifest. See their own SKILL.md descriptions.
-    .filter((name) => !["install", "setup-standalone", "voltmind-action-runtime"].includes(name));
+    .filter((name) => !excluded.has(name));
 }
 
 describe("skills conformance", () => {
@@ -117,6 +119,31 @@ describe("skills conformance", () => {
       expect(result.status).toBe("ok");
       expect(result.reason).not.toBe("missing_brain_first");
       expect(content).toMatch(/^>\s*\*\*Convention:\*\*[^\n]*brain-first/im);
+    }
+  });
+
+  test("disk inventory equals published skills plus explicit exclusions", () => {
+    const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+    const diskNames = readdirSync(SKILLS_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && existsSync(join(SKILLS_DIR, entry.name, "SKILL.md")))
+      .map((entry) => entry.name)
+      .sort();
+    const declared = [
+      ...manifest.skills.map((entry: { name: string }) => entry.name),
+      ...manifest.excluded_skills.map((entry: { name: string; reason: string }) => {
+        expect(entry.reason.trim().length).toBeGreaterThan(0);
+        return entry.name;
+      }),
+    ].sort();
+    expect(declared).toEqual(diskNames);
+  });
+
+  test("media and voice skills document the thin-client localOnly boundary", () => {
+    for (const dir of ["media-ingest", "voice-note-ingest"]) {
+      const content = readFileSync(join(SKILLS_DIR, dir, "SKILL.md"), "utf-8");
+      expect(content).toContain("ExternalFileReferenceV1");
+      expect(content).toMatch(/thin client[\s\S]*file_upload/i);
+      expect(content).toMatch(/localOnly/);
     }
   });
 });

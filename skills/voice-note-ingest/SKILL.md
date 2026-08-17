@@ -46,12 +46,21 @@ memo upload, openclaw audio attachment). The host agent typically provides
 the transcript text. If not, transcribe via `voltmind transcription` (Groq
 Whisper by default; OpenAI fallback for audio > 25MB segmented via ffmpeg).
 
+Before storage/transcription, determine topology. `file_upload`,
+`voltmind files upload-raw`, and Host-side transcription are admin `localOnly`
+surfaces. A thin client must not call them through MCP or assume the Host can
+open a workstation path. Preserve the connector's stable
+`ExternalFileReferenceV1` plus the supplied transcript in the local evidence
+page, then use local `voltmind put` for client-first synchronization. If bytes
+must be materialized or transcribed, hand the reference to a Host operator (or
+an approved Host-side worker) and keep the page pending until that succeeds.
+
 ## The pipeline
 
 ```
-1. STORE       → Upload original audio to voltmind storage backend
-                 (S3 / Supabase Storage / local — pluggable per
-                 src/core/storage.ts).
+1. STORE       → Host-local: upload original audio to the configured storage
+                 backend. Thin client: persist ExternalFileReferenceV1 locally
+                 and route materialization to the Host; never call file_upload.
 2. TRANSCRIBE  → Use the agent-provided transcript verbatim, OR call
                  voltmind transcription if no transcript was supplied.
 3. ROUTE       → Apply the decision tree (below) to find the right
@@ -173,8 +182,12 @@ No batching.
   know"). The texture matters.
 - ❌ **Creating a page with no entity cross-links** when people/companies
   were mentioned. Iron Law fail.
-- ❌ **Skipping the audio storage step.** Always upload the original; the
-  brain page has a `🔊 [Audio]` link back to it.
+- ❌ **Skipping audio provenance.** On the Host, upload the original; on a thin
+  client, persist its stable external reference. The brain page keeps a
+  `🔊 [Audio]` link/reference either way.
+- ❌ **Calling Host-only upload/transcription from a thin client.** Preserve a
+  stable external file reference locally and route the byte operation to the
+  Host instead.
 
 ## Related skills
 

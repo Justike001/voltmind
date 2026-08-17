@@ -3,7 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { VoltMindConfig } from '../src/core/config.ts';
-import { writeClientFirstPage } from '../src/core/client-first-page-writer.ts';
+import {
+  markClientFirstPageSynchronized,
+  writeClientFirstPage,
+} from '../src/core/client-first-page-writer.ts';
 import { withEnv } from './helpers/with-env.ts';
 
 const VALID_PROJECT = `---
@@ -91,6 +94,26 @@ describe('client-first semantic page writer', () => {
     expect(receipt.template_type).toBe('project');
     expect(receipt.content_sha256).toHaveLength(64);
     expect(readFileSync(target, 'utf8')).toBe(VALID_PROJECT);
+    expect(existsSync(receipt.receipt_path)).toBe(true);
+    expect(JSON.parse(readFileSync(receipt.receipt_path, 'utf8')).status)
+      .toBe('local_written_remote_pending');
+  });
+
+  test('keeps a durable pending manifest until remote synchronization succeeds', async () => {
+    const receipt = await withEnv({ VOLTMIND_HOME: root }, () =>
+      writeClientFirstPage(config, { slug: 'projects/example', content: VALID_PROJECT }),
+    );
+
+    // A remote failure does not call the completion helper: both the local
+    // page and retry ledger remain authoritative.
+    expect(readFileSync(receipt.path, 'utf8')).toBe(VALID_PROJECT);
+    expect(JSON.parse(readFileSync(receipt.receipt_path, 'utf8')).status)
+      .toBe('local_written_remote_pending');
+
+    markClientFirstPageSynchronized(receipt);
+    const completed = JSON.parse(readFileSync(receipt.receipt_path, 'utf8'));
+    expect(completed.status).toBe('synchronized');
+    expect(completed.synchronized_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   test('rejects an invalid canonical page without touching the vault', async () => {
