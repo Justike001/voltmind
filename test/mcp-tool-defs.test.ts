@@ -44,10 +44,14 @@ function referenceParamDefToSchema(p: ParamDefLike): Record<string, unknown> {
   };
 }
 function legacyInlineMap(ops: typeof operations) {
-  return ops.map(op => ({
-    name: op.name,
-    description: op.description,
-    inputSchema: {
+  return ops.map(op => {
+    const scope = op.scope ?? 'read';
+    return {
+      name: op.name,
+      description: op.description,
+      scope,
+      _meta: { 'voltmind/requiredScope': scope },
+      inputSchema: {
       type: 'object' as const,
       properties: Object.fromEntries(
         Object.entries(op.params).map(([k, v]) => [k, referenceParamDefToSchema(v)]),
@@ -55,8 +59,10 @@ function legacyInlineMap(ops: typeof operations) {
       required: Object.entries(op.params)
         .filter(([, v]) => v.required)
         .map(([k]) => k),
-    },
-  }));
+      additionalProperties: false,
+      },
+    };
+  });
 }
 
 describe('buildToolDefs', () => {
@@ -86,6 +92,9 @@ describe('buildToolDefs', () => {
       expect(def.inputSchema.type).toBe('object');
       expect(typeof def.inputSchema.properties).toBe('object');
       expect(Array.isArray(def.inputSchema.required)).toBe(true);
+      expect(def.inputSchema.additionalProperties).toBe(false);
+      expect(def.scope).toBeTruthy();
+      expect(def._meta['voltmind/requiredScope']).toBe(def.scope);
     }
   });
 });

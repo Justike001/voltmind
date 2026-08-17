@@ -19,6 +19,7 @@ import {
   extractToolErrorCode,
   buildAbortController,
   RemoteMcpError,
+  DEFAULT_REMOTE_MCP_TIMEOUT_MS,
   type CallRemoteToolOptions,
 } from '../src/core/mcp-client.ts';
 
@@ -57,6 +58,14 @@ describe('toRemoteMcpError', () => {
     const out = toRemoteMcpError(err, MCP_URL);
     expect(out.reason).toBe('network');
     expect(out.detail?.kind).toBe('aborted');
+  });
+
+  test('an aborted shared deadline remains network/timeout', () => {
+    const controller = new AbortController();
+    controller.abort(new Error('timeout after 25ms'));
+    const out = toRemoteMcpError(new Error('request aborted'), MCP_URL, controller.signal);
+    expect(out.reason).toBe('network');
+    expect(out.detail?.kind).toBe('timeout');
   });
 
   test('non-Error throwable (string) becomes network/unreachable', () => {
@@ -251,6 +260,9 @@ describe('RemoteMcpError class shape', () => {
 });
 
 describe('CallRemoteToolOptions type contract', () => {
+  test('default remote MCP deadline is bounded', () => {
+    expect(DEFAULT_REMOTE_MCP_TIMEOUT_MS).toBe(30_000);
+  });
   test('both fields are optional', () => {
     const empty: CallRemoteToolOptions = {};
     expect(empty.timeoutMs).toBeUndefined();

@@ -57,6 +57,7 @@ import {
 } from './search/embedding-column.ts';
 import { hasCJK, escapeLikePattern } from './cjk.ts';
 import { healthEntityTypeSql } from './health-entity-types.ts';
+import { assertValidSourceId } from './source-id.ts';
 
 type PGLiteDB = PGlite;
 
@@ -815,7 +816,9 @@ export class PGLiteEngine implements BrainEngine {
    * without branching on engine kind.
    */
   async setSourceScope(_sourceId: string): Promise<void> {
-    // intentionally empty — PGLite has no RLS.
+    // PGLite has no RLS, but keep source-id rejection identical to Postgres
+    // so invalid operation context cannot be accepted by only one engine.
+    assertValidSourceId(_sourceId);
   }
 
   // Pages CRUD

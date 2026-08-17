@@ -14,7 +14,7 @@
 
 import type { VoltMindConfig } from './config.ts';
 import { discoverOAuth, mintClientCredentialsToken, smokeTestMcp } from './remote-mcp-probe.ts';
-import { callRemoteTool, RemoteMcpError, unpackToolResult } from './mcp-client.ts';
+import { buildAbortController, callRemoteTool, RemoteMcpError, unpackToolResult } from './mcp-client.ts';
 import { safeCompare, driftLevel, loadPromptState } from './thin-client-upgrade-prompt.ts';
 import { VERSION } from '../version.ts';
 
@@ -67,6 +67,8 @@ export async function runRemoteDoctor(config: VoltMindConfig, args: string[]): P
  */
 export interface CollectRemoteDoctorOpts {
   skipScopeProbe?: boolean;
+  timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -150,8 +152,16 @@ export async function collectRemoteDoctorReport(
   });
 
   // 2. OAuth discovery
-  const disco = await discoverOAuth(remote.issuer_url);
+  const probeDeadline = buildAbortController({
+    timeoutMs: opts.timeoutMs ?? 30_000,
+    signal: opts.signal,
+  });
+  const disco = await discoverOAuth(remote.issuer_url, {
+    signal: probeDeadline.signal,
+    allowedTokenEndpointOrigins: remote.token_endpoint_allowed_origins,
+  });
   if (!disco.ok) {
+    probeDeadline.cleanup();
     checks.push({
       name: 'oauth_discovery',
       status: 'fail',
@@ -167,8 +177,14 @@ export async function collectRemoteDoctorReport(
   });
 
   // 3. Token round-trip
-  const tokenRes = await mintClientCredentialsToken(disco.metadata.token_endpoint, remote.oauth_client_id, clientSecret);
+  const tokenRes = await mintClientCredentialsToken(
+    disco.metadata.token_endpoint,
+    remote.oauth_client_id,
+    clientSecret,
+    { signal: probeDeadline.signal },
+  );
   if (!tokenRes.ok) {
+    probeDeadline.cleanup();
     checks.push({
       name: 'oauth_token',
       status: 'fail',
@@ -185,8 +201,13 @@ export async function collectRemoteDoctorReport(
   });
 
   // 4. MCP smoke
-  const mcpRes = await smokeTestMcp(remote.mcp_url, tokenRes.token.access_token);
+  const mcpRes = await smokeTestMcp(
+    remote.mcp_url,
+    tokenRes.token.access_token,
+    { signal: probeDeadline.signal },
+  );
   if (!mcpRes.ok) {
+    probeDeadline.cleanup();
     checks.push({
       name: 'mcp_smoke',
       status: 'fail',
@@ -200,6 +221,7 @@ export async function collectRemoteDoctorReport(
     status: 'ok',
     message: 'initialize round-trip succeeded',
   });
+  probeDeadline.cleanup();
 
   // 5. v0.31.1 (CDX-5): scope-probe — verify the OAuth client actually has
   // the scopes its token claims. Every client gets a representative read

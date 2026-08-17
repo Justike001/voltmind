@@ -36,7 +36,7 @@ import {
 } from '../core/oauth-provider.ts';
 import type { SqlQuery } from '../core/oauth-provider.ts';
 import { hasScope, filterOperationsForScopes, ALLOWED_SCOPES_LIST, normalizeScopesInput } from '../core/scope.ts';
-import { summarizeMcpParams, dispatchToolCall } from '../mcp/dispatch.ts';
+import { summarizeMcpParams, dispatchToolCall, withOperationSourceScope } from '../mcp/dispatch.ts';
 import type { DispatchOpts, ToolResult } from '../mcp/dispatch.ts';
 import { paramDefToSchema } from '../mcp/tool-defs.ts';
 import { getBrainHotMemoryMeta } from '../core/facts/meta-hook.ts';
@@ -58,6 +58,7 @@ import {
   type TrackingReference,
 } from '../core/ingestion/types.ts';
 import { normalizeExternalFileRefs } from '../core/external-file-refs.ts';
+import { validateOAuthIssuerUrl } from '../core/oauth-url-validation.ts';
 
 const RELAY_EVIDENCE_TYPES = new Set<SourceEvidenceType>([
   'teams_thread',
@@ -1219,7 +1220,11 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   // match the URL clients actually hit, or strict OAuth clients reject tokens
   // (RFC 8414 §3.3). Honor --public-url for production deployments behind
   // reverse proxies / tunnels; default to localhost for dev.
-  const issuerUrl = new URL(publicUrl || `http://localhost:${port}`);
+  const issuerValidation = validateOAuthIssuerUrl(publicUrl || `http://localhost:${port}`);
+  if (!issuerValidation.ok) {
+    throw new Error(`Invalid OAuth public URL: ${issuerValidation.message}`);
+  }
+  const issuerUrl = issuerValidation.value;
   const adminUrl = new URL(adminPublicUrl || publicUrl || `http://localhost:${port}`);
 
   // F9: cookie `secure` flag honors both the request's TLS state (req.secure
@@ -2422,13 +2427,16 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     sourceId?: string,
   ): Promise<void> {
     try {
-      await executeRawJsonb(
-        engine,
-        `INSERT INTO mcp_request_log (operation, status, error_message, source_id, params)
-         VALUES ($1, $2, $3, $4, $5::jsonb)`,
-        ['self_provision', status, errorMessage ?? null, sourceId ?? null],
-        [{ ip, ...details }],
-      );
+      const auditSourceId = sourceId ?? 'default';
+      await withOperationSourceScope(engine, auditSourceId, async (tx) => {
+        await executeRawJsonb(
+          tx,
+          `INSERT INTO mcp_request_log (operation, status, error_message, source_id, params)
+           VALUES ($1, $2, $3, $4, $5::jsonb)`,
+          ['self_provision', status, errorMessage ?? null, auditSourceId],
+          [{ ip, ...details }],
+        );
+      });
     } catch { /* best-effort audit must not change the HTTP result */ }
   }
 
@@ -2559,13 +2567,16 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       // asserting >= 2 rows after tools/list + tools/call was unreachable.
       const latency = Date.now() - startTime;
       try {
-        await executeRawJsonb(
-          engine,
-          `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, source_id, brain_id, params)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
-          [authInfo.clientId, agentName, 'tools/list', latency, 'success', authInfo.sourceId ?? null, brainIdForProcess],
-          [null],
-        );
+        const auditSourceId = authInfo.sourceId ?? 'default';
+        await withOperationSourceScope(engine, auditSourceId, async (tx) => {
+          await executeRawJsonb(
+            tx,
+            `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, source_id, brain_id, params)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+            [authInfo.clientId, agentName, 'tools/list', latency, 'success', auditSourceId, brainIdForProcess],
+            [null],
+          );
+        });
       } catch { /* best effort */ }
       broadcastEvent({
         agent: agentName,
@@ -2586,6 +2597,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
               Object.entries(op.params).map(([k, v]) => [k, paramDefToSchema(v)]),
             ),
             required: Object.entries(op.params).filter(([, v]) => v.required).map(([k]) => k),
+            additionalProperties: false,
           },
         })),
       };
@@ -2600,13 +2612,16 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         // valid-op success/error.
         const latency = Date.now() - startTime;
         try {
-          await executeRawJsonb(
-            engine,
-            `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
-            [authInfo.clientId, agentName, name, latency, 'error', `unknown_operation: ${name}`, authInfo.sourceId ?? null, brainIdForProcess],
-            [null],
-          );
+          const auditSourceId = authInfo.sourceId ?? 'default';
+          await withOperationSourceScope(engine, auditSourceId, async (tx) => {
+            await executeRawJsonb(
+              tx,
+              `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+              [authInfo.clientId, agentName, name, latency, 'error', `unknown_operation: ${name}`, auditSourceId, brainIdForProcess],
+              [null],
+            );
+          });
         } catch { /* best effort */ }
         broadcastEvent({
           agent: agentName,
@@ -2632,13 +2647,16 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         // persistence regression test reliable across both rejection paths.
         const latency = Date.now() - startTime;
         try {
-          await executeRawJsonb(
-            engine,
-            `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
-            [authInfo.clientId, agentName, name, latency, 'error', `insufficient_scope: requires '${requiredScope}'`, authInfo.sourceId ?? null, brainIdForProcess],
-            [null],
-          );
+          const auditSourceId = authInfo.sourceId ?? 'default';
+          await withOperationSourceScope(engine, auditSourceId, async (tx) => {
+            await executeRawJsonb(
+              tx,
+              `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+              [authInfo.clientId, agentName, name, latency, 'error', `insufficient_scope: requires '${requiredScope}'`, auditSourceId, brainIdForProcess],
+              [null],
+            );
+          });
         } catch { /* best effort */ }
         broadcastEvent({
           agent: agentName,
@@ -2728,13 +2746,15 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         const latency = Date.now() - startTime;
         const errorPayload = serializeError(e);
         try {
-          await executeRawJsonb(
-            engine,
-            `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
-            [authInfo.clientId, agentName, name, latency, 'error', errorPayload.message, tokenSourceId, brainIdForProcess],
-            [logParamsObj],
-          );
+          await withOperationSourceScope(engine, tokenSourceId, async (tx) => {
+            await executeRawJsonb(
+              tx,
+              `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+              [authInfo.clientId, agentName, name, latency, 'error', errorPayload.message, tokenSourceId, brainIdForProcess],
+              [logParamsObj],
+            );
+          });
         } catch { /* best effort */ }
         broadcastEvent({
           agent: agentName,
@@ -2760,13 +2780,15 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
           errMsg = parsed.error?.message ?? parsed.message ?? errMsg;
         } catch { /* ignore */ }
         try {
-          await executeRawJsonb(
-            engine,
-            `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
-            [authInfo.clientId, agentName, name, latency, 'error', errMsg, tokenSourceId, brainIdForProcess],
-            [logParamsObj],
-          );
+          await withOperationSourceScope(engine, tokenSourceId, async (tx) => {
+            await executeRawJsonb(
+              tx,
+              `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+              [authInfo.clientId, agentName, name, latency, 'error', errMsg, tokenSourceId, brainIdForProcess],
+              [logParamsObj],
+            );
+          });
         } catch { /* best effort */ }
         broadcastEvent({
           agent: agentName,
@@ -2782,13 +2804,15 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       }
 
       try {
-        await executeRawJsonb(
-          engine,
-          `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, source_id, brain_id, params)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
-          [authInfo.clientId, agentName, name, latency, 'success', tokenSourceId, brainIdForProcess],
-          [logParamsObj],
-        );
+        await withOperationSourceScope(engine, tokenSourceId, async (tx) => {
+          await executeRawJsonb(
+            tx,
+            `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, source_id, brain_id, params)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+            [authInfo.clientId, agentName, name, latency, 'success', tokenSourceId, brainIdForProcess],
+            [logParamsObj],
+          );
+        });
       } catch { /* best effort */ }
       broadcastEvent({
         agent: agentName,
@@ -3060,13 +3084,15 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
 
         const latency = Date.now() - startTime;
         try {
-          await executeRawJsonb(
-            engine,
-            `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, source_id, brain_id, params)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
-            [authInfo.clientId, agentName, 'webhook_ingest', latency, 'success', sourceId, brainIdForProcess],
-            [{ content_type: contentType, content_hash: contentHash, bytes: body.length, job_id: job.id }],
-          );
+          await withOperationSourceScope(engine, sourceId, async (tx) => {
+            await executeRawJsonb(
+              tx,
+              `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, source_id, brain_id, params)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+              [authInfo.clientId, agentName, 'webhook_ingest', latency, 'success', sourceId, brainIdForProcess],
+              [{ content_type: contentType, content_hash: contentHash, bytes: body.length, job_id: job.id }],
+            );
+          });
         } catch { /* best effort */ }
         broadcastEvent({
           agent: agentName,

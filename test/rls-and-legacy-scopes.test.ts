@@ -7,7 +7,7 @@
  * schema-level preconditions: the source_id columns exist on access_tokens
  * (mcp_request_log already had it) and the v112 migration's PGLite branch
  * is a no-op that still bumps the schema version. We also assert
- * `setSourceScope` is a no-op on PGLite (interface parity, never throws).
+ * `setSourceScope` validates source ids and otherwise no-ops on PGLite.
  *
  * #7 — legacy bearer tokens now carry an explicit scope set. `auth create`
  * no longer mints unconditional admin tokens; the default is read+write.
@@ -82,7 +82,7 @@ describe('v0.42 #6 — RLS source-isolation policies (schema + migration)', () =
     expect(schema).toContain("current_setting('app.source_id', true)");
   });
 
-  test('setSourceScope is a no-op on PGLite (never throws, interface parity)', async () => {
+  test('setSourceScope accepts valid ids and otherwise no-ops on PGLite', async () => {
     // PGLite has no RLS engine, but the method must exist + not throw so
     // dispatch code can call it unconditionally without branching.
     await expect(engine.setSourceScope('default')).resolves.toBeUndefined();
@@ -93,6 +93,10 @@ describe('v0.42 #6 — RLS source-isolation policies (schema + migration)', () =
     await engine.transaction(async (tx) => {
       await expect(tx.setSourceScope('default')).resolves.toBeUndefined();
     });
+  });
+
+  test('setSourceScope rejects invalid source ids on PGLite just like Postgres', async () => {
+    await expect(engine.setSourceScope('../escape')).rejects.toThrow('Invalid source_id');
   });
 });
 

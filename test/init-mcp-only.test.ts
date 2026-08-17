@@ -38,7 +38,10 @@ beforeAll(async () => {
     if (req.url === '/.well-known/oauth-authorization-server') {
       res.statusCode = discoveryStatus;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ token_endpoint: `http://127.0.0.1:${port}/token` }));
+      res.end(JSON.stringify({
+        issuer: `http://127.0.0.1:${port}/`,
+        token_endpoint: `http://127.0.0.1:${port}/token`,
+      }));
       return;
     }
     if (req.url === '/token') {

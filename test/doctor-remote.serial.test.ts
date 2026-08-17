@@ -39,6 +39,8 @@ let discoveryBody: unknown = null;
 let tokenStatus = 200;
 let tokenBody: unknown = null;
 let mcpStatus = 200;
+let mcpBodyOverride: string | null = null;
+let mcpContentType = 'application/json';
 // v0.31.11: per-tool result map for `tools/call` JSON-RPC requests on /mcp.
 // Tests that exercise runUpgradeDriftCheck seed `mcpToolResults['get_brain_identity']`
 // with the version they want the fixture to advertise. Unset → fall through to
@@ -50,7 +52,10 @@ beforeAll(async () => {
     if (req.url === '/.well-known/oauth-authorization-server') {
       res.statusCode = discoveryStatus;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(discoveryBody ?? { token_endpoint: `http://localhost:${port}/token` }));
+      res.end(JSON.stringify(discoveryBody ?? {
+        issuer: `http://localhost:${port}/`,
+        token_endpoint: `http://localhost:${port}/token`,
+      }));
       return;
     }
     if (req.url === '/token') {
@@ -72,8 +77,9 @@ beforeAll(async () => {
       req.on('data', chunk => { body += chunk; });
       req.on('end', () => {
         res.statusCode = mcpStatus;
-        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Type', mcpContentType);
         if (mcpStatus !== 200) { res.end(); return; }
+        if (mcpBodyOverride !== null) { res.end(mcpBodyOverride); return; }
         let parsed: { id?: number | string; method?: string; params?: { name?: string } } = {};
         try { parsed = JSON.parse(body); } catch { /* ignore */ }
         const id = parsed.id ?? 1;
@@ -121,6 +127,8 @@ function reset() {
   tokenStatus = 200;
   tokenBody = null;
   mcpStatus = 200;
+  mcpBodyOverride = null;
+  mcpContentType = 'application/json';
   mcpToolResults = {};
 }
 
@@ -177,6 +185,45 @@ describe('collectRemoteDoctorReport', () => {
     expect(disco.detail?.reason).toBe('parse');
   });
 
+  test('discovery issuer mismatch fails before token mint', async () => {
+    reset();
+    discoveryBody = {
+      issuer: 'https://attacker.example',
+      token_endpoint: `http://localhost:${port}/token`,
+    };
+    const report = await collectRemoteDoctorReport(makeConfig(), SKIP_PROBE_OPTS);
+    const disco = report.checks.find(c => c.name === 'oauth_discovery')!;
+    expect(disco.status).toBe('fail');
+    expect(disco.detail?.reason).toBe('config');
+    expect(report.checks.find(c => c.name === 'oauth_token')).toBeUndefined();
+  });
+
+  test('discovery rejects non-HTTPS production token endpoint', async () => {
+    reset();
+    discoveryBody = {
+      issuer: `http://localhost:${port}/`,
+      token_endpoint: 'http://identity.example/token',
+    };
+    const report = await collectRemoteDoctorReport(makeConfig(), SKIP_PROBE_OPTS);
+    const disco = report.checks.find(c => c.name === 'oauth_discovery')!;
+    expect(disco.status).toBe('fail');
+    expect(disco.message).toContain('HTTPS');
+    expect(report.checks.find(c => c.name === 'oauth_token')).toBeUndefined();
+  });
+
+  test('discovery rejects cross-origin token endpoint without allowlist', async () => {
+    reset();
+    discoveryBody = {
+      issuer: `http://localhost:${port}/`,
+      token_endpoint: 'https://identity.example/token',
+    };
+    const report = await collectRemoteDoctorReport(makeConfig(), SKIP_PROBE_OPTS);
+    const disco = report.checks.find(c => c.name === 'oauth_discovery')!;
+    expect(disco.status).toBe('fail');
+    expect(disco.message).toContain('not trusted');
+    expect(report.checks.find(c => c.name === 'oauth_token')).toBeUndefined();
+  });
+
   test('token 401 — fails with reason=auth and stops short of mcp', async () => {
     reset();
     tokenStatus = 401;
@@ -208,6 +255,41 @@ describe('collectRemoteDoctorReport', () => {
     const mcp = report.checks.find(c => c.name === 'mcp_smoke')!;
     expect(mcp.detail?.reason).toBe('http');
     expect(mcp.detail?.status).toBe(500);
+  });
+
+  test('mcp 2xx HTML is rejected as a protocol parse failure', async () => {
+    reset();
+    mcpContentType = 'text/html';
+    mcpBodyOverride = '<html><body>not MCP</body></html>';
+    const report = await collectRemoteDoctorReport(makeConfig(), SKIP_PROBE_OPTS);
+    const mcp = report.checks.find(c => c.name === 'mcp_smoke')!;
+    expect(mcp.status).toBe('fail');
+    expect(mcp.detail?.reason).toBe('parse');
+  });
+
+  test('mcp 2xx ordinary JSON is rejected as a protocol parse failure', async () => {
+    reset();
+    mcpBodyOverride = JSON.stringify({ ok: true });
+    const report = await collectRemoteDoctorReport(makeConfig(), SKIP_PROBE_OPTS);
+    const mcp = report.checks.find(c => c.name === 'mcp_smoke')!;
+    expect(mcp.status).toBe('fail');
+    expect(mcp.detail?.reason).toBe('parse');
+  });
+
+  test('mcp valid SSE initialize response passes protocol validation', async () => {
+    reset();
+    mcpContentType = 'text/event-stream';
+    mcpBodyOverride = `event: message\ndata: ${JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        serverInfo: { name: 'fixture', version: '1' },
+      },
+    })}\n\n`;
+    const report = await collectRemoteDoctorReport(makeConfig(), SKIP_PROBE_OPTS);
+    expect(report.checks.find(c => c.name === 'mcp_smoke')?.status).toBe('ok');
   });
 
   test('malformed issuer_url — fails config_integrity check', async () => {

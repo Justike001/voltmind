@@ -60,6 +60,7 @@ import { resolveBoostMap, resolveHardExcludes } from './search/source-boost.ts';
 import { buildSourceFactorCase, buildHardExcludeClause, buildVisibilityClause, buildRecencyComponentSql } from './search/sql-ranking.ts';
 import { DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from './ai/defaults.ts';
 import { healthEntityTypeSql } from './health-entity-types.ts';
+import { assertValidSourceId } from './source-id.ts';
 
 function escapeSqlStringLiteral(value: string): string {
   return value.replace(/'/g, "''");
@@ -807,14 +808,17 @@ export class PostgresEngine implements BrainEngine {
    * No-op on PGLite (no RLS engine; overridden there).
    */
   async setSourceScope(sourceId: string): Promise<void> {
-    // SET LOCAL requires a transaction; if a caller invoked us outside one
-    // (a future code path that doesn't wrap), postgres.js would throw. Guard
-    // so the method degrades to a no-op rather than crashing the op — the
-    // app-layer WHERE filter is the primary control anyway.
-    try {
-      await this.sql`SET LOCAL app.source_id = ${sourceId}`;
-    } catch {
-      // best-effort: RLS is defense-in-depth, never the primary gate.
+    assertValidSourceId(sourceId);
+    // set_config(..., true) is transaction-local. Do not absorb failures:
+    // under a restricted role an unset scope means fail-closed reads and
+    // failed audit writes, and pretending the scope was installed makes the
+    // two engines diverge silently.
+    await this.sql`SELECT set_config('app.source_id', ${sourceId}, true)`;
+    const rows = await this.sql<{ source_id: string }[]>`
+      SELECT current_setting('app.source_id', true) AS source_id
+    `;
+    if (rows[0]?.source_id !== sourceId) {
+      throw new Error('source_scope_not_applied');
     }
   }
 

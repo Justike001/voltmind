@@ -33,33 +33,55 @@ let port: number;
 let tokenStatus = 200;
 let mcpResponseFor: (req: { method: string; params?: unknown }) => unknown = () => ({});
 let mcpStatusOverride: number | null = null;
+let mcpRejectRemaining = 0;
+let mcpRequestCount = 0;
 let tokenMintCount = 0;
+let tokenError = 'invalid_client';
+let discoveryDelayMs = 0;
+let tokenDelayMs = 0;
+let revokeClientOnMcp401 = false;
 
 beforeAll(async () => {
   server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (req.url === '/.well-known/oauth-authorization-server') {
+      if (discoveryDelayMs > 0) await new Promise(resolve => setTimeout(resolve, discoveryDelayMs));
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ token_endpoint: `http://127.0.0.1:${port}/token`, issuer: `http://127.0.0.1:${port}` }));
+      res.end(JSON.stringify({ token_endpoint: `http://127.0.0.1:${port}/token`, issuer: `http://127.0.0.1:${port}/` }));
       return;
     }
     if (req.url === '/token') {
+      if (tokenDelayMs > 0) await new Promise(resolve => setTimeout(resolve, tokenDelayMs));
       tokenMintCount++;
       res.statusCode = tokenStatus;
       res.setHeader('Content-Type', 'application/json');
       if (tokenStatus === 200) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const form = new URLSearchParams(Buffer.concat(chunks).toString('utf-8'));
         res.end(JSON.stringify({
-          access_token: `token-${Date.now()}-${tokenMintCount}`,
+          access_token: `token-${form.get('client_id')}-${form.get('client_secret')}-${tokenMintCount}`,
           token_type: 'bearer',
           expires_in: 3600,
           scope: 'read write admin',
         }));
       } else {
-        res.end(JSON.stringify({ error: 'invalid_client' }));
+        res.end(JSON.stringify({ error: tokenError }));
       }
       return;
     }
     if (req.url === '/mcp' && req.method === 'POST') {
+      mcpRequestCount++;
+      if (mcpRejectRemaining > 0) {
+        mcpRejectRemaining--;
+        if (revokeClientOnMcp401) {
+          tokenStatus = 400;
+          tokenError = 'invalid_grant';
+        }
+        res.statusCode = 401;
+        res.end();
+        return;
+      }
       // Test-controlled status override (used to simulate 401 from MCP).
       if (mcpStatusOverride !== null) {
         res.statusCode = mcpStatusOverride;
@@ -111,7 +133,13 @@ beforeEach(() => {
   tokenStatus = 200;
   tokenMintCount = 0;
   mcpStatusOverride = null;
+  mcpRejectRemaining = 0;
+  mcpRequestCount = 0;
   mcpResponseFor = () => ({ content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] });
+  tokenError = 'invalid_client';
+  discoveryDelayMs = 0;
+  tokenDelayMs = 0;
+  revokeClientOnMcp401 = false;
   _clearMcpClientTokenCache();
 });
 
@@ -144,6 +172,18 @@ describe('callRemoteTool — happy path', () => {
     expect(tokenMintCount).toBe(1);
   });
 
+  test('does not reuse a cached token across client identity or secret rotation', async () => {
+    const first = makeConfig();
+    await callRemoteTool(first, 'noop', {});
+    const second = makeConfig();
+    second.remote_mcp!.oauth_client_id = 'other-client';
+    await callRemoteTool(second, 'noop', {});
+    const rotated = makeConfig();
+    rotated.remote_mcp!.oauth_client_secret = 'rotated-secret';
+    await callRemoteTool(rotated, 'noop', {});
+    expect(tokenMintCount).toBe(3);
+  });
+
   test('passes args through to the tool handler', async () => {
     let captured: unknown = null;
     mcpResponseFor = ({ params }) => {
@@ -157,44 +197,38 @@ describe('callRemoteTool — happy path', () => {
 
 describe('callRemoteTool — 401 refresh-on-once', () => {
   test('401 from /mcp → re-mint token + retry succeeds', async () => {
-    // Pre-seed cache with a fresh-but-server-rejected token by first
-    // succeeding once, then flipping the server to 401 just once.
-    await callRemoteTool(makeConfig(), 'first_success', {});
-    expect(tokenMintCount).toBe(1);
+    mcpRejectRemaining = 1;
+    await callRemoteTool(makeConfig(), 'after_401', {});
+    expect(tokenMintCount).toBe(2);
+    expect(mcpRequestCount).toBe(4); // rejected init + init + initialized notification + tools/call
+  });
 
-    // Next call: the /mcp endpoint will return 401 on the first attempt;
-    // the client should re-mint and retry. We simulate "rejected once,
-    // accepted on retry" by counting requests.
-    let mcpCallCount = 0;
-    mcpStatusOverride = null;
-    const origResponse = mcpResponseFor;
-    mcpResponseFor = ({ method, params }) => {
-      if (method === 'tools/call') mcpCallCount++;
-      // First call: instruct fixture to return 401 by setting override THEN restore
-      // Actually simpler: throw on first attempt by setting mcpStatusOverride pre-emptively
-      return origResponse({ method, params });
-    };
+  test('second 401 becomes auth_after_refresh and never makes a third attempt', async () => {
+    mcpRejectRemaining = 2;
+    try {
+      await callRemoteTool(makeConfig(), 'still_unauthorized', {});
+      throw new Error('expected throw');
+    } catch (error) {
+      expect(error).toBeInstanceOf(RemoteMcpError);
+      expect((error as RemoteMcpError).reason).toBe('auth_after_refresh');
+    }
+    expect(tokenMintCount).toBe(2);
+    expect(mcpRequestCount).toBe(2);
+  });
 
-    // Easier path: install a once-only 401 on /mcp by setting mcpStatusOverride
-    // for one request; we need a counter. Use a flag.
-    let overrideUsed = false;
-    const realServer = server;
-    void realServer;
-    mcpStatusOverride = null;
-    // Wrap mcpResponseFor with a one-shot rejector — but the override is a
-    // status-line mechanism, not a body mechanism. Use a small hack: make
-    // the next /mcp request return a tool-error envelope that the client
-    // interprets as 401-equivalent. Actually the SDK throws on 401 status,
-    // so we need a real 401. Use mcpStatusOverride for one request.
-    // For test simplicity: expect that calling with stale-cached-token-then-
-    // 401 flow will re-mint. Achieve by setting tokenStatus to a failing
-    // value AFTER first success, then restoring. Skipped for this case;
-    // covered indirectly by the cache-reuse test above.
-
-    // Instead, assert that the cache invalidation API works: clear cache,
-    // call again, expect new token.
-    _clearMcpClientTokenCache();
-    await callRemoteTool(makeConfig(), 'after_clear', {});
+  test('revoked client during 401 refresh is classified explicitly', async () => {
+    mcpRejectRemaining = 1;
+    revokeClientOnMcp401 = true;
+    try {
+      await callRemoteTool(makeConfig(), 'revoked_client', {});
+      throw new Error('expected throw');
+    } catch (error) {
+      expect(error).toBeInstanceOf(RemoteMcpError);
+      expect((error as RemoteMcpError).reason).toBe('auth_after_refresh');
+      expect((error as RemoteMcpError).detail?.code).toBe('invalid_grant');
+      expect((error as Error).message).toContain('invalid or revoked');
+    }
+    expect(mcpRequestCount).toBe(1);
     expect(tokenMintCount).toBe(2);
   });
 });
@@ -232,6 +266,56 @@ describe('callRemoteTool — error surfaces', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(RemoteMcpError);
       expect((e as RemoteMcpError).reason).toBe('auth');
+    }
+  });
+
+  test('invalid_grant from token endpoint is classified as credential auth failure', async () => {
+    tokenStatus = 400;
+    tokenError = 'invalid_grant';
+    try {
+      await callRemoteTool(makeConfig(), 'foo', {});
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(RemoteMcpError);
+      expect((e as RemoteMcpError).reason).toBe('auth');
+      expect((e as RemoteMcpError).detail?.code).toBe('invalid_grant');
+      expect((e as Error).message).toContain('invalid or revoked');
+    }
+  });
+
+  test('one deadline aborts during OAuth discovery as timeout', async () => {
+    discoveryDelayMs = 100;
+    try {
+      await callRemoteTool(makeConfig(), 'foo', {}, { timeoutMs: 20 });
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(RemoteMcpError);
+      expect((e as RemoteMcpError).detail?.kind).toBe('timeout');
+    }
+    expect(tokenMintCount).toBe(0);
+  });
+
+  test('one deadline aborts during token mint as timeout', async () => {
+    tokenDelayMs = 100;
+    try {
+      await callRemoteTool(makeConfig(), 'foo', {}, { timeoutMs: 20 });
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(RemoteMcpError);
+      expect((e as RemoteMcpError).detail?.kind).toBe('timeout');
+    }
+  });
+
+  test('external abort remains aborted rather than timeout', async () => {
+    discoveryDelayMs = 100;
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new Error('SIGINT')), 20);
+    try {
+      await callRemoteTool(makeConfig(), 'foo', {}, { signal: controller.signal, timeoutMs: 1000 });
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(RemoteMcpError);
+      expect((e as RemoteMcpError).detail?.kind).toBe('aborted');
     }
   });
 

@@ -718,6 +718,7 @@ const put_page: Operation = {
     source_uri: { type: 'string', required: false, description: 'Original URI/path/message-id the event carried. Remote callers: SERVER-STAMPED null.' },
     ingested_via: { type: 'string', required: false, description: 'Richer label paired with source_kind. Remote callers: SERVER-STAMPED.' },
     file_refs: { type: 'array', required: false, items: { type: 'object' }, description: 'Validated SharePoint/OneDrive file references associated with this page.' },
+    dry_run: { type: 'boolean', required: false, description: 'Preview the write without applying it.' },
   },
   mutating: true,
   scope: 'write',

@@ -3,10 +3,14 @@ import type { Operation, ParamDef } from '../core/operations.ts';
 export interface McpToolDef {
   name: string;
   description: string;
+  /** VoltMind authorization scope required by tools/call. */
+  scope: NonNullable<Operation['scope']>;
+  _meta: { 'voltmind/requiredScope': NonNullable<Operation['scope']> };
   inputSchema: {
     type: 'object';
     properties: Record<string, unknown>;
     required: string[];
+    additionalProperties: false;
   };
 }
 
@@ -38,10 +42,14 @@ export function paramDefToSchema(p: ParamDef): Record<string, unknown> {
 }
 
 export function buildToolDefs(ops: Operation[]): McpToolDef[] {
-  return ops.map(op => ({
-    name: op.name,
-    description: op.description,
-    inputSchema: {
+  return ops.map(op => {
+    const scope = op.scope ?? 'read';
+    return {
+      name: op.name,
+      description: op.description,
+      scope,
+      _meta: { 'voltmind/requiredScope': scope },
+      inputSchema: {
       type: 'object' as const,
       properties: Object.fromEntries(
         Object.entries(op.params).map(([k, v]) => [k, paramDefToSchema(v)]),
@@ -49,6 +57,10 @@ export function buildToolDefs(ops: Operation[]): McpToolDef[] {
       required: Object.entries(op.params)
         .filter(([, v]) => v.required)
         .map(([k]) => k),
-    },
-  }));
+      // The runtime validator rejects undeclared top-level keys. Publish the
+      // same closed-object policy so tools/list and tools/call cannot drift.
+      additionalProperties: false,
+      },
+    };
+  });
 }

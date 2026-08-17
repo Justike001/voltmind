@@ -6,8 +6,9 @@
  *   - `voltmind remote ping`   — submits autopilot-cycle, polls get_job
  *   - `voltmind remote doctor` — calls run_doctor MCP op
  *
- * Token caching strategy: in-process Map keyed by mcp_url, value carries the
- * access_token + expires_at. CLI invocations are short-lived; the cache
+ * Token caching strategy: in-process Map keyed by mcp_url + issuer + client_id
+ * + a one-way client-secret fingerprint. The value carries the access_token
+ * + expires_at. CLI invocations are short-lived; the cache
  * amortizes when a single `voltmind remote ping` makes multiple calls (submit_job
  * + N × get_job). Persisting to disk would create a credential-on-disk
  * surface for marginal benefit — re-mint is a single sub-100ms /token call.
@@ -20,11 +21,13 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { createHash } from 'crypto';
 import type { VoltMindConfig } from './config.ts';
 import { discoverOAuth, mintClientCredentialsToken } from './remote-mcp-probe.ts';
 
 interface CachedToken {
   access_token: string;
+  mcp_url: string;
   /** Wall-clock ms when this token expires. Conservative: 30s safety margin
    *  against clock skew so we mint fresh BEFORE the server says expired. */
   expires_at_ms: number;
@@ -91,18 +94,22 @@ export class RemoteMcpError extends Error {
  * Not part of the public API — production code should consume this only via
  * the callRemoteTool funnel.
  */
-export function toRemoteMcpError(e: unknown, mcpUrl: string): RemoteMcpError {
+export function toRemoteMcpError(e: unknown, mcpUrl: string, signal?: AbortSignal): RemoteMcpError {
   if (e instanceof RemoteMcpError) return e;
   if (e instanceof Error) {
     // AbortError fires for both --timeout and SIGINT; the caller distinguishes
     // via the AbortSignal.reason it set, but the SDK swallows that. Fall back
     // to message inspection for the timeout sub-kind.
-    const isAbort = e.name === 'AbortError' || /abort/i.test(e.message);
+    const isAbort = signal?.aborted || e.name === 'AbortError' || /abort/i.test(e.message);
     if (isAbort) {
+      const reason = signal?.reason;
+      const timedOut = /timeout/i.test(reason instanceof Error ? reason.message : String(reason ?? ''));
       return new RemoteMcpError(
         'network',
-        `Request to ${mcpUrl} aborted: ${e.message}`,
-        { mcp_url: mcpUrl, kind: 'aborted' },
+        timedOut
+          ? `Request to ${mcpUrl} timed out`
+          : `Request to ${mcpUrl} aborted: ${e.message}`,
+        { mcp_url: mcpUrl, kind: timedOut ? 'timeout' : 'aborted' },
       );
     }
     // undici/fetch network errors (DNS, connection refused, TLS) end up here.
@@ -163,41 +170,102 @@ function resolveSecret(remote: NonNullable<VoltMindConfig['remote_mcp']>): strin
   return secret;
 }
 
+function isUnauthorizedError(error: unknown): boolean {
+  if (error && typeof error === 'object') {
+    const code = (error as { code?: unknown }).code;
+    if (code === 401 || code === '401') return true;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /401|unauthor|invalid.token/i.test(message);
+}
+
+function tokenCacheKey(
+  remote: NonNullable<VoltMindConfig['remote_mcp']>,
+  secret: string,
+): string {
+  const secretFingerprint = createHash('sha256').update(secret, 'utf8').digest('hex');
+  return JSON.stringify([
+    remote.mcp_url,
+    remote.issuer_url.replace(/\/+$/, ''),
+    remote.oauth_client_id,
+    secretFingerprint,
+  ]);
+}
+
 /**
  * Mint or reuse a cached access_token for the given config. Throws
  * RemoteMcpError on discovery failure or auth rejection.
  */
-async function getAccessToken(config: VoltMindConfig, force = false): Promise<string> {
+async function getAccessToken(
+  config: VoltMindConfig,
+  force = false,
+  signal?: AbortSignal,
+): Promise<string> {
   const remote = requireRemoteMcp(config);
-  const cached = tokenCache.get(remote.mcp_url);
+  const secret = resolveSecret(remote);
+  const cacheKey = tokenCacheKey(remote, secret);
+  const cached = tokenCache.get(cacheKey);
   if (!force && cached && cached.expires_at_ms > Date.now()) {
     return cached.access_token;
   }
 
-  const secret = resolveSecret(remote);
-
-  const disco = await discoverOAuth(remote.issuer_url);
+  const disco = await discoverOAuth(remote.issuer_url, {
+    signal,
+    allowedTokenEndpointOrigins: remote.token_endpoint_allowed_origins,
+  });
   if (!disco.ok) {
+    const kind = disco.reason === 'timeout'
+      ? 'timeout'
+      : disco.reason === 'aborted'
+        ? 'aborted'
+        : disco.reason === 'network'
+          ? 'unreachable'
+          : undefined;
     throw new RemoteMcpError(
-      disco.reason === 'http' || disco.reason === 'parse' ? 'discovery' : 'network',
+      disco.reason === 'http' || disco.reason === 'parse' || disco.reason === 'config' ? 'discovery' : 'network',
       `OAuth discovery failed: ${disco.message}`,
-      { ...(disco.status ? { status: disco.status } : {}), mcp_url: remote.mcp_url },
+      { ...(disco.status ? { status: disco.status } : {}), mcp_url: remote.mcp_url, ...(kind ? { kind } : {}) },
     );
   }
 
-  const tokenRes = await mintClientCredentialsToken(disco.metadata.token_endpoint, remote.oauth_client_id, secret);
+  const tokenRes = await mintClientCredentialsToken(
+    disco.metadata.token_endpoint,
+    remote.oauth_client_id,
+    secret,
+    { signal },
+  );
   if (!tokenRes.ok) {
+    const kind = tokenRes.reason === 'timeout'
+      ? 'timeout'
+      : tokenRes.reason === 'aborted'
+        ? 'aborted'
+        : tokenRes.reason === 'network'
+          ? 'unreachable'
+          : undefined;
     throw new RemoteMcpError(
-      tokenRes.reason === 'auth' ? 'auth' : tokenRes.reason === 'network' ? 'network' : 'discovery',
+      tokenRes.reason === 'auth'
+        ? 'auth'
+        : tokenRes.reason === 'network' || tokenRes.reason === 'timeout' || tokenRes.reason === 'aborted'
+          ? 'network'
+          : 'discovery',
       `OAuth /token failed: ${tokenRes.message}`,
-      { ...(tokenRes.status ? { status: tokenRes.status } : {}), mcp_url: remote.mcp_url },
+      {
+        ...(tokenRes.status ? { status: tokenRes.status } : {}),
+        mcp_url: remote.mcp_url,
+        ...(kind ? { kind } : {}),
+        ...(tokenRes.code ? { code: tokenRes.code } : {}),
+      },
     );
   }
 
   const ttlSec = tokenRes.token.expires_in ?? 3600;
   const expires_at_ms = Date.now() + Math.max(0, ttlSec * 1000 - 30_000);
-  const token: CachedToken = { access_token: tokenRes.token.access_token, expires_at_ms };
-  tokenCache.set(remote.mcp_url, token);
+  const token: CachedToken = { access_token: tokenRes.token.access_token, expires_at_ms, mcp_url: remote.mcp_url };
+  // Credential rotation at a URL invalidates the prior identity's token.
+  for (const [key, entry] of tokenCache) {
+    if (entry.mcp_url === remote.mcp_url && key !== cacheKey) tokenCache.delete(key);
+  }
+  tokenCache.set(cacheKey, token);
   return token.access_token;
 }
 
@@ -229,15 +297,17 @@ async function buildClient(mcpUrl: string, accessToken: string, signal?: AbortSi
 }
 
 /**
- * v0.31.1: options for `callRemoteTool`. Both fields optional; when absent the
- * call inherits SDK defaults (no client-side timeout, no abort).
+ * Options for `callRemoteTool`. Both fields are optional; calls without an
+ * explicit timeout use DEFAULT_REMOTE_MCP_TIMEOUT_MS.
  */
 export interface CallRemoteToolOptions {
-  /** Hard wall-clock cap for the whole call (token mint + tool call). Aborts on expiry. */
+  /** Hard wall-clock cap for the whole call (token mint + tool call). Defaults to 30s. */
   timeoutMs?: number;
   /** External AbortSignal (e.g. SIGINT handler). Composed with the timeout. */
   signal?: AbortSignal;
 }
+
+export const DEFAULT_REMOTE_MCP_TIMEOUT_MS = 30_000;
 
 /**
  * Compose an external signal with a timeout into a single AbortController.
@@ -291,12 +361,17 @@ export async function callRemoteTool(
   // v0.31.1 (CDX-4): wrap the WHOLE call in normalize-on-error so the
   // exhaustive switch on RemoteMcpError.reason at the dispatcher is sound.
   // No plain Error (undici, AbortError, JSON parse) escapes.
-  const { signal, cleanup } = buildAbortController(opts);
+  const { signal, cleanup } = buildAbortController({
+    ...opts,
+    timeoutMs: opts.timeoutMs ?? DEFAULT_REMOTE_MCP_TIMEOUT_MS,
+  });
   try {
     // Step 1: mint (or reuse cached) token. If THIS fails — bad credentials,
     // unreachable issuer, etc. — surface immediately. Retry-on-401 is for
     // the mid-session token-rotation case, NOT for initial-credentials-wrong.
-    const initialToken = await getAccessToken(config, false);
+    const secret = resolveSecret(remote);
+    const cacheKey = tokenCacheKey(remote, secret);
+    const initialToken = await getAccessToken(config, false, signal);
 
     // Step 2: try the tool call. On a 401-shaped failure here, drop the cache
     // and retry ONCE with a freshly-minted token (handles host-side rotation
@@ -331,20 +406,21 @@ export async function callRemoteTool(
       // RemoteMcpError already-typed: bubble unless it's a tool_error that
       // happens to look 401-shaped (e.g. SDK wrapping HTTP 401 in a tool
       // error). For plain Error, do the 401 sniff.
-      const message = e instanceof Error ? e.message : String(e);
-      const looksLike401 = /401|unauthor|invalid.token/i.test(message);
-      if (!looksLike401) throw e;
+      if (!isUnauthorizedError(e)) throw e;
       // Drop cached token and retry once with a fresh mint.
-      tokenCache.delete(remote.mcp_url);
+      tokenCache.delete(cacheKey);
       let freshToken: string;
       try {
-        freshToken = await getAccessToken(config, true);
+        freshToken = await getAccessToken(config, true, signal);
       } catch (mintErr) {
         if (mintErr instanceof RemoteMcpError && mintErr.reason === 'auth') {
+          const credentialCode = mintErr.detail?.code;
           throw new RemoteMcpError(
             'auth_after_refresh',
-            `Auth failed after token refresh. Verify oauth_client_id and secret are still valid; the host operator may need to re-run \`voltmind auth register-client\`.`,
-            { mcp_url: remote.mcp_url },
+            credentialCode === 'invalid_grant'
+              ? 'Auth failed after token refresh because the OAuth client credential is invalid or revoked. Re-register the client.'
+              : `Auth failed after token refresh. Verify oauth_client_id and secret are still valid; the host operator may need to re-run \`voltmind auth register-client\`.`,
+            { mcp_url: remote.mcp_url, ...(credentialCode ? { code: credentialCode } : {}) },
           );
         }
         throw mintErr;
@@ -352,8 +428,7 @@ export async function callRemoteTool(
       try {
         return await tryCall(freshToken);
       } catch (e2) {
-        const m2 = e2 instanceof Error ? e2.message : String(e2);
-        if (/401|unauthor|invalid.token/i.test(m2)) {
+        if (isUnauthorizedError(e2)) {
           throw new RemoteMcpError(
             'auth_after_refresh',
             `Auth failed after token refresh. Verify oauth_client_id and secret are still valid; the host operator may need to re-run \`voltmind auth register-client\`.`,
@@ -367,7 +442,7 @@ export async function callRemoteTool(
     // CDX-4: this is the funnel. ANYTHING that escapes the inner block becomes
     // a typed RemoteMcpError. The dispatcher's exhaustive switch can rely on
     // this contract.
-    throw toRemoteMcpError(e, remote.mcp_url);
+    throw toRemoteMcpError(e, remote.mcp_url, signal);
   } finally {
     cleanup();
   }

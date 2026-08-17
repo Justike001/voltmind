@@ -13,6 +13,7 @@ import { loadConfig } from '../core/config.ts';
 import { hasScope } from '../core/scope.ts';
 import { executeRawJsonb } from '../core/sql-query.ts';
 import { resolveBrainId } from '../core/brain-resolver.ts';
+import { randomUUID } from 'node:crypto';
 
 export interface ToolResult {
   content: { type: 'text'; text: string }[];
@@ -91,6 +92,26 @@ export interface DispatchOpts {
   stdio?: boolean;
 }
 
+/** Execute database work with the request source installed transaction-locally. */
+export async function withOperationSourceScope<T>(
+  engine: BrainEngine,
+  sourceId: string,
+  fn: (scopedEngine: BrainEngine) => Promise<T>,
+): Promise<T> {
+  // PGLite has no RLS/session GUC. Validate the id through the engine parity
+  // hook, then avoid wrapping handlers in a transaction: several operations
+  // already own atomic subtransactions (notably put_page/importFromContent),
+  // and PGLite does not support beginning a transaction from its tx object.
+  if (engine.kind === 'pglite') {
+    await engine.setSourceScope(sourceId);
+    return fn(engine);
+  }
+  return engine.transaction(async (tx) => {
+    await tx.setSourceScope(sourceId);
+    return fn(tx);
+  });
+}
+
 /**
  * Default capability scope granted to unauthenticated stdio MCP callers.
  *
@@ -129,7 +150,7 @@ export function resolveStdioScopes(): string[] {
  * transport (declared keys only, no values, no attacker-controlled key
  * names). Never throws; a DB blip must not flip a tool call to error.
  */
-function auditStdioRequest(
+async function auditStdioRequest(
   engine: BrainEngine,
   name: string,
   status: 'success' | 'error',
@@ -138,7 +159,7 @@ function auditStdioRequest(
   errorMessage?: string,
   sourceId?: string | null,
   brainId?: string | null,
-): void {
+): Promise<void> {
   try {
     const summary = summarizeMcpParams(name, params);
     // v0.42 (#861 audit follow-up): thread the resolved source_id + brain_id
@@ -146,13 +167,16 @@ function auditStdioRequest(
     // sourceId comes from the stdio dispatch (VOLTMIND_SOURCE / 'default');
     // brainId is the resolved mount id. Both nullable for forward-compat
     // with transports that don't resolve them.
-    void executeRawJsonb(
-      engine,
-      `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
-      [null, 'stdio', name, latencyMs, status, errorMessage ?? null, sourceId ?? null, brainId ?? null],
-      [summary],
-    ).catch(() => { /* best-effort audit */ });
+    const scopedSourceId = sourceId ?? 'default';
+    await withOperationSourceScope(engine, scopedSourceId, async (tx) => {
+      await executeRawJsonb(
+        tx,
+        `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+        [null, 'stdio', name, latencyMs, status, errorMessage ?? null, scopedSourceId, brainId ?? null],
+        [summary],
+      );
+    });
   } catch { /* best-effort audit */ }
 }
 
@@ -251,23 +275,75 @@ export function summarizeMcpParams(opName: string, params: unknown): ParamSummar
   };
 }
 
-/** Validate required params exist and have the expected type. Returns null on success, error message on failure. */
+function validateParamValue(def: Operation['params'][string], value: unknown, path: string): string | null {
+  if (def.type === 'string') {
+    if (typeof value !== 'string') return `Parameter "${path}" must be a string`;
+    if (def.enum && !def.enum.includes(value)) {
+      return `Parameter "${path}" must be one of: ${def.enum.join(', ')}`;
+    }
+    return null;
+  }
+  if (def.type === 'number') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return `Parameter "${path}" must be a finite number`;
+    }
+    return null;
+  }
+  if (def.type === 'boolean') {
+    return typeof value === 'boolean' ? null : `Parameter "${path}" must be a boolean`;
+  }
+  if (def.type === 'object') {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? null
+      : `Parameter "${path}" must be an object`;
+  }
+  if (!Array.isArray(value)) return `Parameter "${path}" must be an array`;
+  if (def.items) {
+    for (let index = 0; index < value.length; index += 1) {
+      const error = validateParamValue(def.items, value[index], `${path}[${index}]`);
+      if (error) return error;
+    }
+  }
+  return null;
+}
+
+/**
+ * Validate a tool call against the same closed ParamDef contract published by
+ * tools/list. Unknown top-level fields are rejected; array items recurse.
+ * JSON Schema's `default` annotation does not mutate instances, so omitted
+ * optional fields remain omitted here as well.
+ */
 export function validateParams(op: Operation, params: Record<string, unknown>): string | null {
+  for (const key of Object.keys(params)) {
+    if (!Object.prototype.hasOwnProperty.call(op.params, key)) {
+      return `Unknown parameter: ${key}`;
+    }
+  }
   for (const [key, def] of Object.entries(op.params)) {
     if (def.required && (params[key] === undefined || params[key] === null)) {
       return `Missing required parameter: ${key}`;
     }
     if (params[key] !== undefined && params[key] !== null) {
-      const val = params[key];
-      const expected = def.type;
-      if (expected === 'string' && typeof val !== 'string') return `Parameter "${key}" must be a string`;
-      if (expected === 'number' && typeof val !== 'number') return `Parameter "${key}" must be a number`;
-      if (expected === 'boolean' && typeof val !== 'boolean') return `Parameter "${key}" must be a boolean`;
-      if (expected === 'object' && (typeof val !== 'object' || Array.isArray(val))) return `Parameter "${key}" must be an object`;
-      if (expected === 'array' && !Array.isArray(val)) return `Parameter "${key}" must be an array`;
+      const error = validateParamValue(def, params[key], key);
+      if (error) return error;
     }
   }
   return null;
+}
+
+/** Remove high-risk payloads before an unexpected exception reaches local audit/logs. */
+export function sanitizeInternalErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  return raw
+    // Database statements commonly contain user content and identifiers.
+    .replace(/\b(?:SELECT|INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|WITH)\b[\s\S]*/gi, '<redacted-sql>')
+    // Windows and POSIX absolute paths can reveal usernames and vault layout.
+    .replace(/(?:[A-Za-z]:\\|\\\\)[^\r\n]*/g, '<redacted-path>')
+    .replace(/\/(?:Users|home|var|tmp|etc|opt|srv)\/[^\r\n]*/g, '<redacted-path>')
+    // Common credential and PII shapes.
+    .replace(/\b(client_secret|password|secret|token|api[_-]?key)\s*[=:]\s*[^\s,;]+/gi, '$1=<redacted>')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '<redacted-email>')
+    .slice(0, 512);
 }
 
 const stderrLogger: OperationContext['logger'] = {
@@ -336,7 +412,7 @@ export async function dispatchToolCall(
     // plain `Error: ...` string here breaks the contract on every
     // unknown-op path and the resulting test failure looked like a
     // transport bug.
-    audit?.('error', `unknown_tool: ${name}`);
+    await audit?.('error', `unknown_tool: ${name}`);
     return {
       content: [{ type: 'text', text: JSON.stringify({ error: 'unknown_tool', message: `Unknown tool: ${name}` }, null, 2) }],
       isError: true,
@@ -344,7 +420,7 @@ export async function dispatchToolCall(
   }
 
   if (op.localOnly && (opts.remote ?? true) !== false) {
-    audit?.('error', `local_only: ${name}`);
+    await audit?.('error', `local_only: ${name}`);
     return { content: [{ type: 'text', text: JSON.stringify({ error: 'operation_not_available', message: 'Operation ' + name + ' is local-only.' }, null, 2) }], isError: true };
   }
 
@@ -361,7 +437,7 @@ export async function dispatchToolCall(
     const requiredScope = op.scope || 'read';
     const grantedScopes = resolveStdioScopes();
     if (!hasScope(grantedScopes, requiredScope)) {
-      audit?.('error', `insufficient_scope: requires '${requiredScope}'`);
+      await audit?.('error', `insufficient_scope: requires '${requiredScope}'`);
       return {
         content: [{
           type: 'text',
@@ -379,7 +455,8 @@ export async function dispatchToolCall(
   const safeParams = params || {};
   const validationError = validateParams(op, safeParams);
   if (validationError) {
-    audit?.('error', `invalid_params: ${validationError}`);
+    // Do not persist attacker-controlled unknown key names in audit.
+    await audit?.('error', 'invalid_params');
     return {
       content: [{ type: 'text', text: JSON.stringify({ error: 'invalid_params', message: validationError }, null, 2) }],
       isError: true,
@@ -397,36 +474,46 @@ export async function dispatchToolCall(
       resolveWriteSourceId(ctx, safeParams.source_id);
     }
 
-    const result = await op.handler(ctx, safeParams);
-    const out: ToolResult = { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    // v0.31 (eD3 + eE4): best-effort _meta.brain_hot_memory injection.
-    // The hook is wrapped in its own try/catch — any DB blip / cache miss /
-    // helper crash degrades to no `_meta` rather than flipping the whole
-    // tool call to error.
-    if (opts.metaHook) {
-      try {
-        const meta = await opts.metaHook(name, ctx);
-        if (meta && Object.keys(meta).length > 0) out._meta = meta;
-      } catch (metaErr) {
-        const msg = metaErr instanceof Error ? metaErr.message : String(metaErr);
-        ctx.logger.warn(`[mcp] _meta hook failed for ${name}: ${msg}; degrading to no-_meta`);
+    const out = await withOperationSourceScope(engine, ctx.sourceId, async (tx) => {
+      const scopedCtx: OperationContext = { ...ctx, engine: tx };
+      const result = await op.handler(scopedCtx, safeParams);
+      const scopedOut: ToolResult = { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      // Keep the meta hook in the same scoped transaction. Restricted
+      // Postgres roles otherwise see an unset GUC and fail closed here.
+      if (opts.metaHook) {
+        try {
+          const meta = await opts.metaHook(name, scopedCtx);
+          if (meta && Object.keys(meta).length > 0) scopedOut._meta = meta;
+        } catch (metaErr) {
+          const msg = sanitizeInternalErrorMessage(metaErr);
+          scopedCtx.logger.warn(`[mcp] _meta hook failed for ${name}: ${msg}; degrading to no-_meta`);
+        }
       }
-    }
-    audit?.('success');
+      return scopedOut;
+    });
+    await audit?.('success');
     return out;
   } catch (e: unknown) {
     if (e instanceof OperationError) {
-      audit?.('error', `${e.code}: ${e.message}`);
-      return { content: [{ type: 'text', text: JSON.stringify(e.toJSON(), null, 2) }], isError: true };
+      const safeMessage = sanitizeInternalErrorMessage(e.message);
+      const safeSuggestion = e.suggestion ? sanitizeInternalErrorMessage(e.suggestion) : undefined;
+      const safeDocs = e.docs ? sanitizeInternalErrorMessage(e.docs) : undefined;
+      await audit?.('error', `${e.code}: ${safeMessage}`);
+      const payload = opts.remote === false
+        ? e.toJSON()
+        : { error: e.code, message: safeMessage, suggestion: safeSuggestion, docs: safeDocs };
+      return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }], isError: true };
     }
     // Non-OperationError (uncaught throws) — wrap in the same shape so
     // every error response is JSON-parseable. The pre-v0.31 path emitted
     // plain `Error: ${msg}` strings here, which broke any caller that
     // tried JSON.parse(content).
-    const msg = e instanceof Error ? e.message : String(e);
-    audit?.('error', `internal_error: ${msg}`);
+    const requestId = randomUUID();
+    const safeMessage = sanitizeInternalErrorMessage(e);
+    ctx.logger.error(`[mcp] internal_error request_id=${requestId}: ${safeMessage}`);
+    await audit?.('error', `internal_error request_id=${requestId}: ${safeMessage}`);
     return {
-      content: [{ type: 'text', text: JSON.stringify({ error: 'internal_error', message: msg }, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify({ error: 'internal_error', request_id: requestId }, null, 2) }],
       isError: true,
     };
   }

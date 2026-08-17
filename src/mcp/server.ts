@@ -59,15 +59,9 @@ export async function startMcpServer(
   // shape and cast through `any` (the SDK accepts it via the ServerResult union).
   server.setRequestHandler(CallToolRequestSchema, async (request: any): Promise<any> => {
     const { name, arguments: params } = request.params;
-    if (!mcpOperations.some(op => op.name === name)) {
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({ error: 'unknown_tool', message: `Unknown tool: ${name}` }, null, 2),
-        }],
-        isError: true,
-      };
-    }
+    // Always use the canonical registry at call time. tools/list remains
+    // scope-filtered, but a direct call to a known filtered tool must produce
+    // insufficient_scope rather than masquerading as unknown_tool.
     // v0.28: stdio MCP has no per-token auth (local pipe). Default the
     // takes-holder allow-list to ['world'] so agent-facing callers don't
     // see private hunches via takes_list / takes_search / query. Operators

@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { saveConfig, loadConfig, loadConfigFileOnly, toEngineConfig, voltmindPath, configPath, isThinClient, type VoltMindConfig } from '../core/config.ts';
 import { createEngine } from '../core/engine-factory.ts';
-import { discoverOAuth, mintClientCredentialsToken, smokeTestMcp } from '../core/remote-mcp-probe.ts';
+import { createRemoteProbeDeadline, discoverOAuth, mintClientCredentialsToken, smokeTestMcp } from '../core/remote-mcp-probe.ts';
 import { defaultPersonalBrainRoot, installPersonalBrainScaffold } from '../core/personal-brain-scaffold.ts';
 
 export async function runInit(args: string[]) {
@@ -605,8 +605,12 @@ async function initRemoteMcp(opts: {
     console.log(`  mcp:    ${mcpUrl}`);
   }
 
+  // One wall-clock deadline spans discovery, credential minting, and MCP
+  // initialize so a stalled token endpoint cannot outlive the setup probe.
+  const probeDeadline = createRemoteProbeDeadline({ timeoutMs: 30_000 });
+
   // 1. OAuth discovery
-  const disco = await discoverOAuth(issuerUrl);
+  const disco = await discoverOAuth(issuerUrl, { signal: probeDeadline.signal });
   if (!disco.ok) {
     fail(
       `discovery_${disco.reason}`,
@@ -618,7 +622,12 @@ async function initRemoteMcp(opts: {
   if (!jsonOutput) console.log(`  ✓ OAuth discovery (token_endpoint=${disco.metadata.token_endpoint})`);
 
   // 2. Token round-trip
-  const tokenRes = await mintClientCredentialsToken(disco.metadata.token_endpoint, clientId, clientSecret);
+  const tokenRes = await mintClientCredentialsToken(
+    disco.metadata.token_endpoint,
+    clientId,
+    clientSecret,
+    { signal: probeDeadline.signal },
+  );
   if (!tokenRes.ok) {
     fail(
       `token_${tokenRes.reason}`,
@@ -630,7 +639,11 @@ async function initRemoteMcp(opts: {
   if (!jsonOutput) console.log(`  ✓ OAuth /token (${tokenRes.token.token_type ?? 'bearer'}, scope=${tokenRes.token.scope ?? 'unspecified'})`);
 
   // 3. MCP smoke
-  const mcpRes = await smokeTestMcp(mcpUrl, tokenRes.token.access_token);
+  const mcpRes = await smokeTestMcp(
+    mcpUrl,
+    tokenRes.token.access_token,
+    { signal: probeDeadline.signal },
+  );
   if (!mcpRes.ok) {
     fail(
       `mcp_smoke_${mcpRes.reason}`,
@@ -639,6 +652,7 @@ async function initRemoteMcp(opts: {
       { detail: mcpRes.message, ...(mcpRes.status ? { status: mcpRes.status } : {}) },
     );
   }
+  probeDeadline.cleanup();
   if (!jsonOutput) console.log(`  ✓ MCP initialize`);
 
   // 4. Persist config. Preserve any existing AI/storage/etc. fields on

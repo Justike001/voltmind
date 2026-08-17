@@ -649,7 +649,8 @@ export interface BrainEngine {
    * v0.42 #6: set the `app.source_id` session GUC for the current transaction.
    * Activates the RLS source-isolation policies (migration v112) when the app
    * role lacks BYPASSRLS. MUST be called inside a transaction (SET LOCAL).
-   * Inert under the default BYPASSRLS postgres role. No-op on PGLite.
+   * Inert under the default BYPASSRLS postgres role. PGLite validates the
+   * source id but otherwise no-ops. Failures must propagate (fail closed).
    * Defense-in-depth on top of the app-layer sourceScopeOpts(ctx) WHERE filters.
    */
   setSourceScope(sourceId: string): Promise<void>;
