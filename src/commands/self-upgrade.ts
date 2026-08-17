@@ -4,6 +4,11 @@ import { fetchChangelog, fetchLatestRelease } from './check-update.ts';
 import { detectInstallMethod, runUpgrade } from './upgrade.ts';
 import { writeUpdateCache } from '../core/self-upgrade.ts';
 
+export interface RunSelfUpgradeDeps {
+  fetchLatestRelease?: typeof fetchLatestRelease;
+  runUpgrade?: typeof runUpgrade;
+}
+
 /**
  * `voltmind self-upgrade [--check-only] [--force] [--json]`
  *
@@ -17,7 +22,10 @@ import { writeUpdateCache } from '../core/self-upgrade.ts';
  *   --force       Apply even if not behind (re-run the install-method swap).
  *   --json        Machine-readable output for the check.
  */
-export async function runSelfUpgrade(args: string[]): Promise<void> {
+export async function runSelfUpgrade(
+  args: string[],
+  deps: RunSelfUpgradeDeps = {},
+): Promise<void> {
   if (args.includes('--help') || args.includes('-h')) {
     console.log(
       'Usage: voltmind self-upgrade [--check-only] [--force] [--json]\n\n' +
@@ -34,7 +42,7 @@ export async function runSelfUpgrade(args: string[]): Promise<void> {
   const force = args.includes('--force');
   const json = args.includes('--json');
 
-  const release = await fetchLatestRelease();
+  const release = await (deps.fetchLatestRelease ?? fetchLatestRelease)();
   const latest = release ? release.tag.replace(/^v/, '') : null;
   const behind = !!latest && isValidVersionString(latest) && isMinorOrMajorBump(VERSION, latest);
 
@@ -97,5 +105,5 @@ export async function runSelfUpgrade(args: string[]): Promise<void> {
   }
 
   // Apply: delegate to the hardcoded upgrade path (full swap + post-upgrade).
-  await runUpgrade([]);
+  await (deps.runUpgrade ?? runUpgrade)([]);
 }

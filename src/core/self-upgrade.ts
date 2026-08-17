@@ -29,7 +29,7 @@
 import { closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { voltmindPath } from './config.ts';
-import { acquirePackLock, type PackLockOpts } from './schema-pack/pack-lock.ts';
+import { acquirePackLock, withPackLock, type PackLockOpts } from './schema-pack/pack-lock.ts';
 import { isMinorOrMajorBump, isValidVersionString, parseSemver, semverGt, semverLte } from './semver.ts';
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -410,6 +410,22 @@ export function releaseRefreshLock(lockPath: string): void {
   } catch {
     /* already gone */
   }
+}
+
+/**
+ * Shared cross-process mutex for every package-replacement entry point.
+ * The underlying lock refreshes while migrations/verification run and reclaims
+ * dead or expired holders. Ordinary CLI commands never acquire this lock.
+ */
+export function withUpgradeLock<T>(
+  fn: () => Promise<T> | T,
+  opts: Pick<PackLockOpts, 'now' | 'isPidAlive' | 'ttlMs'> = {},
+): Promise<T> {
+  return withPackLock('self-upgrade', {
+    lockDir: locksDir(),
+    ttlMs: 10 * 60_000,
+    ...opts,
+  }, fn);
 }
 
 // ── Breadcrumb reconciliation (attribution for crash-on-launch) ──────────────

@@ -1,15 +1,48 @@
 import { execSync, execFileSync } from 'child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, realpathSync } from 'fs';
+import {
+  appendFileSync,
+  chmodSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'fs';
 import { basename, join, dirname, resolve } from 'path';
 import { VERSION } from '../version.ts';
+import { voltmindPath } from '../core/config.ts';
+import { withUpgradeLock } from '../core/self-upgrade.ts';
+import { PackLockBusyError } from '../core/schema-pack/pack-lock.ts';
 
 const VOLTMIND_GITHUB_REPO = 'Justike001/voltmind';
 
-export async function runUpgrade(args: string[]) {
+export interface RunUpgradeDeps {
+  /** Test seam: substituted for the package swap body, but still lock-protected. */
+  lockedAction?: () => Promise<void> | void;
+}
+
+export async function runUpgrade(args: string[], deps: RunUpgradeDeps = {}) {
   if (args.includes('--help') || args.includes('-h')) {
     console.log('Usage: voltmind upgrade\n\nSelf-update the CLI.\n\nDetects install method (bun, binary, clawhub) and runs the appropriate update.\nAfter upgrading, shows what\'s new and offers to set up new features.');
     return;
   }
+
+  try {
+    await withUpgradeLock(() => deps.lockedAction ? deps.lockedAction() : runUpgradeLocked());
+  } catch (error) {
+    if (error instanceof PackLockBusyError) {
+      console.error(`Another VoltMind upgrade is already in progress (pid=${error.heldBy}).`);
+      return;
+    }
+    throw error;
+  }
+}
+
+async function runUpgradeLocked(): Promise<void> {
 
   // Capture old version BEFORE upgrading (Codex finding: old binary runs this code)
   const oldVersion = VERSION;
@@ -171,7 +204,8 @@ function verifyUpgrade(): string {
 }
 
 /**
- * Append a structured record to ~/.voltmind/upgrade-errors.jsonl when a
+ * Append a structured record to the canonical VoltMind home's
+ * upgrade-errors.jsonl (honoring VOLTMIND_HOME) when a
  * best-effort phase of the upgrade fails (e.g., `voltmind post-upgrade`
  * silently bombing). Without this trail, users end up with half-upgraded
  * brains and no signal. `voltmind doctor` reads this file and surfaces the
@@ -185,9 +219,9 @@ export function recordUpgradeError(record: {
   hint: string;
 }): void {
   try {
-    const dir = join(process.env.HOME || '', '.voltmind');
+    const dir = voltmindPath();
     mkdirSync(dir, { recursive: true });
-    const path = join(dir, 'upgrade-errors.jsonl');
+    const path = voltmindPath('upgrade-errors.jsonl');
     const line = JSON.stringify({
       ts: new Date().toISOString(),
       phase: record.phase,
@@ -196,18 +230,19 @@ export function recordUpgradeError(record: {
       error: record.error,
       hint: record.hint,
     }) + '\n';
-    appendFileSync(path, line);
+    appendFileSync(path, line, { encoding: 'utf8', mode: 0o600 });
+    try { chmodSync(path, 0o600); } catch { /* platform-specific */ }
   } catch {
     // Recording errors is itself best-effort. The user will still see the
     // underlying failure in stdout/stderr from the original command.
   }
 }
 
-function saveUpgradeState(oldVersion: string, newVersion: string) {
+export function saveUpgradeState(oldVersion: string, newVersion: string): void {
   try {
-    const dir = join(process.env.HOME || '', '.voltmind');
+    const dir = voltmindPath();
     mkdirSync(dir, { recursive: true });
-    const statePath = join(dir, 'upgrade-state.json');
+    const statePath = voltmindPath('upgrade-state.json');
     const state: Record<string, unknown> = existsSync(statePath)
       ? JSON.parse(readFileSync(statePath, 'utf-8'))
       : {};
@@ -216,11 +251,33 @@ function saveUpgradeState(oldVersion: string, newVersion: string) {
       to: newVersion,
       ts: new Date().toISOString(),
     };
-    writeFileSync(statePath, JSON.stringify(state, null, 2));
+    atomicWritePrivate(statePath, JSON.stringify(state, null, 2) + '\n');
   } catch {
     // best-effort
   }
 }
+
+function atomicWritePrivate(
+  path: string,
+  content: string,
+  replace: (from: string, to: string) => void = renameSync,
+): void {
+  const tempPath = `${path}.tmp.${process.pid}.${Date.now()}`;
+  const fd = openSync(tempPath, 'w', 0o600);
+  try {
+    writeFileSync(fd, content, 'utf8');
+  } finally {
+    closeSync(fd);
+  }
+  try {
+    replace(tempPath, path);
+    try { chmodSync(path, 0o600); } catch { /* platform-specific */ }
+  } finally {
+    if (existsSync(tempPath)) rmSync(tempPath, { force: true });
+  }
+}
+
+export const __testing = { atomicWritePrivate };
 
 /**
  * Post-upgrade feature discovery + migration application.
@@ -261,7 +318,7 @@ export async function runPostUpgrade(args: string[] = []): Promise<void> {
   }
   // Cosmetic: print feature pitches for migrations newer than the prior binary.
   try {
-    const statePath = join(process.env.HOME || '', '.voltmind', 'upgrade-state.json');
+    const statePath = voltmindPath('upgrade-state.json');
     if (existsSync(statePath)) {
       const state = JSON.parse(readFileSync(statePath, 'utf-8'));
       const from = state?.last_upgrade?.from;
