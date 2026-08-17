@@ -2335,11 +2335,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   // ---------------------------------------------------------------------------
   // Admin SPA static files (v0.36.x #1090)
   // ---------------------------------------------------------------------------
-  // Two-tier resolution:
-  //   1. Dev path — admin/dist next to cwd. Vite rebuilds land here first,
-  //      so devs hacking on the SPA see changes without re-running
-  //      build-admin-embedded.
-  //   2. Binary path — `src/admin-embedded.ts` exports `ADMIN_ASSETS`, a
+  // Two-tier resolution. The immutable embedded artifact is the production
+  // default. A mutable cwd-relative admin/dist is used only when the operator
+  // explicitly sets VOLTMIND_ADMIN_DEV_ASSETS=1 for local SPA development.
+  // `src/admin-embedded.ts` exports `ADMIN_ASSETS`, a
   //      manifest of request-path → resolved-path keyed by every file in
   //      admin/dist at generation time. Bun's `with { type: 'file' }` ESM
   //      imports resolve correctly inside the compiled binary, so a
@@ -2350,7 +2349,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   const path = await import('path');
   const fs = await import('fs');
   const adminDistPath = path.join(process.cwd(), 'admin', 'dist');
-  const useDevPath = fs.existsSync(adminDistPath) && options.adminApiOnly !== true;
+  const useDevPath = process.env.VOLTMIND_ADMIN_DEV_ASSETS === '1'
+    && fs.existsSync(adminDistPath)
+    && options.adminApiOnly !== true;
   if (useDevPath) {
     app.use('/admin', express.static(adminDistPath));
     app.get('/admin/{*path}', (req: Request, res: Response, next: NextFunction) => {
@@ -2363,7 +2364,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     // Embedded path. Read assets from the generated manifest. Cache the
     // bytes per asset on first request — these never change for a given
     // binary, so subsequent requests skip the fs read.
-    const { ADMIN_ASSETS, ADMIN_INDEX_HTML } = await import('../admin-embedded.ts');
+    const { ADMIN_ASSETS, ADMIN_INDEX_HTML, ADMIN_CONTENT_SHA256 } = await import('../admin-embedded.ts');
     const cache = new Map<string, Buffer>();
     function loadAsset(asset: { path: string }): Buffer {
       const hit = cache.get(asset.path);
@@ -2379,6 +2380,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       const hit = ADMIN_ASSETS[req.path];
       if (hit) {
         res.setHeader('Content-Type', hit.mime);
+        res.setHeader('X-VoltMind-Admin-Build', ADMIN_CONTENT_SHA256);
         res.send(loadAsset(hit));
         return;
       }
@@ -2386,6 +2388,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       // so client-side routing takes over (login, dashboard, agents, ...).
       if (ADMIN_INDEX_HTML) {
         res.setHeader('Content-Type', ADMIN_INDEX_HTML.mime);
+        res.setHeader('X-VoltMind-Admin-Build', ADMIN_CONTENT_SHA256);
         res.send(loadAsset(ADMIN_INDEX_HTML));
         return;
       }

@@ -67,6 +67,12 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
+      - name: Build and verify immutable Admin artifact
+        shell: bash
+        run: |
+          (cd admin && bun install --frozen-lockfile)
+          bun run build:admin
+          bun run check:admin-embedded
       - name: Compile
         run: bun build --compile --target=${{ matrix.target }} --outfile bin/${{ matrix.artifact }} src/cli.ts
       - name: Generate checksum (Unix)

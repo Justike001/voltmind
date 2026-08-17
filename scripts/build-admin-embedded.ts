@@ -26,6 +26,7 @@
  */
 
 import { readdirSync, statSync, writeFileSync, existsSync, readFileSync } from 'fs';
+import { createHash } from 'crypto';
 import { join, relative, posix } from 'path';
 
 const REPO = join(import.meta.dir, '..');
@@ -84,6 +85,15 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+const contentHash = createHash('sha256');
+for (const rel of files) {
+  contentHash.update(rel.split(/[\\/]/).join('/'));
+  contentHash.update('\0');
+  contentHash.update(readFileSync(join(DIST, rel)));
+  contentHash.update('\0');
+}
+const distSha256 = contentHash.digest('hex');
+
 const imports: string[] = [];
 const manifestEntries: string[] = [];
 
@@ -102,7 +112,7 @@ for (let i = 0; i < files.length; i++) {
 
 const content = `// AUTO-GENERATED — do not edit by hand.
 // Run \`bun run scripts/build-admin-embedded.ts\` to regenerate.
-// Source: admin/dist/ at ${new Date().toISOString().slice(0, 10)}.
+// Source: admin/dist/ content sha256 ${distSha256}.
 //
 // Bun resolves the file: imports to a path that works at runtime even
 // inside a compiled binary (\`bun build --compile\`). The manifest maps
@@ -123,6 +133,7 @@ ${manifestEntries.join('\n')}
 export const ADMIN_INDEX_HTML: AdminAsset = ADMIN_ASSETS['/admin/index.html'];
 
 export const ADMIN_ASSET_COUNT = ${files.length};
+export const ADMIN_CONTENT_SHA256 = ${JSON.stringify(distSha256)};
 `;
 
 const existing = existsSync(OUT) ? readFileSync(OUT, 'utf-8') : '';

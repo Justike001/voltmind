@@ -85,6 +85,7 @@ state/
 .omo/
 .deploy/
 .tools/
+admin/*.tsbuildinfo
 
 # Local-only: onboarding contains real internal Gogs infras (host IP, org, admin acct, company domain).
 # Kept on the host for the agent; never committed/pushed.

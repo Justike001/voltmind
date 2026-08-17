@@ -15,6 +15,7 @@ import {
   type SourceSummary,
 } from '../api';
 import voltageLogoV from '../assets/voltage-logo-v.png';
+import { DIALOG_FOCUSABLE_SELECTOR, isRowActivationKey, trappedFocusTarget } from '../accessibility';
 
 type View = 'overview' | 'sources' | 'oauth' | 'jobs' | 'autopilot' | 'audit';
 const views: Array<{ id: View; label: string; hint: string }> = [
@@ -63,6 +64,12 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 function Loading() { return <div className="loading-state">Loading…</div>; }
+
+function activateRow(event: React.KeyboardEvent<HTMLTableRowElement>, action: () => void) {
+  if (!isRowActivationKey(event.key)) return;
+  event.preventDefault();
+  action();
+}
 
 function ErrorBanner({ error, onRetry }: { error: string; onRetry?: () => void }) {
   return <div className="error-banner" role="alert"><span>{error}</span>{onRetry && <button onClick={onRetry}>Retry</button>}</div>;
@@ -146,7 +153,7 @@ function SourcesPage({ selected, onSelect }: { selected: string | null; onSelect
   if (selected) return <SourceWorkspace sourceId={selected} onBack={() => onSelect(null)} onChanged={load} />;
   return <section className="page"><PageHeader eyebrow="SourceID management" title="Sources" description="Every repository, credential, job, and cycle is anchored to a SourceID." action={<button className="primary-button" onClick={() => setCreating(true)}>New source</button>} />
     <div className="toolbar"><label className="check"><input type="checkbox" checked={includeArchived} onChange={e => setIncludeArchived(e.target.checked)} /> Include archived</label><button className="secondary-button" onClick={load}>Refresh</button></div>
-    {error && <ErrorBanner error={error} onRetry={load} />}{loading ? <Loading /> : sources.length === 0 ? <Empty>No sources found.</Empty> : <div className="table-card"><table><thead><tr><th>Source</th><th>Status</th><th>Pages</th><th>Clients</th><th>Federated</th><th>Last sync</th></tr></thead><tbody>{sources.map(source => <tr key={source.id} onClick={() => onSelect(source.id)} className="clickable"><td><strong>{source.name}</strong><code>{source.id}</code></td><td><StatusBadge value={source.archived ? 'archived' : 'active'} /></td><td>{source.page_count}</td><td>{source.oauth_client_count}</td><td>{source.federated ? 'Enabled' : 'Off'}</td><td>{formatTime(source.last_sync_at)}</td></tr>)}</tbody></table></div>}
+    {error && <ErrorBanner error={error} onRetry={load} />}{loading ? <Loading /> : sources.length === 0 ? <Empty>No sources found.</Empty> : <div className="table-card"><table><thead><tr><th>Source</th><th>Status</th><th>Pages</th><th>Clients</th><th>Federated</th><th>Last sync</th></tr></thead><tbody>{sources.map(source => <tr key={source.id} onClick={() => onSelect(source.id)} onKeyDown={event => activateRow(event, () => onSelect(source.id))} className="clickable" role="button" tabIndex={0} aria-label={`Open source ${source.name}`}><td><strong>{source.name}</strong><code>{source.id}</code></td><td><StatusBadge value={source.archived ? 'archived' : 'active'} /></td><td>{source.page_count}</td><td>{source.oauth_client_count}</td><td>{source.federated ? 'Enabled' : 'Off'}</td><td>{formatTime(source.last_sync_at)}</td></tr>)}</tbody></table></div>}
     {creating && <CreateSourceModal onClose={() => setCreating(false)} onCreated={async id => { setCreating(false); await load(); onSelect(id); }} />}
   </section>;
 }
@@ -222,7 +229,7 @@ function JobsPage({ initialSource }: { initialSource: string | null }) {
   const visibleJobs = useMemo(() => jobs.filter(job => !jobType || job.name.toLowerCase().includes(jobType.toLowerCase())), [jobs, jobType]);
   const safePhases = useMemo(() => Array.from(new Set(profiles.flatMap(item => item.phases))).filter(item => item !== 'purge'), [profiles]);
   const submit = async () => { if (!sourceId || (profile === 'custom' && !customPhases.length)) return; try { const result = await api.submitCycle(sourceId, { profile, phases: profile === 'custom' ? customPhases : undefined, dry_run: dryRun }); await load(); setSelected((await api.job(result.data.job_id)).data); } catch (cause) { setError(errorText(cause)); } };
-  return <section className="page"><PageHeader eyebrow="Background work" title="Jobs & Dream Cycles" description="Filter by SourceID, inspect progress, and safely submit approved cycle profiles." action={<button className="secondary-button" onClick={load}>Refresh</button>} /><div className="job-layout"><div><div className="toolbar"><label>Source <select value={sourceId} onChange={e => setSourceId(e.target.value)}>{sources.map(s => <option key={s.id} value={s.id}>{sourceOptionLabel(s)}</option>)}</select></label><label>Status <select value={status} onChange={e => setStatus(e.target.value)}><option value="">All</option>{['waiting','active','delayed','completed','failed','dead','cancelled'].map(s => <option key={s}>{s}</option>)}</select></label><label>Job type<input value={jobType} onChange={e => setJobType(e.target.value)} placeholder="Filter loaded jobs" /></label></div>{error && <ErrorBanner error={error} onRetry={load} />}{visibleJobs.length ? <div className="table-card"><table><thead><tr><th>ID</th><th>Job</th><th>Status</th><th>Attempts</th><th>Updated</th></tr></thead><tbody>{visibleJobs.map(job => <tr key={job.id} className="clickable" onClick={() => setSelected(job)}><td>#{job.id}</td><td><strong>{job.name}</strong><code>{job.queue}</code></td><td><StatusBadge value={job.status} /></td><td>{job.attempts_made}/{job.max_attempts}</td><td>{formatTime(job.updated_at)}</td></tr>)}</tbody></table></div> : <Empty>Select a source or no jobs match these filters.</Empty>}<div className="pagination"><button onClick={previous} disabled={!history.length}>Previous</button><button onClick={next} disabled={!nextCursor}>Next</button></div></div>
+  return <section className="page"><PageHeader eyebrow="Background work" title="Jobs & Dream Cycles" description="Filter by SourceID, inspect progress, and safely submit approved cycle profiles." action={<button className="secondary-button" onClick={load}>Refresh</button>} /><div className="job-layout"><div><div className="toolbar"><label>Source <select value={sourceId} onChange={e => setSourceId(e.target.value)}>{sources.map(s => <option key={s.id} value={s.id}>{sourceOptionLabel(s)}</option>)}</select></label><label>Status <select value={status} onChange={e => setStatus(e.target.value)}><option value="">All</option>{['waiting','active','delayed','completed','failed','dead','cancelled'].map(s => <option key={s}>{s}</option>)}</select></label><label>Job type<input value={jobType} onChange={e => setJobType(e.target.value)} placeholder="Filter loaded jobs" /></label></div>{error && <ErrorBanner error={error} onRetry={load} />}{visibleJobs.length ? <div className="table-card"><table><thead><tr><th>ID</th><th>Job</th><th>Status</th><th>Attempts</th><th>Updated</th></tr></thead><tbody>{visibleJobs.map(job => <tr key={job.id} className="clickable" onClick={() => setSelected(job)} onKeyDown={event => activateRow(event, () => setSelected(job))} role="button" tabIndex={0} aria-label={`Open job ${job.id}: ${job.name}`}><td>#{job.id}</td><td><strong>{job.name}</strong><code>{job.queue}</code></td><td><StatusBadge value={job.status} /></td><td>{job.attempts_made}/{job.max_attempts}</td><td>{formatTime(job.updated_at)}</td></tr>)}</tbody></table></div> : <Empty>Select a source or no jobs match these filters.</Empty>}<div className="pagination"><button onClick={previous} disabled={!history.length}>Previous</button><button onClick={next} disabled={!nextCursor}>Next</button></div></div>
     <aside className="cycle-panel"><p className="eyebrow">Submit cycle</p><h2>Dream Cycle</h2><label>Profile<select value={profile} onChange={e => setProfile(e.target.value)}>{profiles.map(p => <option key={p.id} value={p.id}>{p.id}</option>)}<option value="custom">custom · advanced</option></select></label>{profile === 'custom' ? <details className="advanced-phases" open><summary>Advanced phases</summary><div>{safePhases.map(phase => <label className="check" key={phase}><input type="checkbox" checked={customPhases.includes(phase)} onChange={e => setCustomPhases(items => e.target.checked ? [...items, phase] : items.filter(item => item !== phase))} /> {phase}</label>)}</div></details> : <div className="phase-list">{profiles.find(p => p.id === profile)?.phases.map(p => <span key={p}>{p}</span>)}</div>}<label className="check"><input type="checkbox" checked={dryRun} onChange={e => setDryRun(e.target.checked)} /> Dry run</label><button className="primary-button" onClick={submit} disabled={!sourceId || (profile === 'custom' && !customPhases.length)}>Submit cycle</button><small>Purge is never offered. Custom phases are sent only from this explicit Advanced selection.</small></aside></div>{selected && <JobModal initial={selected} onClose={() => setSelected(null)} onChanged={load} />}</section>;
 }
 
@@ -251,5 +258,38 @@ function AuditPage() {
 }
 
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose?: () => void }) {
-  return <div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true" aria-label={title}><div className="modal-header"><h2>{title}</h2>{onClose && <button aria-label="Close" onClick={onClose}>×</button>}</div>{children}</section></div>;
+  const dialogRef = React.useRef<HTMLElement>(null);
+  const closeRef = React.useRef(onClose);
+  const titleId = React.useId();
+
+  React.useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  React.useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(DIALOG_FOCUSABLE_SELECTOR) ?? []).filter(element => !element.hidden);
+    (focusable()[0] ?? dialog)?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && closeRef.current) {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialog) return;
+      const items = focusable();
+      const target = trappedFocusTarget(items, document.activeElement as HTMLElement | null, event.shiftKey);
+      if (target !== undefined) {
+        event.preventDefault();
+        (target ?? dialog).focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, []);
+
+  return <div className="modal-backdrop" role="presentation"><section ref={dialogRef} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><div className="modal-header"><h2 id={titleId}>{title}</h2>{onClose && <button aria-label="Close" onClick={onClose}>×</button>}</div>{children}</section></div>;
 }

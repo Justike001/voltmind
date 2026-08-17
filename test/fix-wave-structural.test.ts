@@ -42,8 +42,10 @@ describe('v0.36.1.x #1090 — admin embed two-tier resolution', () => {
     expect(src).toMatch(/import\(['"]\.\.\/admin-embedded/);
     expect(src).toMatch(/ADMIN_ASSETS/);
     expect(src).toMatch(/ADMIN_INDEX_HTML/);
-    // Two-tier: dev path (cwd-relative admin/dist) AND embedded manifest fallback
+    // Two-tier: explicit dev opt-in AND immutable embedded manifest fallback.
     expect(src).toMatch(/useDevPath/);
+    expect(src).toMatch(/VOLTMIND_ADMIN_DEV_ASSETS/);
+    expect(src).toMatch(/ADMIN_CONTENT_SHA256/);
   });
 
   test('src/admin-embedded.ts is auto-generated with file: imports', () => {
@@ -52,14 +54,29 @@ describe('v0.36.1.x #1090 — admin embed two-tier resolution', () => {
     expect(src).toMatch(/with \{ type: 'file' \}/);
     expect(src).toMatch(/export const ADMIN_ASSETS/);
     expect(src).toMatch(/export const ADMIN_INDEX_HTML/);
+    expect(src).toMatch(/export const ADMIN_CONTENT_SHA256/);
   });
 
   test('build script + CI guard exist', () => {
     const buildSrc = readFileSync('scripts/build-admin-embedded.ts', 'utf8');
     expect(buildSrc).toMatch(/walk\(DIST/);
     expect(buildSrc).toMatch(/with \{ type: 'file' \}/);
+    expect(buildSrc).toMatch(/createHash\(['"]sha256['"]\)/);
+    expect(buildSrc).not.toMatch(/new Date\(\)/);
     const guard = readFileSync('scripts/check-admin-embedded.sh', 'utf8');
     expect(guard).toMatch(/git diff --exit-code -- src\/admin-embedded\.ts/);
+  });
+
+  test('release workflow rebuilds and verifies the Admin artifact before compiling', () => {
+    const release = readFileSync('.github/workflows/release.yml', 'utf8');
+    const installAdmin = release.indexOf('(cd admin && bun install --frozen-lockfile)');
+    const buildAdmin = release.indexOf('bun run build:admin');
+    const checkEmbedded = release.indexOf('bun run check:admin-embedded');
+    const compile = release.indexOf('bun build --compile');
+    expect(installAdmin).toBeGreaterThan(-1);
+    expect(buildAdmin).toBeGreaterThan(installAdmin);
+    expect(checkEmbedded).toBeGreaterThan(buildAdmin);
+    expect(compile).toBeGreaterThan(checkEmbedded);
   });
 });
 
