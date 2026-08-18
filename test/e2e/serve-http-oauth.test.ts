@@ -631,9 +631,11 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     const sql = postgres(process.env.VOLTMIND_DATABASE_URL || process.env.DATABASE_URL || '', { prepare: false });
     try {
       // Wipe any prior log rows for our test client so we can assert exact counts.
+      // Previous runs may have deleted the OAuth client while retaining its
+      // audit rows, so clean by this isolated test's stable agent name.
       await sql.begin(async (tx) => {
         await tx`SELECT set_config('app.source_id', 'default', false), set_config('app.source_ids', 'default', false)`;
-        await tx`DELETE FROM mcp_request_log WHERE token_name = ${clientId!}`;
+        await tx`DELETE FROM mcp_request_log WHERE agent_name = ${'e2e-oauth-test'}`;
       });
 
       // Mint a fresh write-scoped token and make a successful tools/list call.
