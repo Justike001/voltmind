@@ -54,7 +54,7 @@
     "check:wasm": "bash scripts/check-wasm-embedded.sh",
     "check:newlines": "bash scripts/check-trailing-newline.sh",
     "test:e2e": "bash scripts/run-e2e.sh",
-    "test:e2e:tier1": "bun test test/init-mcp-only.test.ts test/mcp-client.test.ts test/mcp-client-hardening.test.ts test/cli-dispatch-thin-client.test.ts test/thin-client-routing-audit.test.ts test/get-brain-identity.test.ts test/get-status-snapshot-op.test.ts --timeout=60000",
+    "test:e2e:tier1": "bun test test/init-mcp-only.test.ts test/mcp-client.test.ts test/mcp-client-hardening.test.ts test/cli-dispatch-thin-client.test.ts test/thin-client-routing-audit.test.ts test/get-brain-identity.test.ts test/get-status-snapshot-op.test.ts --timeout=60000 --parallel=1",
     "test:e2e:tier2": "bun run scripts/host-mcp-e2e.ts tier2",
     "test:heavy:host": "bun run scripts/host-mcp-e2e.ts heavy",
     "test:slow": "bash scripts/run-slow-tests.sh",

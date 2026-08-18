@@ -52,13 +52,30 @@ describe('VoltMind CI and release contracts', () => {
     expect(text).toContain('VOLTMIND_REMOTE_CLIENT_ID');
     expect(text).toContain('VOLTMIND_REMOTE_CLIENT_SECRET');
     expect(text).not.toContain('TS_AUTHKEY');
-    expect(text).not.toContain('DATABASE_URL');
     expect(text).not.toContain('pgvector/pgvector');
     expect(text).not.toContain('services');
     expect(text).not.toContain('OPENAI_API_KEY');
     expect(text).not.toContain('ANTHROPIC_API_KEY');
     expect(text).not.toContain('openclaw@');
     expect(text).not.toContain('ci-pass-');
+
+    const clientJobNames = [
+      'verify',
+      'test',
+      'serial',
+      'slow-eval',
+      'slow-perf',
+      'windows-adapter',
+      'tier1-thin-client',
+      'client-build',
+      'gitleaks',
+    ];
+    const clientText = rendered(Object.fromEntries(
+      clientJobNames.map(name => [name, jobs[name]]),
+    ));
+    expect(clientText).not.toContain('DATABASE_URL');
+    expect(clientText).not.toContain('VOLTMIND_DATABASE_URL');
+    expect(clientText).not.toContain('VOLTMIND_RESTRICTED_DATABASE_URL');
 
     const hostProbe = readFileSync(new URL('../scripts/host-mcp-e2e.ts', import.meta.url), 'utf8');
     expect(hostProbe).toContain("'get_brain_identity'");

@@ -7,7 +7,7 @@
  */
 
 import type { BrainEngine } from '../core/engine.ts';
-import { operations, OperationError, resolveWriteSourceId } from '../core/operations.ts';
+import { operations, OperationError, resolveReadSourceScope, resolveWriteSourceId } from '../core/operations.ts';
 import type { Operation, OperationContext, AuthInfo } from '../core/operations.ts';
 import { loadConfig } from '../core/config.ts';
 import { hasScope } from '../core/scope.ts';
@@ -488,6 +488,14 @@ export async function dispatchToolCall(
     // resolve the id when they need to route a multi-source write explicitly.
     if (op.mutating && typeof safeParams.source_id === 'string') {
       resolveWriteSourceId(ctx, safeParams.source_id);
+    }
+
+    // Source authorization must be decided before opening a database
+    // transaction. Besides avoiding unnecessary work for rejected requests,
+    // this keeps the permission boundary independent from the engine surface
+    // (and therefore fail-closed for malformed or unavailable engines).
+    if (op.name === 'audit_frontmatter' && (opts.remote ?? true) !== false) {
+      resolveReadSourceScope(ctx, typeof safeParams.source_id === 'string' ? safeParams.source_id : undefined);
     }
 
     const readSourceIds = ctx.auth?.allowedSources && ctx.auth.allowedSources.length > 0
