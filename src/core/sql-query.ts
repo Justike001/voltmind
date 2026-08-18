@@ -15,7 +15,9 @@ import type { BrainEngine } from './engine.ts';
  * v0.31 plan review).
  */
 export type SqlValue = string | number | bigint | boolean | Date | null;
-export type SqlQuery = (strings: TemplateStringsArray, ...values: SqlValue[]) => Promise<Record<string, unknown>[]>;
+export type SqlQuery = ((strings: TemplateStringsArray, ...values: SqlValue[]) => Promise<Record<string, unknown>[]>) & {
+  transaction?: <T>(fn: (tx: SqlQuery) => Promise<T>) => Promise<T>;
+};
 
 /**
  * Build a minimal tagged-template SQL adapter over the active BrainEngine.
@@ -30,7 +32,7 @@ export type SqlQuery = (strings: TemplateStringsArray, ...values: SqlValue[]) =>
  * auto-stringify path that caused the original silent-data-loss incident.
  */
 export function sqlQueryForEngine(engine: BrainEngine): SqlQuery {
-  return async (strings: TemplateStringsArray, ...values: SqlValue[]) => {
+  const query: SqlQuery = async (strings: TemplateStringsArray, ...values: SqlValue[]) => {
     for (const value of values) {
       assertSqlValue(value);
     }
@@ -39,6 +41,9 @@ export function sqlQueryForEngine(engine: BrainEngine): SqlQuery {
     }, '');
     return engine.executeRaw(query, values);
   };
+  query.transaction = <T>(fn: (tx: SqlQuery) => Promise<T>) =>
+    engine.transaction((txEngine) => fn(sqlQueryForEngine(txEngine)));
+  return query;
 }
 
 function assertSqlValue(value: unknown): asserts value is SqlValue {

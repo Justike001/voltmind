@@ -518,6 +518,13 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
   ): Promise<OAuthTokens> {
     const tokenHash = hashToken(refreshToken);
     const now = Math.floor(Date.now() / 1000);
+    const transaction = this.sql.transaction ??
+      (async <T>(fn: (tx: SqlQuery) => Promise<T>) => fn(this.sql));
+
+    // Validate before consuming the old token. The row lock serializes two
+    // concurrent refreshes; invalid scope/expiry/client requests roll back
+    // and therefore do not burn a still-valid refresh token.
+    return transaction(async (tx) => {
 
     // F2 hardening: bind client_id atomically into the DELETE WHERE clause.
     // RFC 6749 §10.4 detection of stolen refresh tokens depends on second-use
@@ -528,20 +535,22 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     // attempts get zero rows back; the legitimate client retains the row
     // for one valid rotation.
     const rows = resource !== undefined
-      ? await this.sql`
-      DELETE FROM oauth_tokens
+      ? await tx`
+      SELECT client_id, scopes, expires_at, resource
+      FROM oauth_tokens
       WHERE token_hash = ${tokenHash}
         AND token_type = 'refresh'
         AND client_id = ${client.client_id}
         AND resource = ${resource.toString()}
-      RETURNING client_id, scopes, expires_at, resource
+      FOR UPDATE
     `
-      : await this.sql`
-      DELETE FROM oauth_tokens
+      : await tx`
+      SELECT client_id, scopes, expires_at, resource
+      FROM oauth_tokens
       WHERE token_hash = ${tokenHash}
         AND token_type = 'refresh'
         AND client_id = ${client.client_id}
-      RETURNING client_id, scopes, expires_at, resource
+      FOR UPDATE
     `;
     if (rows.length === 0) throw new Error('Refresh token not found');
 
@@ -571,7 +580,25 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     }
     const storedResource = row.resource ? new URL(row.resource as string) : undefined;
     const tokenScopes = scopes ?? grantedScopes;
-    return this.issueTokens(client.client_id, tokenScopes, storedResource, true);
+    const consumed = resource !== undefined
+      ? await tx`
+        DELETE FROM oauth_tokens
+        WHERE token_hash = ${tokenHash}
+          AND token_type = 'refresh'
+          AND client_id = ${client.client_id}
+          AND resource = ${resource.toString()}
+        RETURNING client_id
+      `
+      : await tx`
+        DELETE FROM oauth_tokens
+        WHERE token_hash = ${tokenHash}
+          AND token_type = 'refresh'
+          AND client_id = ${client.client_id}
+        RETURNING client_id
+      `;
+    if (consumed.length === 0) throw new Error('Refresh token not found');
+    return this.issueTokens(client.client_id, tokenScopes, resource ?? storedResource, true, undefined, tx);
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -977,6 +1004,7 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     resource: URL | undefined,
     includeRefresh: boolean,
     ttlOverride?: number,
+    sql: SqlQuery = this.sql,
   ): Promise<OAuthTokens> {
     const accessToken = generateToken('voltmind_at_');
     const accessHash = hashToken(accessToken);
@@ -984,7 +1012,7 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
     const effectiveTtl = ttlOverride || this.tokenTtl;
     const accessExpiry = now + effectiveTtl;
 
-    await this.sql`
+    await sql`
       INSERT INTO oauth_tokens (token_hash, token_type, client_id, scopes, expires_at, resource)
       VALUES (${accessHash}, ${'access'}, ${clientId},
               ${pgArray(scopes)}, ${accessExpiry}, ${resource?.toString() || null})
@@ -1002,7 +1030,7 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
       const refreshHash = hashToken(refreshToken);
       const refreshExpiry = now + this.refreshTtl;
 
-      await this.sql`
+      await sql`
         INSERT INTO oauth_tokens (token_hash, token_type, client_id, scopes, expires_at, resource)
         VALUES (${refreshHash}, ${'refresh'}, ${clientId},
                 ${pgArray(scopes)}, ${refreshExpiry}, ${resource?.toString() || null})

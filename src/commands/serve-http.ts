@@ -2660,7 +2660,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       const latency = Date.now() - startTime;
       try {
         const auditSourceId = authInfo.sourceId ?? 'default';
-        await withOperationSourceScope(engine, auditSourceId, async (tx) => {
+        await withOperationSourceScope(engine, auditSourceId, [auditSourceId], async (tx) => {
           await executeRawJsonb(
             tx,
             `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, source_id, brain_id, params)
@@ -2694,7 +2694,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         const latency = Date.now() - startTime;
         try {
           const auditSourceId = authInfo.sourceId ?? 'default';
-          await withOperationSourceScope(engine, auditSourceId, async (tx) => {
+          await withOperationSourceScope(engine, auditSourceId, [auditSourceId], async (tx) => {
             await executeRawJsonb(
               tx,
               `INSERT INTO mcp_request_log (token_name, agent_name, operation, latency_ms, status, error_message, source_id, brain_id, params)
