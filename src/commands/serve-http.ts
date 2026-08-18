@@ -24,7 +24,7 @@ import { safeHexEqual } from '../core/timing-safe.ts';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
+import { getOAuthProtectedResourceMetadataUrl, mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
 import type { BrainEngine } from '../core/engine.ts';
 import { operations, OperationError, validatePageSlug } from '../core/operations.ts';
@@ -1205,7 +1205,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
           res.status(400).json({ error: 'invalid_request', error_description: 'refresh_token required' });
           return;
         }
-        tokens = await oauthProvider.exchangeRefreshToken(client, refreshToken, scopeParam, resource);
+        const refreshResource = req.body?.resource === undefined ? undefined : resource;
+        tokens = await oauthProvider.exchangeRefreshToken(client, refreshToken, scopeParam, refreshResource);
       }
       res.json(tokens);
     } catch (e) {
@@ -1259,6 +1260,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     throw new Error(`Invalid MCP public URL: ${mcpResourceValidation.message}`);
   }
   const mcpResourceUrl = mcpResourceValidation.value.mcpEndpoint;
+  const resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(mcpResourceUrl);
 
   function resolveMcpResource(raw: unknown): URL | null {
     if (raw === undefined || raw === null || raw === '') return mcpResourceUrl;
@@ -1314,6 +1316,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     // ['read','write','admin'] list left those new scopes invisible.
     scopesSupported: [...ALLOWED_SCOPES_LIST],
     resourceName: 'VoltMind MCP Server',
+    resourceServerUrl: mcpResourceUrl,
   };
 
   // F12: DCR disable lives on the provider's constructor option above. The
@@ -1525,6 +1528,27 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         : null;
     },
   }));
+  // Legacy Admin mutation routes are retained only for explicitly enabled
+  // compatibility clients. The versioned v1 router above is the sole default
+  // mutation surface; returning 410 makes stale clients fail closed instead of
+  // reaching a second, differently-audited policy.
+  const legacyAdminMutationsEnabled = process.env.VOLTMIND_ENABLE_LEGACY_ADMIN_MUTATIONS === '1';
+  app.use('/admin/api', (req: Request, res: Response, next: NextFunction) => {
+    const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+    const legacyPath = req.path;
+    if (!isMutation || legacyPath === '/issue-magic-link' || legacyPath === '/v1' || legacyPath.startsWith('/v1/')) {
+      next();
+      return;
+    }
+    if (!legacyAdminMutationsEnabled) {
+      res.setHeader('Deprecation', 'true');
+      res.status(410).json({
+        error: { code: 'legacy_admin_api_disabled', message: 'Legacy Admin mutations are disabled; use /admin/api/v1' },
+      });
+      return;
+    }
+    next();
+  });
 
 
   // Sign-out-everywhere: nuke ALL active admin sessions in-memory. Every
@@ -2600,7 +2624,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     }
   });
 
-  app.post('/mcp', requireBearerAuth({ verifier: oauthProvider }), async (req: Request, res: Response) => {
+  app.post('/mcp', requireBearerAuth({ verifier: oauthProvider, resourceMetadataUrl }), async (req: Request, res: Response) => {
     const startTime = Date.now();
     const authInfo = (req as any).auth as AuthInfo;
     const tokenResource = (authInfo as AuthInfo & { resource?: URL }).resource;

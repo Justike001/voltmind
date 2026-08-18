@@ -4410,7 +4410,7 @@ const whoami: Operation = {
     // of `ctx.remote === false`. Empty scopes array forces clients to
     // special-case `transport: 'local'` explicitly.
     if (ctx.remote === false) {
-      return { transport: 'local', scopes: [] };
+      return { transport: 'local', scopes: [], owner_source_id: null, allowed_sources: [], federated_read: false, schema_version: 1 };
     }
     if (!ctx.auth) {
       throw new OperationError(
@@ -4423,10 +4423,18 @@ const whoami: Operation = {
     // OAuth tokens have client_id starting with 'voltmind_cl_'; legacy
     // access_tokens reuse `name` as both clientId and clientName (verifyAccessToken
     // at oauth-provider.ts:417-430). Detect by inspecting the prefix.
+    const allowedSources = ctx.auth.allowedSources ?? (ctx.auth.sourceId ? [ctx.auth.sourceId] : []);
+    const sourceProjection = {
+      owner_source_id: ctx.auth.sourceId ?? null,
+      allowed_sources: allowedSources,
+      federated_read: allowedSources.some(source => source !== (ctx.auth?.sourceId ?? null)),
+      schema_version: 1,
+    };
     const isOauth = ctx.auth.clientId.startsWith('voltmind_cl_');
     if (isOauth) {
       return {
         transport: 'oauth',
+        ...sourceProjection,
         client_id: ctx.auth.clientId,
         client_name: ctx.auth.clientName ?? ctx.auth.clientId,
         scopes: ctx.auth.scopes,
@@ -4435,6 +4443,7 @@ const whoami: Operation = {
     }
     return {
       transport: 'legacy',
+      ...sourceProjection,
       token_name: ctx.auth.clientName ?? ctx.auth.clientId,
       scopes: ctx.auth.scopes,
       expires_at: null,
