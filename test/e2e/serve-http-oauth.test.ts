@@ -639,7 +639,6 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
       });
 
       // Mint a fresh write-scoped token and make a successful tools/list call.
-      const auditWindowStart = new Date();
       const tokenRes = await fetch(`${BASE}/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -671,7 +670,6 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
           SELECT operation, status, agent_name, params, error_message, token_name = ${clientId!} AS token_matches
           FROM mcp_request_log
           WHERE agent_name = ${'e2e-oauth-test'}
-            AND created_at >= ${auditWindowStart}
           ORDER BY created_at ASC
         ` as unknown as Array<Record<string, unknown>>;
       });
