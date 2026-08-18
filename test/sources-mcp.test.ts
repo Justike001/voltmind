@@ -81,7 +81,7 @@ function findOp(name: string): Operation {
   return op;
 }
 
-function ctxRemote(scopes: string[]): OperationContext {
+function ctxRemote(scopes: string[], sourceId = 'default'): OperationContext {
   const auth: AuthInfo = {
     token: 'voltmind_at_xxx',
     clientId: 'voltmind_cl_test',
@@ -96,7 +96,7 @@ function ctxRemote(scopes: string[]): OperationContext {
     dryRun: false,
     remote: true,
     auth,
-    sourceId: 'default',
+    sourceId,
   };
 }
 
@@ -171,7 +171,7 @@ describe('sources_* handlers — happy path', () => {
         url: 'https://github.com/example/repo',
       });
       const statusOp = findOp('sources_status');
-      const result = (await statusOp.handler(ctxRemote(['read']), {
+      const result = (await statusOp.handler(ctxRemote(['read'], 'mcp-status-test'), {
         id: 'mcp-status-test',
       })) as any;
       expect(result.id).toBe('mcp-status-test');
