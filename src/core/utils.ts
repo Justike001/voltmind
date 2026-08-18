@@ -331,6 +331,7 @@ export function takeRowToTake(row: Record<string, unknown>): Take {
   return {
     id: Number(row.id),
     page_id: Number(row.page_id),
+    source_id: String(row.source_id ?? ''),
     page_slug: String(row.page_slug ?? ''),
     row_num: Number(row.row_num),
     claim: String(row.claim),

@@ -253,6 +253,8 @@ export interface TakeBatchInput {
 export interface Take {
   id: number;
   page_id: number;
+  /** Actual source_id of the owning page, read from the database. */
+  source_id: string;
   page_slug: string;        // joined from pages
   row_num: number;
   claim: string;
@@ -294,6 +296,9 @@ export interface TakesListOpts {
   resolved?: boolean;       // true = only resolved; false = only unresolved; undefined = both
   /** Per-token MCP allow-list. Server applies AND holder = ANY($takesHoldersAllowList) when set. */
   takesHoldersAllowList?: string[];
+  /** Source scope resolved by the operation/auth layer. */
+  sourceId?: string;
+  sourceIds?: string[];
   sortBy?: 'weight' | 'since_date' | 'created_at';
   limit?: number;
   offset?: number;
@@ -303,6 +308,8 @@ export interface TakesListOpts {
 export interface TakeHit {
   take_id: number;
   page_id: number;
+  /** Actual source_id of the owning page, read from the database. */
+  source_id: string;
   page_slug: string;
   row_num: number;
   claim: string;
@@ -395,6 +402,8 @@ export interface TakesScorecardOpts {
   domainPrefix?: string; // e.g. 'companies/' to scope the scorecard
   since?: string;        // ISO date 'YYYY-MM-DD'
   until?: string;        // ISO date 'YYYY-MM-DD'
+  sourceId?: string;
+  sourceIds?: string[];
 }
 
 /** v0.30.0: calibration curve bucket. */
@@ -414,6 +423,8 @@ export interface CalibrationBucket {
 export interface CalibrationCurveOpts {
   holder?: string;
   bucketSize?: number; // default 0.1
+  sourceId?: string;
+  sourceIds?: string[];
 }
 
 /** Synthesis evidence row input (provenance from think synthesis pages). */
@@ -654,12 +665,14 @@ export interface BrainEngine {
    * Defense-in-depth on top of the app-layer sourceScopeOpts(ctx) WHERE filters.
    */
   setSourceScope(sourceId: string): Promise<void>;
+  /** Set an authorized federated source set for the current transaction. */
+  setSourceReadScope(sourceIds: string[]): Promise<void>;
   /**
-   * Install the transaction-local set of sources permitted for reads. Writes
-   * remain governed by setSourceScope(sourceId), which is always scalar.
-   * Engines without database RLS may validate and no-op this hook.
+   * Run a trusted, authenticated Admin operation with an explicit all-source
+   * read scope. Implementations resolve current source IDs and set them
+   * transaction-locally; this is not a BYPASSRLS escape hatch.
    */
-  setSourceReadScope?(sourceIds: string[]): Promise<void>;
+  setAdminSourceScope(extraSourceIds?: string[]): Promise<void>;
   /**
    * Run `fn` with a dedicated connection (Postgres: reserved backend;
    * PGLite: pass-through). See `ReservedConnection` for semantics and

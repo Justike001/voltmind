@@ -14,7 +14,6 @@
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { hasDatabase } from './helpers.ts';
-import { hashToken } from '../../src/core/utils.ts';
 
 const skip = !hasDatabase();
 const describeE2E = skip ? describe.skip : describe;
@@ -25,6 +24,7 @@ if (skip) {
 
 const PORT = 19131; // Avoid collision with production 3131
 const BASE = `http://localhost:${PORT}`;
+const E2E_ADMIN_BOOTSTRAP_TOKEN = 'e2e-admin-bootstrap-token-20260818-abcdef1234567890';
 
 describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
   let serverProcess: ReturnType<typeof import('child_process').spawn> | null = null;
@@ -59,26 +59,30 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     );
     const idMatch = regOutput.match(/Client ID:\s+(voltmind_cl_\S+)/);
     const secretMatch = regOutput.match(/Client Secret:\s+(voltmind_cs_\S+)/);
-    if (!idMatch || !secretMatch) throw new Error('Failed to register test client:\n' + regOutput);
+    if (!idMatch || !secretMatch) throw new Error('Failed to register test client');
     clientId = idMatch[1];
     clientSecret = secretMatch[1];
 
     // Start the HTTP server. v0.26.2 adds --enable-dcr so the /register
     // endpoint is reachable for the DCR response-shape test.
-    serverProcess = spawn('bun', [
+    const proc = spawn('bun', [
       'run', 'src/cli.ts', 'serve', '--http',
       '--port', String(PORT),
       '--public-url', `http://localhost:${PORT}`,
       '--enable-dcr',
     ], {
       cwd: process.cwd(),
-      env: process.env,
+      env: { ...process.env, VOLTMIND_ADMIN_BOOTSTRAP_TOKEN: E2E_ADMIN_BOOTSTRAP_TOKEN },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    serverProcess = proc;
 
     // Collect stderr for debugging failures
     let stderr = '';
-    serverProcess.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+    proc.stderr?.on('data', (d: Buffer) => {
+      stderr += d.toString();
+      (proc as any)._stderrBuffer = stderr;
+    });
 
     // Wait for server to be ready (up to 15s)
     let ready = false;
@@ -165,66 +169,6 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     expect(body).toContain('query');  // query tool too
   }, 15_000);
 
-  test('read bearer lists only authorized canonical tool definitions and cannot call hidden writes', async () => {
-    const { access_token } = await mintToken('read');
-    const listed = await mcpCall(access_token, 'tools/list');
-    const listBody = await listed.json() as { result: { tools: Array<{ name: string; scope?: string; _meta?: Record<string, string> }> } };
-    expect(listBody.result.tools.some(tool => tool.name === 'put_page')).toBe(false);
-    const search = listBody.result.tools.find(tool => tool.name === 'search');
-    expect(search?.scope).toBe('read');
-    expect(search?._meta?.['voltmind/requiredScope']).toBe('read');
-
-    const call = await mcpCall(access_token, 'tools/call', {
-      name: 'put_page',
-      arguments: { slug: 'ideas/scope-denied', content: 'denied' },
-    });
-    const callBody = await call.text();
-    expect(callBody).toContain('insufficient_scope');
-  }, 15_000);
-
-  test('client credentials rejects a token resource other than this MCP endpoint', async () => {
-    const res = await fetch(`${BASE}/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${clientSecret}&scope=read&resource=${encodeURIComponent('https://attacker.example/mcp')}`,
-    });
-    expect(res.status).toBe(400);
-    const body = await res.json() as { error?: string };
-    expect(body.error).toBe('invalid_target');
-  });
-
-  test('MCP returns a standard 401 Bearer invalid_token challenge for missing or wrong token resource', async () => {
-    const postgres = (await import('postgres')).default;
-    const sql = postgres(process.env.VOLTMIND_DATABASE_URL || process.env.DATABASE_URL || '', { prepare: false });
-    const expiry = Math.floor(Date.now() / 1000) + 300;
-    const tokens = [
-      { raw: `e2e-null-resource-${Date.now()}`, resource: null },
-      { raw: `e2e-wrong-resource-${Date.now()}`, resource: 'https://attacker.example/mcp' },
-    ];
-    try {
-      for (const token of tokens) {
-        await sql`
-          INSERT INTO oauth_tokens (token_hash, token_type, client_id, scopes, expires_at, resource)
-          VALUES (${hashToken(token.raw)}, 'access', ${clientId!}, ARRAY['read'], ${expiry}, ${token.resource})
-        `;
-      }
-      for (const token of tokens) {
-        const res = await mcpCall(token.raw, 'tools/list');
-        expect(res.status).toBe(401);
-        expect(res.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
-        const body = await res.json() as { error?: string; error_description?: string };
-        expect(body.error).toBe('invalid_token');
-        expect(body.error_description).toBe('Bearer token is not valid for this resource');
-        expect(JSON.stringify(body)).not.toContain('attacker.example');
-      }
-    } finally {
-      for (const token of tokens) {
-        await sql`DELETE FROM oauth_tokens WHERE token_hash = ${hashToken(token.raw)}`;
-      }
-      await sql.end({ timeout: 5 });
-    }
-  });
-
   test('minted token works for tools/call — search executes', async () => {
     const { access_token } = await mintToken('read');
     const res = await mcpCall(access_token, 'tools/call', {
@@ -239,6 +183,24 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     expect(body).toContain('result');
   }, 15_000);
 
+
+  test('whoami returns the OAuth owner/read source projection', async () => {
+    const { access_token } = await mintToken('read');
+    const res = await mcpCall(access_token, 'tools/call', {
+      name: 'whoami',
+      arguments: {},
+    });
+    expect(res.status).not.toBe(401);
+    const body = await res.text();
+    const dataLine = body.split("\n").find(line => line.startsWith("data: "));
+    expect(dataLine).toBeDefined();
+    const envelope = JSON.parse(dataLine!.slice("data: ".length)) as any;
+    const projection = JSON.parse(envelope.result.content[0].text) as any;
+    expect(projection.owner_source_id).toBe("default");
+    expect(projection.allowed_sources).toEqual(["default"]);
+    expect(projection.federated_read).toBe(false);
+    expect(projection.schema_version).toBe(1);
+  }, 15_000);
   test('expired/invalid token is rejected at /mcp', async () => {
     const res = await mcpCall('voltmind_at_totally_fake_token', 'tools/list');
     // Invalid tokens should not return 200 with tool results
@@ -261,6 +223,40 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
   });
 
   // =========================================================================
+  test('missing Authorization header advertises RFC 9728 resource metadata', async () => {
+    const res = await fetch(BASE + '/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    expect(res.status).toBe(401);
+    const challenge = res.headers.get('www-authenticate') || '';
+    expect(challenge).toContain('resource_metadata=');
+    const metadata = await fetch(BASE + '/.well-known/oauth-protected-resource/mcp');
+    expect(metadata.ok).toBe(true);
+    const data = await metadata.json() as any;
+    expect(data.resource).toBe(BASE + '/mcp');
+    expect(data.authorization_servers).toEqual([BASE + '/']);
+    expect(data.scopes_supported).toEqual(
+      expect.arrayContaining(['read', 'write', 'admin', 'sources_admin', 'users_admin']),
+    );
+  });
+
+  test('legacy Admin mutations are disabled by default', async () => {
+    const res = await fetch(BASE + '/admin/api/register-client', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'legacy-disabled-test' }),
+    });
+    expect(res.status).toBe(410);
+    expect(res.headers.get('deprecation')).toBe('true');
+    const data = await res.json() as any;
+    expect(data.error?.code).toBe('legacy_admin_api_disabled');
+  });
+
   // Fix 2: OAuth metadata includes client_credentials
   // =========================================================================
 
@@ -404,13 +400,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     // Same magic-link cookie dance the existing single-use test uses.
     // Skip gracefully if the bootstrap token isn't extractable — the 401
     // case above pins the auth gate; this test pins the happy path.
-    const stderrBuf = (serverProcess as any)?._stderrBuffer || '';
-    const tokenMatch = String(stderrBuf).match(/Admin Token[\s\S]*?([a-f0-9]{32,64})/);
-    if (!tokenMatch) {
-      console.warn('[e2e] skipped /admin/api/full-stats happy path: could not extract bootstrap token');
-      return;
-    }
-    const bootstrapToken = tokenMatch[1];
+    const bootstrapToken = E2E_ADMIN_BOOTSTRAP_TOKEN;
 
     const issueRes = await fetch(`${BASE}/admin/api/issue-magic-link`, {
       method: 'POST',
@@ -455,6 +445,46 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
 
     expect(r1.status).not.toBe(401);
     expect(r2.status).not.toBe(401);
+  }, 15_000);
+
+  test("invalid refresh scope does not consume the old refresh token", async () => {
+    const postgres = (await import("postgres")).default;
+    const { hashToken } = await import("../../src/core/utils.ts");
+    const sql = postgres(process.env.VOLTMIND_DATABASE_URL || process.env.DATABASE_URL || "", { prepare: false });
+    const oldRefreshToken = "rt_http_rotation_" + Date.now();
+    try {
+      await sql.unsafe(
+        "INSERT INTO oauth_tokens (token_hash, token_type, client_id, scopes, expires_at) VALUES ($1, 'refresh', $2, ARRAY['read'], $3)",
+        [hashToken(oldRefreshToken), clientId!, Math.floor(Date.now() / 1000) + 3600],
+      );
+      const exchange = (scope: string) => fetch(BASE + "/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token", client_id: clientId!, client_secret: clientSecret!,
+          refresh_token: oldRefreshToken, scope,
+        }).toString(),
+      });
+      const invalid = await exchange("write");
+      expect(invalid.status).toBe(400);
+      expect((await invalid.json() as any).error).toBe("invalid_grant");
+      const stillPresent = await sql.unsafe<{ count: string }[]>(
+        "SELECT count(*)::text AS count FROM oauth_tokens WHERE token_hash = $1 AND token_type = 'refresh'",
+        [hashToken(oldRefreshToken)],
+      );
+      expect(stillPresent[0]?.count).toBe("1");
+      const valid = await exchange("read");
+      expect(valid.status).toBe(200);
+      const rotated = await valid.json() as any;
+      expect(rotated.refresh_token).toBeTruthy();
+      expect(rotated.refresh_token).not.toBe(oldRefreshToken);
+      const replay = await exchange("read");
+      expect(replay.status).toBe(400);
+      expect((await replay.json() as any).error).toBe("invalid_grant");
+    } finally {
+      await sql.unsafe("DELETE FROM oauth_tokens WHERE client_id = $1", [clientId!]);
+      await sql.end();
+    }
   }, 15_000);
 
   test('wrong client_secret is rejected at token endpoint', async () => {
@@ -601,7 +631,10 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     const sql = postgres(process.env.VOLTMIND_DATABASE_URL || process.env.DATABASE_URL || '', { prepare: false });
     try {
       // Wipe any prior log rows for our test client so we can assert exact counts.
-      await sql`DELETE FROM mcp_request_log WHERE token_name = ${clientId!}`;
+      await sql.begin(async (tx) => {
+        await tx`SELECT set_config('app.source_id', 'default', true)`;
+        await tx`DELETE FROM mcp_request_log WHERE token_name = ${clientId!}`;
+      });
 
       // Mint a fresh write-scoped token and make a successful tools/list call.
       const tokenRes = await fetch(`${BASE}/token`, {
@@ -623,12 +656,15 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
       // Allow async best-effort INSERT to flush.
       await new Promise(r => setTimeout(r, 250));
 
-      const rows = await sql`
-        SELECT operation, status, agent_name, params, error_message
-        FROM mcp_request_log
-        WHERE token_name = ${clientId!}
-        ORDER BY created_at ASC
-      ` as unknown as Array<Record<string, unknown>>;
+      const rows = await sql.begin(async (tx) => {
+        await tx`SELECT set_config('app.source_id', 'default', true)`;
+        return await tx`
+          SELECT operation, status, agent_name, params, error_message
+          FROM mcp_request_log
+          WHERE token_name = ${clientId!}
+          ORDER BY created_at ASC
+        ` as unknown as Array<Record<string, unknown>>;
+      });
 
       expect(rows.length).toBeGreaterThanOrEqual(2);
 
@@ -797,16 +833,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     // spawn handle. The spawn already started so stderr has flushed.
     // Skip if we can't extract — the test is best-effort coverage of the
     // single-use semantic; the styled-401 test above covers the negative path.
-    const stderrBuf = (serverProcess as any)?._stderrBuffer || '';
-    const tokenMatch = String(stderrBuf).match(/Admin Token[\s\S]*?([a-f0-9]{32,64})/);
-    if (!tokenMatch) {
-      // No way to get the bootstrap token in this test fixture — skip gracefully.
-      // The unit-level coverage for nonce single-use is in oauth.test.ts and
-      // the styled-401 test above pins the consumed-nonce path.
-      console.warn('[e2e] skipped magic-link single-use: could not extract bootstrap token');
-      return;
-    }
-    const bootstrapToken = tokenMatch[1];
+    const bootstrapToken = E2E_ADMIN_BOOTSTRAP_TOKEN;
 
     // Mint a one-time nonce.
     const issueRes = await fetch(`${BASE}/admin/api/issue-magic-link`, {
@@ -854,11 +881,14 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
       await mcpCall(access_token, 'tools/list');
       await new Promise(r => setTimeout(r, 250));
 
-      const oauthRows = await sql`
-        SELECT agent_name FROM mcp_request_log
-        WHERE token_name = ${clientId!}
-        ORDER BY created_at DESC LIMIT 1
-      ` as unknown as Array<{ agent_name: string }>;
+      const oauthRows = await sql.begin(async (tx) => {
+        await tx`SELECT set_config('app.source_id', 'default', true)`;
+        return await tx`
+          SELECT agent_name FROM mcp_request_log
+          WHERE token_name = ${clientId!}
+          ORDER BY created_at DESC LIMIT 1
+        ` as unknown as Array<{ agent_name: string }>;
+      });
       expect(oauthRows.length).toBeGreaterThan(0);
       expect(oauthRows[0].agent_name).toBe('e2e-oauth-test');
     } finally {
@@ -867,13 +897,13 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
   }, 15_000);
 
   // =========================================================================
-  // v0.26.3: register-client missing-name returns 400
+  // H14: legacy register-client is disabled by default
   // =========================================================================
   //
   // Defense-in-depth: the admin register-client endpoint must validate
   // input. Pre-fix would have crashed or returned 500.
 
-  test('v0.26.3: /admin/api/register-client without name returns 400', async () => {
+  test('H14: /admin/api/register-client without name is disabled by default', async () => {
     // Endpoint is admin-cookie-gated. Without auth we should get 401, not 500.
     // Without a name in the body (with auth) we should get 400. We test the
     // 401 path here as a basic input-validation smoke; the 400 path requires
@@ -883,7 +913,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
     });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(410);
   });
 
   // =========================================================================

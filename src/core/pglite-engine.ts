@@ -815,25 +815,30 @@ export class PGLiteEngine implements BrainEngine {
    * BrainEngine interface so dispatch code can call it unconditionally
    * without branching on engine kind.
    */
+  async setSourceReadScope(sourceIds: string[]): Promise<void> {
+    for (const sourceId of sourceIds) assertValidSourceId(sourceId);
+  }
+
   async setSourceScope(_sourceId: string): Promise<void> {
     // PGLite has no RLS, but keep source-id rejection identical to Postgres
     // so invalid operation context cannot be accepted by only one engine.
     assertValidSourceId(_sourceId);
   }
 
-  /** PGLite has no RLS; validate the federated read scope for engine parity. */
-  async setSourceReadScope(sourceIds: string[]): Promise<void> {
-    for (const sourceId of sourceIds) assertValidSourceId(sourceId);
-  }
+  /** PGLite has no RLS; Admin authorization remains at the HTTP session boundary. */
+  async setAdminSourceScope(_extraSourceIds: string[] = []): Promise<void> {}
 
   // Pages CRUD
-  async getPage(slug: string, opts?: { sourceId?: string; includeDeleted?: boolean }): Promise<Page | null> {
+  async getPage(slug: string, opts?: { sourceId?: string; sourceIds?: string[]; includeDeleted?: boolean }): Promise<Page | null> {
     // v0.26.5: hide soft-deleted by default; opt-in via opts.includeDeleted.
     const includeDeleted = opts?.includeDeleted === true;
     const sourceId = opts?.sourceId;
     const where: string[] = ['slug = $1'];
     const params: unknown[] = [slug];
-    if (sourceId) {
+    if (opts?.sourceIds !== undefined) {
+      params.push(opts.sourceIds);
+      where.push(`source_id = ANY($${params.length}::text[])`);
+    } else if (sourceId) {
       params.push(sourceId);
       where.push(`source_id = $${params.length}`);
     }
@@ -3663,7 +3668,7 @@ export class PGLiteEngine implements BrainEngine {
     for (const pid of pageIds) out.set(pid, []);
     if (pageIds.length === 0) return out;
     const { rows } = await this.db.query(
-      `SELECT t.*, p.slug AS page_slug
+      `SELECT t.*, p.slug AS page_slug, p.source_id AS source_id
        FROM takes t
        JOIN pages p ON p.id = t.page_id
        WHERE t.page_id = ANY($1::int[])
@@ -3834,7 +3839,7 @@ export class PGLiteEngine implements BrainEngine {
     const active = opts.active ?? true;
     const sortBy = opts.sortBy ?? 'created_at';
     const { rows } = await this.db.query(
-      `SELECT t.*, p.slug AS page_slug
+      `SELECT t.*, p.slug AS page_slug, p.source_id AS source_id
        FROM takes t
        JOIN pages p ON p.id = t.page_id
        WHERE 1=1
@@ -3849,11 +3854,13 @@ export class PGLiteEngine implements BrainEngine {
            OR ($6::boolean = false AND t.resolved_at IS NULL)
          )
          AND ($7::text[] IS NULL OR t.holder = ANY($7::text[]))
+         AND (($8::text[] IS NOT NULL AND p.source_id = ANY($8::text[]))
+           OR ($8::text[] IS NULL AND ($9::text IS NULL OR p.source_id = $9::text)))
        ORDER BY
-         CASE WHEN $8 = 'weight'      THEN t.weight     END DESC NULLS LAST,
-         CASE WHEN $8 = 'since_date'  THEN t.since_date END DESC NULLS LAST,
-         CASE WHEN $8 = 'created_at'  THEN t.created_at END DESC NULLS LAST
-       LIMIT $9 OFFSET $10`,
+         CASE WHEN $10 = 'weight'      THEN t.weight     END DESC NULLS LAST,
+         CASE WHEN $10 = 'since_date'  THEN t.since_date END DESC NULLS LAST,
+         CASE WHEN $10 = 'created_at'  THEN t.created_at END DESC NULLS LAST
+       LIMIT $11 OFFSET $12`,
       [
         opts.page_id ?? null,
         opts.page_slug ?? null,
@@ -3862,6 +3869,8 @@ export class PGLiteEngine implements BrainEngine {
         active,
         opts.resolved === undefined ? null : opts.resolved,
         opts.takesHoldersAllowList ?? null,
+        opts.sourceIds ?? null,
+        opts.sourceId ?? null,
         sortBy,
         limit,
         offset,
@@ -3872,11 +3881,11 @@ export class PGLiteEngine implements BrainEngine {
 
   async searchTakes(
     query: string,
-    opts: { limit?: number; takesHoldersAllowList?: string[] } = {},
+    opts: { limit?: number; takesHoldersAllowList?: string[]; sourceId?: string; sourceIds?: string[] } = {},
   ): Promise<TakeHit[]> {
     const limit = clampSearchLimit(opts.limit, 30, 100);
     const { rows } = await this.db.query(
-      `SELECT t.id AS take_id, t.page_id, p.slug AS page_slug, t.row_num,
+      `SELECT t.id AS take_id, t.page_id, p.slug AS page_slug, p.source_id AS source_id, t.row_num,
               t.claim, t.kind, t.holder, t.weight,
               similarity(t.claim, $1)::real AS score
        FROM takes t
@@ -3884,21 +3893,23 @@ export class PGLiteEngine implements BrainEngine {
        WHERE t.active
          AND t.claim % $1
          AND ($2::text[] IS NULL OR t.holder = ANY($2::text[]))
+         AND (($3::text[] IS NOT NULL AND p.source_id = ANY($3::text[]))
+           OR ($3::text[] IS NULL AND ($4::text IS NULL OR p.source_id = $4::text)))
        ORDER BY score DESC, t.weight DESC
-       LIMIT $3`,
-      [query, opts.takesHoldersAllowList ?? null, limit]
+       LIMIT $5`,
+      [query, opts.takesHoldersAllowList ?? null, opts.sourceIds ?? null, opts.sourceId ?? null, limit]
     );
     return rows as unknown as TakeHit[];
   }
 
   async searchTakesVector(
     embedding: Float32Array,
-    opts: { limit?: number; takesHoldersAllowList?: string[] } = {},
+    opts: { limit?: number; takesHoldersAllowList?: string[]; sourceId?: string; sourceIds?: string[] } = {},
   ): Promise<TakeHit[]> {
     const limit = clampSearchLimit(opts.limit, 30, 100);
     const vec = `[${Array.from(embedding).join(',')}]`;
     const { rows } = await this.db.query(
-      `SELECT t.id AS take_id, t.page_id, p.slug AS page_slug, t.row_num,
+      `SELECT t.id AS take_id, t.page_id, p.slug AS page_slug, p.source_id AS source_id, t.row_num,
               t.claim, t.kind, t.holder, t.weight,
               (1 - (t.embedding <=> $1::halfvec(2048)))::real AS score
        FROM takes t
@@ -3906,9 +3917,11 @@ export class PGLiteEngine implements BrainEngine {
        WHERE t.active
          AND t.embedding IS NOT NULL
          AND ($2::text[] IS NULL OR t.holder = ANY($2::text[]))
+         AND (($3::text[] IS NOT NULL AND p.source_id = ANY($3::text[]))
+           OR ($3::text[] IS NULL AND ($4::text IS NULL OR p.source_id = $4::text)))
        ORDER BY t.embedding <=> $1::halfvec(2048)
-       LIMIT $3`,
-      [vec, opts.takesHoldersAllowList ?? null, limit]
+       LIMIT $5`,
+      [vec, opts.takesHoldersAllowList ?? null, opts.sourceIds ?? null, opts.sourceId ?? null, limit]
     );
     return rows as unknown as TakeHit[];
   }
@@ -4089,6 +4102,8 @@ export class PGLiteEngine implements BrainEngine {
     if (opts.since !== undefined) { params.push(opts.since); clauses.push(`AND since_date >= $${params.length}`); }
     if (opts.until !== undefined) { params.push(opts.until); clauses.push(`AND since_date <= $${params.length}`); }
     if (allowList !== undefined) { params.push(allowList); clauses.push(`AND holder = ANY($${params.length}::text[])`); }
+    if (opts.sourceIds !== undefined) { params.push(opts.sourceIds); clauses.push(`AND EXISTS (SELECT 1 FROM pages p WHERE p.id = takes.page_id AND p.source_id = ANY($${params.length}::text[]))`); }
+    else if (opts.sourceId !== undefined) { params.push(opts.sourceId); clauses.push(`AND EXISTS (SELECT 1 FROM pages p WHERE p.id = takes.page_id AND p.source_id = $${params.length})`); }
     const where = clauses.join(' ');
     // v0.36.1.1 T1c: `resolved` deliberately filters to the 3-state subset
     // (correct|incorrect|partial) — NOT `resolved_quality IS NOT NULL` — so
@@ -4125,6 +4140,8 @@ export class PGLiteEngine implements BrainEngine {
     const clauses: string[] = [];
     if (opts.holder !== undefined) { params.push(opts.holder); clauses.push(`AND holder = $${params.length}`); }
     if (allowList !== undefined) { params.push(allowList); clauses.push(`AND holder = ANY($${params.length}::text[])`); }
+    if (opts.sourceIds !== undefined) { params.push(opts.sourceIds); clauses.push(`AND EXISTS (SELECT 1 FROM pages p WHERE p.id = takes.page_id AND p.source_id = ANY($${params.length}::text[]))`); }
+    else if (opts.sourceId !== undefined) { params.push(opts.sourceId); clauses.push(`AND EXISTS (SELECT 1 FROM pages p WHERE p.id = takes.page_id AND p.source_id = $${params.length})`); }
     const where = clauses.join(' ');
     // NUMERIC casts for exact decimal arithmetic — keeps PGLite + Postgres
     // bucket boundaries identical at FP-edge weights (e.g. 0.7/0.1).

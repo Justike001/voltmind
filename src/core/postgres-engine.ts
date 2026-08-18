@@ -807,40 +807,49 @@ export class PostgresEngine implements BrainEngine {
    * Inert under the default BYPASSRLS `postgres` app role (RLS doesn't fire).
    * No-op on PGLite (no RLS engine; overridden there).
    */
+  async setSourceReadScope(sourceIds: string[]): Promise<void> {
+    const unique = Array.from(new Set(sourceIds));
+    for (const sourceId of unique) assertValidSourceId(sourceId);
+    const encoded = unique.join(',');
+    const scalar = unique[0] ?? '';
+    await this.sql`SELECT set_config('app.source_ids', ${encoded}, true), set_config('app.source_id', ${scalar}, true)`;
+    const rows = await this.sql<{ source_ids: string; source_id: string }[]>`
+      SELECT current_setting('app.source_ids', true) AS source_ids, current_setting('app.source_id', true) AS source_id
+    `;
+    if (rows[0]?.source_ids !== encoded || rows[0]?.source_id !== scalar) {
+      throw new Error('source_scope_not_applied');
+    }
+  }
+
   async setSourceScope(sourceId: string): Promise<void> {
     assertValidSourceId(sourceId);
     // set_config(..., true) is transaction-local. Do not absorb failures:
     // under a restricted role an unset scope means fail-closed reads and
     // failed audit writes, and pretending the scope was installed makes the
     // two engines diverge silently.
-    await this.sql`SELECT set_config('app.source_id', ${sourceId}, true)`;
-    const rows = await this.sql<{ source_id: string }[]>`
-      SELECT current_setting('app.source_id', true) AS source_id
+    await this.sql`SELECT set_config('app.source_ids', ${sourceId}, true), set_config('app.source_id', ${sourceId}, true)`;
+    const rows = await this.sql<{ source_ids: string; source_id: string }[]>`
+      SELECT current_setting('app.source_ids', true) AS source_ids, current_setting('app.source_id', true) AS source_id
     `;
-    if (rows[0]?.source_id !== sourceId) {
+    if (rows[0]?.source_ids !== sourceId || rows[0]?.source_id !== sourceId) {
       throw new Error('source_scope_not_applied');
     }
   }
 
   /**
-   * Install the transaction-local federated read set. The scalar
-   * `app.source_id` remains the write authority; RLS policies use this array
-   * only in USING predicates. Source ids are validated before they reach the
-   * GUC and the comma-separated encoding is safe under SOURCE_ID_RE because
-   * commas are not valid source-id characters.
+   * Resolve every current source and install that set transaction-locally for
+   * an already authenticated Admin request. This keeps RLS enabled and does
+   * not grant the application role BYPASSRLS.
    */
-  async setSourceReadScope(sourceIds: string[]): Promise<void> {
-    if (sourceIds.length === 0) throw new Error('source_read_scope_empty');
-    const unique = [...new Set(sourceIds)];
-    for (const sourceId of unique) assertValidSourceId(sourceId);
-    const encoded = unique.join(',');
-    await this.sql`SELECT set_config('app.source_ids', ${encoded}, true)`;
-    const rows = await this.sql<{ source_ids: string }[]>`
-      SELECT current_setting('app.source_ids', true) AS source_ids
+  async setAdminSourceScope(extraSourceIds: string[] = []): Promise<void> {
+    const rows = await this.sql<{ source_ids: string[] | null }[]>`
+      SELECT public.voltmind_admin_source_ids() AS source_ids
     `;
-    if (rows[0]?.source_ids !== encoded) {
-      throw new Error('source_read_scope_not_applied');
-    }
+    const sourceIds = rows[0]?.source_ids;
+    if (!Array.isArray(sourceIds)) throw new Error("admin_source_scope_unavailable");
+    const extras = extraSourceIds.map(String);
+    for (const sourceId of extras) assertValidSourceId(sourceId);
+    await this.setSourceReadScope([...sourceIds.map(String), ...extras]);
   }
 
   async withReservedConnection<T>(fn: (conn: ReservedConnection) => Promise<T>): Promise<T> {
@@ -871,13 +880,18 @@ export class PostgresEngine implements BrainEngine {
   }
 
   // Pages CRUD
-  async getPage(slug: string, opts?: { sourceId?: string; includeDeleted?: boolean }): Promise<Page | null> {
+  async getPage(slug: string, opts?: { sourceId?: string; sourceIds?: string[]; includeDeleted?: boolean }): Promise<Page | null> {
     const sql = this.sql;
     const includeDeleted = opts?.includeDeleted === true;
     const sourceId = opts?.sourceId;
+    const sourceIds = opts?.sourceIds;
     // v0.26.5: default hides soft-deleted rows. Compose with optional sourceId
     // filter via fragment chaining (postgres.js supports sql`` composition).
-    const sourceCondition = sourceId ? sql`AND source_id = ${sourceId}` : sql``;
+    const sourceCondition = sourceIds !== undefined
+      ? sql`AND source_id = ANY(${sourceIds}::text[])`
+      : sourceId
+        ? sql`AND source_id = ${sourceId}`
+        : sql``;
     const deletedCondition = includeDeleted ? sql`` : sql`AND deleted_at IS NULL`;
     const rows = await sql`
       SELECT id, source_id, slug, type, title, compiled_truth, timeline, frontmatter, content_hash, source_payload_hash, file_refs_projection_hash, created_at, updated_at, deleted_at,
@@ -3692,14 +3706,19 @@ export class PostgresEngine implements BrainEngine {
    */
   async listActiveTakesForPages(
     pageIds: number[],
-    opts: { takesHoldersAllowList?: string[] } = {},
+    opts: { takesHoldersAllowList?: string[]; sourceId?: string; sourceIds?: string[] } = {},
   ): Promise<Map<number, Take[]>> {
     const out = new Map<number, Take[]>();
     for (const pid of pageIds) out.set(pid, []);
     if (pageIds.length === 0) return out;
     const sql = this.sql;
+    const sourceClause = opts.sourceIds !== undefined
+      ? sql`AND p.source_id = ANY(${opts.sourceIds}::text[])`
+      : opts.sourceId !== undefined
+        ? sql`AND p.source_id = ${opts.sourceId}`
+        : sql``;
     const rows = await sql`
-      SELECT t.*, p.slug AS page_slug
+      SELECT t.*, p.slug AS page_slug, p.source_id AS source_id
       FROM takes t
       JOIN pages p ON p.id = t.page_id
       WHERE t.page_id = ANY(${pageIds}::int[])
@@ -3708,6 +3727,7 @@ export class PostgresEngine implements BrainEngine {
           ${opts.takesHoldersAllowList ?? null}::text[] IS NULL
           OR t.holder = ANY(${opts.takesHoldersAllowList ?? null}::text[])
         )
+        ${sourceClause}
       ORDER BY t.page_id, t.row_num
     `;
     for (const r of rows) {
@@ -3880,8 +3900,13 @@ export class PostgresEngine implements BrainEngine {
     const limit = clampSearchLimit(opts.limit, 100, 500);
     const offset = Math.max(0, Math.floor(opts.offset ?? 0));
     const active = opts.active ?? true;
+    const sourceClause = opts.sourceIds !== undefined
+      ? sql`AND p.source_id = ANY(${opts.sourceIds}::text[])`
+      : opts.sourceId !== undefined
+        ? sql`AND p.source_id = ${opts.sourceId}`
+        : sql``;
     const rows = await sql`
-      SELECT t.*, p.slug AS page_slug
+      SELECT t.*, p.slug AS page_slug, p.source_id AS source_id
       FROM takes t
       JOIN pages p ON p.id = t.page_id
       WHERE 1=1
@@ -3899,6 +3924,7 @@ export class PostgresEngine implements BrainEngine {
           ${opts.takesHoldersAllowList ?? null}::text[] IS NULL
           OR t.holder = ANY(${opts.takesHoldersAllowList ?? null}::text[])
         )
+        ${sourceClause}
       ORDER BY
         CASE WHEN ${opts.sortBy ?? 'created_at'} = 'weight'      THEN t.weight     END DESC NULLS LAST,
         CASE WHEN ${opts.sortBy ?? 'created_at'} = 'since_date'  THEN t.since_date END DESC NULLS LAST,
@@ -3911,8 +3937,13 @@ export class PostgresEngine implements BrainEngine {
   async searchTakes(query: string, opts: SearchOpts & { takesHoldersAllowList?: string[] } = {}): Promise<TakeHit[]> {
     const sql = this.sql;
     const limit = clampSearchLimit(opts.limit, 30, 100);
+    const sourceClause = opts.sourceIds !== undefined
+      ? sql`AND p.source_id = ANY(${opts.sourceIds}::text[])`
+      : opts.sourceId !== undefined
+        ? sql`AND p.source_id = ${opts.sourceId}`
+        : sql``;
     const rows = await sql`
-      SELECT t.id AS take_id, t.page_id, p.slug AS page_slug, t.row_num,
+      SELECT t.id::int AS take_id, t.page_id::int AS page_id, p.slug AS page_slug, p.source_id AS source_id, t.row_num,
              t.claim, t.kind, t.holder, t.weight,
              similarity(t.claim, ${query})::real AS score
       FROM takes t
@@ -3923,6 +3954,7 @@ export class PostgresEngine implements BrainEngine {
           ${opts.takesHoldersAllowList ?? null}::text[] IS NULL
           OR t.holder = ANY(${opts.takesHoldersAllowList ?? null}::text[])
         )
+        ${sourceClause}
       ORDER BY score DESC, t.weight DESC
       LIMIT ${limit}
     `;
@@ -3936,8 +3968,13 @@ export class PostgresEngine implements BrainEngine {
     const sql = this.sql;
     const limit = clampSearchLimit(opts.limit, 30, 100);
     const vec = `[${Array.from(embedding).join(',')}]`;
+    const sourceClause = opts.sourceIds !== undefined
+      ? sql`AND p.source_id = ANY(${opts.sourceIds}::text[])`
+      : opts.sourceId !== undefined
+        ? sql`AND p.source_id = ${opts.sourceId}`
+        : sql``;
     const rows = await sql`
-      SELECT t.id AS take_id, t.page_id, p.slug AS page_slug, t.row_num,
+      SELECT t.id::int AS take_id, t.page_id::int AS page_id, p.slug AS page_slug, p.source_id AS source_id, t.row_num,
              t.claim, t.kind, t.holder, t.weight,
              (1 - (t.embedding <=> ${vec}::halfvec(2048)))::real AS score
       FROM takes t
@@ -3948,6 +3985,7 @@ export class PostgresEngine implements BrainEngine {
           ${opts.takesHoldersAllowList ?? null}::text[] IS NULL
           OR t.holder = ANY(${opts.takesHoldersAllowList ?? null}::text[])
         )
+        ${sourceClause}
       ORDER BY t.embedding <=> ${vec}::halfvec(2048)
       LIMIT ${limit}
     `;
@@ -4096,6 +4134,11 @@ export class PostgresEngine implements BrainEngine {
       : sql``;
     const sinceClause = opts.since ? sql`AND since_date >= ${opts.since}` : sql``;
     const untilClause = opts.until ? sql`AND since_date <= ${opts.until}` : sql``;
+    const sourceClause = opts.sourceIds !== undefined
+      ? sql`AND EXISTS (SELECT 1 FROM pages p WHERE p.id = takes.page_id AND p.source_id = ANY(${opts.sourceIds}::text[]))`
+      : opts.sourceId !== undefined
+        ? sql`AND EXISTS (SELECT 1 FROM pages p WHERE p.id = takes.page_id AND p.source_id = ${opts.sourceId})`
+        : sql``;
     // v0.36.1.1 T1c: `resolved` deliberately filters to the 3-state subset
     // (correct|incorrect|partial) — NOT `resolved_quality IS NOT NULL` — so
     // historical comparisons against pre-v74 scorecards stay valid.
@@ -4114,7 +4157,7 @@ export class PostgresEngine implements BrainEngine {
           END
         )::float                                                                               AS brier
       FROM takes
-      WHERE 1=1 ${holderClause} ${domainClause} ${sinceClause} ${untilClause} ${allowed}
+      WHERE 1=1 ${holderClause} ${domainClause} ${sinceClause} ${untilClause} ${allowed} ${sourceClause}
     `;
     const r = rows[0] as { total_bets: number; resolved: number; correct: number; incorrect: number; partial: number; unresolvable_count: number; brier: number | null };
     return finalizeScorecard(r);
@@ -4136,6 +4179,11 @@ export class PostgresEngine implements BrainEngine {
     const maxIdx = Math.floor(1 / bucketSize) - 1;
     const allowed = allowList ? sql`AND holder = ANY(${allowList}::text[])` : sql``;
     const holderClause = opts.holder ? sql`AND holder = ${opts.holder}` : sql``;
+    const sourceClause = opts.sourceIds !== undefined
+      ? sql`AND EXISTS (SELECT 1 FROM pages p WHERE p.id = takes.page_id AND p.source_id = ANY(${opts.sourceIds}::text[]))`
+      : opts.sourceId !== undefined
+        ? sql`AND EXISTS (SELECT 1 FROM pages p WHERE p.id = takes.page_id AND p.source_id = ${opts.sourceId})`
+        : sql``;
     // Bucketing uses NUMERIC for exact decimal arithmetic. Going through
     // FLOAT introduces IEEE 754 rounding (e.g. 0.7/0.1 = 6.9999..., FLOOR=6
     // instead of the expected 7), which makes Postgres and PGLite diverge
@@ -4149,7 +4197,7 @@ export class PostgresEngine implements BrainEngine {
           (resolved_quality = 'correct')::int AS hit
         FROM takes
         WHERE resolved_quality IN ('correct','incorrect')
-          ${holderClause} ${allowed}
+          ${holderClause} ${allowed} ${sourceClause}
       )
       SELECT
         (bucket_idx::numeric * ${bucketSize}::numeric)::float       AS bucket_lo,
