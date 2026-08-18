@@ -632,7 +632,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     try {
       // Wipe any prior log rows for our test client so we can assert exact counts.
       await sql.begin(async (tx) => {
-        await tx`SELECT set_config('app.source_id', 'default', true)`;
+        await tx`SELECT set_config('app.source_id', 'default', true), set_config('app.source_ids', 'default', true)`;
         await tx`DELETE FROM mcp_request_log WHERE token_name = ${clientId!}`;
       });
 
@@ -657,7 +657,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
       await new Promise(r => setTimeout(r, 250));
 
       const rows = await sql.begin(async (tx) => {
-        await tx`SELECT set_config('app.source_id', 'default', true)`;
+        await tx`SELECT set_config('app.source_id', 'default', true), set_config('app.source_ids', 'default', true)`;
         return await tx`
           SELECT operation, status, agent_name, params, error_message
           FROM mcp_request_log
