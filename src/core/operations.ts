@@ -491,7 +491,7 @@ export function resolveReadSourceScope(
       ? { sourceIds: allowed }
       : ctx.sourceId
         ? { sourceId: ctx.sourceId }
-        : {};
+        : { sourceIds: [] };
   }
 
   if (!permittedSources.includes(requestedSourceId)) {
@@ -561,7 +561,7 @@ const get_page: Operation = {
     // resolves to no source), the engine two-branch query falls through to
     // the cross-source view, preserving pre-v0.31.8 behavior. MCP callers
     // (stdio + HTTP) populate ctx.sourceId via the transport layer.
-    const sourceOpts = ctx.sourceId ? { sourceId: ctx.sourceId } : {};
+    const sourceOpts = sourceScopeOpts(ctx);
     // v0.41.13 #1436: fuzzy resolveSlugs ALSO needs source scope — pre-fix
     // it was unscoped, so a remote `get_page` with `fuzzy: true` could
     // return candidates from sources outside ctx.auth.allowedSources /
@@ -594,7 +594,7 @@ const get_page: Operation = {
     // inside bumpLastRetrievedAt (D2).
     bumpLastRetrievedAt(ctx.engine, [page.id]);
 
-    const tags = await ctx.engine.getTags(page.slug, sourceOpts);
+    const tags = await ctx.engine.getTags(page.slug, { sourceId: page.source_id });
     // Privacy boundary for the per-token allow-list (v0.28.6 for takes,
     // v0.32.2 for facts).
     //
@@ -1796,6 +1796,7 @@ const takes_list: Operation = {
     offset: { type: 'number', description: 'Skip first N rows' },
   },
   handler: async (ctx, p) => {
+    const scope = sourceScopeOpts(ctx);
     const rows = await ctx.engine.listTakes({
       page_slug: p.page_slug as string | undefined,
       holder: p.holder as string | undefined,
@@ -1808,9 +1809,10 @@ const takes_list: Operation = {
       // Per-token allow-list — server-side filter for MCP-bound calls.
       // Local CLI callers leave takesHoldersAllowList unset and see all holders.
       takesHoldersAllowList: ctx.takesHoldersAllowList,
+      ...scope,
     });
     return rows.map(row => withReadoutProvenance(row, {
-      source_id: ctx.sourceId ?? null,
+      source_id: row.source_id,
       citation: row.resolved_source ?? row.source ?? null,
       confidence: row.weight ?? null,
       created_by: row.holder ?? null,
@@ -1829,12 +1831,14 @@ const takes_search: Operation = {
     limit: { type: 'number', description: 'Max results (default 30, cap 100)' },
   },
   handler: async (ctx, p) => {
+    const scope = sourceScopeOpts(ctx);
     const rows = await ctx.engine.searchTakes(p.query as string, {
       limit: p.limit as number | undefined,
       takesHoldersAllowList: ctx.takesHoldersAllowList,
+      ...scope,
     });
     return rows.map(row => withReadoutProvenance(row, {
-      source_id: ctx.sourceId ?? null,
+      source_id: row.source_id,
       citation: null,
       confidence: row.weight ?? null,
       created_by: row.holder ?? null,
@@ -1863,15 +1867,18 @@ const takes_scorecard: Operation = {
     until: { type: 'string', description: 'Window end (YYYY-MM-DD)' },
   },
   handler: async (ctx, p) => {
-    return ctx.engine.getScorecard(
+    const scope = sourceScopeOpts(ctx);
+    const scorecard = await ctx.engine.getScorecard(
       {
         holder: p.holder as string | undefined,
         domainPrefix: p.domain_prefix as string | undefined,
         since: p.since as string | undefined,
         until: p.until as string | undefined,
+        ...scope,
       },
       ctx.takesHoldersAllowList,
     );
+    return { ...scorecard, source_projection: scope.sourceIds ?? (scope.sourceId ? [scope.sourceId] : []) };
   },
   cliHints: { name: 'takes-scorecard' },
 };
@@ -1889,10 +1896,12 @@ const takes_calibration: Operation = {
     bucket_size: { type: 'number', description: 'Bucket width in (0,1]; default 0.1' },
   },
   handler: async (ctx, p) => {
+    const scope = sourceScopeOpts(ctx);
     return ctx.engine.getCalibrationCurve(
       {
         holder: p.holder as string | undefined,
         bucketSize: p.bucket_size as number | undefined,
+        ...scope,
       },
       ctx.takesHoldersAllowList,
     );
@@ -3220,6 +3229,7 @@ const submit_ingestion_event: Operation = {
     }
     try {
       return await submitTrackedIngestionEvent(ctx.engine, sourceId, {
+        owner_source_id: sourceId,
         source_kind: sourceKind,
         source_uri: sourceUri,
         content,
@@ -3332,6 +3342,7 @@ const register_tracking_evidence: Operation = {
     const sourceId = resolveWriteSourceId(ctx);
     try {
       return await registerTrackingEvidence(ctx.engine, sourceId, {
+        owner_source_id: sourceId,
         evidence_slug: String(p.evidence_slug ?? ''),
         event_id: String(p.event_id ?? ''),
         event_version: p.event_version as string | undefined,
@@ -3623,6 +3634,24 @@ const submit_agent: Operation = {
   },
 };
 
+function assertRemoteJobReadable(ctx: OperationContext, job: { source_id: string | null; data: Record<string, unknown> }): void {
+  if (ctx.remote === false) return;
+  const dataSourceId = typeof job.data.owner_source_id === "string"
+    ? job.data.owner_source_id
+    : typeof job.data.source_id === "string"
+      ? job.data.source_id
+      : typeof job.data.page_source_id === "string"
+        ? job.data.page_source_id
+        : null;
+  const sourceId = job.source_id ?? dataSourceId;
+  const scope = sourceScopeOpts(ctx);
+  const allowed = typeof sourceId === "string" && (
+    scope.sourceIds ? scope.sourceIds.includes(sourceId) :
+      typeof scope.sourceId === "string" && scope.sourceId === sourceId
+  );
+  if (!allowed) throw new OperationError("invalid_params", "Job not found");
+}
+
 const get_job: Operation = {
   name: 'get_job',
   description: 'Get job status and details by ID',
@@ -3634,11 +3663,13 @@ const get_job: Operation = {
     const { MinionQueue } = await import('./minions/queue.ts');
     const queue = new MinionQueue(ctx.engine);
     const job = await queue.getJob(p.id as number);
-    if (!job) throw new OperationError('invalid_params', `Job not found: ${p.id}`);
-    return job;
+    if (!job) throw new OperationError('invalid_params', 'Job not found');
+    assertRemoteJobReadable(ctx, job);
+    const { receiptFromJob } = await import('./receipts.ts');
+    const receipt = receiptFromJob(job);
+    return { ...job, ...receipt, receipt };
   },
 };
-
 const list_jobs: Operation = {
   name: 'list_jobs',
   description: 'List jobs with optional filters',
@@ -3652,10 +3683,15 @@ const list_jobs: Operation = {
   handler: async (ctx, p) => {
     const { MinionQueue } = await import('./minions/queue.ts');
     const queue = new MinionQueue(ctx.engine);
+    const scope = sourceScopeOpts(ctx);
+    if (ctx.remote !== false && !scope.sourceId && !scope.sourceIds) return [];
+
     return queue.getJobs({
       status: p.status as string | undefined,
       queue: p.queue as string | undefined,
       name: p.name as string | undefined,
+      sourceId: scope.sourceId,
+      sourceIds: scope.sourceIds,
       limit: (p.limit as number) || 50,
     } as Parameters<typeof queue.getJobs>[0]);
   },
@@ -3805,7 +3841,8 @@ const get_job_progress: Operation = {
     const { MinionQueue } = await import('./minions/queue.ts');
     const queue = new MinionQueue(ctx.engine);
     const job = await queue.getJob(p.id as number);
-    if (!job) throw new OperationError('invalid_params', `Job not found: ${p.id}`);
+    if (!job) throw new OperationError('invalid_params', 'Job not found');
+    assertRemoteJobReadable(ctx, job);
     return { id: job.id, name: job.name, status: job.status, progress: job.progress };
   },
 };
@@ -3826,6 +3863,16 @@ const get_job_failure_report: Operation = {
       where = `id = $1`;
       params.push(p.id);
     }
+    const scope = sourceScopeOpts(ctx);
+    if (ctx.remote !== false && !scope.sourceId && !scope.sourceIds) return { failures: [] };
+    if (scope.sourceIds) {
+      where += ' AND source_id = ANY($' + (params.length + 1) + '::text[])';
+      params.push(scope.sourceIds);
+    } else if (scope.sourceId) {
+      where += ' AND source_id = $' + (params.length + 1);
+      params.push(scope.sourceId);
+    }
+
     const rows = await ctx.engine.executeRaw<Record<string, unknown>>(
       `SELECT id, name, queue, status, attempts_made, max_attempts, error_text,
               stacktrace, created_at, started_at, finished_at, updated_at
@@ -3878,7 +3925,8 @@ const get_job_undo_report: Operation = {
     const { MinionQueue } = await import('./minions/queue.ts');
     const queue = new MinionQueue(ctx.engine);
     const job = await queue.getJob(p.id as number);
-    if (!job) throw new OperationError('invalid_params', `Job not found: ${p.id}`);
+    if (!job) throw new OperationError('invalid_params', 'Job not found');
+    assertRemoteJobReadable(ctx, job);
     return {
       id: job.id,
       name: job.name,

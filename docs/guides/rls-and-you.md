@@ -7,6 +7,10 @@ process exits 1.
 This guide explains why, what to do when you hit the check, and the escape hatch
 for the cases where you really do want a table to stay readable by the anon key.
 
+## VoltMind Host application role
+
+For a Host deployment, the runtime connection must use a dedicated Postgres role with `NOSUPERUSER NOBYPASSRLS`. Source-owned tables use transaction-local source scope plus RLS policies, and the Host migration checks this boundary in the restricted Postgres E2E. Migrations and role provisioning may use a separate privileged setup role; that role must not be used by the running Host service. PGLite has no database RLS, so its equivalent protection is the Host application-layer source resolver.
+
 ## Why RLS matters
 
 Supabase exposes everything in the `public` schema via PostgREST. Whatever's
@@ -15,10 +19,7 @@ If RLS is off on a public table, the anon key can read it. On anything sensitive
 (auth tokens, chat history, financial data) that's an exfiltration vector, not
 a footgun.
 
-voltmind's service-role connection holds `BYPASSRLS`, so enabling RLS without
-policies does NOT break voltmind itself. It just blocks the anon key's default
-read. That's the security posture: deny-by-default to anon, full access for
-the service role.
+A privileged setup or migration role may hold `BYPASSRLS` while it provisions the schema. The running Host application role must not hold `BYPASSRLS`; otherwise database-level source isolation is bypassed. The runtime therefore uses explicit source policies rather than relying on a bypass role.
 
 ## What to do when doctor fails
 
@@ -102,16 +103,14 @@ voltmind apply-migrations --force-retry 35
 Re-running migration v35 is idempotent — it `DROP EVENT TRIGGER IF EXISTS`
 and recreates cleanly.
 
-### Why no FORCE ROW LEVEL SECURITY?
+### Why source-owned tables use FORCE ROW LEVEL SECURITY?
 
 Postgres has two RLS dials. `ENABLE` blocks anon/authenticated; `FORCE` also
-blocks the table OWNER unless they hold BYPASSRLS. We use `ENABLE` only,
-matching the posture in `src/schema.sql`, migrations v24, and v29. `FORCE`
-would lock non-BYPASSRLS apps out of their own freshly-created tables (the
-trigger function inherits the caller's role, not the voltmind role) — which
-defeats the cross-app coexistence story above. If you want defense-in-depth
-`FORCE` on a specific voltmind-owned table, add it explicitly in your own
-migration; voltmind's auto-RLS does not opt you in by default.
+blocks the table OWNER unless it holds BYPASSRLS. VoltMind source-owned tables use
+`FORCE` with explicit source policies so a misconfigured non-bypass runtime role
+cannot read across sources. The generic auto-RLS trigger for unrelated plugin tables
+still enables RLS without inventing an application policy; those tables require their
+own documented policy or an explicit exemption.
 
 ## The 1% case: deliberate exemption
 

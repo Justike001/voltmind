@@ -30,6 +30,9 @@ cd "$ROOT"
 GUARDED_FILES=(
   "src/core/cycle/synthesize.ts"
   "src/core/think/index.ts"
+  "src/core/minions/handlers/subagent.ts"
+  "src/commands/serve-http.ts"
+  "src/commands/eval-longmemeval.ts"
 )
 
 FAILED=0

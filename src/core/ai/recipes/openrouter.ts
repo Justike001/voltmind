@@ -90,6 +90,7 @@ export const openrouter: Recipe = {
         'google/gemini-3-flash-preview',
         'deepseek/deepseek-chat',
         'deepseek/deepseek-v4-pro',
+        'deepseek/deepseek-v4-flash-0731',
       ],
       supports_tools: true,
       // Model-specific cache support is resolved in capabilities.ts.

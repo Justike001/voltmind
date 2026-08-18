@@ -131,6 +131,8 @@ export interface MinionJobInput {
   idempotency_key?: string;
   /** Submission backpressure: cap waiting jobs with this name before inserting a new row. */
   maxWaiting?: number;
+  /** Reject rather than coalesce an unrelated waiting job when maxWaiting is hit. */
+  rejectOnBackpressure?: boolean;
 
   // v12: scheduler polish
   /**

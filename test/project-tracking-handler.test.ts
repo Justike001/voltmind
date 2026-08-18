@@ -136,6 +136,11 @@ describe('register_tracking_evidence', () => {
       affected_pages: ['projects/connector-rollout'],
     });
     expect(result.status).toBe('registered');
+    expect(result.receipt_id).toMatch(/^rcpt_tracking_/);
+    expect(result.schema_version).toBe(1);
+    expect(result.receipt_status).toBe('completed');
+    expect(result.owner_source_id).toBeNull();
+    expect(result.page_source_id).toBe('default');
     const duplicate = await registerTrackingEvidence(engine, 'default', {
       evidence_slug: 'sources/teams/chat-1',
       event_id: 'message-1',
@@ -145,6 +150,8 @@ describe('register_tracking_evidence', () => {
       affected_pages: ['projects/connector-rollout'],
     });
     expect(duplicate.status).toBe('duplicate');
+    expect(duplicate.receipt_id).toBe(result.receipt_id);
+    expect(duplicate.schema_version).toBe(1);
     const receipt = await engine.executeRaw<{ target_type: string; outcome: string }>(
       `SELECT target_type, outcome FROM project_tracking_receipts WHERE target_type='evidence'`,
     );

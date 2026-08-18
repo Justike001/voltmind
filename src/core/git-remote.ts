@@ -18,6 +18,8 @@ import { execFileSync } from 'child_process';
 import { lstatSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { isInternalUrl } from './url-safety.ts';
+import { validateAndResolveUrl, type ResolvedTarget } from './ssrf-validate.ts';
+export type { ResolvedTarget } from './ssrf-validate.ts';
 
 /**
  * Git CLI accepts two flag positions:
@@ -60,7 +62,9 @@ export type RemoteUrlErrorCode =
   | 'unsupported_scheme'
   | 'embedded_credentials'
   | 'path_traversal'
-  | 'internal_target';
+  | 'internal_target'
+  | 'dns_resolution_failed'
+  | 'dns_resolved_internal';
 
 export class RemoteUrlError extends Error {
   constructor(public code: RemoteUrlErrorCode, message: string) {
@@ -72,6 +76,11 @@ export class RemoteUrlError extends Error {
 export interface ParsedRemoteUrl {
   url: string;
   hostname: string;
+}
+
+export interface ResolvedRemoteUrl extends ParsedRemoteUrl {
+  /** DNS-pinned target for HTTP(S); undefined for SSH remotes. */
+  resolvedTarget?: ResolvedTarget;
 }
 
 export interface ParseUrlOpts {
@@ -113,17 +122,17 @@ export function parseRemoteUrl(s: string, opts: ParseUrlOpts = {}): ParsedRemote
   }
 
   const proto = url.protocol;
-  const isHttps = proto === 'https:';
+  const isHttp = proto === 'http:' || proto === 'https:';
   const isSsh = opts.allowSsh === true && (proto === 'ssh:' || Boolean(scp));
-  if (!isHttps && !isSsh) {
+  if (!isHttp && !isSsh) {
     throw new RemoteUrlError(
       'unsupported_scheme',
-      `URL scheme not supported (https:// only${opts.allowSsh ? ', or ssh:// / git@host:path' : ''}): ${proto}`,
+      `URL scheme not supported (http(s) only${opts.allowSsh ? ', or ssh:// / git@host:path' : ''}): ${proto}`,
     );
   }
   // Embedded credentials are never allowed. SSH uses the operator's key, not
   // a password in the URL; https must be password-free (key/token via env/helper).
-  if (isHttps && (url.username || url.password)) {
+  if (isHttp && (url.username || url.password)) {
     throw new RemoteUrlError(
       'embedded_credentials',
       'URL must not contain embedded credentials (https://user:pass@host)',
@@ -148,10 +157,43 @@ export function parseRemoteUrl(s: string, opts: ParseUrlOpts = {}): ParsedRemote
   return { url: s, hostname };
 }
 
+/**
+ * Resolve an HTTP(S) git remote once through the shared DNS-aware SSRF
+ * validator. The caller must pass the returned target to git via
+ * http.curloptResolve so git never performs a second hostname lookup.
+ */
+export async function resolveRemoteUrl(
+  s: string,
+  opts: ParseUrlOpts = {},
+): Promise<ResolvedRemoteUrl> {
+  const parsed = parseRemoteUrl(s, opts);
+  if (!parsed.url.startsWith('http://') && !parsed.url.startsWith('https://')) {
+    return parsed;
+  }
+
+  try {
+    const resolvedTarget = await validateAndResolveUrl(parsed.url, { allowPrivate: false });
+    return { ...parsed, resolvedTarget };
+  } catch (err) {
+    const code = err instanceof Error && 'code' in err
+      ? (err as { code?: string }).code
+      : undefined;
+    if (code === 'DNS_RESOLUTION_FAILED') {
+      throw new RemoteUrlError('dns_resolution_failed', err instanceof Error ? err.message : String(err));
+    }
+    if (code === 'DNS_RESOLVED_INTERNAL' || code === 'INTERNAL_HOST') {
+      throw new RemoteUrlError('dns_resolved_internal', err instanceof Error ? err.message : String(err));
+    }
+    throw err;
+  }
+}
+
 export interface CloneOpts {
   depth?: number; // default 1; 0 means full clone
   branch?: string;
   timeoutMs?: number; // default 600_000 (10 min)
+  /** Internal seam for callers/tests that already performed shared validation. */
+  resolvedTarget?: ResolvedTarget;
 }
 
 export class GitOperationError extends Error {
@@ -180,7 +222,7 @@ const GIT_ENV = {
  * - Default --depth=1 (no history); pass {depth: 0} for full clone.
  * - Throws GitOperationError on failure; caller is responsible for cleanup.
  */
-export function cloneRepo(url: string, destDir: string, opts: CloneOpts = {}): void {
+export async function cloneRepo(url: string, destDir: string, opts: CloneOpts = {}): Promise<void> {
   if (existsSync(destDir)) {
     let entries: string[];
     try {
@@ -200,21 +242,39 @@ export function cloneRepo(url: string, destDir: string, opts: CloneOpts = {}): v
     }
   }
 
-  const args: string[] = [...GIT_SSRF_FLAGS, 'clone', ...GIT_SSRF_SUBCOMMAND_FLAGS];
+  let parsed: ResolvedRemoteUrl;
+  try {
+    parsed = opts.resolvedTarget
+      ? { ...parseRemoteUrl(url, { allowSsh: true }), resolvedTarget: opts.resolvedTarget }
+      : await resolveRemoteUrl(url, { allowSsh: true });
+  } catch (e) {
+    if (e instanceof RemoteUrlError) {
+      throw new GitOperationError('clone', `git clone remote rejected: ${e.message}`, e);
+    }
+    throw e;
+  }
+
+  const args: string[] = [...GIT_SSRF_FLAGS];
+  if (parsed.resolvedTarget?.originalHost) {
+    const source = new URL(parsed.url);
+    const port = source.port || (source.protocol === 'https:' ? '443' : '80');
+    const ip = parsed.resolvedTarget.ipv6
+      ? `[${parsed.resolvedTarget.resolvedIp}]`
+      : parsed.resolvedTarget.resolvedIp;
+    args.push('-c', `http.curloptResolve=${parsed.resolvedTarget.originalHost}:${port}:${ip}`);
+  }
+  args.push('clone', ...GIT_SSRF_SUBCOMMAND_FLAGS);
   if (opts.depth !== 0) {
     args.push(`--depth=${opts.depth ?? 1}`);
   }
   if (opts.branch) {
     args.push('--branch', opts.branch);
   }
-  args.push(url, destDir);
+  args.push(parsed.url, destDir);
 
-  const isSsh = url.startsWith('ssh://') || /^[^@/\s]+@[^:\s]+:/.test(url);
+  const isSsh = parsed.url.startsWith('ssh://') || /^[^@/\s]+@[^:\s]+:/.test(parsed.url);
   const sshEnv = isSsh
     ? {
-        // Use the operator's key (already on the Host for the Gogs admin
-        // account). BatchMode avoids keyboard-interactive; accept-new records
-        // the internal Gogs host key on first contact without a prompt.
         GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new',
       }
     : {};
@@ -228,15 +288,55 @@ export function cloneRepo(url: string, destDir: string, opts: CloneOpts = {}): v
   } catch (e) {
     throw new GitOperationError(
       'clone',
-      `git clone failed for ${url}: ${(e as Error).message}`,
+      `git clone failed for ${parsed.url}: ${(e as Error).message}`,
       e,
     );
   }
 }
 
 /** Pull a repo with --ff-only and the same SSRF-defensive flags as cloneRepo. */
-export function pullRepo(repoPath: string, opts: { timeoutMs?: number } = {}): void {
-  const args: string[] = ['-C', repoPath, ...GIT_SSRF_FLAGS, 'pull', ...GIT_SSRF_SUBCOMMAND_FLAGS, '--ff-only'];
+export async function pullRepo(
+  repoPath: string,
+  opts: { timeoutMs?: number; remoteUrl?: string; resolvedTarget?: ResolvedTarget } = {},
+): Promise<void> {
+  let remoteUrl = opts.remoteUrl;
+  if (!remoteUrl) {
+    try {
+      remoteUrl = execFileSync('git', ['-C', repoPath, 'remote', 'get-url', 'origin'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 10_000,
+        env: { ...process.env, ...GIT_ENV },
+      }).toString().trim();
+    } catch (e) {
+      throw new GitOperationError('pull', `could not read origin remote in ${repoPath}`, e);
+    }
+  }
+  if (!remoteUrl) {
+    throw new GitOperationError('pull', `origin remote is empty in ${repoPath}`);
+  }
+
+  let parsed: ResolvedRemoteUrl;
+  try {
+    parsed = opts.resolvedTarget
+      ? { ...parseRemoteUrl(remoteUrl, { allowSsh: true }), resolvedTarget: opts.resolvedTarget }
+      : await resolveRemoteUrl(remoteUrl, { allowSsh: true });
+  } catch (e) {
+    if (e instanceof RemoteUrlError) {
+      throw new GitOperationError('pull', `git pull remote rejected: ${e.message}`, e);
+    }
+    throw e;
+  }
+
+  const args: string[] = ['-C', repoPath, ...GIT_SSRF_FLAGS];
+  if (parsed.resolvedTarget?.originalHost) {
+    const source = new URL(parsed.url);
+    const port = source.port || (source.protocol === 'https:' ? '443' : '80');
+    const ip = parsed.resolvedTarget.ipv6
+      ? `[${parsed.resolvedTarget.resolvedIp}]`
+      : parsed.resolvedTarget.resolvedIp;
+    args.push('-c', `http.curloptResolve=${parsed.resolvedTarget.originalHost}:${port}:${ip}`);
+  }
+  args.push('pull', ...GIT_SSRF_SUBCOMMAND_FLAGS, '--ff-only');
   try {
     execFileSync('git', args, {
       stdio: ['ignore', 'pipe', 'pipe'],

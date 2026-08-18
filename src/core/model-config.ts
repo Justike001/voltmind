@@ -62,19 +62,27 @@ export const DEFAULT_ALIASES: Record<string, string> = {
 };
 
 /**
+ * Default chat model for gateway-owned work when the operator has not set a
+ * model override. OpenRouter is OpenAI-compatible, so the API key stays at
+ * the gateway boundary and the route can be audited and budgeted centrally.
+ */
+export const DEFAULT_OPENROUTER_CHAT_MODEL =
+  'openrouter:deepseek/deepseek-v4-flash-0731';
+
+/**
  * Default model for each tier. Used as the hardcoded fallback when no
- * `models.tier.<tier>` config + no `models.default` is set. Subagent gets
- * Sonnet (Anthropic Messages API tool-loop shape required); reasoning gets
- * Sonnet (default workhorse); deep gets Opus 4.7 (expensive reasoning);
- * utility gets Haiku (fast classification).
+ * `models.tier.<tier>` config + no `models.default` is set. The reasoning and
+ * subagent tiers use the gateway-owned OpenRouter DeepSeek route by default;
+ * utility and deep retain their specialized defaults until explicitly
+ * configured.
  *
  * Users override via `voltmind config set models.tier.<tier> <model>`.
  */
 export const TIER_DEFAULTS: Record<ModelTier, string> = {
   utility:   'anthropic:claude-haiku-4-5-20251001',
-  reasoning: 'anthropic:claude-sonnet-4-6',
+  reasoning: DEFAULT_OPENROUTER_CHAT_MODEL,
   deep:      'anthropic:claude-opus-4-7',
-  subagent:  'anthropic:claude-sonnet-4-6',
+  subagent:  DEFAULT_OPENROUTER_CHAT_MODEL,
 };
 
 /**

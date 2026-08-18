@@ -33,6 +33,15 @@ const DEFAULT_MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MiB
 
 const TERMINAL_STATUSES = ['completed', 'failed', 'dead', 'cancelled'] as const;
 
+export class QueueBackpressureError extends Error {
+  readonly code = 'queue_backpressure' as const;
+
+  constructor() {
+    super('queue is at its waiting-job capacity; retry later');
+    this.name = 'QueueBackpressureError';
+  }
+}
+
 /** True when a job status is terminal (no further worker will ever pick it up). */
 function isTerminalStatus(status: string): boolean {
   return (TERMINAL_STATUSES as readonly string[]).includes(status);
@@ -199,6 +208,7 @@ export class MinionQueue {
             [jobName, backpressureQueue]
           );
           if (existingWaiting.length > 0) {
+            if (opts?.rejectOnBackpressure) throw new QueueBackpressureError();
             const coalesced = rowToMinionJob(existingWaiting[0]);
             try {
               const { logBackpressureCoalesce } = await import('./backpressure-audit.ts');
@@ -353,6 +363,7 @@ export class MinionQueue {
     queue?: string;
     name?: string;
     sourceId?: string;
+    sourceIds?: string[];
     beforeId?: number;
     limit?: number;
     offset?: number;
@@ -373,7 +384,12 @@ export class MinionQueue {
       conditions.push(`name = $${idx++}`);
       params.push(opts.name);
     }
-    if (opts?.sourceId) {
+    if (opts?.sourceIds) {
+      const sourceIds = Array.from(new Set(opts.sourceIds));
+      if (sourceIds.length === 0) return [];
+      conditions.push(`source_id = ANY($${idx++}::text[])`);
+      params.push(sourceIds);
+    } else if (opts?.sourceId) {
       conditions.push(`source_id = $${idx++}`);
       params.push(opts.sourceId);
     }

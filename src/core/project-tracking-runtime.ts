@@ -18,6 +18,7 @@ import {
   validateActionAssigneeCoverage,
   type ActionAssigneeProjection,
 } from './ingestion/action-assignees.ts';
+import { makeReceiptProjection, makeTrackingReceiptProjection, type ReceiptProjection } from './receipts.ts';
 
 export interface TrackingQueue {
   add(
@@ -36,6 +37,8 @@ async function requireRegisteredSource(engine: BrainEngine, sourceId: string): P
 
 export interface SubmitTrackedIngestionInput {
   source_kind: string;
+  /** OAuth owner/write binding; never inferred from source_uri or emitter identity. */
+  owner_source_id?: string | null;
   source_uri: string;
   content: string;
   content_type?: IngestionContentType;
@@ -55,6 +58,8 @@ export type TrackingClientOutcome = 'applied' | 'created' | 'review_needed' | 'n
 export interface RegisterTrackingEvidenceInput {
   evidence_slug: string;
   event_id: string;
+  /** OAuth owner/write binding, when the caller has it separately from the page source. */
+  owner_source_id?: string | null;
   event_version?: string;
   evidence_type: SourceEvidenceType;
   tracking_refs?: TrackingReference[];
@@ -148,6 +153,15 @@ export async function registerTrackingEvidence(
     || input.client_outcome === 'review_needed'
     || input.client_outcome === 'partial';
   const effectiveClientOutcome: TrackingClientOutcome = semanticReviewRequired ? 'review_needed' : input.client_outcome;
+  const trackingReceipt = (outcome: string) => makeTrackingReceiptProjection({
+    pageSourceId: sourceId,
+    ownerSourceId: input.owner_source_id,
+    sourceUri: (evidencePage as unknown as { source_uri?: unknown }).source_uri,
+    eventKind: input.evidence_type,
+    eventId,
+    targetSlug: evidenceSlug,
+    outcome,
+  });
   const renderHash = pageRenderHash(evidencePage);
   const sourcePayloadHash = evidencePage.source_payload_hash ?? null;
   const fileRefsProjectionHash = pageFileRefsHash(evidencePage);
@@ -170,7 +184,10 @@ export async function registerTrackingEvidence(
     && priorRenderHash === renderHash && prior.file_refs_projection_hash === fileRefsProjectionHash;
   const recovered = sameRevision && prior?.outcome !== 'registered' && prior?.outcome !== 'verified';
   if (sameRevision && !recovered && !semanticReviewRequired) {
-    return { status: 'duplicate', semantic_status: 'complete', source_id: sourceId, evidence_slug: evidenceSlug, content_hash: renderHash, source_payload_hash: sourcePayloadHash };
+    return {
+      ...trackingReceipt("duplicate"),
+      status: 'duplicate', semantic_status: 'complete', source_id: sourceId, evidence_slug: evidenceSlug, content_hash: renderHash, source_payload_hash: sourcePayloadHash,
+    };
   }
   const projectionChanged = !!prior && sameVersion && (sourceEqual || legacyEqual)
     && (priorRenderHash !== renderHash || prior.file_refs_projection_hash !== fileRefsProjectionHash);
@@ -219,6 +236,7 @@ export async function registerTrackingEvidence(
         conflictKind === 'source_revision_conflict' ? 'same event version has a different source payload hash' : 'no pre-projection snapshot proves the legacy hash mapping', supersedes],
     );
     return {
+      ...trackingReceipt("conflict"),
       status: conflictKind === 'unknown_without_snapshot' ? 'manual_review_required' : 'conflict',
       source_id: sourceId, evidence_slug: evidenceSlug, content_hash: renderHash,
       source_payload_hash: sourcePayloadHash, conflict_kind: conflictKind,
@@ -262,6 +280,7 @@ export async function registerTrackingEvidence(
       renderHash, fileRefsProjectionHash, snapshotKind, outcome, details, null, supersedes],
   );
   return {
+    ...trackingReceipt(outcome),
     status: outcome,
     semantic_status: semanticReviewRequired ? 'review_required' : 'complete',
     assignee_coverage_findings: assigneeFindings,
@@ -279,7 +298,7 @@ export async function submitTrackedIngestionEvent(
   sourceId: string,
   input: SubmitTrackedIngestionInput,
   queue: TrackingQueue = new MinionQueue(engine),
-): Promise<{ source_id: string; status: 'queued' | 'duplicate'; job_id: number }> {
+): Promise<{ source_id: string; status: 'queued' | 'duplicate' } & ReceiptProjection> {
   await requireRegisteredSource(engine, sourceId);
   const fileRefs = input.file_refs === undefined
     ? undefined
@@ -333,13 +352,34 @@ export async function submitTrackedIngestionEvent(
     [idempotencyKey],
   );
   if (existing[0]?.id !== undefined) {
-    return { source_id: sourceId, status: 'duplicate', job_id: existing[0].id };
+    return {
+      source_id: sourceId,
+      status: 'duplicate',
+      ...makeReceiptProjection({
+        jobId: existing[0].id,
+        status: 'waiting',
+        ownerSourceId: input.owner_source_id,
+        pageSourceId: null,
+        sourceUri: input.source_uri,
+      }),
+    };
   }
   const job = await queue.add('ingest_capture', {
     event,
+    owner_source_id: input.owner_source_id ?? null,
     ...(routedSlug ? { slug: routedSlug } : {}),
   }, { idempotency_key: idempotencyKey });
-  return { source_id: sourceId, status: 'queued', job_id: job.id };
+  return {
+    source_id: sourceId,
+    status: 'queued',
+    ...makeReceiptProjection({
+      jobId: job.id,
+      status: 'waiting',
+      ownerSourceId: input.owner_source_id,
+      pageSourceId: null,
+      sourceUri: input.source_uri,
+    }),
+  };
 }
 
 export async function getProjectTrackingStatus(engine: BrainEngine, sourceId: string): Promise<Record<string, unknown>> {
@@ -392,6 +432,7 @@ export async function listProjectTrackingReceipts(
   const output: Record<string, unknown>[] = [];
   for (const row of rows) {
     const item: Record<string, unknown> = {
+      ...makeTrackingReceiptProjection({ pageSourceId: sourceId, eventKind: String(row.event_kind), eventId: String(row.event_key), targetSlug: String(row.evidence_slug), outcome: String(row.outcome) }),
       event_id: row.event_key,
       event_version: row.event_version,
       evidence_slug: row.evidence_slug,
@@ -443,7 +484,7 @@ export async function reconcileTrackingProjection(
   if (!page) throw new Error(`Evidence page not found: ${sourceId}:${input.evidence_slug}`);
   const currentFileHash = pageFileRefsHash(page);
   if (page.content_hash !== input.new_render_hash || currentFileHash !== input.new_file_refs_hash || !page.source_payload_hash) {
-    return { status: 'manual_review_required', reason: 'current_page_hashes_do_not_match' };
+    return { ...makeTrackingReceiptProjection({ pageSourceId: sourceId, eventKind: "evidence", eventId: input.event_id, targetSlug: input.evidence_slug, outcome: "manual_review_required" }), status: 'manual_review_required', reason: 'current_page_hashes_do_not_match' };
   }
   const stripProjection = (text: string) => withExternalFileRefsProjection(text, []);
   const currentFrontmatter = { ...page.frontmatter };
@@ -460,14 +501,14 @@ export async function reconcileTrackingProjection(
     [page.id, input.old_render_hash, page.source_payload_hash, input.old_file_refs_hash],
   );
   const snapshot = snapshots[0];
-  if (!snapshot) return { status: 'manual_review_required', reason: 'pre_projection_snapshot_missing' };
+  if (!snapshot) return { ...makeTrackingReceiptProjection({ pageSourceId: sourceId, eventKind: "evidence", eventId: input.event_id, targetSlug: input.evidence_slug, outcome: "manual_review_required" }), status: 'manual_review_required', reason: 'pre_projection_snapshot_missing' };
   const oldFrontmatter = { ...(snapshot.frontmatter ?? {}) };
   delete oldFrontmatter.file_refs;
   delete oldFrontmatter.file_refs_version;
   if (stripProjection(snapshot.compiled_truth) !== stripProjection(page.compiled_truth)
     || snapshot.timeline !== page.timeline
     || JSON.stringify(oldFrontmatter) !== JSON.stringify(currentFrontmatter)) {
-    return { status: 'manual_review_required', reason: 'body_or_non_file_projection_changed' };
+    return { ...makeTrackingReceiptProjection({ pageSourceId: sourceId, eventKind: "evidence", eventId: input.event_id, targetSlug: input.evidence_slug, outcome: "manual_review_required" }), status: 'manual_review_required', reason: 'body_or_non_file_projection_changed' };
   }
   return await engine.transaction(async (tx) => {
     const receipts = await tx.executeRaw<{ outcome: string; source_payload_hash: string | null; event_version: string | null; target_slug: string }>(
@@ -477,7 +518,7 @@ export async function reconcileTrackingProjection(
     );
     const receipt = receipts.find((row) => row.target_slug === input.evidence_slug);
     if (!receipt || receipt.event_version !== input.event_version || receipt.source_payload_hash !== page.source_payload_hash) {
-      return { status: 'manual_review_required', reason: 'receipt_identity_or_source_hash_mismatch' };
+      return { ...makeTrackingReceiptProjection({ pageSourceId: sourceId, eventKind: "evidence", eventId: input.event_id, targetSlug: input.evidence_slug, outcome: "manual_review_required" }), status: 'manual_review_required', reason: 'receipt_identity_or_source_hash_mismatch' };
     }
     await tx.executeRaw(
       `UPDATE project_tracking_receipts SET content_hash=$4,render_hash=$4,file_refs_projection_hash=$5,updated_at=now()
@@ -492,7 +533,7 @@ export async function reconcileTrackingProjection(
        ON CONFLICT (page_source_id,event_source_id,event_kind,event_key,target_type,target_slug,content_hash) DO NOTHING`,
       [sourceId, input.event_id, input.evidence_slug, input.new_render_hash, input.new_file_refs_hash],
     );
-    return { status: 'reconciled', source_id: sourceId, evidence_slug: input.evidence_slug };
+    return { ...makeTrackingReceiptProjection({ pageSourceId: sourceId, eventKind: "evidence", eventId: input.event_id, targetSlug: input.evidence_slug, outcome: "reconciled" }), status: 'reconciled', source_id: sourceId, evidence_slug: input.evidence_slug };
   });
 }
 
@@ -506,5 +547,5 @@ export async function reconcileProjectTracking(
   const job = await queue.add('tracking_maintenance', { source_id: sourceId }, {
     idempotency_key: `tracking-maintenance:${sourceId}:${new Date().toISOString().slice(0, 13)}`,
   }, { allowProtectedSubmit: true });
-  return { source_id: sourceId, submitted: 1, job_id: job.id };
+  return { source_id: sourceId, submitted: 1, ...makeReceiptProjection({ jobId: job.id, status: 'waiting', ownerSourceId: null, pageSourceId: null }) };
 }

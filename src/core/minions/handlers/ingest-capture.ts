@@ -34,6 +34,7 @@ import type { BrainEngine } from '../../engine.ts';
 import type { IngestionEvent } from '../../ingestion/types.ts';
 import { validateIngestionEvent } from '../../ingestion/types.ts';
 import { importFromContent } from '../../import-file.ts';
+import { makeReceiptProjection, RECEIPT_SCHEMA_VERSION, type ReceiptProjection } from '../../receipts.ts';
 
 export interface IngestCaptureQueue {
   add(
@@ -54,6 +55,12 @@ export interface IngestCaptureResult {
   /** Deprecated compatibility fields; ingest no longer fills these. */
   tracking_job_id?: number;
   tracking_error?: string;
+  receipt_id: string;
+  schema_version: typeof RECEIPT_SCHEMA_VERSION;
+  receipt_status: ReceiptProjection['receipt_status'];
+  owner_source_id: string | null;
+  page_source_id: string | null;
+  emitter_source_id: string | null;
 }
 
 /** Builds the default slug for an event when the caller didn't provide one. */
@@ -115,12 +122,22 @@ export function makeIngestCaptureHandler(engine: BrainEngine, _queue?: IngestCap
       const currentVersion = state[0]?.event_version;
       if (currentVersion && (eventVersionIsOlder(event.event_version, currentVersion)
         || event.event_version === currentVersion)) {
+        const receipt = makeReceiptProjection({
+          jobId: job.id,
+          status: 'completed',
+          ownerSourceId: (data as { owner_source_id?: unknown }).owner_source_id,
+          pageSourceId,
+          emitterSourceId: (data as { emitter_source_id?: unknown }).emitter_source_id
+            ?? (event.metadata as Record<string, unknown> | undefined)?.emitter_id,
+          sourceUri: event.source_uri,
+        });
         return {
           slug,
           status: 'skipped',
           chunks: 0,
           untrusted_payload: event.untrusted_payload === true,
           source_kind: event.source_kind,
+          ...receipt,
           source_uri: event.source_uri,
         };
       }
@@ -235,12 +252,22 @@ export function makeIngestCaptureHandler(engine: BrainEngine, _queue?: IngestCap
       );
     }
 
+    const receipt = makeReceiptProjection({
+      jobId: job.id,
+      status: 'completed',
+      ownerSourceId: (data as { owner_source_id?: unknown }).owner_source_id,
+      pageSourceId,
+      emitterSourceId: (data as { emitter_source_id?: unknown }).emitter_source_id
+        ?? (event.metadata as Record<string, unknown> | undefined)?.emitter_id,
+      sourceUri: event.source_uri,
+    });
     return {
       slug,
       status: result.status,
       chunks: result.chunks,
       untrusted_payload: untrustedPayload,
       source_kind: event.source_kind,
+      ...receipt,
       source_uri: event.source_uri,
     };
   };

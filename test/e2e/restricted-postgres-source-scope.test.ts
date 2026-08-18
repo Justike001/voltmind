@@ -62,6 +62,13 @@ run('restricted Postgres source scope (VOLTMIND_RESTRICTED_DATABASE_URL)', () =>
     await setupEngine.executeRaw('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO voltmind_restricted');
     await setupEngine.executeRaw('GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO voltmind_restricted');
     await setupEngine.executeRaw('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO voltmind_restricted');
+    await setupEngine.executeRaw('REVOKE EXECUTE ON FUNCTION public.voltmind_admin_source_ids() FROM PUBLIC');
+    const helperPrivileges = await setupEngine.executeRaw<{ public_execute: boolean; restricted_execute: boolean }>(
+      `SELECT has_function_privilege('public', 'public.voltmind_admin_source_ids()', 'EXECUTE') AS public_execute,
+              has_function_privilege('voltmind_restricted', 'public.voltmind_admin_source_ids()', 'EXECUTE') AS restricted_execute`,
+    );
+    expect(helperPrivileges[0]?.public_execute).toBe(false);
+    expect(helperPrivileges[0]?.restricted_execute).toBe(true);
     await setupEngine.transaction(async (tx) => {
       // The owner is NOSUPERUSER/NOBYPASSRLS after bootstrap. Admin source
       // scope keeps setup within ordinary RLS instead of bypassing it.

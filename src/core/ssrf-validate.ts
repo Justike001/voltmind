@@ -78,7 +78,15 @@ export type SSRFErrorCode =
  *   - DNS rebinding (resolves all records, blocks if any are internal)
  *   - Non-resolving hosts (caller can't fetch them anyway)
  */
-export async function validateAndResolveUrl(urlStr: string): Promise<ResolvedTarget> {
+export interface ValidateUrlOpts {
+  /** Operator-only escape hatch for explicitly configured private remotes. */
+  allowPrivate?: boolean;
+}
+
+export async function validateAndResolveUrl(
+  urlStr: string,
+  opts: ValidateUrlOpts = {},
+): Promise<ResolvedTarget> {
   let url: URL;
   try {
     url = new URL(urlStr);
@@ -96,7 +104,7 @@ export async function validateAndResolveUrl(urlStr: string): Promise<ResolvedTar
 
   // Layer 1: static check covers IPv4 hex/octal/single-int, IPv6 ULA + link-local,
   // metadata hostnames, CGNAT, IPv4-mapped IPv6.
-  if (isInternalUrl(urlStr)) {
+  if (!opts.allowPrivate && isInternalUrl(urlStr)) {
     throw new SSRFError('INTERNAL_HOST', `URL targets internal/private network: ${truncate(urlStr)}`);
   }
 
@@ -131,7 +139,7 @@ export async function validateAndResolveUrl(urlStr: string): Promise<ResolvedTar
   }
 
   for (const a of addrs) {
-    if (isAddressInternal(a.address, a.family)) {
+    if (!opts.allowPrivate && isAddressInternal(a.address, a.family)) {
       throw new SSRFError(
         'DNS_RESOLVED_INTERNAL',
         `${host} resolves to internal address ${a.address} (DNS rebinding attempt?)`,
@@ -217,8 +225,9 @@ export async function fetchWithSSRFGuard(
     let hops = 0;
     while (true) {
       const target = await validateAndResolveUrl(currentUrl);
+      const { maxRedirects: _maxRedirects, timeoutMs: _timeoutMs, ...requestInit } = init;
       const fetchInit: RequestInit = {
-        ...init,
+        ...requestInit,
         redirect: 'manual',
         signal: controller.signal,
       };
@@ -233,6 +242,7 @@ export async function fetchWithSSRFGuard(
       // Redirect status codes
       if ([301, 302, 303, 307, 308].includes(res.status)) {
         if (hops >= maxRedirects) {
+          if (maxRedirects === 0) return res;
           throw new SSRFError('SSRF_HOP_LIMIT', `Exceeded ${maxRedirects} redirect hops`);
         }
         const location = res.headers.get('location');

@@ -19,10 +19,10 @@ import {
   makeSubagentHandler,
   RateLeaseUnavailableError,
   stripProviderPrefix,
-  type MessagesClient,
 } from '../src/core/minions/handlers/subagent.ts';
 import type { ToolDef, MinionJobContext } from '../src/core/minions/types.ts';
 import type Anthropic from '@anthropic-ai/sdk';
+import type { ChatOpts, ChatResult, ChatBlock } from '../src/core/ai/gateway.ts';
 
 let engine: PGLiteEngine;
 let queue: MinionQueue;
@@ -48,6 +48,44 @@ beforeEach(async () => {
 // ── FakeMessagesClient ──────────────────────────────────────
 
 type FakeResponse = Partial<Anthropic.Message> & { content: Anthropic.Message['content'] };
+
+interface MessagesClient {
+  create(params: Anthropic.MessageCreateParamsNonStreaming, opts?: { signal?: AbortSignal }): Promise<Anthropic.Message>;
+}
+
+function chatFnFromClient(client: MessagesClient): (opts: ChatOpts) => Promise<ChatResult> {
+  return async (opts) => {
+    const response = await client.create({
+      model: stripProviderPrefix(opts.model ?? ''),
+      max_tokens: opts.maxTokens ?? 4096,
+      system: opts.system ? [{ type: 'text', text: opts.system }] : undefined,
+      messages: opts.messages as unknown as Anthropic.MessageParam[],
+      tools: opts.tools?.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.inputSchema,
+      })) as unknown as Anthropic.Tool[] | undefined,
+    }, { signal: opts.abortSignal });
+    const blocks: ChatBlock[] = [];
+    for (const block of response.content as any[]) {
+      if (block.type === 'text') blocks.push({ type: 'text', text: block.text });
+      if (block.type === 'tool_use') blocks.push({ type: 'tool-call', toolCallId: block.id, toolName: block.name, input: block.input });
+    }
+    return {
+      text: blocks.filter((b): b is { type: 'text'; text: string } => b.type === 'text').map(b => b.text).join(''),
+      blocks,
+      stopReason: response.stop_reason === 'tool_use' ? 'tool_calls' : response.stop_reason === 'max_tokens' ? 'length' : response.stop_reason === 'end_turn' ? 'end' : 'other',
+      usage: {
+        input_tokens: response.usage?.input_tokens ?? 0,
+        output_tokens: response.usage?.output_tokens ?? 0,
+        cache_read_tokens: (response.usage as any)?.cache_read_input_tokens ?? 0,
+        cache_creation_tokens: (response.usage as any)?.cache_creation_input_tokens ?? 0,
+      },
+      model: opts.model ?? 'anthropic:unknown',
+      providerId: 'anthropic',
+    };
+  };
+}
 
 class FakeMessagesClient implements MessagesClient {
   public calls: Anthropic.MessageCreateParamsNonStreaming[] = [];
@@ -128,7 +166,7 @@ describe('subagent handler happy path', () => {
     const client = new FakeMessagesClient([
       { content: [{ type: 'text', text: 'hello world' }] as any, stop_reason: 'end_turn' },
     ]);
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [] });
     const ctx = await makeCtx({ prompt: 'hi' });
 
     const result = await handler(ctx);
@@ -160,7 +198,7 @@ describe('subagent handler happy path', () => {
         stop_reason: 'end_turn',
       },
     ]);
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [tool] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [tool] });
     const ctx = await makeCtx({ prompt: 'go' });
 
     const result = await handler(ctx);
@@ -191,7 +229,7 @@ describe('subagent handler happy path', () => {
         stop_reason: 'end_turn',
       },
     ]);
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [tool] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [tool] });
     const ctx = await makeCtx({ prompt: 'try' });
 
     const result = await handler(ctx);
@@ -214,7 +252,7 @@ describe('subagent handler happy path', () => {
       },
       { content: [{ type: 'text', text: 'ok' }] as any, stop_reason: 'end_turn' },
     ]);
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [] });
     const ctx = await makeCtx({ prompt: 'x' });
 
     const result = await handler(ctx);
@@ -236,7 +274,7 @@ describe('subagent handler happy path', () => {
     }));
     const client = new FakeMessagesClient(echoing);
     const tool = makeEchoTool();
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [tool] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [tool] });
     const ctx = await makeCtx({ prompt: 'loop', max_turns: 2 });
 
     const result = await handler(ctx);
@@ -257,7 +295,7 @@ describe('subagent handler replay (crash recovery)', () => {
         stop_reason: 'tool_use' as any,
       },
     ]);
-    const handler1 = makeSubagentHandler({ engine, client: client1, toolRegistry: [tool] });
+    const handler1 = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client1), toolRegistry: [tool] });
     const ctx = await makeCtx({ prompt: 'start' });
 
     // Run handler1 until it WOULD make a second LLM call — force that
@@ -269,7 +307,7 @@ describe('subagent handler replay (crash recovery)', () => {
           stop_reason: 'tool_use' as any,
         },
       ]);
-      const interrupted = makeSubagentHandler({ engine, client: client1b, toolRegistry: [tool] });
+      const interrupted = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client1b), toolRegistry: [tool] });
       await interrupted(ctx);
     } catch {
       // Out-of-scripted-responses — simulates worker kill before turn 2.
@@ -288,7 +326,7 @@ describe('subagent handler replay (crash recovery)', () => {
     const client2 = new FakeMessagesClient([
       { content: [{ type: 'text', text: 'resumed ok' }] as any, stop_reason: 'end_turn' },
     ]);
-    const handler2 = makeSubagentHandler({ engine, client: client2, toolRegistry: [tool] });
+    const handler2 = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client2), toolRegistry: [tool] });
     const result = await handler2(ctx);
 
     expect(result.result).toBe('resumed ok');
@@ -332,7 +370,7 @@ describe('subagent handler replay (crash recovery)', () => {
     const client = new FakeMessagesClient([
       { content: [{ type: 'text', text: 'finished after replay' }] as any, stop_reason: 'end_turn' },
     ]);
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [throwingTool] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [throwingTool] });
     const result = await handler(ctx);
 
     expect(result.stop_reason).toBe('end_turn');
@@ -376,7 +414,7 @@ describe('subagent handler replay (crash recovery)', () => {
     // tries to call messages.create, it throws. The fix guarantees we
     // never reach that path.
     const client = new FakeMessagesClient([]);
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [] });
     const result = await handler(ctx);
 
     expect(result.stop_reason).toBe('end_turn');
@@ -415,7 +453,7 @@ describe('subagent handler replay (crash recovery)', () => {
     const client = new FakeMessagesClient([
       { content: [{ type: 'text', text: 'done after tool' }] as any, stop_reason: 'end_turn' },
     ]);
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [echoTool] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [echoTool] });
     const result = await handler(ctx);
     expect(result.stop_reason).toBe('end_turn');
     expect(result.result).toBe('done after tool');
@@ -447,7 +485,7 @@ describe('subagent handler replay (crash recovery)', () => {
     );
 
     const client = new FakeMessagesClient([]);
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [nonIdempotent] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [nonIdempotent] });
     await expect(handler(ctx)).rejects.toThrow(/non-idempotent/);
   });
 });
@@ -458,7 +496,7 @@ describe('subagent handler lease behavior', () => {
       { content: [{ type: 'text', text: 'ok' }] as any, stop_reason: 'end_turn' },
     ]);
     const handler = makeSubagentHandler({
-      engine, client, toolRegistry: [], maxConcurrent: 1, rateLeaseKey: 'k1',
+      engine, chatFn: chatFnFromClient(client), toolRegistry: [], maxConcurrent: 1, rateLeaseKey: 'k1',
     });
     const ctx = await makeCtx({ prompt: 'hi' });
     await handler(ctx);
@@ -499,7 +537,7 @@ describe('subagent handler lease behavior', () => {
       },
     };
     const handler = makeSubagentHandler({
-      engine, client, toolRegistry: [], maxConcurrent: 100, rateLeaseKey: 'k_prefix',
+      engine, chatFn: chatFnFromClient(client), toolRegistry: [], maxConcurrent: 100, rateLeaseKey: 'k_prefix',
     });
     const ctx = await makeCtx({
       prompt: 'hello',
@@ -522,7 +560,7 @@ describe('subagent handler lease behavior', () => {
     );
     const client = new FakeMessagesClient([]);
     const handler = makeSubagentHandler({
-      engine, client, toolRegistry: [], maxConcurrent: 1, rateLeaseKey: 'k_cap',
+      engine, chatFn: chatFnFromClient(client), toolRegistry: [], maxConcurrent: 1, rateLeaseKey: 'k_cap',
     });
     const ctx = await makeCtx({ prompt: 'blocked' });
     await expect(handler(ctx)).rejects.toBeInstanceOf(RateLeaseUnavailableError);
@@ -532,7 +570,7 @@ describe('subagent handler lease behavior', () => {
 describe('subagent handler input validation', () => {
   test('missing prompt throws', async () => {
     const client = new FakeMessagesClient([]);
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [] });
     const ctx = await makeCtx({});
     await expect(handler(ctx)).rejects.toThrow(/prompt/);
   });
@@ -540,58 +578,21 @@ describe('subagent handler input validation', () => {
   test('allowed_tools unknown name rejected at dispatch', async () => {
     const tool = makeEchoTool('real');
     const client = new FakeMessagesClient([]);
-    const handler = makeSubagentHandler({ engine, client, toolRegistry: [tool] });
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [tool] });
     const ctx = await makeCtx({ prompt: 'x', allowed_tools: ['real', 'ghost_tool'] });
     await expect(handler(ctx)).rejects.toThrow(/unknown tool/);
   });
 });
 
-describe('makeSubagentHandler default client construction', () => {
-  test('factory default wires sdk.messages through to the handler', async () => {
-    // Regression guard for the v0.16.0 shipped bug: makeSubagentHandler
-    // was casting `new Anthropic()` (top-level SDK class) to MessagesClient,
-    // but `.create()` lives at sdk.messages.create. Every subagent job in
-    // production died with "client.create is not a function" on first LLM
-    // call. This test exercises the default-client path (no `deps.client`
-    // injected) via the makeAnthropic dep-injection seam, so the exact
-    // default-branch construction is covered without a real API call.
-    const calls: Anthropic.MessageCreateParamsNonStreaming[] = [];
-    const fakeSdk = {
-      messages: {
-        async create(
-          params: Anthropic.MessageCreateParamsNonStreaming,
-        ): Promise<Anthropic.Message> {
-          calls.push(params);
-          return {
-            id: 'msg_regression',
-            type: 'message',
-            role: 'assistant',
-            model: params.model,
-            stop_reason: 'end_turn',
-            stop_sequence: null,
-            content: [{ type: 'text', text: 'ok' }],
-            usage: {
-              input_tokens: 1,
-              output_tokens: 1,
-              cache_read_input_tokens: 0,
-              cache_creation_input_tokens: 0,
-            },
-          } as unknown as Anthropic.Message;
-        },
-      },
-    } as unknown as Anthropic;
-
-    // Crucial: do NOT pass `client`. Only `makeAnthropic`. This forces the
-    // factory to hit the default-client branch (`deps.client ?? makeAnthropic().messages`).
-    const handler = makeSubagentHandler({
-      engine,
-      makeAnthropic: () => fakeSdk,
-      toolRegistry: [],
-    });
+describe('makeSubagentHandler gateway transport construction', () => {
+  test('factory uses the gateway-shaped transport seam', async () => {
+    const client = new FakeMessagesClient([
+      { content: [{ type: 'text', text: 'ok' }] as any, stop_reason: 'end_turn' },
+    ]);
+    const handler = makeSubagentHandler({ engine, chatFn: chatFnFromClient(client), toolRegistry: [] });
     const ctx = await makeCtx({ prompt: 'hello' });
     const result = await handler(ctx);
-
-    expect(calls.length).toBe(1);
+    expect(client.calls.length).toBe(1);
     expect(result.stop_reason).toBe('end_turn');
     expect(result.result).toBe('ok');
   });

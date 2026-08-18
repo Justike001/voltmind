@@ -24,6 +24,7 @@ import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/serv
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { InvalidTokenError, InvalidClientMetadataError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { hashToken, generateToken, isUndefinedColumnError } from './utils.ts';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { hasScope, assertAllowedScopes, parseScopeString, InvalidScopeError } from './scope.ts';
 import type { SqlQuery, SqlValue } from './sql-query.ts';
 export type { SqlQuery, SqlValue };
@@ -39,7 +40,7 @@ export type { SqlQuery, SqlValue };
  * columns ("insufficient data left in message"), so we hand-build the array
  * literal `{...}` and let Postgres parse it on insert.
  *
- * SECURITY: every element is wrapped in double quotes with `"` and `\`
+ * SECURITY: every element is wrapped in double quotes with `"` and ``
  * escaped. Without this, an element containing a comma (e.g., a malicious
  * `redirect_uri` containing `,`) would be parsed by Postgres as MULTIPLE
  * array elements, smuggling values past validation. See CSO finding #5.
@@ -100,6 +101,75 @@ export class InvalidTokenEndpointAuthMethodError extends Error {
  * NOT apply on read — legacy oauth_clients rows with non-allowlist values
  * must continue to function unchanged.
  */
+
+export interface ParsedClientCredentials {
+  clientId: string;
+  clientSecret?: string;
+  source: 'basic' | 'body' | 'both' | 'none';
+}
+
+/** Parse RFC 6749 client authentication consistently for every token grant. */
+export function parseClientCredentials(
+  body: Record<string, unknown> | undefined,
+  authorizationHeader: string | undefined,
+  opts: { allowClientIdOnly?: boolean } = {},
+): ParsedClientCredentials {
+  const bodyClientId = typeof body?.client_id === 'string' && body.client_id.length > 0 ? body.client_id : undefined;
+  const bodySecret = typeof body?.client_secret === 'string' && body.client_secret.length > 0 ? body.client_secret : undefined;
+  let basicClientId: string | undefined;
+  let basicSecret: string | undefined;
+  const header = authorizationHeader?.trim();
+  if (header) {
+    const match = /^Basic\s+(.+)$/i.exec(header);
+    if (!match) throw new Error('Unsupported authorization scheme');
+    const encoded = match[1]!;
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+      throw new Error('Malformed Basic authorization credentials');
+    }
+    const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+    const colon = decoded.indexOf(':');
+    if (colon < 1) throw new Error('Malformed Basic authorization credentials');
+    const decodeForm = (value: string): string => decodeURIComponent(value.replace(/\+/g, ' '));
+    try {
+      basicClientId = decodeForm(decoded.slice(0, colon));
+      basicSecret = decodeForm(decoded.slice(colon + 1));
+    } catch {
+      throw new Error('Malformed Basic authorization credentials');
+    }
+    if (!basicClientId || !basicSecret) throw new Error('Malformed Basic authorization credentials');
+  }
+  if (basicClientId && bodyClientId && basicClientId !== bodyClientId) throw new Error('Conflicting client credentials');
+  if (basicSecret && bodySecret && basicSecret !== bodySecret) throw new Error('Conflicting client credentials');
+  const clientId = basicClientId ?? bodyClientId;
+  const clientSecret = basicSecret ?? bodySecret;
+  if (!clientId) {
+    if (opts.allowClientIdOnly && !header && bodyClientId) return { clientId: bodyClientId, source: 'none' };
+    throw new Error('client_id required');
+  }
+  if (!clientSecret) {
+    if (opts.allowClientIdOnly && !header && bodyClientId) return { clientId, source: 'none' };
+    throw new Error('client_secret required');
+  }
+  return { clientId, clientSecret, source: basicClientId && bodyClientId ? 'both' : basicClientId ? 'basic' : 'body' };
+}
+
+/** Verify the RFC 7636 S256 proof for an authorization-code exchange. */
+export function verifyPkceCodeVerifier(
+  codeChallenge: string | null | undefined,
+  codeVerifier: string | undefined,
+  codeChallengeMethod = 'S256',
+): void {
+  if (!codeChallenge) return;
+  if (!codeVerifier) throw new Error('PKCE code_verifier required');
+  if (codeChallengeMethod !== 'S256') throw new Error('Unsupported PKCE code_challenge_method: ' + codeChallengeMethod);
+  const actual = createHash('sha256').update(codeVerifier, 'ascii').digest('base64url');
+  const expected = Buffer.from(codeChallenge, 'ascii');
+  const observed = Buffer.from(actual, 'ascii');
+  if (expected.length !== observed.length || !timingSafeEqual(expected, observed)) {
+    throw new Error('PKCE code_verifier does not match code_challenge');
+  }
+}
+
 export function validateTokenEndpointAuthMethod(value: unknown): TokenEndpointAuthMethod {
   if (value === undefined || value === null || value === '') return 'client_secret_post';
   if (typeof value !== 'string') throw new InvalidTokenEndpointAuthMethodError(value);
@@ -440,12 +510,26 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
   async exchangeAuthorizationCode(
     client: OAuthClientInformationFull,
     authorizationCode: string,
-    _codeVerifier?: string,
+    codeVerifier?: string,
     redirectUri?: string,
     resource?: URL,
   ): Promise<OAuthTokens> {
     const codeHash = hashToken(authorizationCode);
     const now = Math.floor(Date.now() / 1000);
+
+    const selected = await this.sql`
+      SELECT code_challenge, code_challenge_method
+      FROM oauth_codes
+      WHERE code_hash = ${codeHash}
+        AND client_id = ${client.client_id}
+        AND expires_at > ${now}
+    `;
+    if (selected.length === 0) throw new Error('Authorization code not found or expired');
+    verifyPkceCodeVerifier(
+      selected[0]?.code_challenge as string | null | undefined,
+      codeVerifier,
+      (selected[0]?.code_challenge_method as string | null | undefined) || 'S256',
+    );
 
     // F1 + F7c hardening: bind client_id AND redirect_uri atomically into the
     // DELETE WHERE clause. RFC 6749 §10.5 requires auth codes be single-use;
@@ -518,8 +602,8 @@ export class VoltMindOAuthProvider implements OAuthServerProvider {
   ): Promise<OAuthTokens> {
     const tokenHash = hashToken(refreshToken);
     const now = Math.floor(Date.now() / 1000);
-    const transaction = this.sql.transaction ??
-      (async <T>(fn: (tx: SqlQuery) => Promise<T>) => fn(this.sql));
+    const transaction = this.sql.transaction;
+    if (!transaction) throw new Error('refresh_transaction_unavailable');
 
     // Validate before consuming the old token. The row lock serializes two
     // concurrent refreshes; invalid scope/expiry/client requests roll back

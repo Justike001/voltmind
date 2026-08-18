@@ -45,7 +45,7 @@ import type {
   TouchpointKind,
 } from './types.ts';
 import { resolveRecipe, assertTouchpoint, parseModelId } from './model-resolver.ts';
-import { resolveModel, TIER_DEFAULTS } from '../model-config.ts';
+import { DEFAULT_OPENROUTER_CHAT_MODEL, resolveModel, TIER_DEFAULTS } from '../model-config.ts';
 import type { BrainEngine } from '../engine.ts';
 import { dimsProviderOptions } from './dims.ts';
 import { AIConfigError, AITransientError, normalizeAIError } from './errors.ts';
@@ -56,7 +56,7 @@ const MAX_CHARS = 8000;
 export { DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from './defaults.ts';
 import { DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from './defaults.ts';
 const DEFAULT_EXPANSION_MODEL = 'anthropic:claude-haiku-4-5-20251001';
-const DEFAULT_CHAT_MODEL = 'anthropic:claude-sonnet-4-6';
+const DEFAULT_CHAT_MODEL = DEFAULT_OPENROUTER_CHAT_MODEL;
 // v0.35.0.0+: reranker default. Used only when search.reranker.enabled is set
 // AND no explicit reranker_model is configured. Mode bundles' per-mode
 // `reranker_model` default to this same value but can be overridden.
@@ -2605,6 +2605,8 @@ export interface ToolLoopOpts {
   abortSignal?: AbortSignal;
   /** Apply Anthropic cache_control to system + last tool. Silently ignored elsewhere. */
   cacheSystem?: boolean;
+  /** Gateway-shaped test transport; production uses the configured gateway chat. */
+  chatFn?: (opts: ChatOpts) => Promise<ChatResult>;
 
   /** Crash-replay state. When set, the loop resumes from the recorded position. */
   replayState?: ToolLoopReplayState;
@@ -2689,6 +2691,7 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
   let messageIdx = opts.replayState?.nextMessageIdx ?? 0;
   let finalText = '';
   let stopReason: ToolLoopStopReason = 'end';
+  let totalTurns = 0;
 
   while (turnIdx < maxTurns) {
     if (opts.abortSignal?.aborted) {
@@ -2700,7 +2703,7 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
 
     let chatResult: ChatResult;
     try {
-      chatResult = await chat({
+      chatResult = await (opts.chatFn ?? chat)({
         model: opts.model,
         system: opts.system,
         messages,
@@ -2721,6 +2724,7 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
     totalUsage.output_tokens += chatResult.usage.output_tokens;
     totalUsage.cache_read_tokens += chatResult.usage.cache_read_tokens;
     totalUsage.cache_creation_tokens += chatResult.usage.cache_creation_tokens;
+    totalTurns += 1;
 
     // D11 step 1: persist assistant turn BEFORE any tool dispatch.
     const assistantMessageIdx = messageIdx++;
@@ -2761,7 +2765,12 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
 
       const handler = handlers.get(call.toolName);
       if (!handler) {
-        // Tool not registered. Synthesize an error result; don't persist.
+        // Tool not registered. Persist the failed observation so replay and
+        // audit see the same outcome as other tool failures.
+        const failedId = (await opts.onToolCallStart?.(
+          turnIdx, assistantMessageIdx, callIdx, call.toolName, call.input, call.toolCallId,
+        ))?.gbrainToolUseId;
+        if (failedId) await opts.onToolCallFailed?.(failedId, `tool ${call.toolName} is not in the registry for this subagent`);
         toolResultBlocks.push({
           type: 'tool-result',
           toolCallId: call.toolCallId,
@@ -2860,7 +2869,7 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
     stopReason = 'max_turns';
   }
 
-  return { finalText, totalTurns: turnIdx, totalUsage, stopReason, messages };
+  return { finalText, totalTurns, totalUsage, stopReason, messages };
 }
 
 // ---- Reranker (v0.35.0.0+) ----

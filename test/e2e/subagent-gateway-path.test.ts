@@ -150,7 +150,6 @@ function buildHandler(toolRegistry: ToolDef[]) {
     engine,
     config: {} as any,
     toolRegistry,
-    makeAnthropic: () => ({ messages: { create: async () => { throw new Error('legacy path should not be invoked'); } } }) as any,
   });
 }
 

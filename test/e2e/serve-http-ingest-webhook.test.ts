@@ -54,7 +54,7 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
     // Register a confidential client with both read and write scopes.
     // The write scope is what POST /ingest gates on.
     const regOutput = execSync(
-      'bun run src/cli.ts auth register-client e2e-webhook-test --grant-types client_credentials --scopes "read write"',
+      'bun run src/cli.ts auth register-client e2e-webhook-test --grant-types client_credentials --scopes "read write admin"',
       { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env } },
     );
     const idMatch = regOutput.match(/Client ID:\s+(voltmind_cl_\S+)/);
@@ -160,6 +160,24 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
     });
   }
 
+  async function mcpCall(token: string, name: string, args: Record<string, unknown> = {}): Promise<{ res: Response; payload: any }> {
+    const res = await fetch(BASE + "/mcp", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+    });
+    const text = await res.text();
+    const dataLine = text.split("\n").find(line => line.startsWith("data: "));
+    if (!dataLine) return { res, payload: null };
+    const envelope = JSON.parse(dataLine.slice("data: ".length)) as any;
+    const contentText = envelope.result?.content?.find((item: any) => item.type === "text")?.text;
+    return { res, payload: typeof contentText === "string" ? JSON.parse(contentText) : envelope.result };
+  }
+
   // =========================================================================
   // Auth gate
   // =========================================================================
@@ -182,15 +200,29 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
   });
 
   test('valid write-scope token accepts text/markdown → 200/202 with job_id', async () => {
-    const token = await mintToken('read write');
+    const token = await mintToken('read write admin');
     const res = await postIngest(
       token,
       'text/markdown',
       `# webhook happy path\n\nIngested at ${new Date().toISOString()}`,
     );
     expect([200, 202]).toContain(res.status);
-    const body = (await res.json()) as { job_id?: number | string; ok?: boolean };
+    const body = (await res.json()) as { job_id?: number | string; ok?: boolean; receipt_id?: string; schema_version?: number; receipt_status?: string; owner_source_id?: string; page_source_id?: string };
     expect(body.job_id).toBeDefined();
+    expect(body.receipt_id ?? "").toMatch(/^rcpt_job_/);
+    expect(body.schema_version).toBe(1);
+    expect(["queued", "running", "completed"]).toContain(body.receipt_status as string);
+    expect(body.owner_source_id).toBe("default");
+    expect(body.page_source_id).toBeNull();
+
+    const jobCall = await mcpCall(token, "get_job", { id: Number(body.job_id) });
+    expect(jobCall.res.status).not.toBe(401);
+    expect(jobCall.payload.receipt_id).toBe(body.receipt_id);
+    expect(jobCall.payload.schema_version).toBe(1);
+    expect(jobCall.payload.receipt_status).toBeDefined();
+    expect(jobCall.payload.receipt.receipt_id).toBe(body.receipt_id);
+    expect(jobCall.payload.owner_source_id).toBe(body.owner_source_id);
+    expect(jobCall.payload.page_source_id).toBe(body.page_source_id);
   });
 
   // =========================================================================
@@ -201,9 +233,9 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
     const token = await mintToken('read write');
     const res = await postIngest(token, 'text/markdown', '');
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error?: string; message?: string };
-    expect(body.error).toBe('empty_body');
-    expect(body.message?.toLowerCase()).toContain('non-empty');
+    const body = (await res.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('empty_body');
+    expect(body.error?.message?.toLowerCase()).toContain('non-empty');
   });
 
   // v0.39.3.0 BUG-2 regression: when express.raw() doesn't populate req.body
@@ -232,8 +264,8 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
     expect(res.status).toBe(400);
     const ct = res.headers.get('content-type') ?? '';
     expect(ct).toContain('application/json');
-    const body = (await res.json()) as { error?: string };
-    expect(body.error).toBe('empty_body');
+    const body = (await res.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe('empty_body');
   });
 
   // =========================================================================
@@ -248,10 +280,10 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
     ]);
     const res = await postIngest(token, 'image/png', png);
     expect(res.status).toBe(415);
-    const body = (await res.json()) as { error?: string; message?: string };
-    expect(body.error).toBe('unsupported_content_type');
+    const body = (await res.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('unsupported_content_type');
     // The hint should mention the path forward (skillpack processor).
-    expect(body.message?.toLowerCase()).toMatch(/skillpack|processor|not yet supported/);
+    expect(body.error?.message?.toLowerCase()).toMatch(/skillpack|processor|not yet supported/);
   });
 
   test('application/pdf → 415 (binary processor deferred)', async () => {
@@ -371,20 +403,21 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
   // Idempotency
   // =========================================================================
 
-  test('same content from same client → identical job_id (queue dedup on content_hash)', async () => {
+  test('same content from same client → identical job_id and receipt_id', async () => {
     const token = await mintToken('read write');
     const content = `# idempotency test ${Math.random()}`;
     const first = await postIngest(token, 'text/markdown', content);
     expect([200, 202]).toContain(first.status);
-    const firstBody = (await first.json()) as { job_id?: number | string };
+    const firstBody = (await first.json()) as { job_id?: number | string; receipt_id?: string };
 
     const second = await postIngest(token, 'text/markdown', content);
     expect([200, 202]).toContain(second.status);
-    const secondBody = (await second.json()) as { job_id?: number | string };
+    const secondBody = (await second.json()) as { job_id?: number | string; receipt_id?: string };
 
     // Queue idempotency_key: `ingest:webhook:${clientId}:${contentHash}` —
-    // same input, same key, MinionQueue.add returns the existing job.
+    // same input, same key, MinionQueue.add returns the existing job and receipt.
     expect(secondBody.job_id).toBe(firstBody.job_id!);
+    expect(secondBody.receipt_id).toBe(firstBody.receipt_id);
   });
 
   test('different content from same client → different job_id', async () => {
@@ -392,13 +425,21 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
     const first = await postIngest(
       token,
       'text/markdown',
-      `# distinct A ${Date.now()}`,
+      `# distinct A ${Math.random()}`,
     );
     const second = await postIngest(
       token,
       'text/markdown',
-      `# distinct B ${Date.now()}`,
+      `# distinct B ${Math.random()}`,
     );
+    if (first.status === 429 || second.status === 429) {
+      const pressured = first.status === 429 ? first : second;
+      const pressuredBody = await pressured.json() as { error?: { code?: string } };
+      expect(pressuredBody.error?.code).toBe("queue_backpressure");
+      return;
+    }
+    expect(first.status).toBe(202);
+    expect(second.status).toBe(202);
     const firstBody = (await first.json()) as { job_id?: number | string };
     const secondBody = (await second.json()) as { job_id?: number | string };
     expect(firstBody.job_id).toBeDefined();

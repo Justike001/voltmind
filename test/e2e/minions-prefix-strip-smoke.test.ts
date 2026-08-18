@@ -1,20 +1,17 @@
 /**
- * v0.41 E2E — Bug 3 prefix-strip smoke.
- *
- * Verifies that a subagent job with `data.model = 'anthropic:claude-sonnet-4-6'`
- * sends the BARE model id to the Anthropic SDK (not the qualified string).
- * Uses a stubbed MessagesClient that records every params.model it sees.
- *
- * Pre-v0.41 this would have sent the qualified string to Anthropic and
- * gotten a 404 "model not found." Post-v0.41 the SDK receives
- * "claude-sonnet-4-6" cleanly.
+ * v0.41 E2E - qualified provider:model reaches the AI gateway transport.
  */
 
-import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 import { PGLiteEngine } from '../../src/core/pglite-engine.ts';
 import { MinionQueue } from '../../src/core/minions/queue.ts';
-import { makeSubagentHandler, type MessagesClient } from '../../src/core/minions/handlers/subagent.ts';
-import type Anthropic from '@anthropic-ai/sdk';
+import { makeSubagentHandler } from '../../src/core/minions/handlers/subagent.ts';
+import {
+  __setChatTransportForTests,
+  type ChatBlock,
+  type ChatResult,
+  type ChatOpts,
+} from '../../src/core/ai/gateway.ts';
 
 let engine: PGLiteEngine;
 let queue: MinionQueue;
@@ -37,33 +34,38 @@ beforeEach(async () => {
   await engine.executeRaw('DELETE FROM minion_jobs');
 }, 30_000);
 
-describe('v0.41 Bug 3 — E2E prefix strip at Anthropic call site', () => {
-  test('qualified provider:model strips to bare model_id at SDK call', async () => {
-    const calls: Anthropic.MessageCreateParamsNonStreaming[] = [];
-    const client: MessagesClient = {
-      async create(params) {
-        calls.push(params);
-        return {
-          content: [{ type: 'text', text: 'ok' }],
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 1, output_tokens: 1 },
-          role: 'assistant',
-        } as unknown as Anthropic.Message;
-      },
-    };
+afterEach(() => {
+  __setChatTransportForTests(null);
+});
+
+describe('v0.41 gateway routing', () => {
+  test('qualified provider:model reaches the gateway with the qualified model id', async () => {
+    const calls: ChatOpts[] = [];
+    __setChatTransportForTests(async (opts): Promise<ChatResult> => {
+      calls.push(opts);
+      return {
+        text: 'ok',
+        blocks: [{ type: 'text', text: 'ok' }] as ChatBlock[],
+        stopReason: 'end',
+        usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+        model: opts.model ?? 'anthropic:claude-sonnet-4-6',
+        providerId: 'anthropic',
+      };
+    });
+
     const handler = makeSubagentHandler({
-      engine, client, toolRegistry: [], maxConcurrent: 100,
+      engine,
+      toolRegistry: [],
+      maxConcurrent: 100,
       rateLeaseKey: 'k_e2e_prefix',
     });
 
-    // Submit with qualified model — the field-report case.
     const job = await queue.add(
       'subagent',
       { prompt: 'hi', model: 'anthropic:claude-sonnet-4-6' },
       {},
       { allowProtectedSubmit: true },
     );
-    // Drive the handler directly (worker not needed for one-shot test).
     const ctx = {
       id: job.id,
       data: { prompt: 'hi', model: 'anthropic:claude-sonnet-4-6' },
@@ -76,8 +78,6 @@ describe('v0.41 Bug 3 — E2E prefix strip at Anthropic call site', () => {
     await handler(ctx);
 
     expect(calls.length).toBe(1);
-    // The SDK MUST receive the bare model id (no `anthropic:` prefix).
-    expect(calls[0]!.model).toBe('claude-sonnet-4-6');
-    expect(calls[0]!.model).not.toContain(':');
+    expect(calls[0]!.model).toBe('anthropic:claude-sonnet-4-6');
   });
 });

@@ -74,6 +74,7 @@ describe('long-running project tracking capability injection', () => {
     } as unknown as BrainEngine;
     const result = await submitTrackedIngestionEvent(engine, 'company-a', {
       source_kind: 'teams-connector',
+      owner_source_id: 'company-a',
       source_uri: 'teams://conversation/example',
       content: 'Milestone reached.',
       event_id: 'event-1',
@@ -96,7 +97,14 @@ describe('long-running project tracking capability injection', () => {
       },
     });
 
-    expect(result).toEqual({ source_id: 'company-a', status: 'queued', job_id: 42 });
+    expect(result).toMatchObject({
+      source_id: 'company-a',
+      status: 'queued',
+      job_id: 42,
+      owner_source_id: 'company-a',
+      page_source_id: null,
+    });
+    expect(result.receipt_id).toMatch(/^rcpt_job_/);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.name).toBe('ingest_capture');
     expect((calls[0]?.data?.event as { source_id?: string }).source_id).toBe('company-a');

@@ -6,6 +6,7 @@ import {
   GIT_SSRF_FLAGS,
   GIT_SSRF_SUBCOMMAND_FLAGS,
   parseRemoteUrl,
+  type ResolvedTarget,
   RemoteUrlError,
   cloneRepo,
   pullRepo,
@@ -74,6 +75,13 @@ beforeEach(() => {
 });
 
 const fakePath = (): string => `${FAKE_GIT_DIR}:${process.env.PATH ?? ''}`;
+
+const TEST_RESOLVED_TARGET: ResolvedTarget = {
+  resolvedUrl: 'https://93.184.216.34/repo',
+  resolvedIp: '93.184.216.34',
+  originalHost: 'example.com',
+  ipv6: false,
+};
 
 // ---------------------------------------------------------------------------
 // GIT_SSRF_FLAGS — pinned shape (snapshot test). If a future flag is added,
@@ -265,7 +273,7 @@ describe('cloneRepo', () => {
     const dest = join(FAKE_GIT_DIR, 'clone-target');
     rmSync(dest, { recursive: true, force: true });
     await withEnv({ PATH: fakePath() }, async () => {
-      cloneRepo('https://example.com/repo', dest);
+      await cloneRepo('https://example.com/repo', dest, { resolvedTarget: TEST_RESOLVED_TARGET });
     });
     const calls = readArgvLog();
     expect(calls.length).toBe(1);
@@ -275,6 +283,7 @@ describe('cloneRepo', () => {
     expect(argv).toContain('clone');
     expect(argv).toContain('--depth=1');
     expect(argv).toContain('https://example.com/repo');
+    expect(argv).toContain('http.curloptResolve=example.com:443:93.184.216.34');
     expect(argv[argv.length - 1]).toBe(dest);
     // v0.34 fix wave: subcommand flags MUST appear after the verb. Real
     // git rejects `git --no-recurse-submodules clone ...` with exit 129.
@@ -292,7 +301,7 @@ describe('cloneRepo', () => {
     const dest = join(FAKE_GIT_DIR, 'clone-full');
     rmSync(dest, { recursive: true, force: true });
     await withEnv({ PATH: fakePath() }, async () => {
-      cloneRepo('https://example.com/repo', dest, { depth: 0 });
+      await cloneRepo('https://example.com/repo', dest, { depth: 0, resolvedTarget: TEST_RESOLVED_TARGET });
     });
     const argv = readArgvLog()[0];
     expect(argv.find(a => a.startsWith('--depth'))).toBeUndefined();
@@ -302,7 +311,7 @@ describe('cloneRepo', () => {
     const dest = join(FAKE_GIT_DIR, 'clone-branch');
     rmSync(dest, { recursive: true, force: true });
     await withEnv({ PATH: fakePath() }, async () => {
-      cloneRepo('https://example.com/repo', dest, { branch: 'main' });
+      await cloneRepo('https://example.com/repo', dest, { branch: 'main', resolvedTarget: TEST_RESOLVED_TARGET });
     });
     const argv = readArgvLog()[0];
     const branchIdx = argv.indexOf('--branch');
@@ -316,7 +325,7 @@ describe('cloneRepo', () => {
     writeFileSync(join(dest, 'sentinel'), 'hi');
     await withEnv({ PATH: fakePath() }, async () => {
       try {
-        cloneRepo('https://example.com/repo', dest);
+        await cloneRepo('https://example.com/repo', dest, { resolvedTarget: TEST_RESOLVED_TARGET });
         throw new Error('expected throw');
       } catch (e) {
         expect(e).toBeInstanceOf(GitOperationError);
@@ -333,7 +342,7 @@ describe('cloneRepo', () => {
     setMode('fail');
     await withEnv({ PATH: fakePath() }, async () => {
       try {
-        cloneRepo('https://example.com/repo', dest);
+        await cloneRepo('https://example.com/repo', dest, { resolvedTarget: TEST_RESOLVED_TARGET });
         throw new Error('expected throw');
       } catch (e) {
         expect(e).toBeInstanceOf(GitOperationError);
@@ -352,12 +361,13 @@ describe('pullRepo', () => {
     const repo = join(FAKE_GIT_DIR, 'pull-target');
     mkdirSync(repo, { recursive: true });
     await withEnv({ PATH: fakePath() }, async () => {
-      pullRepo(repo);
+      await pullRepo(repo, { remoteUrl: 'https://example.com/repo', resolvedTarget: TEST_RESOLVED_TARGET });
     });
     const argv = readArgvLog()[0];
     expect(argv[0]).toBe('-C');
     expect(argv[1]).toBe(repo);
     expect(argv.slice(2, 2 + GIT_SSRF_FLAGS.length)).toEqual([...GIT_SSRF_FLAGS]);
+    expect(argv).toContain('http.curloptResolve=example.com:443:93.184.216.34');
     expect(argv).toContain('pull');
     expect(argv).toContain('--ff-only');
     // v0.34 fix wave: subcommand flag position assertion.
@@ -375,7 +385,7 @@ describe('pullRepo', () => {
     mkdirSync(repo, { recursive: true });
     setMode('fail');
     await withEnv({ PATH: fakePath() }, async () => {
-      expect(() => pullRepo(repo)).toThrow(GitOperationError);
+      await expect(pullRepo(repo, { remoteUrl: 'https://example.com/repo', resolvedTarget: TEST_RESOLVED_TARGET })).rejects.toBeInstanceOf(GitOperationError);
     });
     rmSync(repo, { recursive: true, force: true });
   });

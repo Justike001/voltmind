@@ -19,12 +19,8 @@
  *   Abort token threads through both.
  */
 
-import { promises as dns } from 'dns';
-import {
-  isInternalUrl,
-  hostnameToOctets,
-  isPrivateIpv4,
-} from '../../../commands/integrations.ts';
+import { isInternalUrl, hostnameToOctets } from '../../../core/url-safety.ts';
+import { fetchWithSSRFGuard, SSRFError, validateAndResolveUrl } from '../../../core/ssrf-validate.ts';
 import type {
   Resolver,
   ResolverContext,
@@ -97,26 +93,6 @@ export const urlReachableResolver: Resolver<UrlReachableInput, UrlReachableOutpu
       };
     }
 
-    // DNS rebinding defense: resolve the hostname NOW and validate the resolved
-    // IP against private ranges. Prevents attacker-controlled domains whose DNS
-    // returns a public IP at string-validation time and `169.254.169.254` at
-    // fetch time. We check the A/AAAA records; if any of them is private, we
-    // refuse the whole URL rather than trying to pin a specific IP (node's
-    // fetch doesn't expose a lookup hook cleanly, and pinning would break SNI
-    // on some CDNs).
-    const rebindCheck = await checkDnsRebinding(url);
-    if (rebindCheck) {
-      return {
-        value: {
-          reachable: false,
-          reason: rebindCheck,
-        },
-        confidence: 1,
-        source: 'head-check',
-        fetchedAt: new Date(),
-      };
-    }
-
     let currentUrl = url;
     let status: number | undefined;
     let usedMethod: 'HEAD' | 'GET' = 'HEAD';
@@ -125,20 +101,38 @@ export const urlReachableResolver: Resolver<UrlReachableInput, UrlReachableOutpu
       const combinedSignal = composeSignals(signal, timeoutMs);
       let resp: Response;
       try {
-        resp = await fetch(currentUrl, {
+        resp = await fetchWithSSRFGuard(currentUrl, {
           method: usedMethod,
-          redirect: 'manual',
           signal: combinedSignal,
+          maxRedirects: 0,
+          timeoutMs,
         });
       } catch (err: unknown) {
         if (isAbortError(err)) {
           throw new ResolverError('aborted', `url_reachable aborted (${currentUrl})`, 'url_reachable', err);
         }
+        // A redirect hop is validated by the shared guard immediately before
+        // connect. Preserve the resolver's stable redirect-specific reason.
+        if (err instanceof SSRFError && currentUrl !== url) {
+          return {
+            value: {
+              reachable: false,
+              status,
+              finalUrl: currentUrl,
+              reason: err.code === 'DNS_RESOLVED_INTERNAL'
+                ? `redirect blocked by DNS check: ` + err.message
+                : `redirect to blocked hostname: ` + currentUrl,
+            },
+            confidence: 1,
+            source: 'head-check',
+            fetchedAt: new Date(),
+          };
+        }
         // fetch threw (DNS, connection refused, timeout). Not reachable, no status.
         return {
           value: {
             reachable: false,
-            reason: `fetch error: ${errMessage(err).slice(0, 200)}`,
+            reason: `fetch error: ` + errMessage(err).slice(0, 200),
           },
           confidence: 1,
           source: 'head-check',
@@ -171,35 +165,6 @@ export const urlReachableResolver: Resolver<UrlReachableInput, UrlReachableOutpu
           };
         }
         const nextUrl = new URL(location, currentUrl).toString();
-        // Re-validate each hop against SSRF (hostname string).
-        if (isInternalUrl(nextUrl)) {
-          return {
-            value: {
-              reachable: false,
-              status,
-              finalUrl: currentUrl,
-              reason: `redirect to blocked hostname: ${nextUrl}`,
-            },
-            confidence: 1,
-            source: 'head-check',
-            fetchedAt: new Date(),
-          };
-        }
-        // DNS rebinding defense on redirect target too.
-        const rebindOnRedirect = await checkDnsRebinding(nextUrl);
-        if (rebindOnRedirect) {
-          return {
-            value: {
-              reachable: false,
-              status,
-              finalUrl: currentUrl,
-              reason: `redirect blocked by DNS check: ${rebindOnRedirect}`,
-            },
-            confidence: 1,
-            source: 'head-check',
-            fetchedAt: new Date(),
-          };
-        }
         currentUrl = nextUrl;
         usedMethod = 'HEAD'; // reset to HEAD for the new hop
         continue;
@@ -262,45 +227,23 @@ function errMessage(err: unknown): string {
  */
 export async function checkDnsRebinding(urlStr: string): Promise<string | null> {
   let parsed: URL;
-  try { parsed = new URL(urlStr); } catch { return null; }
-  let host = parsed.hostname.toLowerCase();
-  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
-
-  // IP literal? isInternalUrl already rejected private ones; skip DNS.
-  if (hostnameToOctets(host)) return null;
-  if (host.includes(':')) return null; // IPv6 literal
-
-  let addrs: { address: string; family: number }[];
   try {
-    // all: true returns both A and AAAA records.
-    addrs = await dns.lookup(host, { all: true });
+    parsed = new URL(urlStr);
   } catch {
-    return null; // let fetch surface the error
+    return null;
   }
-
-  for (const a of addrs) {
-    if (a.family === 4) {
-      const octets = a.address.split('.').map(s => parseInt(s, 10));
-      if (octets.length === 4 && octets.every(o => Number.isFinite(o)) && isPrivateIpv4(octets)) {
-        return `DNS resolution of ${host} yielded private IPv4 ${a.address} (rebinding defense)`;
-      }
-    } else if (a.family === 6) {
-      // Minimal v6 private-range checks: loopback, link-local, unique-local, IPv4-mapped.
-      const v6 = a.address.toLowerCase();
-      if (v6 === '::1' || v6 === '::' ) return `DNS resolution of ${host} yielded IPv6 loopback ${v6}`;
-      if (v6.startsWith('fe80:') || v6.startsWith('fc') || v6.startsWith('fd')) {
-        return `DNS resolution of ${host} yielded private/link-local IPv6 ${v6}`;
-      }
-      if (v6.startsWith('::ffff:')) {
-        const tail = v6.slice(7);
-        const octets = tail.split('.').map(s => parseInt(s, 10));
-        if (octets.length === 4 && octets.every(o => Number.isFinite(o)) && isPrivateIpv4(octets)) {
-          return `DNS resolution of ${host} yielded IPv4-mapped private IPv6 ${v6}`;
-        }
-      }
-    }
+  const host = parsed.hostname.replace(/^\[|\]$/g, '');
+  // This legacy helper reports only DNS rebinding. Static IP literals are
+  // handled by the caller's isInternalUrl gate and intentionally return null.
+  if (host.includes(':') || hostnameToOctets(host) !== null) return null;
+  try {
+    await validateAndResolveUrl(urlStr);
+    return null;
+  } catch (err) {
+    if (err instanceof SSRFError && err.code === 'DNS_RESOLUTION_FAILED') return null;
+    if (err instanceof SSRFError && err.code === 'DNS_RESOLVED_INTERNAL') return err.message;
+    return null;
   }
-  return null;
 }
 
 function isAbortError(err: unknown): boolean {

@@ -16,7 +16,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { spawn } from 'child_process';
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes, randomUUID, createHash } from 'crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -33,6 +33,7 @@ import {
   VoltMindOAuthProvider,
   matchesLoopbackCallbackRedirect,
   validateTokenEndpointAuthMethod,
+  parseClientCredentials,
 } from '../core/oauth-provider.ts';
 import type { SqlQuery } from '../core/oauth-provider.ts';
 import { hasScope, filterOperationsForScopes, ALLOWED_SCOPES_LIST, normalizeScopesInput } from '../core/scope.ts';
@@ -46,7 +47,8 @@ import { buildError, serializeError } from '../core/errors.ts';
 import { VERSION } from '../version.ts';
 import * as db from '../core/db.ts';
 import { sqlQueryForEngine, executeRawJsonb } from '../core/sql-query.ts';
-import { MinionQueue } from '../core/minions/queue.ts';
+import { makeReceiptProjection, RECEIPT_SCHEMA_VERSION } from '../core/receipts.ts';
+import { MinionQueue, QueueBackpressureError } from '../core/minions/queue.ts';
 import type { MinionJob, MinionJobInput } from '../core/minions/types.ts';
 import type { TrustedSubmitOpts } from '../core/minions/queue.ts';
 import {
@@ -1058,22 +1060,36 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     }
 
     try {
-      const { client_id, client_secret, scope } = req.body;
-      if (!client_id || !client_secret) {
-        res.status(400).json({ error: 'invalid_request', error_description: 'client_id and client_secret required' });
+      const credentials = parseClientCredentials(
+        req.body as Record<string, unknown> | undefined,
+        req.headers.authorization,
+      );
+      if (!credentials.clientSecret) {
+        res.status(401).json({ error: 'invalid_client', error_description: 'client_secret required' });
         return;
       }
-
       const resource = resolveMcpResource(req.body?.resource);
       if (!resource) {
         res.status(400).json({ error: 'invalid_target', error_description: `resource must equal ${mcpResourceUrl.href}` });
         return;
       }
-      const tokens = await oauthProvider.exchangeClientCredentials(client_id, client_secret, scope, resource);
+      const scope = typeof req.body?.scope === 'string' ? req.body.scope : undefined;
+      const tokens = await oauthProvider.exchangeClientCredentials(
+        credentials.clientId,
+        credentials.clientSecret,
+        scope,
+        resource,
+      );
       res.json(tokens);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
-      res.status(400).json({ error: 'invalid_grant', error_description: msg });
+      const status = msg.includes('required') || msg.includes('Malformed') || msg.includes('Conflicting') || msg.includes('Unsupported')
+        ? 401
+        : 400;
+      res.status(status).json({
+        error: status === 401 ? 'invalid_client' : 'invalid_grant',
+        error_description: msg,
+      });
     }
   });
 
@@ -1528,6 +1544,35 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         : null;
     },
   }));
+  // Legacy mutations are opt-in only. If an operator explicitly enables
+  // them for an old client, retain the v1 audit guarantees: stable request id,
+  // hashed session identity, redacted body-key summary, and outcome/error code.
+  function auditLegacyAdminMutation(req: Request, res: Response, next: NextFunction) {
+    const sessionId = (req.cookies as Record<string, string>)?.voltmind_admin;
+    const requestId = String(req.header('X-Request-ID') || randomUUID()).slice(0, 128);
+    const started = Date.now();
+    res.setHeader('X-Request-ID', requestId);
+    res.on('finish', () => {
+      const bodyKeys = Object.keys(req.body ?? {}).filter(key => !/secret|token|password/i.test(key));
+      void engine.executeRaw(
+        'INSERT INTO admin_audit_log (request_id, session_hash, source_id, client_id, job_id, action, status, params_summary, ip, error_code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::text::jsonb,$9,$10)',
+        [
+          requestId,
+          createHash('sha256').update(sessionId ?? '').digest('hex'),
+          null,
+          null,
+          null,
+          req.method + ' ' + req.path,
+          res.statusCode < 400 ? 'ok' : 'error',
+          JSON.stringify({ body_keys: bodyKeys, duration_ms: Date.now() - started }),
+          req.ip ?? null,
+          res.locals.errorCode ?? (res.statusCode < 400 ? null : 'legacy_admin_mutation_failed'),
+        ],
+      ).catch(err => console.error('[admin-legacy] audit insert failed:', err instanceof Error ? err.message : err));
+    });
+    next();
+  }
+
   // Legacy Admin mutation routes are retained only for explicitly enabled
   // compatibility clients. The versioned v1 router above is the sole default
   // mutation surface; returning 410 makes stale clients fail closed instead of
@@ -1547,7 +1592,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       });
       return;
     }
-    next();
+    requireAdmin(req, res, () => auditLegacyAdminMutation(req, res, next));
   });
 
 
@@ -2181,7 +2226,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       const status = req.query.status as string;
 
       // Dynamic filtering: SqlQuery is deliberately scalar-only and does not
-      // support fragment composition (the prior `sql\`AND ... = ${v}\`` shape).
+      // support fragment composition (the prior `sql`AND ... = ${v}`` shape).
       // Build the WHERE clause with positional placeholders + a params array.
       // `WHERE 1=1` lets us always have a WHERE clause and conditionally
       // append `AND col = $N` fragments — still parameterized, still escaped
@@ -2982,6 +3027,29 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   const queueAdd: ServeQueueAdd = options.queueAdd ?? ((name, data, opts, trusted) =>
     ingestQueue!.add(name, data, opts, trusted));
 
+  const installReceiptErrorEnvelope = (res: Response, requestId: string) => {
+    const originalJson = res.json.bind(res);
+    res.json = ((payload: unknown) => {
+      if (
+        payload &&
+        typeof payload === 'object' &&
+        !Array.isArray(payload) &&
+        'error' in payload &&
+        !('request_id' in payload)
+      ) {
+        const body = payload as { error?: unknown; message?: unknown; [key: string]: unknown };
+        const error = typeof body.error === 'string'
+          ? {
+              code: body.error,
+              message: typeof body.message === 'string' ? body.message : 'Request rejected',
+            }
+          : body.error;
+        return originalJson({ ...body, error, request_id: requestId });
+      }
+      return originalJson(payload);
+    }) as Response['json'];
+  };
+
   app.post(
     '/ingest',
     ingestRateLimiter,
@@ -2991,6 +3059,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       const startTime = Date.now();
       const authInfo = (req as Request & { auth?: AuthInfo }).auth as AuthInfo;
       const agentName = authInfo.clientName ?? authInfo.clientId;
+      const requestId = String(req.header('X-Request-ID') || randomUUID()).slice(0, 128);
+      res.setHeader('X-Request-ID', requestId);
+      installReceiptErrorEnvelope(res, requestId);
 
       // v0.39.3.0 BUG-2: outer try/catch ensures any unexpected throw
       // returns a JSON envelope instead of leaking express's default HTML
@@ -3146,6 +3217,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
           'ingest_capture',
           {
             event,
+            source_id: sourceId,
+            owner_source_id: sourceId,
+            emitter_source_id: emitterId ?? null,
+            source_uri: sourceUri,
             ...(callerSlug ? { slug: callerSlug } : {}),
           },
           {
@@ -3157,6 +3232,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
             // Cap waiting jobs from a single client so a runaway integration
             // can't fill the queue.
             maxWaiting: 50,
+            rejectOnBackpressure: true,
           },
         );
 
@@ -3181,18 +3257,32 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
           timestamp: new Date().toISOString(),
         });
 
+        const receipt = makeReceiptProjection({
+          jobId: job.id,
+          status: 'waiting',
+          ownerSourceId: sourceId,
+          // This is a queue receipt. The worker returns the actual page
+          // source after it resolves the event and persists the page.
+          pageSourceId: null,
+          emitterSourceId: emitterId ?? null,
+          sourceUri,
+        });
         res.status(202).json({
-          job_id: job.id,
+          ...receipt,
+          request_id: requestId,
           content_hash: contentHash,
           source_id: sourceId,
           message: 'Accepted. Event queued for ingestion.',
         });
       } catch (err) {
+        if (err instanceof QueueBackpressureError) {
+          res.status(429).json({ error: { code: "queue_backpressure", message: "Ingest queue is full; retry later", request_id: requestId } });
+          return;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         console.error('POST /ingest queue submission error:', msg);
-        res.status(500).json({
-          error: 'queue_submission_failed',
-          message: msg,
+        res.status(503).json({
+          error: { code: 'queue_submission_failed', message: 'Unable to queue ingest request', request_id: requestId },
         });
       }
 
@@ -3206,8 +3296,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         console.error('POST /ingest unexpected handler error:', msg);
         if (!res.headersSent) {
           res.status(500).json({
-            error: 'internal_error',
-            message: msg,
+            error: { code: 'internal_error', message: 'Unexpected ingest failure', request_id: requestId },
           });
         }
       }
@@ -3232,6 +3321,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     express.json({ limit: ingestMaxBytes }),
     async (req: Request, res: Response) => {
       const authInfo = (req as Request & { auth?: AuthInfo }).auth as AuthInfo;
+      const requestId = String(req.header('X-Request-ID') || randomUUID()).slice(0, 128);
+      res.setHeader('X-Request-ID', requestId);
+      installReceiptErrorEnvelope(res, requestId);
       const sourceId = authInfo.sourceId;
       if (!sourceId) {
         res.status(403).json({
@@ -3349,7 +3441,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         return;
       }
 
-      const results: Array<{ event_id: string; status: 'queued' | 'duplicate'; job_id: number }> = [];
+      const results: Array<Record<string, unknown>> = [];
       try {
         for (const { event, slug } of events) {
           const idempotencyKey = `ingest:microsoft:${sourceId}:${event.source_uri}:${event.event_id}:${event.event_version}`;
@@ -3358,24 +3450,57 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
             [idempotencyKey],
           );
           if (existing[0]?.id !== undefined) {
-            results.push({ event_id: event.event_id!, status: 'duplicate', job_id: existing[0].id });
+            const duplicateReceipt = makeReceiptProjection({
+              jobId: existing[0].id,
+              status: 'waiting',
+              ownerSourceId: sourceId,
+              pageSourceId: null,
+              sourceUri: event.source_uri,
+            });
+            results.push({ event_id: event.event_id!, status: 'duplicate', ...duplicateReceipt });
             continue;
           }
           const job = await queueAdd(
             'ingest_capture',
-            { event, slug },
+            {
+              event,
+              source_id: sourceId,
+              owner_source_id: sourceId,
+              emitter_source_id: null,
+              source_uri: event.source_uri,
+              slug,
+            },
             {
               idempotency_key: idempotencyKey,
               maxWaiting: 50,
             },
           );
-          results.push({ event_id: event.event_id!, status: 'queued', job_id: job.id });
+          const receipt = makeReceiptProjection({
+            jobId: job.id,
+            status: 'waiting',
+            ownerSourceId: sourceId,
+            pageSourceId: null,
+            sourceUri: event.source_uri,
+          });
+          results.push({ event_id: event.event_id!, status: 'queued', ...receipt });
         }
       } catch (err) {
-        res.status(503).json({ error: 'queue_submission_failed', message: err instanceof Error ? err.message : String(err), results });
+        res.status(503).json({ error: { code: 'queue_submission_failed', message: 'Unable to queue relay events', request_id: requestId }, results });
         return;
       }
-      res.status(202).json({ source_id: sourceId, results });
+      const batchReceiptId = `rcpt_batch_${createHash('sha256').update(JSON.stringify(events.map(({ event }) => [event.event_id, event.event_version, event.source_uri]))).digest('hex').slice(0, 24)}`;
+      res.status(202).json({
+        receipt_id: batchReceiptId,
+        schema_version: RECEIPT_SCHEMA_VERSION,
+        receipt_status: 'queued',
+        request_id: requestId,
+        owner_source_id: sourceId,
+        page_source_id: null,
+        emitter_source_id: null,
+        source_uri: null,
+        source_id: sourceId,
+        results,
+      });
     },
   );
 
@@ -3408,6 +3533,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     githubWebhookLimiter,
     express.raw({ type: '*/*', limit: '1mb' }),
     async (req: Request, res: Response) => {
+      const requestId = String(req.header('X-Request-ID') || randomUUID()).slice(0, 128);
+      res.setHeader('X-Request-ID', requestId);
+      installReceiptErrorEnvelope(res, requestId);
       // D3 pre-DB short-circuit: missing signature → 401 without any
       // source lookup. Bot probe traffic ends here.
       const sigHeader = req.header('X-Hub-Signature-256');
@@ -3512,6 +3640,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
           'sync',
           {
             sourceId: source.id,
+            source_id: source.id,
+            owner_source_id: source.id,
+            emitter_source_id: 'github',
+            source_uri: `github:${source.id}:${fullName}`,
             auto_embed_backfill: true,
             embed_reason: 'webhook',
           },
@@ -3521,11 +3653,20 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
             maxWaiting: 1,
           },
         );
-        res.status(202).json({ job_id: job.id, source_id: source.id });
+        const receipt = makeReceiptProjection({
+          jobId: job.id,
+          status: 'waiting',
+          ownerSourceId: source.id,
+          // The sync worker returns the actual page source in its result.
+          pageSourceId: null,
+          emitterSourceId: 'github',
+          sourceUri: `github:${source.id}:${fullName}`,
+        });
+        res.status(202).json({ ...receipt, request_id: requestId, source_id: source.id });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error('webhook: queue submission error:', msg);
-        res.status(500).json({ error: 'queue_submission_failed', message: msg });
+        res.status(503).json({ error: { code: 'queue_submission_failed', message: 'Unable to queue webhook sync', request_id: requestId } });
       }
     },
   );

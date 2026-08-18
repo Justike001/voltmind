@@ -133,9 +133,9 @@ describe('chat touchpoint — model resolver + aliases (Codex F-OV-5)', () => {
 describe('chat touchpoint — gateway config plumbing', () => {
   beforeEach(() => resetGateway());
 
-  test('default chat_model is anthropic:claude-sonnet-4-6', () => {
+  test('default chat_model is the OpenRouter DeepSeek route', () => {
     configureGateway({ env: {} });
-    expect(getChatModel()).toBe('anthropic:claude-sonnet-4-6');
+    expect(getChatModel()).toBe('openrouter:deepseek/deepseek-v4-flash-0731');
   });
 
   test('explicit chat_model overrides the default', () => {
@@ -165,8 +165,8 @@ describe('chat touchpoint — gateway config plumbing', () => {
     expect(getChatFallbackChain()).toEqual([]);
   });
 
-  test('isAvailable("chat") returns true when default Anthropic + key present', () => {
-    configureGateway({ env: { ANTHROPIC_API_KEY: 'fake' } });
+  test('isAvailable("chat") returns true when default OpenRouter + key present', () => {
+    configureGateway({ env: { OPENROUTER_API_KEY: 'fake' } });
     expect(isAvailable('chat')).toBe(true);
   });
 

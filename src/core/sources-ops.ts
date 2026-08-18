@@ -349,7 +349,7 @@ export async function addSource(
     mkdirSync(dirname(tempDir), { recursive: true });
 
     try {
-      cloneRepo(parsedUrl.url, tempDir);
+      await cloneRepo(parsedUrl.url, tempDir);
     } catch (e) {
       // Clone failed before we've touched the DB. tempDir may or may not
       // exist; nuke it just in case.
@@ -705,7 +705,7 @@ export async function recloneIfMissing(
   const tempDir = makeTempCloneDir(id);
   mkdirSync(dirname(tempDir), { recursive: true });
   try {
-    cloneRepo(remoteUrl, tempDir);
+    await cloneRepo(remoteUrl, tempDir);
   } catch (e) {
     rmSync(tempDir, { recursive: true, force: true });
     if (e instanceof GitOperationError) {

@@ -4,11 +4,15 @@
 
 本指南解释原因、doctor 命中时怎么处理，以及极少数确实希望 anon key 可读时的 escape hatch。
 
+## VoltMind Host 运行角色
+
+Host 生产服务必须使用专用 Postgres role，并具备 `NOSUPERUSER NOBYPASSRLS`。source-owned 表由 transaction-local source scope 和 RLS policy 共同保护；受限 Postgres E2E 会验证这个边界。迁移和 role provisioning 可以使用独立的 privileged setup role，但运行中的 Host 不得使用它。PGLite 没有数据库 RLS，因此依赖 Host 应用层的 source resolver。
+
 ## 为什么 RLS 重要
 
 Supabase 通过 PostgREST 暴露 `public` schema。anon key 是客户端 secret，因此如果 public table 关闭 RLS，anon key 就能读它。对 auth tokens、聊天历史、财务数据等敏感内容来说，这是数据外泄路径，不只是 footgun。
 
-voltmind 的 service-role connection 有 `BYPASSRLS`，所以启用 RLS 但没有 policies 不会破坏 voltmind 自身。它只阻止 anon key 默认读取。这就是安全姿态：对 anon 默认拒绝，对 service role 完整访问。
+privileged setup 或 migration role 可以有 `BYPASSRLS` 来初始化 schema；运行中的 Host application role 不得有 `BYPASSRLS`，否则数据库级 source isolation 会被绕过。runtime 必须使用显式 source policy，而不能依赖 bypass role。
 
 ## doctor 失败时怎么做
 
@@ -45,9 +49,9 @@ Fix: ALTER TABLE "public"."expenses_ramp" ENABLE ROW LEVEL SECURITY;
 voltmind apply-migrations --force-retry 35
 ~~~
 
-### 为什么不用 FORCE ROW LEVEL SECURITY？
+### 为什么 source-owned 表使用 FORCE ROW LEVEL SECURITY？
 
-`ENABLE` 阻止 anon/authenticated；`FORCE` 还会限制 table owner。voltmind 默认只用 `ENABLE`，避免把非 BYPASSRLS app 锁在自己创建的表外。
+`ENABLE` 阻止 anon/authenticated；`FORCE` 还会限制 table owner。VoltMind 的 source-owned 表使用 `FORCE` 和显式 source policy，确保错误配置的 non-bypass runtime role 也不能跨 source 读取。通用 auto-RLS trigger 对无关 plugin table 仍只负责启用 RLS；这些表必须自行提供 policy 或显式 exemption。
 
 ## 1% case：有意 exemption
 

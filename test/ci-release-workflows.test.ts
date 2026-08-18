@@ -96,5 +96,8 @@ describe('VoltMind CI and release contracts', () => {
     expect(text).toContain('actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6');
     expect(text).toContain('softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228');
     expect(text).toContain('voltmind-windows-x64.exe');
+    expect(text).toContain('write-release-provenance.ts');
+    expect(text).toContain('.provenance.json');
+    expect(text).toContain('.source_commit == $commit');
   });
 });

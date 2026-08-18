@@ -35,6 +35,7 @@ import { maybePromptForUpgrade } from './core/thin-client-upgrade-prompt.ts';
 import { loadRuntimeEnvFile } from './core/autopilot/env-file.ts';
 import { installProcessLog } from './core/process-log.ts';
 import { VERSION } from './version.ts';
+import { RELEASE_PROVENANCE } from './release-provenance.ts';
 
 // Windows Task Scheduler launches the native executable directly, so there
 // is no shell available to redirect `stdout 2>&1`. The installer passes this
@@ -204,8 +205,13 @@ async function main() {
     return;
   }
 
+  if (command === '--build-info' || (command === 'version' && args[1] === '--json')) {
+    console.log(JSON.stringify(RELEASE_PROVENANCE));
+    return;
+  }
+
   if (command === '--version' || command === 'version') {
-    console.log(`voltmind ${VERSION}`);
+    console.log('voltmind ' + VERSION);
     return;
   }
 

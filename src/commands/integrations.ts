@@ -140,6 +140,7 @@ export {
 } from '../core/url-safety.ts';
 
 import { isInternalUrl } from '../core/url-safety.ts';
+import { fetchWithSSRFGuard } from '../core/ssrf-validate.ts';
 
 export async function executeHealthCheck(
   check: HealthCheck,
@@ -203,40 +204,14 @@ export async function executeHealthCheck(
         const body = check.body ? expandVars(check.body) : undefined;
         if (body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
 
-        // B3: manual redirect handling. Follow up to 3 hops, re-validating each Location.
-        const MAX_REDIRECTS = 3;
-        let currentUrl = url;
-        let resp: Response | null = null;
-        for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-          const fetchOpts: RequestInit = {
-            method,
-            headers,
-            redirect: 'manual',
-            signal: AbortSignal.timeout(10000),
-          };
-          if (body) fetchOpts.body = body;
-          resp = await fetch(currentUrl, fetchOpts);
-          if (resp.status < 300 || resp.status >= 400) break; // terminal
-          const location = resp.headers.get('location');
-          if (!location) break;
-          // Resolve relative redirects against the current URL
-          let next: string;
-          try {
-            next = new URL(location, currentUrl).toString();
-          } catch {
-            return { ...base, status: 'blocked', output: `Blocked: malformed redirect Location header from ${currentUrl}` };
-          }
-          if (isInternalUrl(next)) {
-            return { ...base, status: 'blocked', output: `Blocked: redirect hop ${hop + 1} targets internal URL: ${next}` };
-          }
-          if (hop === MAX_REDIRECTS) {
-            return { ...base, status: 'fail', output: `${check.label || 'HTTP'}: exceeded ${MAX_REDIRECTS} redirect hops` };
-          }
-          currentUrl = next;
-        }
-        if (!resp) {
-          return { ...base, status: 'fail', output: `${check.label || 'HTTP'}: no response` };
-        }
+        // Shared validator resolves and pins every hop before connecting.
+        const resp = await fetchWithSSRFGuard(url, {
+          method,
+          headers,
+          body,
+          maxRedirects: 3,
+          timeoutMs: 10_000,
+        });
         const ok = resp.status >= 200 && resp.status < 400;
         return { ...base, status: ok ? 'ok' : 'fail', output: `${check.label || 'HTTP'}: ${ok ? 'OK' : `HTTP ${resp.status}`}` };
       } catch (e: unknown) {

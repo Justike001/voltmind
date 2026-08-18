@@ -456,6 +456,11 @@ describe('performSync dry-run never writes', () => {
     });
     // Structural assertion: the contract includes `embedded: number`.
     expect(typeof result.embedded).toBe('number');
+    expect(result.receipt_id).toMatch(/^rcpt_sync_/);
+    expect(result.schema_version).toBe(1);
+    expect(result.receipt_status).toBe('completed');
+    expect(result.owner_source_id).toBeNull();
+    expect(result.page_source_id).toBe('default');
   });
 
   test('detached HEAD skips git pull and ingests local working-tree files', async () => {

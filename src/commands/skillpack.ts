@@ -391,9 +391,9 @@ async function runThirdPartyScaffold(opts: ThirdPartyScaffoldOptions): Promise<v
         process.exit(2);
       }
       registryTier = found.tier;
-      resolved = resolveSource(found.entry.source.url, { noCache: opts.noCache });
+      resolved = await resolveSource(found.entry.source.url, { noCache: opts.noCache });
     } else {
-      resolved = resolveSource(opts.spec, { noCache: opts.noCache });
+      resolved = await resolveSource(opts.spec, { noCache: opts.noCache });
     }
   } catch (err) {
     if (err instanceof RemoteSourceError) {

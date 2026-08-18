@@ -206,7 +206,7 @@ export class CodexExecutor implements ActionExecutor {
       const child = spawn(command, args, {
         cwd,
         env: childEnv,
-        shell: true,
+        shell: false,
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
       });

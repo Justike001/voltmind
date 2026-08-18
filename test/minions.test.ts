@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
-import { MinionQueue } from '../src/core/minions/queue.ts';
+import { MinionQueue, QueueBackpressureError } from '../src/core/minions/queue.ts';
 import { MinionWorker } from '../src/core/minions/worker.ts';
 import { calculateBackoff } from '../src/core/minions/backoff.ts';
 import { UnrecoverableError } from '../src/core/minions/types.ts';
@@ -1763,6 +1763,16 @@ describe('MinionQueue: v0.19.1 maxWaiting — cap correctness + race (D2/H2)', (
       `SELECT count(*)::text AS count FROM minion_jobs WHERE name='poll' AND status='waiting'`,
     );
     expect(parseInt(rows[0].count, 10)).toBe(2);
+  });
+
+  test('rejectOnBackpressure never returns an unrelated waiting job', async () => {
+    await queue.add('reject-cap', { source_id: 'source-a' }, { maxWaiting: 1 });
+    await expect(queue.add('reject-cap', { source_id: 'source-b' }, { maxWaiting: 1, rejectOnBackpressure: true }))
+      .rejects.toBeInstanceOf(QueueBackpressureError);
+    const rows = await engine.executeRaw<{ count: string }>(
+      `SELECT count(*)::text AS count FROM minion_jobs WHERE name='reject-cap' AND status='waiting'`,
+    );
+    expect(parseInt(rows[0].count, 10)).toBe(1);
   });
 
   test('clamps maxWaiting: 0 → 1 (strictest cap)', async () => {

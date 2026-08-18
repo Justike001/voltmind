@@ -16,6 +16,7 @@ import { MinionQueue } from '../core/minions/queue.ts';
 import { ALL_PHASES, type CyclePhase } from '../core/cycle.ts';
 import { GOGS_SSH_HOST, GOGS_API_URL, gogsRepoRef } from '../core/personal-provision.ts';
 import type { MinionJobStatus } from '../core/minions/types.ts';
+import { receiptFromJob } from '../core/receipts.ts';
 
 export interface AdminV1Session {
   sessionId: string;
@@ -108,6 +109,7 @@ function remoteHost(value: string): string {
 
 function presentJob(job: any) {
   return {
+    ...receiptFromJob(job),
     id: job.id, source_id: job.source_id, name: job.name, queue: job.queue, status: job.status,
     priority: job.priority, attempts_made: job.attempts_made, max_attempts: job.max_attempts,
     progress: job.progress, result: job.result, error_text: job.error_text,
@@ -365,7 +367,7 @@ export function createAdminV1Router(options: AdminV1Options): express.Router {
         return fail(res, 400, 'repository_host_denied', 'Repository host must be ' + GOGS_SSH_HOST);
       }
       res.locals.audit = { action: 'source.create', source_id: id };
-      const row = await addSource(engine, {
+      const row = await addSource(createAdminScopedEngine(rawEngine, [id]), {
         id, name: typeof req.body?.name === 'string' ? req.body.name : id,
         remoteUrl: typeof req.body?.remote_url === 'string' ? req.body.remote_url : undefined,
         federated: req.body?.federated === true,

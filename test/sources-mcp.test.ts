@@ -81,7 +81,7 @@ function findOp(name: string): Operation {
   return op;
 }
 
-function ctxRemote(scopes: string[], sourceId = 'default'): OperationContext {
+function ctxRemote(scopes: string[], sourceId = 'default', allowedSources?: string[]): OperationContext {
   const auth: AuthInfo = {
     token: 'voltmind_at_xxx',
     clientId: 'voltmind_cl_test',
@@ -95,7 +95,7 @@ function ctxRemote(scopes: string[], sourceId = 'default'): OperationContext {
     logger: { info() {}, warn() {}, error() {} },
     dryRun: false,
     remote: true,
-    auth,
+    auth: allowedSources ? { ...auth, allowedSources } : auth,
     sourceId,
   };
 }
@@ -171,13 +171,38 @@ describe('sources_* handlers — happy path', () => {
         url: 'https://github.com/example/repo',
       });
       const statusOp = findOp('sources_status');
-      const result = (await statusOp.handler(ctxRemote(['read'], 'mcp-status-test'), {
+      const result = (await statusOp.handler(ctxRemote(["read"], "mcp-status-test"), {
         id: 'mcp-status-test',
       })) as any;
       expect(result.id).toBe('mcp-status-test');
       expect(result.clone_state).toBe('healthy');
       expect(result.remote_url).toBe('https://github.com/example/repo');
     });
+  });
+
+  test("sources_status denies an unauthorized source without a source-existence distinction", async () => {
+    const addOp = findOp("sources_add");
+    await addOp.handler(ctxRemote(["sources_admin"]), { id: "mcp-status-owner" });
+    await addOp.handler(ctxRemote(["sources_admin"]), { id: "mcp-status-other" });
+    const statusOp = findOp("sources_status");
+    await expect(statusOp.handler(ctxRemote(["read"], "mcp-status-owner"), { id: "mcp-status-other" }))
+      .rejects.toMatchObject({ code: "permission_denied" });
+    await expect(statusOp.handler(ctxRemote(["read"], "mcp-status-owner"), { id: "missing-status-source" }))
+      .rejects.toMatchObject({ code: "permission_denied" });
+  });
+
+  test("sources_status permits an explicitly federated allowed source", async () => {
+    const addOp = findOp("sources_add");
+    await addOp.handler(ctxRemote(["sources_admin"]), { id: "mcp-status-owner" });
+    await addOp.handler(ctxRemote(["sources_admin"]), { id: "mcp-status-other" });
+    const statusOp = findOp("sources_status");
+    const result = await statusOp.handler(
+      ctxRemote(["read"], "mcp-status-owner", ["mcp-status-owner", "mcp-status-other"]),
+      { id: "mcp-status-other" },
+    ) as any;
+    expect(result.id).toBe("mcp-status-other");
+    expect(result.local_path).toBeNull();
+    expect(result.remote_url).toBeNull();
   });
 
   test('sources_remove deletes row + clone (with confirm_destructive)', async () => {

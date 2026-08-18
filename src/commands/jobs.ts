@@ -1185,6 +1185,7 @@ export async function registerBuiltinHandlers(
     const noExtract = job.data.noExtract !== false;
     const result = await performSync(engine, {
       repoPath, sourceId, noPull, noEmbed, noExtract,
+      ownerSourceId: typeof job.data.owner_source_id === 'string' ? job.data.owner_source_id : null,
       concurrency: concurrencyOverride,
     });
 
@@ -1230,7 +1231,16 @@ export async function registerBuiltinHandlers(
       embedSkipReason = 'auto_embed_disabled';
     }
 
-    return { ...result, embed_job_id: embedJobId, embed_skip_reason: embedSkipReason };
+    const { makeReceiptProjection } = await import('../core/receipts.ts');
+    const receipt = makeReceiptProjection({
+      jobId: job.id,
+      status: 'completed',
+      ownerSourceId: result.owner_source_id ?? null,
+      pageSourceId: result.page_source_id ?? null,
+      emitterSourceId: job.data.emitter_source_id,
+      sourceUri: job.data.source_uri,
+    });
+    return { ...result, embed_job_id: embedJobId, embed_skip_reason: embedSkipReason, ...receipt };
   });
 
   worker.register('embed', async (job) => {

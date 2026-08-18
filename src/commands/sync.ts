@@ -47,6 +47,7 @@ import {
 import { loadStorageConfig } from '../core/storage-config.ts';
 import { getDefaultSourcePath } from '../core/source-resolver.ts';
 import { sortNewestFirst } from '../core/sort-newest-first.ts';
+import { RECEIPT_SCHEMA_VERSION, receiptIdForSync } from '../core/receipts.ts';
 
 export interface SyncResult {
   status: 'up_to_date' | 'synced' | 'first_sync' | 'dry_run' | 'blocked_by_failures' | 'partial';
@@ -80,6 +81,14 @@ export interface SyncResult {
   reason?: 'timeout' | 'pull_timeout';
   /** Present when this run safely reclaimed a dead local sync-lock holder. */
   lockRecovery?: { reason: 'reclaimed'; holder_pid?: number; age_ms?: number };
+  /** Additive remote/job receipt fields; direct CLI syncs may omit them. */
+  receipt_id?: string;
+  schema_version?: number;
+  receipt_status?: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  owner_source_id?: string | null;
+  page_source_id?: string | null;
+  emitter_source_id?: string | null;
+  source_uri?: string | null;
 }
 
 /**
@@ -174,6 +183,8 @@ export interface SyncOpts {
    * pre-v0.17 global-config path unchanged.
    */
   sourceId?: string;
+  /** OAuth owner/write binding, when this sync was submitted by a Host route. */
+  ownerSourceId?: string | null;
   /** Multi-repo: sync strategy override (markdown, code, auto). */
   strategy?: 'markdown' | 'code' | 'auto';
   /**
@@ -551,6 +562,23 @@ See also:
   console.log(`job_id=${job.id}`);
 }
 
+function withSyncReceipt(result: SyncResult, opts: SyncOpts): SyncResult {
+  const sourceId = opts.sourceId ?? DEFAULT_SOURCE_ID;
+  const failed = result.status === "blocked_by_failures" || result.status === "partial";
+  return {
+    ...result,
+    receipt_id: receiptIdForSync(sourceId, result.toCommit),
+    schema_version: RECEIPT_SCHEMA_VERSION,
+    receipt_status: failed ? "failed" : "completed",
+    owner_source_id: opts.ownerSourceId ?? null,
+    // Sync targets this source's repository, so this is the actual page/data
+    // source. It is not inferred from a generic job source_id column.
+    page_source_id: sourceId,
+    emitter_source_id: null,
+    source_uri: null,
+  };
+}
+
 export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<SyncResult> {
   // v0.22.13 CODEX-2: cross-process writer lock prevents two concurrent
   // syncs from racing on the same last_commit anchor (last writer wins,
@@ -569,7 +597,7 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
   // skipLock is reserved for callers that already serialize via another
   // mechanism (e.g. cycle.ts holds voltmind-cycle for the broader scope).
   if (opts.skipLock) {
-    return await performSyncInner(engine, opts);
+    return withSyncReceipt(await performSyncInner(engine, opts), opts);
   }
 
   const lockKey = opts.lockId ?? syncLockId(opts.sourceId ?? 'default');
@@ -594,7 +622,7 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
   };
 
   try {
-    return await runWithLock();
+    return withSyncReceipt(await runWithLock(), opts);
   } catch (err) {
     if (!(err instanceof LockUnavailableError)) throw err;
 
@@ -612,7 +640,7 @@ export async function performSync(engine: BrainEngine, opts: SyncOpts): Promise<
     try {
       const result = await runWithLock();
       return {
-        ...result,
+        ...withSyncReceipt(result, opts),
         lockRecovery: {
           reason: 'reclaimed',
           holder_pid: recovery.holder_pid,
@@ -1074,7 +1102,7 @@ async function performSyncInner(engine: BrainEngine, opts: SyncOpts): Promise<Sy
       // pullRepo's own 300s default). The catch below distinguishes
       // timeout (ETIMEDOUT / SIGTERM on err.cause) from ordinary pull
       // failure.
-      pullRepo(repoPath);
+      await pullRepo(repoPath);
       serr(`[voltmind phase] sync.git_pull done ${Date.now() - _t0}ms`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);

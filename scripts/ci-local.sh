@@ -49,6 +49,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
+run_gitleaks_scans() {
+  if gitleaks --help 2>/dev/null | grep -qE "^[[:space:]]+dir([[:space:]]|$)"; then
+    gitleaks dir . --redact --no-banner
+    gitleaks git . --redact --no-banner --log-opts="origin/master..HEAD"
+  else
+    gitleaks detect --no-git --source . --redact --no-banner
+    gitleaks detect --source . --redact --no-banner --log-opts="origin/master..HEAD"
+  fi
+}
 if [ "$CLEAN" = "1" ]; then
   echo "[ci-local] --clean: removing named volumes..."
   docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>&1 | tail -5 || true
@@ -66,8 +75,7 @@ if [ "$DIFF" = "1" ]; then
       if ! command -v gitleaks >/dev/null 2>&1; then
         echo "[ci-local] WARN: gitleaks not installed; skipping. brew install gitleaks." >&2
       else
-        gitleaks dir . --redact --no-banner
-        gitleaks git . --redact --no-banner --log-opts="origin/master..HEAD"
+        run_gitleaks_scans
       fi
       echo "[ci-local] Doc-only fast-path complete. No code paths exercised."
       trap - EXIT
@@ -121,9 +129,7 @@ fi
 #   1. Working-tree files (catch uncommitted secrets sitting in files)
 #   2. Branch commits vs origin/master (catch secrets committed on this branch)
 # Full-history scan is ~4 min on this repo's 3700+ commits; not useful pre-push.
-gitleaks dir . --redact --no-banner
-gitleaks git . --redact --no-banner --log-opts="origin/master..HEAD"
-
+run_gitleaks_scans
 # Step 1: pull. Refreshes pgvector + oven/bun:1 (both are `image:` not `build:`).
 if [ "$NO_PULL" = "0" ]; then
   echo "[ci-local] Pulling base images (use --no-pull to skip)..."
@@ -340,7 +346,20 @@ if [ -f .git ]; then
 fi
 
 echo "[ci-local] Running checks inside runner container..."
-docker compose -f "$COMPOSE_FILE" run --rm "${EXTRA_MOUNTS[@]:-}" runner bash -c "$INNER_CMD"
+if [ "${#EXTRA_MOUNTS[@]}" -gt 0 ]; then
+  docker compose -f "$COMPOSE_FILE" run --rm "${EXTRA_MOUNTS[@]}" runner bash -c "$INNER_CMD"
+else
+  docker compose -f "$COMPOSE_FILE" run --rm runner bash -c "$INNER_CMD"
+fi
 
 echo ""
+echo ""
+echo "[ci-local] Running restricted Postgres source-scope E2E..."
+# Standard E2E runs as the schema/setup user. This second pass deliberately
+# uses a separate NOSUPERUSER/NOBYPASSRLS role created by the test itself.
+# A skipped restricted test is not considered part of the green gate.
+RESTRICTED_SETUP_URL="postgresql://postgres:postgres@postgres-1:5432/gbrain_test"
+RESTRICTED_APP_URL="postgresql://voltmind_restricted:restricted@postgres-1:5432/gbrain_test"
+docker compose -f "$COMPOSE_FILE" run --rm runner bash -c \
+  "VOLTMIND_RLS_SETUP_DATABASE_URL='$RESTRICTED_SETUP_URL' VOLTMIND_RESTRICTED_DATABASE_URL='$RESTRICTED_APP_URL' bash scripts/run-e2e.sh test/e2e/restricted-postgres-source-scope.test.ts"
 echo "[ci-local] All checks passed."

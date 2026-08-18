@@ -10,6 +10,24 @@
 > different secret namespace. Do not reintroduce a parallel gate; extend this
 > one instead.
 
+## 0. Three CI security domains
+
+- **Client CI** runs on pull requests, including fork pull requests. It runs
+  `bun run verify`, `bun run test:e2e:tier1`, CLI/Admin builds, and the PGLite
+  source-isolation contract. `DATABASE_URL`, `VOLTMIND_DATABASE_URL`, and
+  `VOLTMIND_RESTRICTED_DATABASE_URL` are asserted to be absent.
+- **Host MCP black-box CI** keeps only the two remote URLs and the OAuth client
+  ID/secret. It authenticates through OAuth and calls the deployed Host through
+  MCP; it never receives a database URL.
+- **Host Postgres white-box CI** receives only private, disposable test URLs
+  from the `host-ci` Environment. It runs the OAuth E2E with the
+  migration/test-owner URL, then runs the source-scope E2E with a separate
+  `NOBYPASSRLS` URL and asserts `rolbypassrls = false`.
+
+Host jobs use the protected `host-ci` Environment and are enabled only for
+trusted master pushes, merge-queue runs, or an explicitly approved manual
+dispatch. They never use `pull_request_target`.
+
 ---
 
 ## 1. The gate, end to end
@@ -35,19 +53,29 @@ connection**. Every assertion goes through the Host's read-scope MCP surface.
 
 ## 2. Secrets / Variables to configure on GitHub
 
-Repo → **Settings → Secrets and variables → Actions**.
+Repository → **Settings → Environments → `host-ci`**. Keep the credentials
+environment-scoped; do not put them in repository-wide secrets, files, logs, or
+artifacts.
 
 | Name | Kind | Example value |
 |---|---|---|
-| `VOLTMIND_REMOTE_ISSUER_URL` | **variable** | `https://voltage3d.tailce7d39.ts.net` |
-| `VOLTMIND_REMOTE_MCP_URL` | **variable** | `https://voltage3d.tailce7d39.ts.net/mcp` |
-| `VOLTMIND_REMOTE_CLIENT_ID` | **variable** | `voltmind_cl_...` (read-only client) |
-| `VOLTMIND_REMOTE_CLIENT_SECRET` | **secret** | `voltmind_cs_...` |
+| `VOLTMIND_REMOTE_ISSUER_URL` | **host-ci variable** | Host issuer URL |
+| `VOLTMIND_REMOTE_MCP_URL` | **host-ci variable** | Host `/mcp` URL |
+| `VOLTMIND_REMOTE_CLIENT_ID` | **host-ci secret** | read-only OAuth client ID |
+| `VOLTMIND_REMOTE_CLIENT_SECRET` | **host-ci secret** | read-only OAuth client secret |
+| `VOLTMIND_CI_DATABASE_URL` | **host-ci secret** | disposable database URL using the migration/test owner |
+| `VOLTMIND_CI_RESTRICTED_DATABASE_URL` | **host-ci secret** | disposable database URL using `rolbypassrls=false` |
 
-> `tier2`/`heavy` read these from `vars.VOLTMIND_REMOTE_*` and
-> `secrets.VOLTMIND_REMOTE_CLIENT_SECRET` directly (see `test.yml`). The issuer
-> URL must serve `/.well-known/oauth-authorization-server` and the MCP URL the
-> `/mcp` tools endpoint.
+`tier2`/`heavy` read the URLs from `vars.VOLTMIND_REMOTE_*` and both OAuth
+credentials from `secrets.VOLTMIND_REMOTE_*` (see `test.yml`). The issuer
+URL must serve `/.well-known/oauth-authorization-server` and the MCP URL the
+`/mcp` tools endpoint.
+
+The Postgres job does not connect to the deployed Host. The two URLs must point
+to an isolated, disposable test database and must never point at production.
+`VOLTMIND_CI_DATABASE_URL` must use the migration/test owner role; the
+restricted URL must use a separate role whose `rolbypassrls` is false. The two
+E2E files run sequentially so fixture cleanup cannot race across processes.
 
 ---
 
@@ -85,7 +113,7 @@ hides the admin SPA; `/mcp` + OAuth endpoints still serve).
 
 - Rotating the Host client: `voltmind auth revoke-client <id>` on the Host, then
   `register-client` a new read-only one, then update
-  `VOLTMIND_REMOTE_CLIENT_ID` (var) + `VOLTMIND_REMOTE_CLIENT_SECRET` (secret).
+  `VOLTMIND_REMOTE_CLIENT_ID` (secret) + `VOLTMIND_REMOTE_CLIENT_SECRET` (secret).
 - Any suspected leak, repo-provenance change, or action compromise ⇒ rotate both.
 - Review the Host MCP **reachability** (whether it is public or tunnel-only) as a
   deliberate decision; don't widen it casually.
@@ -100,3 +128,9 @@ hides the admin SPA; `/mcp` + OAuth endpoints still serve).
 | Runner compromise reads Host data | read scope only, thin-client (no DB creds) | Low |
 | Public MCP path reachable by third parties | read-only scope + budget cap | Low |
 | Reachability/tunnel outage blocks release | hard-fail gate | Operational, accepted |
+
+## 6. Security naming check
+
+The release sweep runs `scripts/check-security-product-name.sh` through
+`bun run check:all`. It requires `SECURITY.md` to identify the current
+VoltMind product and rejects the retired `gbrain` name.

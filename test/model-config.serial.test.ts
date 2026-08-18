@@ -7,6 +7,7 @@ import {
   resolveModel,
   resolveAlias,
   DEFAULT_ALIASES,
+  DEFAULT_OPENROUTER_CHAT_MODEL,
   TIER_DEFAULTS,
   isAnthropicProvider,
   _resetDeprecationWarningsForTest,
@@ -173,6 +174,12 @@ describe('resolveModel — v0.31.12 tier system', () => {
       fallback: 'haiku',
     });
     expect(m).toBe(TIER_DEFAULTS.reasoning);
+  });
+
+  test('gateway chat and subagent tiers default to OpenRouter DeepSeek', () => {
+    expect(DEFAULT_OPENROUTER_CHAT_MODEL).toBe('openrouter:deepseek/deepseek-v4-flash-0731');
+    expect(TIER_DEFAULTS.reasoning).toBe(DEFAULT_OPENROUTER_CHAT_MODEL);
+    expect(TIER_DEFAULTS.subagent).toBe(DEFAULT_OPENROUTER_CHAT_MODEL);
   });
 
   test('v0.38 D7: tier.subagent accepts non-Anthropic models that support tools (with cost warn)', async () => {

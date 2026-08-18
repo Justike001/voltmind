@@ -1,7 +1,7 @@
 /**
  * v0.28.1: `voltmind eval longmemeval <dataset.jsonl>` — public LongMemEval
  * benchmark adapter. Spins up an in-memory PGLite, imports each question's
- * haystack, runs hybridSearch, optionally generates an answer via Anthropic,
+ * haystack, runs hybridSearch, optionally generates an answer through the AI gateway,
  * emits hypothesis JSONL on stdout for downstream `evaluate_qa.py`.
  *
  * Hermetic by design: cli.ts skips connectEngine() when this subcommand
@@ -10,7 +10,6 @@
  */
 
 import { readFileSync, existsSync, openSync, writeSync, closeSync, writeFileSync } from 'fs';
-import Anthropic from '@anthropic-ai/sdk';
 import { withBenchmarkBrain, resetTables } from '../eval/longmemeval/harness.ts';
 import { haystackToPages, type LongMemEvalQuestion } from '../eval/longmemeval/adapter.ts';
 import { renderChatBlock, type ChatSessionForPrompt } from '../eval/longmemeval/sanitize.ts';
@@ -18,6 +17,7 @@ import { importFromContent } from '../core/import-file.ts';
 import { hybridSearch } from '../core/search/hybrid.ts';
 import { expandQuery } from '../core/search/expansion.ts';
 import { resolveModel } from '../core/model-config.ts';
+import { __thinkAdapter } from '../core/think/index.ts';
 import type { ThinkLLMClient } from '../core/think/index.ts';
 import { createProgress } from '../core/progress.ts';
 import { getCliOptions, cliOptsToProgressOptions } from '../core/cli-options.ts';
@@ -468,16 +468,6 @@ export async function runEvalLongMemEval(args: string[], runOpts: RunOpts = {}):
     fallback: 'sonnet',
   });
 
-  // Wrap Anthropic SDK so its `.messages.create` shape matches ThinkLLMClient.
-  // Same pattern as src/core/think/index.ts:247-249.
-  const realClient = new Anthropic();
-  const client: ThinkLLMClient = runOpts.client ?? {
-    create: (params, callOpts) => realClient.messages.create(params, callOpts),
-  };
-  // v0.40.2.0 — separate extractor client (defaults to same SDK).
-  const extractorClient: ThinkLLMClient = runOpts.extractorClient ?? {
-    create: (params, callOpts) => realClient.messages.create(params, callOpts),
-  };
   const trajectoryEnabled = !opts.noTrajectory;
   const extractorModel = trajectoryEnabled
     ? await resolveModel(null, {
@@ -485,8 +475,19 @@ export async function runEvalLongMemEval(args: string[], runOpts: RunOpts = {}):
         tier: 'utility',
         fallback: 'haiku',
       })
-    : '';
+    : "";
 
+  // Production model calls use the same gateway adapter as think/cycle.
+  // runOpts.client and runOpts.extractorClient remain explicit test seams.
+  const builtClient = runOpts.client ?? await __thinkAdapter.tryBuildGatewayClient(model);
+  if (!builtClient) throw new Error('No gateway chat provider is configured for the LongMemEval model.');
+  const client: ThinkLLMClient = builtClient;
+  let extractorClient: ThinkLLMClient = runOpts.extractorClient ?? client;
+  if (trajectoryEnabled && !runOpts.extractorClient) {
+    const builtExtractor = await __thinkAdapter.tryBuildGatewayClient(extractorModel);
+    if (!builtExtractor) throw new Error('No gateway chat provider is configured for the trajectory extractor model.');
+    extractorClient = builtExtractor;
+  }
   process.stderr.write(`[longmemeval] estimated 20-60 minutes for ${questions.length} questions; use --limit N for shorter runs\n`);
   process.stderr.write(`[longmemeval] connecting in-memory brain...\n`);
   process.stderr.write(`[longmemeval] starting (questions: ${questions.length}, model: ${model}, expansion: ${opts.expansion ? 'on' : 'off'}${opts.mode ? `, mode: ${opts.mode}` : ''}, trajectory: ${trajectoryEnabled ? 'on' : 'off'}${trajectoryEnabled ? `, extractor: ${extractorModel}` : ''})\n`);

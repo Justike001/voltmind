@@ -85,7 +85,7 @@ describe('runScaffoldThirdParty — happy path', () => {
   test('wrote_new on first scaffold of a fresh pack', async () => {
     freshSandbox();
     buildPackFixture(packDir);
-    const resolved = resolveSource(packDir);
+    const resolved = await resolveSource(packDir);
 
     const result = await runScaffoldThirdParty(
       {
@@ -106,7 +106,7 @@ describe('runScaffoldThirdParty — happy path', () => {
   test('records the pack in state.json after a successful scaffold', async () => {
     freshSandbox();
     buildPackFixture(packDir);
-    const resolved = resolveSource(packDir);
+    const resolved = await resolveSource(packDir);
 
     await runScaffoldThirdParty(
       { resolved, targetWorkspace: workspace, statePath },
@@ -123,7 +123,7 @@ describe('runScaffoldThirdParty — happy path', () => {
   test('second scaffold of same pack lands all_skipped_existing (refuses to overwrite)', async () => {
     freshSandbox();
     buildPackFixture(packDir);
-    const resolved = resolveSource(packDir);
+    const resolved = await resolveSource(packDir);
 
     await runScaffoldThirdParty(
       { resolved, targetWorkspace: workspace, statePath },
@@ -142,7 +142,7 @@ describe('runScaffoldThirdParty — happy path', () => {
   test('dry_run does not write files or state', async () => {
     freshSandbox();
     buildPackFixture(packDir);
-    const resolved = resolveSource(packDir);
+    const resolved = await resolveSource(packDir);
 
     const result = await runScaffoldThirdParty(
       { resolved, targetWorkspace: workspace, statePath, dryRun: true },
@@ -157,7 +157,7 @@ describe('runScaffoldThirdParty — happy path', () => {
   test('displays bootstrap.md when declared and present', async () => {
     freshSandbox();
     buildPackFixture(packDir, { withBootstrap: true });
-    const resolved = resolveSource(packDir);
+    const resolved = await resolveSource(packDir);
 
     const result = await runScaffoldThirdParty(
       { resolved, targetWorkspace: workspace, statePath },
@@ -174,7 +174,7 @@ describe('runScaffoldThirdParty — voltmind version gate', () => {
   test('rejects when current version is below voltmind_min_version', async () => {
     freshSandbox();
     buildPackFixture(packDir, { manifestOverrides: { voltmind_min_version: '99.0.0' } });
-    const resolved = resolveSource(packDir);
+    const resolved = await resolveSource(packDir);
 
     try {
       await runScaffoldThirdParty(
@@ -191,7 +191,7 @@ describe('runScaffoldThirdParty — voltmind version gate', () => {
   test('accepts exact-version match', async () => {
     freshSandbox();
     buildPackFixture(packDir, { manifestOverrides: { voltmind_min_version: '0.36.0' } });
-    const resolved = resolveSource(packDir);
+    const resolved = await resolveSource(packDir);
 
     const r = await runScaffoldThirdParty(
       { resolved, targetWorkspace: workspace, statePath },
@@ -203,7 +203,7 @@ describe('runScaffoldThirdParty — voltmind version gate', () => {
   test('accepts current > min', async () => {
     freshSandbox();
     buildPackFixture(packDir, { manifestOverrides: { voltmind_min_version: '0.36.0' } });
-    const resolved = resolveSource(packDir);
+    const resolved = await resolveSource(packDir);
 
     const r = await runScaffoldThirdParty(
       { resolved, targetWorkspace: workspace, statePath },
@@ -217,7 +217,7 @@ describe('runScaffoldThirdParty — trust prompt gate', () => {
   test('aborted_no_trust when prompt is rejected', async () => {
     freshSandbox();
     buildPackFixture(packDir);
-    const resolved = resolveSource(packDir);
+    const resolved = await resolveSource(packDir);
     // Re-classify as if it came from a tarball so trust prompt fires.
     const fakeResolved = { ...resolved, kind: 'tarball' as const, tarball_sha256: 'fakesha' };
 
@@ -240,7 +240,7 @@ describe('runScaffoldThirdParty — trust prompt gate', () => {
   test('--trust flag bypasses prompt', async () => {
     freshSandbox();
     buildPackFixture(packDir);
-    const resolved = resolveSource(packDir);
+    const resolved = await resolveSource(packDir);
     const fakeResolved = { ...resolved, kind: 'tarball' as const, tarball_sha256: 'fakesha' };
 
     const result = await runScaffoldThirdParty(

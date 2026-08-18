@@ -26,7 +26,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from
 import { isAbsolute, join, resolve } from 'path';
 
 import { voltmindPath } from '../config.ts';
-import { GIT_SSRF_FLAGS, RemoteUrlError, cloneRepo, parseRemoteUrl } from '../git-remote.ts';
+import { GIT_SSRF_FLAGS, RemoteUrlError, cloneRepo, resolveRemoteUrl, type ResolvedTarget } from '../git-remote.ts';
 import { extractTarball, fileSha256 } from './tarball.ts';
 
 /** Kinds of third-party source we accept. */
@@ -137,14 +137,20 @@ function cacheRoot(opts: ResolveSourceOptions): string {
 }
 
 /** Resolve HEAD SHA of a remote git URL via `git ls-remote`. */
-function resolveRemoteHead(url: string, branch: string | undefined): string {
-  const argv = [
-    ...GIT_SSRF_FLAGS,
+async function resolveRemoteHead(url: string, branch: string | undefined, resolvedTarget?: ResolvedTarget): Promise<string> {
+  const argv = [...GIT_SSRF_FLAGS] as string[];
+  if (resolvedTarget?.originalHost) {
+    const source = new URL(url);
+    const port = source.port || (source.protocol === 'https:' ? '443' : '80');
+    const ip = resolvedTarget.ipv6 ? `[${resolvedTarget.resolvedIp}]` : resolvedTarget.resolvedIp;
+    argv.push('-c', `http.curloptResolve=${resolvedTarget.originalHost}:${port}:${ip}`);
+  }
+  argv.push(
     'ls-remote',
     '--exit-code',
     url,
     branch ? `refs/heads/${branch}` : 'HEAD',
-  ];
+  );
   try {
     const output = execFileSync('git', argv, {
       encoding: 'utf-8',
@@ -178,13 +184,16 @@ function gitCachePath(root: string, parsedUrl: URL, sha: string): string {
 }
 
 /** Resolve a git URL into a ResolvedSource. */
-function resolveGitSource(
+async function resolveGitSource(
   url: string,
   opts: ResolveSourceOptions,
-): ResolvedSource {
+): Promise<ResolvedSource> {
   let parsedSafe: URL;
+  let resolvedTarget: ResolvedTarget | undefined;
   try {
-    parsedSafe = new URL(parseRemoteUrl(url).url);
+    const resolved = await resolveRemoteUrl(url);
+    parsedSafe = new URL(resolved.url);
+    resolvedTarget = resolved.resolvedTarget;
   } catch (err) {
     if (err instanceof RemoteUrlError) {
       throw new RemoteSourceError(
@@ -196,7 +205,7 @@ function resolveGitSource(
     throw err;
   }
 
-  const sha = resolveRemoteHead(parsedSafe.toString(), undefined);
+  const sha = await resolveRemoteHead(parsedSafe.toString(), undefined, resolvedTarget);
   const cacheDir = gitCachePath(cacheRoot(opts), parsedSafe, sha);
 
   if (!opts.noCache && existsSync(cacheDir)) {
@@ -217,7 +226,11 @@ function resolveGitSource(
   const stageDir = cacheDir + '.tmp-' + process.pid + '-' + Date.now();
   mkdirSync(stageDir, { recursive: true });
   try {
-    cloneRepo(parsedSafe.toString(), stageDir, { depth: 1, timeoutMs: 600_000 });
+    await cloneRepo(parsedSafe.toString(), stageDir, {
+      depth: 1,
+      timeoutMs: 600_000,
+      resolvedTarget,
+    });
   } catch (err) {
     try {
       rmSync(stageDir, { recursive: true, force: true });
@@ -394,11 +407,11 @@ function resolveLocalSource(absPath: string): ResolvedSource {
  * Resolve any supported source spec. Throws RemoteSourceError for kebab-name
  * inputs — those must be resolved through the registry-client first.
  */
-export function resolveSource(spec: string, opts: ResolveSourceOptions = {}): ResolvedSource {
+export async function resolveSource(spec: string, opts: ResolveSourceOptions = {}): Promise<ResolvedSource> {
   const classified = classifySpec(spec);
   switch (classified.kind) {
     case 'git-url':
-      return resolveGitSource(classified.normalized, opts);
+      return await resolveGitSource(classified.normalized, opts);
     case 'tarball':
       return resolveTarballSource(classified.normalized, opts);
     case 'local':
