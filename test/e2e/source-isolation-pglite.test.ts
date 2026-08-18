@@ -174,7 +174,7 @@ describe('v0.34.1 source-isolation regression (#861)', () => {
     // gate filters them out. We assert the contract via an empty result
     // rather than a positive match: with sourceId set, the SQL still runs
     // (no type or undefined-column errors).
-    const synth = new Float32Array(1536).fill(0.01);
+    const synth = new Float32Array(2048).fill(0.01);
     const results = await engine.searchVector(synth, { sourceId: 'src-b' });
     // Either empty (no embeddings) or all from src-b. Both prove the
     // filter is wired without a runtime error.
