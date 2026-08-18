@@ -4606,7 +4606,8 @@ const sources_status: Operation = {
   scope: 'read',
   handler: async (ctx, p) => {
     const { getSourceStatus } = await import('./sources-ops.ts');
-    return getSourceStatus(ctx.engine, p.id as string);
+    const scope = resolveReadSourceScope(ctx, p.id as string);
+    return getSourceStatus(ctx.engine, p.id as string, scope);
   },
   cliHints: { name: 'sources_status', hidden: true },
 };

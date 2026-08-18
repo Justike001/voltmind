@@ -202,7 +202,24 @@ function getRemoteUrl(config: unknown): string | null {
   return typeof v === 'string' ? v : null;
 }
 
-async function fetchSourceRow(engine: BrainEngine, id: string): Promise<SourceRow | null> {
+type SourceReadScope = { sourceId?: string; sourceIds?: string[] };
+
+function sourceScopePredicate(column: string, scope: SourceReadScope | undefined, params: unknown[]): string {
+  if (!scope) return 'TRUE';
+  if (scope.sourceIds !== undefined) {
+    params.push(scope.sourceIds);
+    return column + ' = ANY($' + params.length + '::text[])';
+  }
+  if (scope.sourceId !== undefined) {
+    params.push(scope.sourceId);
+    return column + ' = $' + params.length;
+  }
+  return 'FALSE';
+}
+
+async function fetchSourceRow(engine: BrainEngine, id: string, scope?: SourceReadScope): Promise<SourceRow | null> {
+  const params: unknown[] = [id];
+  const sourcePredicate = sourceScopePredicate('id', scope, params);
   const rows = await engine.executeRaw<{
     id: string;
     name: string;
@@ -213,21 +230,24 @@ async function fetchSourceRow(engine: BrainEngine, id: string): Promise<SourceRo
     created_at: Date;
   }>(
     `SELECT id, name, local_path, last_commit, last_sync_at, config, created_at
-       FROM sources WHERE id = $1`,
-    [id],
+       FROM sources WHERE id = $1 AND ${sourcePredicate}`,
+    params,
   );
   const r = rows[0];
   if (!r) return null;
   return { ...r, config: parseConfig(r.config) };
 }
 
-async function countPages(engine: BrainEngine, id: string): Promise<number> {
+async function countPages(engine: BrainEngine, id: string, scope?: SourceReadScope): Promise<number> {
+  const params: unknown[] = [id];
+  const sourcePredicate = sourceScopePredicate('source_id', scope, params);
   const rows = await engine.executeRaw<{ n: number }>(
     `SELECT COUNT(*)::int AS n
        FROM pages
       WHERE source_id = $1
+        AND ${sourcePredicate}
         AND deleted_at IS NULL`,
-    [id],
+    params,
   );
   return rows[0]?.n ?? 0;
 }
@@ -617,9 +637,10 @@ export async function removeSource(
 export async function getSourceStatus(
   engine: BrainEngine,
   id: string,
+  scope?: SourceReadScope,
 ): Promise<SourceStatus> {
   validateSourceId(id);
-  const src = await fetchSourceRow(engine, id);
+  const src = await fetchSourceRow(engine, id, scope);
   if (!src) {
     throw new SourceOpError('not_found', `Source "${id}" not found.`);
   }
@@ -628,9 +649,11 @@ export async function getSourceStatus(
   // schema.sql also has dedicated `archived` column post-v0.26.5. Read the
   // column directly via a separate query so we don't need to widen the
   // SourceRow shape just for status.
+  const archivedParams: unknown[] = [id];
+  const archivedPredicate = sourceScopePredicate('id', scope, archivedParams);
   const archivedRows = await engine.executeRaw<{ archived: boolean | null }>(
-    `SELECT archived FROM sources WHERE id = $1`,
-    [id],
+    `SELECT archived FROM sources WHERE id = $1 AND ${archivedPredicate}`,
+    archivedParams,
   );
   const archived = archivedRows[0]?.archived === true;
 
@@ -646,7 +669,7 @@ export async function getSourceStatus(
     local_path: src.local_path,
     remote_url: remoteUrl,
     federated: isFederated(src.config),
-    page_count: await countPages(engine, id),
+    page_count: await countPages(engine, id, scope),
     last_sync_at: src.last_sync_at ? new Date(src.last_sync_at).toISOString() : null,
     last_commit: src.last_commit,
     archived,

@@ -2,6 +2,7 @@ import express from 'express';
 import { randomUUID, createHash } from 'node:crypto';
 import type { BrainEngine } from '../core/engine.ts';
 import type { SqlQuery } from '../core/oauth-provider.ts';
+import { sqlQueryForEngine } from '../core/sql-query.ts';
 import {
   VoltMindOAuthProvider,
   pgArray,
@@ -248,8 +249,29 @@ export function adminV1OpenApi() {
   };
 }
 
+function createAdminScopedEngine(rawEngine: BrainEngine, extraSourceIds: string[] = []): BrainEngine {
+  if (rawEngine.kind !== 'postgres') return rawEngine;
+  const scoped = Object.create(rawEngine) as BrainEngine;
+  scoped.executeRaw = async <T = Record<string, unknown>>(
+    query: string,
+    params?: unknown[],
+    opts?: { signal?: AbortSignal },
+  ): Promise<T[]> => rawEngine.transaction(async tx => {
+    await tx.setAdminSourceScope(extraSourceIds);
+    return tx.executeRaw<T>(query, params, opts);
+  });
+  scoped.transaction = <T>(fn: (tx: BrainEngine) => Promise<T>): Promise<T> =>
+    rawEngine.transaction(async tx => {
+      await tx.setAdminSourceScope(extraSourceIds);
+      return fn(tx);
+    });
+  return scoped;
+}
+
 export function createAdminV1Router(options: AdminV1Options): express.Router {
-  const { engine, sql, oauthProvider, adminOrigin, getSession } = options;
+  const { engine: rawEngine, sql: providedSql, oauthProvider, adminOrigin, getSession } = options;
+  const engine = createAdminScopedEngine(rawEngine);
+  const sql = rawEngine.kind === 'postgres' ? sqlQueryForEngine(engine) : providedSql;
   const queue = new MinionQueue(engine);
   const router = express.Router();
   router.use(express.json({ limit: '256kb' }));
