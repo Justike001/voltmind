@@ -656,7 +656,7 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
       await mcpCall(access_token, 'tools/call', { name: 'this_tool_does_not_exist', arguments: {} });
 
       // Allow async best-effort INSERT to flush.
-      await new Promise(r => setTimeout(r, 250));
+      await new Promise(r => setTimeout(r, 1000));
 
       const rows = await sql.begin(async (tx) => {
         await tx`SELECT set_config('app.source_id', 'default', false), set_config('app.source_ids', 'default', false)`;
