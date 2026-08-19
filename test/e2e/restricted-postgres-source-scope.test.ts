@@ -149,6 +149,24 @@ run('restricted Postgres source scope (VOLTMIND_RESTRICTED_DATABASE_URL)', () =>
     expect(policyRows).toHaveLength(5);
     expect(policyRows.every(row => row.relforcerowsecurity && row.has_policy)).toBe(true);
 
+    const completedRlsRows = await setupEngine.executeRaw<{ relname: string; relforcerowsecurity: boolean; policy_count: number }>(`
+      SELECT c.relname, c.relforcerowsecurity,
+             (SELECT count(*)::int FROM pg_policies p
+               WHERE p.schemaname = 'public' AND p.tablename = c.relname) AS policy_count
+        FROM pg_class c
+       WHERE c.relname IN (
+         'links', 'tags', 'raw_data', 'timeline_entries', 'page_versions',
+         'ingest_log', 'minion_jobs', 'query_cache', 'facts',
+         'code_edges_chunk', 'code_edges_symbol', 'migration_impact_log',
+         'action_index', 'action_runs',
+         'project_tracking_receipts', 'project_tracking_receipt_history',
+         'synthesis_evidence'
+       )
+       ORDER BY c.relname
+    `);
+    expect(completedRlsRows).toHaveLength(17);
+    expect(completedRlsRows.every(row => row.relforcerowsecurity && row.policy_count >= 4)).toBe(true);
+
     engine = new PostgresEngine();
     await engine.connect({ database_url: restrictedUrl!, poolSize: 1 });
     const roles = await engine.executeRaw<{ rolsuper: boolean; rolbypassrls: boolean }>(

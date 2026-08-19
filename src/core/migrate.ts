@@ -112,6 +112,484 @@ export class MigrationRetryExhausted extends Error {
 // Add new migrations at the end. Never modify existing ones.
 // Exported for tests that structurally assert migration contents (e.g., "v9 must
 // pre-create idx_timeline_dedup_helper before the DELETE..."). Read-only contract.
+const RLS_FEDERATED_READ_SCOPE_SQL = `
+
+      -- RLS is enabled and forced for the core source-owned tables.
+      ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.pages FORCE ROW LEVEL SECURITY;
+      ALTER TABLE public.content_chunks ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.content_chunks FORCE ROW LEVEL SECURITY;
+      ALTER TABLE public.files ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.files FORCE ROW LEVEL SECURITY;
+      ALTER TABLE public.access_tokens ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.access_tokens FORCE ROW LEVEL SECURITY;
+      ALTER TABLE public.mcp_request_log ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.mcp_request_log FORCE ROW LEVEL SECURITY;
+      ALTER TABLE public.external_file_refs ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.external_file_refs FORCE ROW LEVEL SECURITY;
+      ALTER TABLE public.page_external_file_refs ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.page_external_file_refs FORCE ROW LEVEL SECURITY;
+      ALTER TABLE public.ingestion_event_state ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.ingestion_event_state FORCE ROW LEVEL SECURITY;
+      CREATE OR REPLACE FUNCTION public.voltmind_source_scope_contains(target_source_id TEXT)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT target_source_id = ANY(string_to_array(
+          COALESCE(NULLIF(current_setting('app.source_ids', true), ''), current_setting('app.source_id', true)), ','
+        ));
+      $fn$;
+      CREATE OR REPLACE FUNCTION public.voltmind_source_write_scope_contains(target_source_id TEXT)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT target_source_id = current_setting('app.source_id', true);
+      $fn$;
+      CREATE OR REPLACE FUNCTION public.voltmind_source_read_scope_matches(target_source TEXT)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT target_source = ANY(string_to_array(
+          COALESCE(NULLIF(current_setting('app.source_ids', true), ''), current_setting('app.source_id', true)), ','
+        ));
+      $fn$;
+
+      CREATE OR REPLACE FUNCTION public.voltmind_chunk_source_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND public.voltmind_source_read_scope_matches(p.source_id)
+        );
+      $fn$;
+
+      CREATE OR REPLACE FUNCTION public.voltmind_chunk_source_write_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND p.source_id = current_setting('app.source_id', true)
+        );
+      $fn$;
+
+      -- Federated IDs are read-only scope. Every mutating command remains
+      -- bound to scalar app.source_id; do not use a FOR ALL policy here,
+      -- because DELETE only consults USING and could delete another source.
+      ALTER TABLE public.sources ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.sources FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS sources_source_read ON sources;
+      DROP POLICY IF EXISTS sources_source_insert ON sources;
+      DROP POLICY IF EXISTS sources_source_update ON sources;
+      DROP POLICY IF EXISTS sources_source_delete ON sources;
+      CREATE POLICY sources_source_read ON sources
+        FOR SELECT USING (public.voltmind_source_read_scope_matches(id));
+      CREATE POLICY sources_source_insert ON sources
+        FOR INSERT WITH CHECK (id = current_setting('app.source_id', true));
+      CREATE POLICY sources_source_update ON sources
+        FOR UPDATE USING (id = current_setting('app.source_id', true))
+        WITH CHECK (id = current_setting('app.source_id', true));
+      CREATE POLICY sources_source_delete ON sources
+        FOR DELETE USING (id = current_setting('app.source_id', true));
+      DROP POLICY IF EXISTS pages_source_isolation ON pages;
+      DROP POLICY IF EXISTS pages_source_read ON pages;
+      DROP POLICY IF EXISTS pages_source_insert ON pages;
+      DROP POLICY IF EXISTS pages_source_update ON pages;
+      DROP POLICY IF EXISTS pages_source_delete ON pages;
+      CREATE POLICY pages_source_read ON pages
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY pages_source_insert ON pages
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY pages_source_update ON pages
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY pages_source_delete ON pages
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      CREATE OR REPLACE FUNCTION public.voltmind_take_source_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND public.voltmind_source_read_scope_matches(p.source_id)
+        );
+      $fn$;
+
+      CREATE OR REPLACE FUNCTION public.voltmind_take_source_write_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND p.source_id = current_setting('app.source_id', true)
+        );
+      $fn$;
+
+      ALTER TABLE public.takes ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.takes FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS takes_source_read ON takes;
+      DROP POLICY IF EXISTS takes_source_insert ON takes;
+      DROP POLICY IF EXISTS takes_source_update ON takes;
+      DROP POLICY IF EXISTS takes_source_delete ON takes;
+      CREATE POLICY takes_source_read ON takes
+        FOR SELECT USING (public.voltmind_take_source_scope_matches(page_id));
+      CREATE POLICY takes_source_insert ON takes
+        FOR INSERT WITH CHECK (public.voltmind_take_source_write_scope_matches(page_id));
+      CREATE POLICY takes_source_update ON takes
+        FOR UPDATE USING (public.voltmind_take_source_write_scope_matches(page_id))
+        WITH CHECK (public.voltmind_take_source_write_scope_matches(page_id));
+      CREATE POLICY takes_source_delete ON takes
+        FOR DELETE USING (public.voltmind_take_source_write_scope_matches(page_id));
+      DROP POLICY IF EXISTS content_chunks_source_isolation ON content_chunks;
+      DROP POLICY IF EXISTS content_chunks_source_read ON content_chunks;
+      DROP POLICY IF EXISTS content_chunks_source_insert ON content_chunks;
+      DROP POLICY IF EXISTS content_chunks_source_update ON content_chunks;
+      DROP POLICY IF EXISTS content_chunks_source_delete ON content_chunks;
+      CREATE POLICY content_chunks_source_read ON content_chunks
+        FOR SELECT
+        USING (public.voltmind_chunk_source_scope_matches(page_id));
+      CREATE POLICY content_chunks_source_insert ON content_chunks
+        FOR INSERT
+        WITH CHECK (public.voltmind_chunk_source_write_scope_matches(page_id));
+      CREATE POLICY content_chunks_source_update ON content_chunks
+        FOR UPDATE
+        USING (public.voltmind_chunk_source_write_scope_matches(page_id))
+        WITH CHECK (public.voltmind_chunk_source_write_scope_matches(page_id));
+      CREATE POLICY content_chunks_source_delete ON content_chunks
+        FOR DELETE
+        USING (public.voltmind_chunk_source_write_scope_matches(page_id));
+
+      DROP POLICY IF EXISTS files_source_isolation ON files;
+      DROP POLICY IF EXISTS files_source_read ON files;
+      DROP POLICY IF EXISTS files_source_insert ON files;
+      DROP POLICY IF EXISTS files_source_update ON files;
+      DROP POLICY IF EXISTS files_source_delete ON files;
+      CREATE POLICY files_source_read ON files
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY files_source_insert ON files
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY files_source_update ON files
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY files_source_delete ON files
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      DROP POLICY IF EXISTS access_tokens_source_isolation ON access_tokens;
+      DROP POLICY IF EXISTS access_tokens_source_read ON access_tokens;
+      DROP POLICY IF EXISTS access_tokens_source_insert ON access_tokens;
+      DROP POLICY IF EXISTS access_tokens_source_update ON access_tokens;
+      DROP POLICY IF EXISTS access_tokens_source_delete ON access_tokens;
+      CREATE POLICY access_tokens_source_read ON access_tokens
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY access_tokens_source_insert ON access_tokens
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY access_tokens_source_update ON access_tokens
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY access_tokens_source_delete ON access_tokens
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      DROP POLICY IF EXISTS mcp_request_log_source_isolation ON mcp_request_log;
+      DROP POLICY IF EXISTS mcp_request_log_source_read ON mcp_request_log;
+      DROP POLICY IF EXISTS mcp_request_log_source_insert ON mcp_request_log;
+      DROP POLICY IF EXISTS mcp_request_log_source_update ON mcp_request_log;
+      DROP POLICY IF EXISTS mcp_request_log_source_delete ON mcp_request_log;
+      CREATE POLICY mcp_request_log_source_read ON mcp_request_log
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY mcp_request_log_source_insert ON mcp_request_log
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY mcp_request_log_source_update ON mcp_request_log
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY mcp_request_log_source_delete ON mcp_request_log
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      DROP POLICY IF EXISTS external_file_refs_source_isolation ON external_file_refs;
+      DROP POLICY IF EXISTS external_file_refs_source_read ON external_file_refs;
+      DROP POLICY IF EXISTS external_file_refs_source_insert ON external_file_refs;
+      DROP POLICY IF EXISTS external_file_refs_source_update ON external_file_refs;
+      DROP POLICY IF EXISTS external_file_refs_source_delete ON external_file_refs;
+      CREATE POLICY external_file_refs_source_read ON external_file_refs
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY external_file_refs_source_insert ON external_file_refs
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY external_file_refs_source_update ON external_file_refs
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY external_file_refs_source_delete ON external_file_refs
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      CREATE OR REPLACE FUNCTION public.voltmind_file_ref_page_source_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND public.voltmind_source_read_scope_matches(p.source_id)
+        );
+      $fn$;
+
+      CREATE OR REPLACE FUNCTION public.voltmind_file_ref_page_source_write_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND p.source_id = current_setting('app.source_id', true)
+        );
+      $fn$;
+
+      DROP POLICY IF EXISTS page_external_file_refs_source_isolation ON page_external_file_refs;
+      DROP POLICY IF EXISTS page_external_file_refs_source_read ON page_external_file_refs;
+      DROP POLICY IF EXISTS page_external_file_refs_source_insert ON page_external_file_refs;
+      DROP POLICY IF EXISTS page_external_file_refs_source_update ON page_external_file_refs;
+      DROP POLICY IF EXISTS page_external_file_refs_source_delete ON page_external_file_refs;
+      CREATE POLICY page_external_file_refs_source_read ON page_external_file_refs
+        FOR SELECT
+        USING (public.voltmind_file_ref_page_source_scope_matches(page_id));
+      CREATE POLICY page_external_file_refs_source_insert ON page_external_file_refs
+        FOR INSERT
+        WITH CHECK (public.voltmind_file_ref_page_source_write_scope_matches(page_id));
+      CREATE POLICY page_external_file_refs_source_update ON page_external_file_refs
+        FOR UPDATE
+        USING (public.voltmind_file_ref_page_source_write_scope_matches(page_id))
+        WITH CHECK (public.voltmind_file_ref_page_source_write_scope_matches(page_id));
+      CREATE POLICY page_external_file_refs_source_delete ON page_external_file_refs
+        FOR DELETE
+        USING (public.voltmind_file_ref_page_source_write_scope_matches(page_id));
+
+      DROP POLICY IF EXISTS ingestion_event_state_source_isolation ON ingestion_event_state;
+      DROP POLICY IF EXISTS ingestion_event_state_source_read ON ingestion_event_state;
+      DROP POLICY IF EXISTS ingestion_event_state_source_insert ON ingestion_event_state;
+      DROP POLICY IF EXISTS ingestion_event_state_source_update ON ingestion_event_state;
+      DROP POLICY IF EXISTS ingestion_event_state_source_delete ON ingestion_event_state;
+      CREATE POLICY ingestion_event_state_source_read ON ingestion_event_state
+        FOR SELECT
+        USING (public.voltmind_source_read_scope_matches(source_id));
+      CREATE POLICY ingestion_event_state_source_insert ON ingestion_event_state
+        FOR INSERT
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY ingestion_event_state_source_update ON ingestion_event_state
+        FOR UPDATE
+        USING (source_id = current_setting('app.source_id', true))
+        WITH CHECK (source_id = current_setting('app.source_id', true));
+      CREATE POLICY ingestion_event_state_source_delete ON ingestion_event_state
+        FOR DELETE
+        USING (source_id = current_setting('app.source_id', true));
+
+      -- Complete the same read/write split for source-owned tables that were
+      -- added by earlier migrations. Federated IDs are read-only: a SELECT
+      -- may use app.source_ids, but UPDATE/DELETE always use app.source_id.
+      CREATE OR REPLACE FUNCTION public.voltmind_page_source_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND public.voltmind_source_read_scope_matches(p.source_id)
+        );
+      $fn$;
+      CREATE OR REPLACE FUNCTION public.voltmind_page_source_write_scope_matches(target_page_id INTEGER)
+      RETURNS BOOLEAN
+      LANGUAGE sql
+      STABLE
+      SECURITY DEFINER
+      SET search_path = pg_catalog, public
+      AS $fn$
+        SELECT EXISTS (
+          SELECT 1 FROM public.pages p
+          WHERE p.id = target_page_id
+            AND public.voltmind_source_write_scope_contains(p.source_id)
+        );
+      $fn$;
+
+      DO $rls$
+      DECLARE
+        table_name TEXT;
+      BEGIN
+        FOREACH table_name IN ARRAY ARRAY[
+          'ingest_log', 'minion_jobs', 'query_cache', 'facts',
+          'code_edges_chunk', 'code_edges_symbol', 'migration_impact_log',
+          'action_index', 'action_runs'
+        ] LOOP
+          IF to_regclass('public.' || table_name) IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
+            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_source_scope ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_source_read ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_source_insert ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_source_update ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_source_delete ON public.%I', table_name);
+            EXECUTE format('CREATE POLICY voltmind_source_read ON public.%I FOR SELECT USING (public.voltmind_source_read_scope_matches(source_id))', table_name);
+            EXECUTE format('CREATE POLICY voltmind_source_insert ON public.%I FOR INSERT WITH CHECK (public.voltmind_source_write_scope_contains(source_id))', table_name);
+            EXECUTE format('CREATE POLICY voltmind_source_update ON public.%I FOR UPDATE USING (public.voltmind_source_write_scope_contains(source_id)) WITH CHECK (public.voltmind_source_write_scope_contains(source_id))', table_name);
+            EXECUTE format('CREATE POLICY voltmind_source_delete ON public.%I FOR DELETE USING (public.voltmind_source_write_scope_contains(source_id))', table_name);
+          END IF;
+        END LOOP;
+
+        FOREACH table_name IN ARRAY ARRAY[
+          'tags', 'raw_data', 'timeline_entries', 'page_versions', 'drift_decisions'
+        ] LOOP
+          IF to_regclass('public.' || table_name) IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
+            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_page_scope ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_page_read ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_page_insert ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_page_update ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_page_delete ON public.%I', table_name);
+            EXECUTE format('CREATE POLICY voltmind_page_read ON public.%I FOR SELECT USING (public.voltmind_page_source_scope_matches(page_id))', table_name);
+            EXECUTE format('CREATE POLICY voltmind_page_insert ON public.%I FOR INSERT WITH CHECK (public.voltmind_page_source_write_scope_matches(page_id))', table_name);
+            EXECUTE format('CREATE POLICY voltmind_page_update ON public.%I FOR UPDATE USING (public.voltmind_page_source_write_scope_matches(page_id)) WITH CHECK (public.voltmind_page_source_write_scope_matches(page_id))', table_name);
+            EXECUTE format('CREATE POLICY voltmind_page_delete ON public.%I FOR DELETE USING (public.voltmind_page_source_write_scope_matches(page_id))', table_name);
+          END IF;
+        END LOOP;
+
+        IF to_regclass('public.links') IS NOT NULL THEN
+          ALTER TABLE public.links ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.links FORCE ROW LEVEL SECURITY;
+          DROP POLICY IF EXISTS voltmind_page_scope ON public.links;
+          DROP POLICY IF EXISTS voltmind_page_read ON public.links;
+          DROP POLICY IF EXISTS voltmind_page_insert ON public.links;
+          DROP POLICY IF EXISTS voltmind_page_update ON public.links;
+          DROP POLICY IF EXISTS voltmind_page_delete ON public.links;
+          CREATE POLICY voltmind_page_read ON public.links
+            FOR SELECT USING (
+              public.voltmind_page_source_scope_matches(from_page_id)
+              AND public.voltmind_page_source_scope_matches(to_page_id)
+            );
+          CREATE POLICY voltmind_page_insert ON public.links
+            FOR INSERT WITH CHECK (
+              public.voltmind_page_source_write_scope_matches(from_page_id)
+              AND public.voltmind_page_source_write_scope_matches(to_page_id)
+            );
+          CREATE POLICY voltmind_page_update ON public.links
+            FOR UPDATE USING (
+              public.voltmind_page_source_write_scope_matches(from_page_id)
+              AND public.voltmind_page_source_write_scope_matches(to_page_id)
+            ) WITH CHECK (
+              public.voltmind_page_source_write_scope_matches(from_page_id)
+              AND public.voltmind_page_source_write_scope_matches(to_page_id)
+            );
+          CREATE POLICY voltmind_page_delete ON public.links
+            FOR DELETE USING (
+              public.voltmind_page_source_write_scope_matches(from_page_id)
+              AND public.voltmind_page_source_write_scope_matches(to_page_id)
+            );
+        END IF;
+
+        FOREACH table_name IN ARRAY ARRAY[
+          'project_tracking_receipts', 'project_tracking_receipt_history'
+        ] LOOP
+          IF to_regclass('public.' || table_name) IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
+            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_page_source_scope ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_page_source_scope_insert ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_page_source_scope_update ON public.%I', table_name);
+            EXECUTE format('DROP POLICY IF EXISTS voltmind_page_source_scope_delete ON public.%I', table_name);
+            EXECUTE format('CREATE POLICY voltmind_page_source_scope ON public.%I FOR SELECT USING (public.voltmind_source_read_scope_matches(page_source_id))', table_name);
+            EXECUTE format('CREATE POLICY voltmind_page_source_scope_insert ON public.%I FOR INSERT WITH CHECK (public.voltmind_source_write_scope_contains(page_source_id))', table_name);
+            EXECUTE format('CREATE POLICY voltmind_page_source_scope_update ON public.%I FOR UPDATE USING (public.voltmind_source_write_scope_contains(page_source_id)) WITH CHECK (public.voltmind_source_write_scope_contains(page_source_id))', table_name);
+            EXECUTE format('CREATE POLICY voltmind_page_source_scope_delete ON public.%I FOR DELETE USING (public.voltmind_source_write_scope_contains(page_source_id))', table_name);
+          END IF;
+        END LOOP;
+
+        IF to_regclass('public.synthesis_evidence') IS NOT NULL THEN
+          ALTER TABLE public.synthesis_evidence ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.synthesis_evidence FORCE ROW LEVEL SECURITY;
+          DROP POLICY IF EXISTS voltmind_page_scope ON public.synthesis_evidence;
+          DROP POLICY IF EXISTS voltmind_page_read ON public.synthesis_evidence;
+          DROP POLICY IF EXISTS voltmind_page_insert ON public.synthesis_evidence;
+          DROP POLICY IF EXISTS voltmind_page_update ON public.synthesis_evidence;
+          DROP POLICY IF EXISTS voltmind_page_delete ON public.synthesis_evidence;
+          CREATE POLICY voltmind_page_read ON public.synthesis_evidence
+            FOR SELECT USING (
+              public.voltmind_page_source_scope_matches(synthesis_page_id)
+              AND public.voltmind_page_source_scope_matches(take_page_id)
+            );
+          CREATE POLICY voltmind_page_insert ON public.synthesis_evidence
+            FOR INSERT WITH CHECK (
+              public.voltmind_page_source_write_scope_matches(synthesis_page_id)
+              AND public.voltmind_page_source_write_scope_matches(take_page_id)
+            );
+          CREATE POLICY voltmind_page_update ON public.synthesis_evidence
+            FOR UPDATE USING (
+              public.voltmind_page_source_write_scope_matches(synthesis_page_id)
+              AND public.voltmind_page_source_write_scope_matches(take_page_id)
+            ) WITH CHECK (
+              public.voltmind_page_source_write_scope_matches(synthesis_page_id)
+              AND public.voltmind_page_source_write_scope_matches(take_page_id)
+            );
+          CREATE POLICY voltmind_page_delete ON public.synthesis_evidence
+            FOR DELETE USING (
+              public.voltmind_page_source_write_scope_matches(synthesis_page_id)
+              AND public.voltmind_page_source_write_scope_matches(take_page_id)
+            );
+        END IF;
+      END
+      $rls$;
+    `;
+
 export const MIGRATIONS: Migration[] = [
   // Version 1 is the baseline (schema.sql creates everything with IF NOT EXISTS).
   {
@@ -5883,184 +6361,20 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: 124,
-    name: 'source_scope_rls_completion',
-    // H6: the runtime source scope is a transaction-local authorization input;
-    // this migration makes it a database-enforced boundary for every
-    // source-owned data path. RLS is FORCE'd so a table-owning app role cannot
-    // accidentally bypass the policies. OAuth metadata tables are excluded:
-    // token validation must read them before a source scope exists and is
-    // covered by the OAuth provider's client binding checks instead.
-    sql: '',
+    name: 'rls_federated_read_scope',
+    // The scalar app.source_id remains the write authority. Read policies use
+    // app.source_ids when present so a federated client can read A+B without
+    // making source B writable. Falling back to app.source_id preserves the
+    // pre-124 single-source transaction contract.
+    sql: RLS_FEDERATED_READ_SCOPE_SQL,
     idempotent: true,
-    sqlFor: {
-      postgres: `
-        CREATE OR REPLACE FUNCTION public.voltmind_source_scope_contains(target_source_id TEXT)
-        RETURNS BOOLEAN
-        LANGUAGE plpgsql
-        STABLE
-        SECURITY DEFINER
-        SET search_path = pg_catalog, public
-        AS $fn$
-        DECLARE
-          configured_ids TEXT;
-        BEGIN
-          IF target_source_id IS NULL THEN RETURN FALSE; END IF;
-          configured_ids := NULLIF(current_setting('app.source_ids', true), '');
-          IF configured_ids IS NOT NULL THEN
-            RETURN target_source_id = ANY(string_to_array(configured_ids, ','));
-          END IF;
-          RETURN target_source_id = NULLIF(current_setting('app.source_id', true), '');
-        END;
-        $fn$;
-
-        CREATE OR REPLACE FUNCTION public.voltmind_page_source_scope_matches(target_page_id INTEGER)
-        RETURNS BOOLEAN
-        LANGUAGE sql
-        STABLE
-        SECURITY DEFINER
-        SET search_path = pg_catalog, public
-        AS $fn$
-          SELECT EXISTS (
-            SELECT 1 FROM public.pages p
-            WHERE p.id = target_page_id
-              AND public.voltmind_source_scope_contains(p.source_id)
-          );
-        $fn$;
-
-        CREATE OR REPLACE FUNCTION public.voltmind_take_source_scope_matches(target_page_id INTEGER)
-        RETURNS BOOLEAN
-        LANGUAGE sql
-        STABLE
-        SECURITY DEFINER
-        SET search_path = pg_catalog, public
-        AS $fn$
-          SELECT EXISTS (
-            SELECT 1 FROM public.takes t
-            JOIN public.pages p ON p.id = t.page_id
-            WHERE t.page_id = target_page_id
-              AND public.voltmind_source_scope_contains(p.source_id)
-          );
-        $fn$;
-
-        DO $rls$
-        DECLARE
-          table_name TEXT;
-        BEGIN
-          FOREACH table_name IN ARRAY ARRAY[
-            'pages', 'files', 'ingest_log', 'access_tokens', 'mcp_request_log',
-            'external_file_refs', 'ingestion_event_state', 'minion_jobs',
-            'query_cache', 'facts', 'code_edges_chunk', 'code_edges_symbol',
-            'migration_impact_log', 'action_index', 'action_runs'
-          ] LOOP
-            IF to_regclass('public.' || table_name) IS NOT NULL THEN
-              EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
-              EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', table_name);
-              EXECUTE format('DROP POLICY IF EXISTS voltmind_source_scope ON public.%I', table_name);
-              EXECUTE format(
-                'CREATE POLICY voltmind_source_scope ON public.%I USING (public.voltmind_source_scope_contains(source_id)) WITH CHECK (public.voltmind_source_scope_contains(source_id))',
-                table_name
-              );
-            END IF;
-          END LOOP;
-
-          IF to_regclass('public.sources') IS NOT NULL THEN
-            ALTER TABLE public.sources ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE public.sources FORCE ROW LEVEL SECURITY;
-            DROP POLICY IF EXISTS voltmind_source_scope ON public.sources;
-            CREATE POLICY voltmind_source_scope ON public.sources
-              USING (public.voltmind_source_scope_contains(id))
-              WITH CHECK (public.voltmind_source_scope_contains(id));
-          END IF;
-
-          IF to_regclass('public.content_chunks') IS NOT NULL THEN
-            ALTER TABLE public.content_chunks ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE public.content_chunks FORCE ROW LEVEL SECURITY;
-            DROP POLICY IF EXISTS voltmind_source_scope ON public.content_chunks;
-            CREATE POLICY voltmind_source_scope ON public.content_chunks
-              USING (public.voltmind_page_source_scope_matches(page_id))
-              WITH CHECK (public.voltmind_page_source_scope_matches(page_id));
-          END IF;
-
-          IF to_regclass('public.takes') IS NOT NULL THEN
-            ALTER TABLE public.takes ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE public.takes FORCE ROW LEVEL SECURITY;
-            DROP POLICY IF EXISTS voltmind_source_scope ON public.takes;
-            CREATE POLICY voltmind_source_scope ON public.takes
-              USING (public.voltmind_page_source_scope_matches(page_id))
-              WITH CHECK (public.voltmind_page_source_scope_matches(page_id));
-          END IF;
-
-          FOREACH table_name IN ARRAY ARRAY[
-            'tags', 'raw_data', 'timeline_entries', 'page_versions', 'drift_decisions'
-          ] LOOP
-            IF to_regclass('public.' || table_name) IS NOT NULL THEN
-              EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
-              EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', table_name);
-              EXECUTE format('DROP POLICY IF EXISTS voltmind_page_scope ON public.%I', table_name);
-              EXECUTE format(
-                'CREATE POLICY voltmind_page_scope ON public.%I USING (public.voltmind_page_source_scope_matches(page_id)) WITH CHECK (public.voltmind_page_source_scope_matches(page_id))',
-                table_name
-              );
-            END IF;
-          END LOOP;
-
-          IF to_regclass('public.links') IS NOT NULL THEN
-            ALTER TABLE public.links ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE public.links FORCE ROW LEVEL SECURITY;
-            DROP POLICY IF EXISTS voltmind_page_scope ON public.links;
-            CREATE POLICY voltmind_page_scope ON public.links
-              USING (public.voltmind_page_source_scope_matches(from_page_id)
-                  AND public.voltmind_page_source_scope_matches(to_page_id))
-              WITH CHECK (public.voltmind_page_source_scope_matches(from_page_id)
-                  AND public.voltmind_page_source_scope_matches(to_page_id));
-          END IF;
-
-          IF to_regclass('public.page_external_file_refs') IS NOT NULL THEN
-            ALTER TABLE public.page_external_file_refs ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE public.page_external_file_refs FORCE ROW LEVEL SECURITY;
-            DROP POLICY IF EXISTS voltmind_page_scope ON public.page_external_file_refs;
-            CREATE POLICY voltmind_page_scope ON public.page_external_file_refs
-              USING (public.voltmind_page_source_scope_matches(page_id))
-              WITH CHECK (public.voltmind_page_source_scope_matches(page_id));
-          END IF;
-
-          FOREACH table_name IN ARRAY ARRAY[
-            'project_tracking_receipts', 'project_tracking_receipt_history'
-          ] LOOP
-            IF to_regclass('public.' || table_name) IS NOT NULL THEN
-              EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
-              EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', table_name);
-              EXECUTE format('DROP POLICY IF EXISTS voltmind_page_source_scope ON public.%I', table_name);
-              EXECUTE format(
-                'CREATE POLICY voltmind_page_source_scope ON public.%I USING (public.voltmind_source_scope_contains(page_source_id)) WITH CHECK (public.voltmind_source_scope_contains(page_source_id))',
-                table_name
-              );
-            END IF;
-          END LOOP;
-
-          IF to_regclass('public.synthesis_evidence') IS NOT NULL THEN
-            ALTER TABLE public.synthesis_evidence ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE public.synthesis_evidence FORCE ROW LEVEL SECURITY;
-            DROP POLICY IF EXISTS voltmind_page_scope ON public.synthesis_evidence;
-            CREATE POLICY voltmind_page_scope ON public.synthesis_evidence
-              USING (public.voltmind_page_source_scope_matches(synthesis_page_id)
-                  AND public.voltmind_page_source_scope_matches(take_page_id))
-              WITH CHECK (public.voltmind_page_source_scope_matches(synthesis_page_id)
-                  AND public.voltmind_page_source_scope_matches(take_page_id));
-          END IF;
-        END
-        $rls$;
-      `,
-      pglite: `-- PGLite has no role system or database RLS; application scope remains authoritative.`,
-    },
+    sqlFor: { pglite: '' },
     verify: async (engine) => {
       if (engine.kind === 'pglite') return true;
-      const rows = await engine.executeRaw<{ policies: number; forced: number }>(`
-        SELECT
-          (SELECT count(*)::int FROM pg_policies WHERE policyname IN ('voltmind_source_scope', 'voltmind_page_scope', 'voltmind_page_source_scope')) AS policies,
-          (SELECT count(*)::int FROM pg_class WHERE relname IN ('pages','takes','facts') AND relforcerowsecurity) AS forced
-      `);
-      return (rows[0]?.policies ?? 0) >= 3 && (rows[0]?.forced ?? 0) >= 2;
+      const rows = await engine.executeRaw<{ n: number }>(
+        `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'voltmind_source_read_scope_matches'`,
+      );
+      return (rows[0]?.n ?? 0) === 1;
     },
   },
   {
@@ -6070,6 +6384,49 @@ export const MIGRATIONS: Migration[] = [
     idempotent: true,
     sqlFor: {
       postgres: `
+        CREATE OR REPLACE FUNCTION public.voltmind_source_write_scope_all(target_source_ids TEXT[])
+        RETURNS BOOLEAN
+        LANGUAGE sql
+        STABLE
+        SECURITY DEFINER
+        SET search_path = pg_catalog, public
+        AS $fn$
+          SELECT target_source_ids IS NOT NULL
+             AND cardinality(target_source_ids) > 0
+             AND NOT EXISTS (
+               SELECT 1 FROM unnest(target_source_ids) AS requested(source_id)
+               WHERE NOT public.voltmind_source_write_scope_contains(requested.source_id)
+             );
+        $fn$;
+
+        CREATE OR REPLACE FUNCTION public.voltmind_take_id_source_write_scope_matches(target_take_id BIGINT)
+        RETURNS BOOLEAN
+        LANGUAGE sql
+        STABLE
+        SECURITY DEFINER
+        SET search_path = pg_catalog, public
+        AS $fn$
+          SELECT EXISTS (
+            SELECT 1 FROM public.takes t
+            JOIN public.pages p ON p.id = t.page_id
+            WHERE t.id = target_take_id
+              AND public.voltmind_source_write_scope_contains(p.source_id)
+          );
+        $fn$;
+
+        CREATE OR REPLACE FUNCTION public.voltmind_job_source_write_scope_matches(target_job_id BIGINT)
+        RETURNS BOOLEAN
+        LANGUAGE sql
+        STABLE
+        SECURITY DEFINER
+        SET search_path = pg_catalog, public
+        AS $fn$
+          SELECT EXISTS (
+            SELECT 1 FROM public.minion_jobs j
+            WHERE j.id = target_job_id
+              AND public.voltmind_source_write_scope_contains(j.source_id)
+          );
+        $fn$;
         CREATE OR REPLACE FUNCTION public.voltmind_source_scope_all(target_source_ids TEXT[])
         RETURNS BOOLEAN
         LANGUAGE sql
@@ -6129,7 +6486,7 @@ export const MIGRATIONS: Migration[] = [
               EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', table_name);
               EXECUTE format('DROP POLICY IF EXISTS voltmind_source_scope ON public.%I', table_name);
               EXECUTE format(
-                'CREATE POLICY voltmind_source_scope ON public.%I USING (public.voltmind_source_scope_contains(source_id)) WITH CHECK (public.voltmind_source_scope_contains(source_id))',
+                'CREATE POLICY voltmind_source_scope ON public.%I USING (public.voltmind_source_scope_contains(source_id)) WITH CHECK (public.voltmind_source_write_scope_contains(source_id))',
                 table_name
               );
             END IF;
@@ -6141,7 +6498,7 @@ export const MIGRATIONS: Migration[] = [
             DROP POLICY IF EXISTS voltmind_source_array_scope ON public.eval_candidates;
             CREATE POLICY voltmind_source_array_scope ON public.eval_candidates
               USING (public.voltmind_source_scope_all(source_ids))
-              WITH CHECK (public.voltmind_source_scope_all(source_ids));
+              WITH CHECK (public.voltmind_source_write_scope_all(source_ids));
           END IF;
 
           IF to_regclass('public.take_grade_cache') IS NOT NULL THEN
@@ -6150,7 +6507,7 @@ export const MIGRATIONS: Migration[] = [
             DROP POLICY IF EXISTS voltmind_take_scope ON public.take_grade_cache;
             CREATE POLICY voltmind_take_scope ON public.take_grade_cache
               USING (public.voltmind_take_id_source_scope_matches(take_id))
-              WITH CHECK (public.voltmind_take_id_source_scope_matches(take_id));
+              WITH CHECK (public.voltmind_take_id_source_write_scope_matches(take_id));
           END IF;
 
           FOREACH table_name IN ARRAY ARRAY[
@@ -6162,7 +6519,7 @@ export const MIGRATIONS: Migration[] = [
               EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', table_name);
               EXECUTE format('DROP POLICY IF EXISTS voltmind_job_scope ON public.%I', table_name);
               EXECUTE format(
-                'CREATE POLICY voltmind_job_scope ON public.%I USING (public.voltmind_job_source_scope_matches(job_id)) WITH CHECK (public.voltmind_job_source_scope_matches(job_id))',
+                'CREATE POLICY voltmind_job_scope ON public.%I USING (public.voltmind_job_source_scope_matches(job_id)) WITH CHECK (public.voltmind_job_source_write_scope_matches(job_id))',
                 table_name
               );
             END IF;
@@ -6174,7 +6531,7 @@ export const MIGRATIONS: Migration[] = [
             DROP POLICY IF EXISTS voltmind_job_scope ON public.subagent_rate_leases;
             CREATE POLICY voltmind_job_scope ON public.subagent_rate_leases
               USING (public.voltmind_job_source_scope_matches(owner_job_id))
-              WITH CHECK (public.voltmind_job_source_scope_matches(owner_job_id));
+              WITH CHECK (public.voltmind_job_source_write_scope_matches(owner_job_id));
           END IF;
         END
         $rls$;
@@ -6207,6 +6564,19 @@ export const MIGRATIONS: Migration[] = [
     idempotent: true,
     sqlFor: {
       postgres: `
+        CREATE OR REPLACE FUNCTION public.voltmind_file_id_source_write_scope_matches(target_file_id INTEGER)
+        RETURNS BOOLEAN
+        LANGUAGE sql
+        STABLE
+        SECURITY DEFINER
+        SET search_path = pg_catalog, public
+        AS $fn$
+          SELECT EXISTS (
+            SELECT 1 FROM public.files f
+            WHERE f.id = target_file_id
+              AND public.voltmind_source_write_scope_contains(f.source_id)
+          );
+        $fn$;
         CREATE OR REPLACE FUNCTION public.voltmind_file_id_source_scope_matches(target_file_id INTEGER)
         RETURNS BOOLEAN
         LANGUAGE sql
@@ -6256,7 +6626,7 @@ export const MIGRATIONS: Migration[] = [
             DROP POLICY IF EXISTS voltmind_take_scope ON public.take_domain_assignments;
             CREATE POLICY voltmind_take_scope ON public.take_domain_assignments
               USING (public.voltmind_take_id_source_scope_matches(take_id))
-              WITH CHECK (public.voltmind_take_id_source_scope_matches(take_id));
+              WITH CHECK (public.voltmind_take_id_source_write_scope_matches(take_id));
           END IF;
 
           IF to_regclass('public.file_migration_ledger') IS NOT NULL THEN
@@ -6265,7 +6635,7 @@ export const MIGRATIONS: Migration[] = [
             DROP POLICY IF EXISTS voltmind_file_scope ON public.file_migration_ledger;
             CREATE POLICY voltmind_file_scope ON public.file_migration_ledger
               USING (public.voltmind_file_id_source_scope_matches(file_id))
-              WITH CHECK (public.voltmind_file_id_source_scope_matches(file_id));
+              WITH CHECK (public.voltmind_file_id_source_write_scope_matches(file_id));
           END IF;
 
           IF to_regclass('public.admin_audit_log') IS NOT NULL THEN
@@ -6274,7 +6644,7 @@ export const MIGRATIONS: Migration[] = [
             DROP POLICY IF EXISTS voltmind_admin_audit_scope ON public.admin_audit_log;
             CREATE POLICY voltmind_admin_audit_scope ON public.admin_audit_log
               USING (source_id IS NULL OR public.voltmind_source_scope_contains(source_id))
-              WITH CHECK (source_id IS NULL OR public.voltmind_source_scope_contains(source_id));
+              WITH CHECK (source_id IS NULL OR public.voltmind_source_write_scope_contains(source_id));
           END IF;
         END
         $rls$;
@@ -6411,6 +6781,123 @@ export const MIGRATIONS: Migration[] = [
         && rows[0]?.current_user_execute === true;
     },
   },
+  {
+    version: 129,
+    name: "oauth_control_plane_rls",
+    sql: "",
+    idempotent: true,
+    sqlFor: {
+      postgres: `
+        -- OAuth metadata is control-plane state, not source-owned content.
+        -- Keep RLS active for the non-BYPASSRLS application role while
+        -- granting only the OAuth provider's three control-plane tables.
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'voltmind_oauth_runtime') THEN
+            EXECUTE 'CREATE ROLE voltmind_oauth_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE';
+          END IF;
+        END $$;
+        GRANT USAGE ON SCHEMA public TO voltmind_oauth_runtime;
+        GRANT SELECT, INSERT, UPDATE, DELETE
+          ON public.oauth_clients, public.oauth_tokens, public.oauth_codes
+          TO voltmind_oauth_runtime;
+        GRANT USAGE, SELECT, UPDATE
+          ON ALL SEQUENCES IN SCHEMA public TO voltmind_oauth_runtime;
+        GRANT voltmind_oauth_runtime TO CURRENT_USER;
+
+        ALTER TABLE public.oauth_clients ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE public.oauth_clients FORCE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS oauth_clients_control_plane ON public.oauth_clients;
+        CREATE POLICY oauth_clients_control_plane ON public.oauth_clients
+          TO voltmind_oauth_runtime
+          USING (true)
+          WITH CHECK (true);
+
+        ALTER TABLE public.oauth_tokens ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE public.oauth_tokens FORCE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS oauth_tokens_control_plane ON public.oauth_tokens;
+        CREATE POLICY oauth_tokens_control_plane ON public.oauth_tokens
+          TO voltmind_oauth_runtime
+          USING (true)
+          WITH CHECK (true);
+
+        ALTER TABLE public.oauth_codes ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE public.oauth_codes FORCE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS oauth_codes_control_plane ON public.oauth_codes;
+        CREATE POLICY oauth_codes_control_plane ON public.oauth_codes
+          TO voltmind_oauth_runtime
+          USING (true)
+          WITH CHECK (true);
+      `,
+      pglite: `-- PGLite has no database roles or RLS; OAuth authorization remains application-controlled.`,
+    },
+    verify: async (engine) => {
+      if (engine.kind === "pglite") return true;
+      const rows = await engine.executeRaw<{ policies: number; forced: number; role_ok: boolean }>(`
+        SELECT
+          (SELECT count(*)::int FROM pg_policies
+             WHERE schemaname = 'public'
+               AND policyname IN (
+                 'oauth_clients_control_plane',
+                 'oauth_tokens_control_plane',
+                 'oauth_codes_control_plane'
+               )) AS policies,
+          (SELECT count(*)::int FROM pg_class
+             WHERE relname IN ('oauth_clients', 'oauth_tokens', 'oauth_codes')
+               AND relforcerowsecurity) AS forced,
+          EXISTS (
+            SELECT 1 FROM pg_roles
+             WHERE rolname = 'voltmind_oauth_runtime'
+               AND NOT rolcanlogin
+               AND NOT rolsuper
+               AND NOT rolbypassrls
+          ) AS role_ok
+      `);
+      return (rows[0]?.policies ?? 0) === 3
+        && (rows[0]?.forced ?? 0) === 3
+        && rows[0]?.role_ok === true;
+    },
+  },
+  {
+    version: 130,
+    name: "source_isolation_reconciliation",
+    sql: RLS_FEDERATED_READ_SCOPE_SQL,
+    idempotent: true,
+    sqlFor: { pglite: "" },
+    verify: async (engine) => {
+      if (engine.kind === "pglite") return true;
+      const rows = await engine.executeRaw<{ forced_tables: number; core_policies: number; helper_count: number }>(`
+        SELECT
+          (SELECT count(*)::int
+             FROM pg_class
+            WHERE relname IN (
+              'links', 'tags', 'raw_data', 'timeline_entries', 'page_versions',
+              'ingest_log', 'minion_jobs', 'query_cache', 'facts',
+              'code_edges_chunk', 'code_edges_symbol', 'migration_impact_log',
+              'action_index', 'action_runs',
+              'project_tracking_receipts', 'project_tracking_receipt_history',
+              'synthesis_evidence'
+            )
+              AND relforcerowsecurity) AS forced_tables,
+          (SELECT count(*)::int
+             FROM pg_policies
+            WHERE policyname IN (
+              'pages_source_read', 'content_chunks_source_read',
+              'files_source_read', 'takes_source_read'
+            )) AS core_policies,
+          (SELECT count(*)::int
+             FROM pg_proc
+            WHERE proname IN (
+              'voltmind_source_read_scope_matches',
+              'voltmind_page_source_scope_matches'
+            )) AS helper_count
+      `);
+      return (rows[0]?.forced_tables ?? 0) === 17
+        && (rows[0]?.core_policies ?? 0) === 4
+        && (rows[0]?.helper_count ?? 0) === 2;
+    },
+  },
+
 ];
 
 export const LATEST_VERSION = MIGRATIONS.length > 0

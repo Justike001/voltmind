@@ -78,6 +78,38 @@ describe('v0.42 #6 — RLS source-isolation policies (schema + migration)', () =
     expect(v124!.sqlFor?.pglite).toBe('');
   });
 
+  test('v128 Admin source directory stays ID-only without a RLS bypass role', () => {
+    const v128 = MIGRATIONS_REAL.find((m) => m.version === 128);
+    expect(v128).toBeDefined();
+    expect(v128!.name).toBe('admin_source_directory');
+    expect(v128!.sqlFor?.postgres).toContain('admin_source_directory');
+    expect(v128!.sqlFor?.postgres).toContain('CREATE TRIGGER voltmind_sync_admin_source_directory');
+    expect(v128!.sqlFor?.postgres).not.toContain('BYPASSRLS');
+    expect(v128!.sqlFor?.postgres).not.toContain('local_path');
+    expect(v128!.sqlFor?.postgres).not.toContain('remote_url');
+  });
+
+  test('v129 OAuth control-plane RLS is role-targeted and non-BYPASSRLS', () => {
+    const v129 = MIGRATIONS_REAL.find((m) => m.version === 129);
+    expect(v129).toBeDefined();
+    expect(v129!.name).toBe('oauth_control_plane_rls');
+    expect(v129!.sqlFor?.postgres).toContain('CREATE ROLE voltmind_oauth_runtime');
+    expect(v129!.sqlFor?.postgres).toContain('TO voltmind_oauth_runtime');
+    expect(v129!.sqlFor?.postgres).toContain('NOBYPASSRLS');
+    expect(v129!.sqlFor?.postgres).not.toContain('CREATE POLICY oauth_clients_control_plane ON public.oauth_clients\n          USING (true)');
+  });
+
+
+  test('v130 reconciles existing Postgres databases after v124 was already recorded', () => {
+    const v130 = MIGRATIONS_REAL.find((m) => m.version === 130);
+    expect(v130).toBeDefined();
+    expect(v130!.name).toBe('source_isolation_reconciliation');
+    expect(v130!.sql).toContain('CREATE POLICY pages_source_read');
+    expect(v130!.sql).toContain("'project_tracking_receipts'");
+    expect(v130!.sql).toContain('public.synthesis_evidence');
+    expect(v130!.sqlFor?.pglite).toBe('');
+  });
+
   test('access_tokens.source_id column exists (PGLite parity)', async () => {
     const cols = await engine.executeRaw<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns

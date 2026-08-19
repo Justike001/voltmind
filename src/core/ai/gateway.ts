@@ -2381,6 +2381,10 @@ export async function chat(opts: ChatOpts): Promise<ChatResult> {
   const estimatedInputTokens = estimateChatInputTokens(opts);
   const maxOutputTokens = opts.maxTokens ?? 4096;
 
+  // Hermetic test transports do not represent billable provider calls.
+  // Route them before budget reservation; production keeps the normal
+  // reservation/recording path because _chatTransport is null there.
+  if (_chatTransport) return _chatTransport(opts);
   // TX5: reserve BEFORE the provider call. Throws BudgetExhausted on cost,
   // runtime, or no_pricing (when cap is set). Pre-resolution model id is
   // fine here — resolveChatProvider would map aliases the same way for the
@@ -2395,49 +2399,6 @@ export async function chat(opts: ChatOpts): Promise<ChatResult> {
     });
   }
 
-  // Test seam: when a test transport is installed, route through it without
-  // touching provider resolution, AI SDK, or any network. See
-  // __setChatTransportForTests. Production paths see _chatTransport === null.
-  if (_chatTransport) {
-    let res: ChatResult | null = null;
-    let threw: unknown = null;
-    try {
-      res = await _chatTransport(opts);
-      return res;
-    } catch (err) {
-      threw = err;
-      throw err;
-    } finally {
-      if (tracker) {
-        try {
-          if (res) {
-            tracker.record({
-              modelId: res.model ?? modelStrEarly,
-              inputTokens: res.usage.input_tokens,
-              outputTokens: res.usage.output_tokens,
-              label: 'gateway.chat',
-            });
-          } else {
-            const usage = _extractUsageFromError(threw, {
-              inputTokens: estimatedInputTokens,
-              outputTokens: maxOutputTokens,
-            });
-            tracker.record({
-              modelId: modelStrEarly,
-              inputTokens: usage.inputTokens,
-              outputTokens: usage.outputTokens,
-              label: 'gateway.chat',
-            });
-          }
-        } catch {
-          // record() can throw BudgetExhausted (TX1) — suppress here so the
-          // original error (if any) wins; the BudgetExhausted is surfaced
-          // on the NEXT call via reserve(). For test transport this branch
-          // is rare in practice.
-        }
-      }
-    }
-  }
 
   const modelStr = modelStrEarly;
   const { model, recipe, modelId } = await resolveChatProvider(modelStr);
@@ -2691,7 +2652,6 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
   let messageIdx = opts.replayState?.nextMessageIdx ?? 0;
   let finalText = '';
   let stopReason: ToolLoopStopReason = 'end';
-  let totalTurns = 0;
 
   while (turnIdx < maxTurns) {
     if (opts.abortSignal?.aborted) {
@@ -2724,7 +2684,6 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
     totalUsage.output_tokens += chatResult.usage.output_tokens;
     totalUsage.cache_read_tokens += chatResult.usage.cache_read_tokens;
     totalUsage.cache_creation_tokens += chatResult.usage.cache_creation_tokens;
-    totalTurns += 1;
 
     // D11 step 1: persist assistant turn BEFORE any tool dispatch.
     const assistantMessageIdx = messageIdx++;
@@ -2869,7 +2828,7 @@ export async function toolLoop(opts: ToolLoopOpts): Promise<ToolLoopResult> {
     stopReason = 'max_turns';
   }
 
-  return { finalText, totalTurns, totalUsage, stopReason, messages };
+  return { finalText, totalTurns: turnIdx, totalUsage, stopReason, messages };
 }
 
 // ---- Reranker (v0.35.0.0+) ----
