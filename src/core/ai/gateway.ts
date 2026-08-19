@@ -124,6 +124,7 @@ let _embedTransportInstalled = false;
 // Test-only seam for chat(). When set, chat() skips provider resolution and
 // returns this function's result directly. See __setChatTransportForTests.
 let _chatTransport: ((opts: ChatOpts) => Promise<ChatResult>) | null = null;
+let _chatTransportBudgeted = false;
 
 /**
  * Per-recipe shrink-on-miss state. When a recipe's pre-split misses the
@@ -496,6 +497,7 @@ export function resetGateway(): void {
   _embedTransport = embedMany;
   _embedTransportInstalled = false;
   _chatTransport = null;
+  _chatTransportBudgeted = false;
   _warnedRecipes.clear();
   _extendedModels.clear();
 }
@@ -522,13 +524,17 @@ export function __setEmbedTransportForTests(fn: EmbedManyFn | null): void {
  * Used by smoke + parser-pin tests in `test/facts-extract*.test.ts` to
  * drive prompt-drift fixtures without spending real API tokens. The
  * transport receives the resolved `ChatOpts` and returns a `ChatResult`.
+ * Pass { budgeted: true } only for tests that explicitly exercise gateway
+ * reserve/record accounting; the default remains a non-billable test seam.
  *
  * @internal exported for tests; not part of the public gateway API.
  */
 export function __setChatTransportForTests(
   fn: ((opts: ChatOpts) => Promise<ChatResult>) | null,
+  options: { budgeted?: boolean } = {},
 ): void {
   _chatTransport = fn;
+  _chatTransportBudgeted = fn !== null && options.budgeted === true;
 }
 
 function requireConfig(): AIGatewayConfig {
@@ -2381,10 +2387,10 @@ export async function chat(opts: ChatOpts): Promise<ChatResult> {
   const estimatedInputTokens = estimateChatInputTokens(opts);
   const maxOutputTokens = opts.maxTokens ?? 4096;
 
-  // Hermetic test transports bypass provider resolution and network calls, but
-  // they still exercise the gateway budget contract. Reserve before invoking
-  // the transport and record its reported usage afterward, just like the
-  // production generateText path.
+  // Hermetic test transports normally bypass billing entirely. The dedicated
+  // budget-composition tests opt in with { budgeted: true }, in which case
+  // reserve/record follows the production generateText path below.
+  if (_chatTransport && !_chatTransportBudgeted) return _chatTransport(opts);
   if (_chatTransport) {
     let res: ChatResult | null = null;
     let threw: unknown = null;

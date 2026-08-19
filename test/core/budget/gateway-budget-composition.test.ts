@@ -71,7 +71,7 @@ describe('withBudgetTracker — scope semantics', () => {
   test('chat() inside scope auto-composes the tracker', async () => {
     const tracker = new BudgetTracker({ maxCostUsd: 1.0, label: 'test-gw', auditPath });
     const transport = fakeChatTransport({ input_tokens: 1000, output_tokens: 500 });
-    __setChatTransportForTests(transport);
+    __setChatTransportForTests(transport, { budgeted: true });
 
     expect(getCurrentBudgetTracker()).toBeNull();
 
@@ -92,7 +92,7 @@ describe('withBudgetTracker — scope semantics', () => {
 
   test('chat() OUTSIDE any scope is a budget no-op (back-compat)', async () => {
     const transport = fakeChatTransport();
-    __setChatTransportForTests(transport);
+    __setChatTransportForTests(transport, { budgeted: true });
     // No withBudgetTracker wrapper — current behavior preserved.
     await chat({
       model: 'claude-haiku-4-5-20251001',
@@ -119,7 +119,7 @@ describe('withBudgetTracker — scope semantics', () => {
   test('over-cap chat call throws BudgetExhausted via reserve()', async () => {
     const tracker = new BudgetTracker({ maxCostUsd: 0.001, label: 'tight', auditPath });
     const transport = fakeChatTransport();
-    __setChatTransportForTests(transport);
+    __setChatTransportForTests(transport, { budgeted: true });
 
     let caught: unknown = null;
     await withBudgetTracker(tracker, async () => {
@@ -146,7 +146,7 @@ describe('withBudgetTracker — scope semantics', () => {
     const tracker = new BudgetTracker({ maxCostUsd: 0.005, label: 'tx1', auditPath });
     // Mock transport reports huge actual usage
     const transport = fakeChatTransport({ input_tokens: 1_000_000, output_tokens: 1_000_000 });
-    __setChatTransportForTests(transport);
+    __setChatTransportForTests(transport, { budgeted: true });
 
     // First call: reserve fits (small chars), record() over-shoots and TX1
     // suppresses internally. Second call: reserve sees cumulative > cap.
@@ -181,7 +181,7 @@ describe('AsyncLocalStorage isolation', () => {
     const t1 = new BudgetTracker({ maxCostUsd: 1.0, label: 'parallel-1', auditPath });
     const t2 = new BudgetTracker({ maxCostUsd: 1.0, label: 'parallel-2', auditPath: join(tmp, 'p2.jsonl') });
     const transport = fakeChatTransport({ input_tokens: 1000, output_tokens: 500 });
-    __setChatTransportForTests(transport);
+    __setChatTransportForTests(transport, { budgeted: true });
 
     await Promise.all([
       withBudgetTracker(t1, async () => {
