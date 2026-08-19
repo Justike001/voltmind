@@ -2381,10 +2381,50 @@ export async function chat(opts: ChatOpts): Promise<ChatResult> {
   const estimatedInputTokens = estimateChatInputTokens(opts);
   const maxOutputTokens = opts.maxTokens ?? 4096;
 
-  // Hermetic test transports do not represent billable provider calls.
-  // Route them before budget reservation; production keeps the normal
-  // reservation/recording path because _chatTransport is null there.
-  if (_chatTransport) return _chatTransport(opts);
+  // Hermetic test transports bypass provider resolution and network calls, but
+  // they still exercise the gateway budget contract. Reserve before invoking
+  // the transport and record its reported usage afterward, just like the
+  // production generateText path.
+  if (_chatTransport) {
+    let res: ChatResult | null = null;
+    let threw: unknown = null;
+    if (tracker) {
+      tracker.reserve({
+        modelId: modelStrEarly,
+        estimatedInputTokens,
+        maxOutputTokens,
+        kind: 'chat' as BudgetKind,
+        label: 'gateway.chat',
+      });
+    }
+    try {
+      res = await _chatTransport(opts);
+      return res;
+    } catch (err) {
+      threw = err;
+      throw err;
+    } finally {
+      if (tracker) {
+        try {
+          const usage = res
+            ? { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens }
+            : _extractUsageFromError(threw, {
+                inputTokens: estimatedInputTokens,
+                outputTokens: maxOutputTokens,
+              });
+          tracker.record({
+            modelId: res?.model ?? modelStrEarly,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            label: 'gateway.chat',
+          });
+        } catch {
+          // Preserve the original transport error. A record() budget error is
+          // surfaced on the next call through reserve(), matching production.
+        }
+      }
+    }
+  }
   // TX5: reserve BEFORE the provider call. Throws BudgetExhausted on cost,
   // runtime, or no_pricing (when cap is set). Pre-resolution model id is
   // fine here — resolveChatProvider would map aliases the same way for the
