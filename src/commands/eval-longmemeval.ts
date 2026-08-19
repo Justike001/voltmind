@@ -369,7 +369,9 @@ export interface RunOpts {
   /**
    * v0.40.2.0 — separate stub for the Haiku claim extractor. Tests can
    * isolate "extractor stubbed, answer-gen real" from "extractor real,
-   * answer-gen stubbed". Defaults to the same SDK client when omitted.
+   * answer-gen stubbed". When omitted, production builds a separate gateway
+   * extractor; with an injected answer client trajectory is disabled unless an
+   * explicit extractor client is provided, keeping the test provider-free.
    */
   extractorClient?: ThinkLLMClient;
   /**
@@ -468,25 +470,40 @@ export async function runEvalLongMemEval(args: string[], runOpts: RunOpts = {}):
     fallback: 'sonnet',
   });
 
-  const trajectoryEnabled = !opts.noTrajectory;
+  // Retrieval-only runs must remain provider-free; trajectory extraction is
+  // an answer-generation concern and is disabled for those runs as well.
+  // Retrieval-only and injected-client runs are hermetic. A test answer client
+  // never triggers construction of a second real provider client; trajectory
+  // extraction is enabled for those runs only when its own client is explicit.
+  let trajectoryEnabled = !opts.noTrajectory
+    && !opts.retrievalOnly
+    && (!runOpts.client || !!runOpts.extractorClient);
   const extractorModel = trajectoryEnabled
     ? await resolveModel(null, {
         cliFlag: runOpts.extractorModel,
         tier: 'utility',
         fallback: 'haiku',
       })
-    : "";
+    : '';
 
   // Production model calls use the same gateway adapter as think/cycle.
   // runOpts.client and runOpts.extractorClient remain explicit test seams.
-  const builtClient = runOpts.client ?? await __thinkAdapter.tryBuildGatewayClient(model);
-  if (!builtClient) throw new Error('No gateway chat provider is configured for the LongMemEval model.');
-  const client: ThinkLLMClient = builtClient;
-  let extractorClient: ThinkLLMClient = runOpts.extractorClient ?? client;
-  if (trajectoryEnabled && !runOpts.extractorClient) {
-    const builtExtractor = await __thinkAdapter.tryBuildGatewayClient(extractorModel);
-    if (!builtExtractor) throw new Error('No gateway chat provider is configured for the trajectory extractor model.');
-    extractorClient = builtExtractor;
+  const builtClient: ThinkLLMClient | undefined = opts.retrievalOnly
+    ? undefined
+    : (runOpts.client ?? (await __thinkAdapter.tryBuildGatewayClient(model))) ?? undefined;
+  if (!builtClient && !opts.retrievalOnly) {
+    throw new Error('No gateway chat provider is configured for the LongMemEval model.');
+  }
+  const client: ThinkLLMClient | undefined = builtClient;
+  let extractorClient: ThinkLLMClient | undefined = runOpts.extractorClient;
+  if (trajectoryEnabled && !extractorClient) {
+    // This is the production-only path: injected answer clients have already
+    // disabled trajectory unless an explicit extractor client was supplied.
+    extractorClient = (await __thinkAdapter.tryBuildGatewayClient(extractorModel)) || undefined;
+    if (!extractorClient) {
+      // Claim extraction is best-effort; answer generation remains required.
+      trajectoryEnabled = false;
+    }
   }
   process.stderr.write(`[longmemeval] estimated 20-60 minutes for ${questions.length} questions; use --limit N for shorter runs\n`);
   process.stderr.write(`[longmemeval] connecting in-memory brain...\n`);
@@ -613,7 +630,7 @@ export async function runEvalLongMemEval(args: string[], runOpts: RunOpts = {}):
 
 interface TrajectoryRunOpts {
   trajectoryEnabled: boolean;
-  extractorClient: ThinkLLMClient;
+  extractorClient?: ThinkLLMClient;
   extractorModel: string;
 }
 
@@ -622,7 +639,7 @@ async function runOneQuestion(
   q: LongMemEvalQuestion,
   opts: ParsedArgs,
   model: string,
-  client: ThinkLLMClient,
+  client: ThinkLLMClient | undefined,
   emitter: JsonlEmitter,
   recallByType: Record<string, { hit: number; total: number }>,
   traj: TrajectoryRunOpts,
@@ -645,10 +662,10 @@ async function runOneQuestion(
     // preprocessing — methodology disclosed at the envelope + stderr
     // summary level. Each call is fail-open; one bad session never
     // kills the per-question loop.
-    if (traj.trajectoryEnabled) {
+    if (traj.trajectoryEnabled && traj.extractorClient) {
       await extractAndInsertClaims({
         engine,
-        client: traj.extractorClient,
+        client: traj.extractorClient!,
         model: traj.extractorModel,
         sessionSlug: p.slug,
         sessionId: sessionIdFromSlug(p.slug),
@@ -732,7 +749,7 @@ async function runOneQuestion(
 
   const hypothesis = opts.retrievalOnly
     ? renderRetrievedAsHypothesis(results)
-    : await generateAnswer(client, q.question, results, pageMeta, model, trajectoryBlock);
+    : await generateAnswer(client!, q.question, results, pageMeta, model, trajectoryBlock);
 
   // v0.40.1.0 (Track D / T2) — compute per-row hit/miss so resume runs can
   // rebuild the cumulative recallByType from the file alone. Undefined when

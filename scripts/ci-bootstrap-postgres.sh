@@ -23,8 +23,8 @@ owner_password=$(openssl rand -hex 24)
 owner_url="postgresql://voltmind_test_owner:${owner_password}@${PGHOST}:${PGPORT}/${PGDATABASE}"
 
 # The owner is temporarily SUPERUSER so the fresh-schema migration can create
-# PostgreSQL's event trigger. The next CI step initializes the schema and
-# immediately demotes this same role to NOSUPERUSER/BYPASSRLS before E2E.
+# PostgreSQL's event trigger. The next CI steps initialize the schema, provision the restricted role,
+# demote this same role to NOSUPERUSER/NOBYPASSRLS, then run OAuth and source E2E.
 psql -v ON_ERROR_STOP=1 <<SQL
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;

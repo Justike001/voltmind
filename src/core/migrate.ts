@@ -6324,10 +6324,94 @@ export const MIGRATIONS: Migration[] = [
     },
     verify: async (engine) => {
       if (engine.kind === "pglite") return true;
-      const rows = await engine.executeRaw<{ exists: boolean }>(
-        "SELECT to_regprocedure('public.voltmind_admin_source_ids()') IS NOT NULL AS exists"
+      const rows = await engine.executeRaw<{ exists: boolean; public_execute: boolean; current_user_execute: boolean }>(
+        "SELECT to_regprocedure('public.voltmind_admin_source_ids()') IS NOT NULL AS exists,\n           has_function_privilege('public', 'public.voltmind_admin_source_ids()', 'EXECUTE') AS public_execute,\n           has_function_privilege(current_user, 'public.voltmind_admin_source_ids()', 'EXECUTE') AS current_user_execute"
       );
-      return rows[0]?.exists === true;
+      return rows[0]?.exists === true
+        && rows[0]?.public_execute === false
+        && rows[0]?.current_user_execute === true;
+    },
+  },
+  {
+    version: 128,
+    name: "admin_source_directory",
+    sql: "",
+    idempotent: true,
+    sqlFor: {
+      postgres: `
+        -- Admin source enumeration needs only identifiers before it can install
+        -- an explicit transaction-local RLS read scope. Keep this control-plane
+        -- directory free of paths, URLs, configs, and page counts.
+        CREATE TABLE IF NOT EXISTS public.admin_source_directory (
+          source_id TEXT PRIMARY KEY REFERENCES public.sources(id) ON DELETE CASCADE
+        );
+        INSERT INTO public.admin_source_directory (source_id)
+          SELECT id FROM public.sources
+          ON CONFLICT (source_id) DO NOTHING;
+
+        CREATE OR REPLACE FUNCTION public.voltmind_sync_admin_source_directory()
+        RETURNS TRIGGER
+        LANGUAGE plpgsql
+        SECURITY DEFINER
+        SET search_path = pg_catalog, public
+        AS $fn$
+        BEGIN
+          INSERT INTO public.admin_source_directory (source_id)
+          VALUES (NEW.id)
+          ON CONFLICT (source_id) DO NOTHING;
+          RETURN NEW;
+        END;
+        $fn$;
+
+        DROP TRIGGER IF EXISTS voltmind_sync_admin_source_directory ON public.sources;
+        CREATE TRIGGER voltmind_sync_admin_source_directory
+          AFTER INSERT ON public.sources
+          FOR EACH ROW
+          EXECUTE FUNCTION public.voltmind_sync_admin_source_directory();
+
+        CREATE OR REPLACE FUNCTION public.voltmind_admin_source_ids()
+        RETURNS TEXT[]
+        LANGUAGE sql
+        STABLE
+        SECURITY DEFINER
+        SET search_path = pg_catalog, public
+        AS $fn$
+          SELECT COALESCE(array_agg(d.source_id ORDER BY d.source_id), ARRAY[]::TEXT[])
+          FROM public.admin_source_directory d;
+        $fn$;
+
+        REVOKE ALL ON public.admin_source_directory FROM PUBLIC;
+        REVOKE ALL ON FUNCTION public.voltmind_admin_source_ids() FROM PUBLIC;
+        REVOKE ALL ON FUNCTION public.voltmind_sync_admin_source_directory() FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION public.voltmind_admin_source_ids() TO CURRENT_USER;
+      `,
+      pglite: `-- PGLite has no database roles or RLS; Admin session auth remains authoritative.`,
+    },
+    verify: async (engine) => {
+      if (engine.kind === "pglite") return true;
+      const rows = await engine.executeRaw<{ table_ok: boolean; trigger_ok: boolean; function_ok: boolean; public_execute: boolean; current_user_execute: boolean }>(`
+        SELECT
+          to_regclass('public.admin_source_directory') IS NOT NULL AS table_ok,
+          EXISTS (
+            SELECT 1 FROM pg_trigger
+             WHERE tgname = 'voltmind_sync_admin_source_directory'
+               AND tgrelid = 'public.sources'::regclass
+          ) AS trigger_ok,
+          EXISTS (
+            SELECT 1 FROM pg_proc
+             WHERE oid = 'public.voltmind_admin_source_ids()'::regprocedure
+          ) AS function_ok,
+          has_function_privilege('public', 'public.voltmind_admin_source_ids()', 'EXECUTE') AS public_execute,
+          has_function_privilege(current_user, 'public.voltmind_admin_source_ids()', 'EXECUTE') AS current_user_execute
+      `);
+      return rows[0]?.table_ok === true
+        && rows[0]?.trigger_ok === true
+        && rows[0]?.function_ok === true
+        && rows[0]?.public_execute === false
+        && rows[0]?.current_user_execute === true;
+    },
+  },
+  {
     },
   },
 ];
@@ -6734,15 +6818,23 @@ export async function runMigrations(engine: BrainEngine): Promise<{ applied: num
     // idempotent — if true, log + retry the same migration once; if false,
     // throw MigrationDriftError so operator runs --skip-verify deliberately.
     if (m.verify) {
-      const verifyOk = await m.verify(engine).catch(() => false);
+      let verifyOk = await m.verify(engine).catch(() => false);
       if (!verifyOk) {
         const idempotent = isMigrationIdempotent(m);
         if (idempotent) {
           console.warn(`  [${m.version}] ⚠️  verify failed; re-running idempotent migration once`);
           if (sql) await runMigrationSQLWithRetry(engine, m, sql);
           if (m.handler) await m.handler(engine);
-          // Best-effort: don't double-throw if second run still fails verify.
-          // Operator's next run of doctor will re-detect drift.
+          // A retry is only a repair attempt. Do not record the version unless
+          // the declared post-condition is true after that attempt.
+          verifyOk = await m.verify(engine).catch(() => false);
+          if (!verifyOk) {
+            throw new MigrationDriftError(
+              m.version,
+              m.name,
+              'Schema does not match expected post-condition after idempotent retry.',
+            );
+          }
         } else {
           throw new MigrationDriftError(
             m.version,

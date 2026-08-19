@@ -15,6 +15,7 @@ const run = restrictedUrl && setupUrl ? describe : describe.skip;
 let engine: PostgresEngine;
 let setupEngine: PostgresEngine;
 let setupCanManageRoles = false;
+let restrictedRoleCreatedByTest = false;
 const suffix = String(process.pid) + '-' + String(Date.now());
 const slug = 'test/restricted-scope-' + suffix;
 const sourceA = 'scope-a-' + suffix;
@@ -41,10 +42,17 @@ run('restricted Postgres source scope (VOLTMIND_RESTRICTED_DATABASE_URL)', () =>
       await setupEngine.initSchema();
     }
     if (setupCanManageRoles) {
+      const restrictedRole = await setupEngine.executeRaw<{ exists: boolean }>(
+        "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'voltmind_restricted') AS exists",
+      );
+      restrictedRoleCreatedByTest = restrictedRole[0]?.exists !== true;
       const quotedPassword = restrictedPassword.replaceAll("'", "''");
       await setupEngine.executeRaw(
         `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'voltmind_restricted') THEN CREATE ROLE voltmind_restricted LOGIN PASSWORD '${quotedPassword}' NOSUPERUSER NOBYPASSRLS; ELSE ALTER ROLE voltmind_restricted LOGIN PASSWORD '${quotedPassword}' NOSUPERUSER NOBYPASSRLS; END IF; END $$;`,
       );
+      if (restrictedRoleCreatedByTest) {
+        await setupEngine.executeRaw('GRANT EXECUTE ON FUNCTION public.voltmind_admin_source_ids() TO voltmind_restricted');
+      }
     } else {
       const restrictedRole = await setupEngine.executeRaw<{
         rolcanlogin: boolean;
@@ -61,29 +69,33 @@ run('restricted Postgres source scope (VOLTMIND_RESTRICTED_DATABASE_URL)', () =>
     await setupEngine.executeRaw('GRANT USAGE ON SCHEMA public TO voltmind_restricted');
     await setupEngine.executeRaw('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO voltmind_restricted');
     await setupEngine.executeRaw('GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO voltmind_restricted');
-    await setupEngine.executeRaw('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO voltmind_restricted');
     await setupEngine.executeRaw('REVOKE EXECUTE ON FUNCTION public.voltmind_admin_source_ids() FROM PUBLIC');
+    await setupEngine.executeRaw('GRANT EXECUTE ON FUNCTION public.voltmind_admin_source_ids() TO voltmind_restricted');
     const helperPrivileges = await setupEngine.executeRaw<{ public_execute: boolean; restricted_execute: boolean }>(
       `SELECT has_function_privilege('public', 'public.voltmind_admin_source_ids()', 'EXECUTE') AS public_execute,
               has_function_privilege('voltmind_restricted', 'public.voltmind_admin_source_ids()', 'EXECUTE') AS restricted_execute`,
     );
     expect(helperPrivileges[0]?.public_execute).toBe(false);
     expect(helperPrivileges[0]?.restricted_execute).toBe(true);
+    for (const sourceId of [sourceA, sourceB]) {
+      await setupEngine.transaction(async (tx) => {
+        await tx.setSourceScope(sourceId);
+        await tx.executeRaw(
+          "INSERT INTO sources (id, name, config) VALUES ($1, $1, '{}'::jsonb)",
+          [sourceId],
+        );
+      });
+    }
     await setupEngine.transaction(async (tx) => {
-      // The owner is NOSUPERUSER/NOBYPASSRLS after bootstrap. Admin source
-      // scope keeps setup within ordinary RLS instead of bypassing it.
-      await tx.setAdminSourceScope([sourceA, sourceB]);
-      await tx.executeRaw(
-        "INSERT INTO sources (id, name, config) VALUES ($1, $1, '{}'::jsonb), ($2, $2, '{}'::jsonb)",
-        [sourceA, sourceB],
-      );
       for (const sourceId of [sourceA, sourceB]) {
+        await tx.setSourceScope(sourceId);
         await tx.putPage(slug, {
           type: 'note',
           title: sourceId,
           compiled_truth: 'content-' + sourceId,
         }, { sourceId });
       }
+      await tx.setSourceReadScope([sourceA, sourceB]);
       const pageA = (await tx.executeRaw<{ id: number }>(
         'SELECT id FROM pages WHERE source_id=$1 AND slug=$2', [sourceA, slug]
       ))[0];
@@ -92,26 +104,39 @@ run('restricted Postgres source scope (VOLTMIND_RESTRICTED_DATABASE_URL)', () =>
       ))[0];
       pageIdA = Number(pageA?.id);
       pageIdB = Number(pageB?.id);
+      await tx.setSourceScope(sourceA);
       await tx.executeRaw(
-        `INSERT INTO takes (page_id, row_num, claim, kind, holder, weight)
-         VALUES ($1, 1, $2, 'bet', 'world', 0.8), ($3, 1, $4, 'bet', 'world', 0.8)`,
-        [pageIdA, 'take-' + sourceA, pageIdB, 'take-' + sourceB],
+        "INSERT INTO takes (page_id, row_num, claim, kind, holder, weight) VALUES ($1, 1, $2, 'bet', 'world', 0.8)",
+        [pageIdA, 'take-' + sourceA],
       );
       const takeA = (await tx.executeRaw<{ id: number }>(
         'SELECT id FROM takes WHERE page_id=$1', [pageIdA]
       ))[0];
+      takeIdA = Number(takeA?.id);
+      await tx.executeRaw(
+        "INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'scope-test', 'scope-pack')",
+        [takeIdA],
+      );
+      await tx.executeRaw(
+        "UPDATE takes SET resolved_quality = 'correct', resolved_at = now() WHERE id = $1",
+        [takeIdA],
+      );
+      await tx.setSourceScope(sourceB);
+      await tx.executeRaw(
+        "INSERT INTO takes (page_id, row_num, claim, kind, holder, weight) VALUES ($1, 1, $2, 'bet', 'world', 0.8)",
+        [pageIdB, 'take-' + sourceB],
+      );
       const takeB = (await tx.executeRaw<{ id: number }>(
         'SELECT id FROM takes WHERE page_id=$1', [pageIdB]
       ))[0];
-      takeIdA = Number(takeA?.id);
       takeIdB = Number(takeB?.id);
       await tx.executeRaw(
-        `INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'scope-test', 'scope-pack'), ($2, 'scope-test', 'scope-pack')`,
-        [takeIdA, takeIdB],
+        "INSERT INTO take_domain_assignments (take_id, domain, pack) VALUES ($1, 'scope-test', 'scope-pack')",
+        [takeIdB],
       );
       await tx.executeRaw(
-        "UPDATE takes SET resolved_quality = 'correct', resolved_at = now() WHERE id IN ($1, $2)",
-        [takeIdA, takeIdB],
+        "UPDATE takes SET resolved_quality = 'correct', resolved_at = now() WHERE id = $1",
+        [takeIdB],
       );
     });
     const policyRows = await setupEngine.executeRaw<{ relname: string; relforcerowsecurity: boolean; has_policy: boolean }>(`
@@ -126,10 +151,11 @@ run('restricted Postgres source scope (VOLTMIND_RESTRICTED_DATABASE_URL)', () =>
 
     engine = new PostgresEngine();
     await engine.connect({ database_url: restrictedUrl!, poolSize: 1 });
-    const roles = await engine.executeRaw<{ rolbypassrls: boolean }>(
-      'SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user',
+    const roles = await engine.executeRaw<{ rolsuper: boolean; rolbypassrls: boolean }>(
+      'SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user',
     );
     expect(roles[0]?.rolbypassrls).toBe(false);
+    expect(roles[0]?.rolsuper).toBe(false);
     const app = express();
     const adminSession = { sessionId: "restricted-admin-session", csrfToken: "restricted-admin-csrf", expiresAt: Date.now() + 60000 };
     app.use("/admin/api/v1", createAdminV1Router({
@@ -150,13 +176,13 @@ run('restricted Postgres source scope (VOLTMIND_RESTRICTED_DATABASE_URL)', () =>
     if (adminServer) await new Promise<void>(resolve => adminServer.close(() => resolve()));
     if (engine) await engine.disconnect();
     if (!setupEngine) return;
-    await setupEngine.transaction(async (tx) => {
-      await tx.setAdminSourceScope([sourceA, sourceB]);
-      for (const sourceId of [sourceA, sourceB]) {
+    for (const sourceId of [sourceA, sourceB]) {
+      await setupEngine.transaction(async (tx) => {
+        await tx.setSourceScope(sourceId);
         await tx.deletePage(slug, { sourceId });
-      }
-      await tx.executeRaw('DELETE FROM sources WHERE id IN ($1, $2)', [sourceA, sourceB]);
-    });
+        await tx.executeRaw('DELETE FROM sources WHERE id = $1', [sourceId]);
+      });
+    }
     if (setupCanManageRoles) {
       await setupEngine.executeRaw('DROP OWNED BY voltmind_restricted');
       await setupEngine.executeRaw('DROP ROLE IF EXISTS voltmind_restricted');

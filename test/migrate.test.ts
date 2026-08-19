@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll, spyOn } from 'bun:test';
-import { LATEST_VERSION, runMigrations, MIGRATIONS, getIdleBlockers, hasPendingMigrations } from '../src/core/migrate.ts';
+import { LATEST_VERSION, runMigrations, MIGRATIONS, getIdleBlockers, hasPendingMigrations, MigrationDriftError } from '../src/core/migrate.ts';
 import type { IdleBlocker } from '../src/core/migrate.ts';
 import type { BrainEngine } from '../src/core/engine.ts';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
@@ -2138,3 +2138,83 @@ describe('migrate v89 — round-trip on PGLite', () => {
   });
 });
 
+describe('H6 admin source helper ACL migration contract', () => {
+  const v127 = MIGRATIONS.find(m => m.version === 127);
+  const v128 = MIGRATIONS.find(m => m.version === 128);
+
+  test('v127 verify requires PUBLIC=false and current migration role=true', async () => {
+    expect(v127).toBeDefined();
+    expect(v127?.sqlFor?.postgres).toContain('REVOKE ALL ON FUNCTION public.voltmind_admin_source_ids() FROM PUBLIC');
+    expect(v127?.sqlFor?.postgres).toContain('GRANT EXECUTE ON FUNCTION public.voltmind_admin_source_ids() TO CURRENT_USER');
+    const engine = {
+      kind: 'postgres' as const,
+      async executeRaw<T>(_sql: string): Promise<T[]> {
+        return [{ exists: true, public_execute: false, current_user_execute: true }] as T[];
+      },
+    } as unknown as BrainEngine;
+    expect(await v127?.verify?.(engine)).toBe(true);
+  });
+
+  test('schema version 127 applies the idempotent v128 repair', async () => {
+    expect(v128).toBeDefined();
+    expect(v128?.version).toBeGreaterThan(127);
+    expect(v128?.idempotent).toBe(true);
+    expect(v128?.sqlFor?.postgres).toContain('REVOKE ALL ON FUNCTION public.voltmind_admin_source_ids() FROM PUBLIC');
+    expect(v128?.sqlFor?.postgres).toContain('GRANT EXECUTE ON FUNCTION public.voltmind_admin_source_ids() TO CURRENT_USER');
+
+    const appliedSql: string[] = [];
+    const recordedVersions: string[] = [];
+    const engine = {
+      kind: 'postgres' as const,
+      async getConfig(): Promise<string> { return '127'; },
+      async setConfig(_key: string, value: string): Promise<void> { recordedVersions.push(value); },
+      async executeRaw<T>(sql: string): Promise<T[]> {
+        if (sql.includes('pg_stat_activity')) return [];
+        if (sql.includes('pg_policies')) return [{ policies: 3, forced: 3, role_ok: true }] as T[];
+        return [{ table_ok: true, trigger_ok: true, function_ok: true, public_execute: false, current_user_execute: true }] as T[];
+      },
+      async transaction<T>(fn: (tx: BrainEngine) => Promise<T>): Promise<T> {
+        return fn({
+          kind: 'postgres',
+          async runMigration(_version: number, sql: string): Promise<void> { appliedSql.push(sql); },
+        } as unknown as BrainEngine);
+      },
+    } as unknown as BrainEngine;
+
+    const result = await runMigrations(engine);
+    expect(result.applied).toBeGreaterThanOrEqual(1);
+    expect(recordedVersions).toContain('128');
+    expect(appliedSql.some(sql => sql.includes('REVOKE ALL ON FUNCTION public.voltmind_admin_source_ids() FROM PUBLIC'))).toBe(true);
+  });
+
+  test("runner does not record v128 when ACL repair post-condition remains false", async () => {
+    let verifyCalls = 0;
+    let setConfigCalls = 0;
+    const engine = {
+      kind: "postgres" as const,
+      async getConfig(): Promise<string> { return "127"; },
+      async setConfig(): Promise<void> { setConfigCalls++; },
+      async executeRaw<T>(sql: string): Promise<T[]> {
+        if (sql.includes("pg_stat_activity")) return [];
+        verifyCalls++;
+        return [{ table_ok: true, trigger_ok: true, function_ok: true, public_execute: true, current_user_execute: false }] as T[];
+      },
+      async transaction<T>(fn: (tx: BrainEngine) => Promise<T>): Promise<T> {
+        return fn({
+          kind: "postgres",
+          async runMigration(): Promise<void> {},
+        } as unknown as BrainEngine);
+      },
+    } as unknown as BrainEngine;
+
+    let thrown: unknown;
+    try {
+      await runMigrations(engine);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(MigrationDriftError);
+    expect(verifyCalls).toBe(2);
+    expect(setConfigCalls).toBe(0);
+  });
+});

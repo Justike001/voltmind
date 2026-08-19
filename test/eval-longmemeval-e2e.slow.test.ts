@@ -22,6 +22,7 @@ import { mkdtempSync, readFileSync, existsSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { runEvalLongMemEval } from '../src/commands/eval-longmemeval.ts';
+import { __thinkAdapter } from '../src/core/think/index.ts';
 import type { LongMemEvalQuestion } from '../src/eval/longmemeval/adapter.ts';
 import { createBenchmarkBrain } from '../src/eval/longmemeval/harness.ts';
 import type { PGLiteEngine } from '../src/core/pglite-engine.ts';
@@ -119,8 +120,50 @@ describe('runEvalLongMemEval: --retrieval-only path', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 10. JSONL format guard (LF + UTF-8)
-// ---------------------------------------------------------------------------
+// Provider-free gateway boundaries
+
+describe('provider-free LongMemEval paths', () => {
+  test('retrieval-only never constructs a gateway client', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'lme-provider-free-'));
+    const outPath = join(tmp, 'retrieval.jsonl');
+    const originalBuilder = __thinkAdapter.tryBuildGatewayClient;
+    __thinkAdapter.tryBuildGatewayClient = async () => {
+      throw new Error('gateway construction must not run for retrieval-only');
+    };
+    try {
+      await runEvalLongMemEval(
+        [FIXTURE_PATH, '--keyword-only', '--retrieval-only', '--limit', '1', '--output', outPath],
+        { engine: sharedEngine },
+      );
+      expect(readFileSync(outPath, 'utf8').split('\n').filter(Boolean)).toHaveLength(1);
+    } finally {
+      __thinkAdapter.tryBuildGatewayClient = originalBuilder;
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  test('injected answer client without extractor stays provider-free', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'lme-provider-free-'));
+    const outPath = join(tmp, 'stub.jsonl');
+    const { client, calls } = makeStubClient('provider-free-stub');
+    const originalBuilder = __thinkAdapter.tryBuildGatewayClient;
+    __thinkAdapter.tryBuildGatewayClient = async () => {
+      throw new Error('gateway construction must not run for injected answer client');
+    };
+    try {
+      await runEvalLongMemEval(
+        [FIXTURE_PATH, '--keyword-only', '--limit', '1', '--output', outPath],
+        { client, engine: sharedEngine },
+      );
+      expect(calls).toHaveLength(1);
+    } finally {
+      __thinkAdapter.tryBuildGatewayClient = originalBuilder;
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+// 10. JSONL format guard
 
 describe('JSONL format guard', () => {
   test('each line ends with \\n, no \\r anywhere, UTF-8 round-trip is byte-equal', async () => {
@@ -156,9 +199,7 @@ describe('JSONL format guard', () => {
   }, 60_000);
 });
 
-// ---------------------------------------------------------------------------
 // 11. JSONL key contract (additive, never replace)
-// ---------------------------------------------------------------------------
 
 describe('JSONL key contract', () => {
   test('every line carries question_id + hypothesis at minimum', async () => {
@@ -184,9 +225,7 @@ describe('JSONL key contract', () => {
   }, 60_000);
 });
 
-// ---------------------------------------------------------------------------
 // 12. per-question failure handling
-// ---------------------------------------------------------------------------
 
 describe('per-question failure handling', () => {
   test('one broken question does not kill the run; emits error JSONL line', async () => {
@@ -242,9 +281,7 @@ describe('per-question failure handling', () => {
   }, 60_000);
 });
 
-// ---------------------------------------------------------------------------
 // 13. v0.35.1.0: --resume-from
-// ---------------------------------------------------------------------------
 
 describe('runEvalLongMemEval --resume-from (v0.35.1.0)', () => {
   test('skips already-answered questions and appends to the same output file', async () => {
@@ -317,10 +354,8 @@ describe('runEvalLongMemEval --resume-from (v0.35.1.0)', () => {
   }, 60_000);
 });
 
-// ---------------------------------------------------------------------------
 // 12. v0.40.1.0 (Track D / T1 + T2): question field on every row + --by-type
 // summary emission with resume-replace semantics + --by-type-floor exit gate
-// ---------------------------------------------------------------------------
 
 describe('runEvalLongMemEval --by-type (v0.40.1.0 Track D / T1+T2)', () => {
   test('per-row JSONL includes the question text (T1, per D9)', async () => {
@@ -429,11 +464,9 @@ describe('runEvalLongMemEval --by-type (v0.40.1.0 Track D / T1+T2)', () => {
   }, 60_000);
 });
 
-// ---------------------------------------------------------------------------
 // 13. Codex CDX-3 — resume + --by-type-floor must enforce the floor even on
 // a no-op resume (where all questions already done). Pre-CDX-3 the early
 // return bypassed the floor gate entirely.
-// ---------------------------------------------------------------------------
 
 describe('codex CDX-3 — resume + --by-type-floor enforcement on no-op resume', () => {
   test('all-done resume still runs --by-type emission AND --by-type-floor gate', async () => {
