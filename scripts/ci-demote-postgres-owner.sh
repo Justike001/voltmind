@@ -51,7 +51,8 @@ SQL
      WHERE owner.rolname = current_user
   ")"
   echo "Host-ci observed role/ACL state: $role_postcondition" >&2
-  if [ "$role_postcondition" != 'f|f|f|f|f|t' ]; then
+  # PostgreSQL renders boolean::text as "true" / "false", not "t" / "f".
+  if [ "$role_postcondition" != 'false|false|false|false|false|true' ]; then
     echo 'ERROR: host-ci Postgres role/ACL postcondition failed' >&2
     exit 1
   fi
