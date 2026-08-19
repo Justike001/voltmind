@@ -24,11 +24,14 @@ fi
 
 voltmin_ci_home="${RUNNER_TEMP:-/tmp}/voltmind-postgres-ci-home"
 if [ "${CI_HOST_POSTGRES:-0}" = "1" ]; then
-  host_role_state="$(psql "$DATABASE_URL" -Atqc "SELECT rolsuper::text || '|' || rolbypassrls::text FROM pg_roles WHERE rolname = current_user")"
-  if [ "$host_role_state" = 'f|f' ]; then
-    echo 'Host-ci migration owner is already demoted; schema initialization is idempotently skipped.'
-    exit 0
+  current_role="$(psql "$DATABASE_URL" -Atqc 'SELECT current_user')"
+  current_role_state="$(psql "$DATABASE_URL" -Atqc "SELECT rolsuper::text || '|' || rolbypassrls::text FROM pg_roles WHERE rolname = current_user")"
+  if [ "$current_role" != 'voltmind_test_owner' ]; then
+    echo 'ERROR: host-ci DATABASE_URL must use voltmind_test_owner' >&2
+    exit 1
   fi
+  echo "Host-ci pre-provisioned schema owner: $current_role ($current_role_state); skipping recurring DDL."
+  exit 0
 fi
 
 mkdir -p "$voltmin_ci_home"
