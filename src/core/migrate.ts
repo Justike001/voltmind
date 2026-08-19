@@ -6897,6 +6897,30 @@ export const MIGRATIONS: Migration[] = [
         && (rows[0]?.helper_count ?? 0) === 2;
     },
   },
+  {
+    version: 131,
+    name: "admin_source_helper_acl_reconciliation",
+    sql: "",
+    idempotent: true,
+    sqlFor: {
+      postgres: `
+        -- Reconcile databases that recorded v127/v128 before the helper
+        -- ACL was provisioned correctly. Keep PUBLIC denied and grant only
+        -- the current migration/runtime role.
+        REVOKE ALL ON FUNCTION public.voltmind_admin_source_ids() FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION public.voltmind_admin_source_ids() TO CURRENT_USER;
+      `,
+      pglite: "",
+    },
+    verify: async (engine) => {
+      if (engine.kind === "pglite") return true;
+      const rows = await engine.executeRaw<{ public_execute: boolean; current_user_execute: boolean }>(
+        "SELECT has_function_privilege('public', 'public.voltmind_admin_source_ids()', 'EXECUTE') AS public_execute,\n                has_function_privilege(current_user, 'public.voltmind_admin_source_ids()', 'EXECUTE') AS current_user_execute",
+      );
+      return rows[0]?.public_execute === false
+        && rows[0]?.current_user_execute === true;
+    },
+  },
 
 ];
 

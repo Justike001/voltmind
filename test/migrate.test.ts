@@ -2171,6 +2171,7 @@ describe('H6 admin source helper ACL migration contract', () => {
       async executeRaw<T>(sql: string): Promise<T[]> {
         if (sql.includes('pg_stat_activity')) return [];
         if (sql.includes('voltmind_page_source_scope_matches')) return [{ forced_tables: 17, core_policies: 4, helper_count: 2 }] as T[];
+        if (sql.includes("current_user_execute") && !sql.includes("table_ok")) return [{ exists: true, public_execute: false, current_user_execute: true }] as T[];
         if (sql.includes('pg_policies')) return [{ policies: 3, forced: 3, role_ok: true }] as T[];
         return [{ table_ok: true, trigger_ok: true, function_ok: true, public_execute: false, current_user_execute: true }] as T[];
       },

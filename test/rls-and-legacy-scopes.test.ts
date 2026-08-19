@@ -110,6 +110,15 @@ describe('v0.42 #6 — RLS source-isolation policies (schema + migration)', () =
     expect(v130!.sqlFor?.pglite).toBe('');
   });
 
+  test("v131 reconciles helper ACL drift on an existing Postgres database", () => {
+    const v131 = MIGRATIONS_REAL.find((m) => m.version === 131);
+    expect(v131).toBeDefined();
+    expect(v131!.name).toBe("admin_source_helper_acl_reconciliation");
+    expect(v131!.sqlFor?.postgres).toContain("REVOKE ALL ON FUNCTION public.voltmind_admin_source_ids() FROM PUBLIC");
+    expect(v131!.sqlFor?.postgres).toContain("GRANT EXECUTE ON FUNCTION public.voltmind_admin_source_ids() TO CURRENT_USER");
+    expect(v131!.sqlFor?.pglite).toBe("");
+  });
+
   test('access_tokens.source_id column exists (PGLite parity)', async () => {
     const cols = await engine.executeRaw<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns

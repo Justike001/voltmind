@@ -515,7 +515,10 @@ async function runSubagentViaGateway(args: GatewayRunArgs): Promise<SubagentResu
 
   return {
     result: result.finalText,
-    turns_count: result.totalTurns,
+    // gateway.totalTurns counts completed tool-loop transitions; the public
+    // subagent contract counts assistant responses, including a terminal
+    // no-tool response.
+    turns_count: result.messages.filter(message => message.role === 'assistant').length,
     stop_reason: stopReason,
     tokens: {
       in: result.totalUsage.input_tokens,
