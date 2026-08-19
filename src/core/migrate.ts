@@ -6411,9 +6411,6 @@ export const MIGRATIONS: Migration[] = [
         && rows[0]?.current_user_execute === true;
     },
   },
-  {
-    },
-  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS.length > 0
