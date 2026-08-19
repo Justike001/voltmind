@@ -23,6 +23,14 @@ fi
 
 
 voltmin_ci_home="${RUNNER_TEMP:-/tmp}/voltmind-postgres-ci-home"
+if [ "${CI_HOST_POSTGRES:-0}" = "1" ]; then
+  host_role_state="$(psql "$DATABASE_URL" -Atqc "SELECT rolsuper::text || '|' || rolbypassrls::text FROM pg_roles WHERE rolname = current_user")"
+  if [ "$host_role_state" = 'f|f' ]; then
+    echo 'Host-ci migration owner is already demoted; schema initialization is idempotently skipped.'
+    exit 0
+  fi
+fi
+
 mkdir -p "$voltmin_ci_home"
 
 # Fresh VoltMind schemas include migrations whose DDL is intentionally guarded
