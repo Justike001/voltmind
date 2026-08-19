@@ -235,50 +235,41 @@ jobs:
     name: Host Postgres - white-box (38 E2E)
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/master') || github.event_name == 'merge_group' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
+    environment:
+      name: host-ci
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: voltmind_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d voltmind_ci"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
+    env:
+      DATABASE_URL: ${{ secrets.VOLTMIND_CI_DATABASE_URL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Assert Client CI has no database credentials
-        run: bash scripts/assert-no-database-env.sh
+      - name: Join tailnet for Host Postgres only
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_FEDERATED_CLIENT_ID }}
+          audience: ${{ secrets.TAILSCALE_FEDERATED_AUDIENCE }}
+          tags: tag:host-ci
+          ping: ${{ vars.VOLTMIND_CI_DATABASE_HOST }}
+      - name: Host Postgres connectivity preflight
+        env:
+          CI_DATABASE_HOST: ${{ vars.VOLTMIND_CI_DATABASE_HOST }}
+        run: |
+          set -euo pipefail
+          test -n "$CI_DATABASE_HOST"
+          timeout 10 bash -c ": </dev/tcp/$CI_DATABASE_HOST/5432"
+          echo "Host Postgres TCP/5432 is reachable"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.3.14
+          bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
-      - name: Bootstrap disposable Postgres
-        env:
-          PGHOST: 127.0.0.1
-          PGPORT: 5432
-          PGUSER: postgres
-          PGPASSWORD: postgres
-          PGDATABASE: voltmind_ci
-        run: bash scripts/ci-bootstrap-postgres.sh restricted
-      - name: Initialize schema as migration/test owner
-        env:
-          PGPASSWORD: postgres
-          CI_SKIP_OWNER_DEMOTION: "1"
-        run: bash scripts/ci-init-and-demote-postgres-owner.sh
-      - name: Provision restricted role and demote migration owner
-        env:
-          PGPASSWORD: postgres
-        run: bash scripts/ci-demote-postgres-owner.sh
-      - name: Run OAuth HTTP E2E as demoted non-BYPASSRLS app role
+      - name: Run OAuth HTTP E2E as migration/test owner
         run: bash scripts/run-e2e.sh test/e2e/serve-http-oauth.test.ts
       - name: Run restricted source-scope E2E as rolbypassrls=false
+        env:
+          VOLTMIND_RESTRICTED_DATABASE_URL: ${{ secrets.VOLTMIND_CI_RESTRICTED_DATABASE_URL }}
         run: bash scripts/run-e2e.sh test/e2e/restricted-postgres-source-scope.test.ts
 
   gitleaks:
