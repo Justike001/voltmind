@@ -303,6 +303,10 @@ describe('runExtractConversationFactsCore', () => {
     await engine.executeRaw(`DELETE FROM pages WHERE slug LIKE 'conversations/%' OR slug LIKE 'people/alice%'`);
     // Set facts.extraction_enabled=true so kill-switch doesn't refuse.
     await engine.setConfig('facts.extraction_enabled', 'true');
+    // The core uses a real budget cap even with the hermetic chat transport.
+    // Pin a priced model so the test transport exercises extraction instead
+    // of being rejected by the unknown-pricing guard for the default route.
+    await engine.setConfig('facts.extraction_model', 'anthropic:claude-haiku-4-5-20251001');
     // Seed test pages.
     await engine.putPage('conversations/imessage/alice-example', {
       type: 'conversation',

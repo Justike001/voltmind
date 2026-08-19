@@ -50,6 +50,7 @@ SQL
       JOIN pg_roles restricted ON restricted.rolname = 'voltmind_restricted'
      WHERE owner.rolname = current_user
   ")"
+  echo "Host-ci observed role/ACL state: $role_postcondition" >&2
   if [ "$role_postcondition" != 'f|f|f|f|f|t' ]; then
     echo 'ERROR: host-ci Postgres role/ACL postcondition failed' >&2
     exit 1
