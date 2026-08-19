@@ -20,26 +20,9 @@ if [ "${CI_HOST_POSTGRES:-0}" = "1" ]; then
     exit 1
   fi
 
-  # This URL must point only at the disposable CI database. The owner is
-  # checked by name before any ACL or role mutation is attempted.
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-REVOKE ALL ON FUNCTION public.voltmind_admin_source_ids() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.voltmind_admin_source_ids() TO voltmind_restricted;
-DO $$
-DECLARE
-  owner_is_superuser boolean;
-BEGIN
-  SELECT rolsuper INTO owner_is_superuser
-    FROM pg_roles WHERE rolname = current_user;
-  IF owner_is_superuser THEN
-    EXECUTE format(
-      'ALTER ROLE %I NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS',
-      current_user
-    );
-  END IF;
-END
-$$;
-SQL
+  # Host CI uses the non-privileged runtime role. The disposable database's
+  # owner, ACL, and role state are provisioned separately; this job verifies
+  # them without attempting no-op ACL DDL that it cannot authorize.
 
   role_postcondition="$(psql "$DATABASE_URL" -Atqc "
     SELECT owner.rolsuper::text || '|' || owner.rolbypassrls::text || '|' ||
