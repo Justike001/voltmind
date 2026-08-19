@@ -1,25 +1,33 @@
 #!/usr/bin/env bash
-# Initialize the disposable database, then reduce the migration/test owner
+# Initialize the disposable database as the migration/test owner
 # before restricted white-box E2E runs use DATABASE_URL; CI can leave it
 # in place for the preceding OAuth control-plane E2E.
 
 set -euo pipefail
 
-: "${DATABASE_URL:?DATABASE_URL must be set by ci-bootstrap-postgres.sh}"
-: "${PGPASSWORD:?PGPASSWORD must be the bootstrap-only service password}"
+: "${DATABASE_URL:?DATABASE_URL must be set}"
 
-case "$DATABASE_URL" in
-  postgresql://voltmind_test_owner:*@127.0.0.1:5432/voltmind_ci) ;;
-  *) echo 'ERROR: refusing to initialize a non-disposable CI Postgres URL' >&2; exit 1 ;;
-esac
+if [ "${CI_HOST_POSTGRES:-0}" = "1" ]; then
+  : "${VOLTMIND_CI_PROVISIONING_TARGET:?provisioning target must be explicit}"
+  if [ "$VOLTMIND_CI_PROVISIONING_TARGET" != 'host-ci' ]; then
+    echo 'ERROR: refusing an unknown Host Postgres provisioning target' >&2
+    exit 1
+  fi
+else
+  : "${PGPASSWORD:?PGPASSWORD must be the bootstrap-only service password}"
+  case "$DATABASE_URL" in
+    postgresql://voltmind_test_owner:*@127.0.0.1:5432/voltmind_ci) ;;
+    *) echo 'ERROR: refusing to initialize a non-disposable CI Postgres URL' >&2; exit 1 ;;
+  esac
+fi
 
 
 voltmin_ci_home="${RUNNER_TEMP:-/tmp}/voltmind-postgres-ci-home"
 mkdir -p "$voltmin_ci_home"
 
 # Fresh VoltMind schemas include migrations whose DDL is intentionally guarded
-# by BYPASSRLS and, on PostgreSQL, a superuser-only event trigger. The role was
-# created as a disposable superuser by the bootstrap step solely for this call.
+# by BYPASSRLS and, on PostgreSQL, a superuser-only event trigger. The trusted
+# host-ci path uses only the explicitly scoped disposable migration-owner URL.
 VOLTMIND_HOME="$voltmin_ci_home" bun -e '
   import { PostgresEngine } from "./src/core/postgres-engine.ts";
   const url = process.env.DATABASE_URL;
@@ -29,13 +37,18 @@ VOLTMIND_HOME="$voltmin_ci_home" bun -e '
   try { await engine.initSchema(); } finally { await engine.disconnect(); }
 '
 
-# OAuth control-plane tables intentionally remain protected by their own RLS
-# posture. CI defers demotion only to keep role provisioning explicit; the
-# OAuth E2E runs after demotion against the real application role.
+# Host-ci keeps role provisioning in a separate explicit step so the migration
+# owner is never silently demoted before schema initialization completes.
 if [ "${CI_SKIP_OWNER_DEMOTION:-0}" = "1" ]; then
   exit 0
 fi
 
+if [ "${CI_HOST_POSTGRES:-0}" = "1" ]; then
+  echo 'ERROR: host-ci requires ci-demote-postgres-owner.sh after initialization' >&2
+  exit 2
+fi
+
+: "${VOLTMIND_RLS_RESTRICTED_PASSWORD:?restricted role password must be set by ci-bootstrap-postgres.sh}"
 test -n "$VOLTMIND_RLS_RESTRICTED_PASSWORD"
 
 # Provision the non-BYPASSRLS application role before demoting the owner.

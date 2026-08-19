@@ -265,7 +265,19 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
-      - name: Run OAuth HTTP E2E as migration/test owner
+      - name: Initialize schema as migration/test owner
+        env:
+          CI_HOST_POSTGRES: "1"
+          VOLTMIND_CI_PROVISIONING_TARGET: host-ci
+          CI_SKIP_OWNER_DEMOTION: "1"
+        run: bash scripts/ci-init-and-demote-postgres-owner.sh
+      - name: Provision restricted role and demote migration owner
+        env:
+          CI_HOST_POSTGRES: "1"
+          VOLTMIND_CI_PROVISIONING_TARGET: host-ci
+          VOLTMIND_RESTRICTED_DATABASE_URL: ${{ secrets.VOLTMIND_CI_RESTRICTED_DATABASE_URL }}
+        run: bash scripts/ci-demote-postgres-owner.sh
+      - name: Run OAuth HTTP E2E as demoted migration/test owner
         run: bash scripts/run-e2e.sh test/e2e/serve-http-oauth.test.ts
       - name: Run restricted source-scope E2E as rolbypassrls=false
         env:
