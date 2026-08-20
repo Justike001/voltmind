@@ -23,8 +23,8 @@ fixed. You wake up and the brain is smarter than when you went to sleep.
 | 3x/day (weekdays) | Meeting sync | Full ingestion + attendee propagation | [meeting-sync](../../recipes/meeting-sync.md) |
 | Weekly | Calendar sync | Daily files + attendee enrichment | [calendar-to-brain](../../recipes/calendar-to-brain.md) |
 | Daily AM | Morning briefing | Search calendar attendees, deal status, active threads | [briefing skill](../../skills/briefing/SKILL.md) |
-| Weekly | Brain maintenance | `voltmind doctor`, embed stale, orphan detection | [maintain skill](../../skills/maintain/SKILL.md) |
-| Nightly | Dream cycle | Entity sweep, enrich thin spots, fix citations | See below |
+| Weekly | Brain maintenance | `voltmind doctor`, embed stale, orphan detection | [maintain-client skill](../../skills/maintain-client/SKILL.md) for thin-client cron agents (host-only work is escalated); [maintain-host skill](../../skills/maintain-host/SKILL.md) for the company server / full install |
+| Nightly | Dream cycle | Entity sweep, enrich thin spots, fix citations | Host only — see [maintain-host skill](../../skills/maintain-host/SKILL.md) (dream cycle section) |
 
 ## Implementation: Setting Up Cron Jobs
 

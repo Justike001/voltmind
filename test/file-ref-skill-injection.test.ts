@@ -61,6 +61,30 @@ describe('external-file runtime skill injection', () => {
     }
   });
 
+  test('client maintenance declares client-authorized backfill/scrub and never the host-only reconcile', () => {
+    const skill = frontmatter('skills/maintain-client/SKILL.md');
+    expect(skill.triggers).toContain('backfill file references');
+    expect(skill.triggers).toContain('scrub open paths');
+    for (const tool of ['search_file_refs', 'backfill_file_refs', 'scrub_file_ref_open_paths']) {
+      expect(skill.tools).toContain(tool);
+      expect(operationNames.has(tool)).toBe(true);
+    }
+    expect(skill.tools).not.toContain('reconcile_project_tracking');
+    const body = read('skills/maintain-client/SKILL.md');
+    expect(body).toContain('VOLTMIND_RUNTIME_ROLE');
+    expect(body).toContain('Host work request');
+  });
+
+  test('host maintenance declares the full host operation surface', () => {
+    const skill = frontmatter('skills/maintain-host/SKILL.md');
+    for (const tool of ['reconcile_project_tracking', 'get_project_tracking_status', 'backfill_file_refs', 'scrub_file_ref_open_paths', 'run_doctor']) {
+      expect(skill.tools).toContain(tool);
+      expect(operationNames.has(tool)).toBe(true);
+    }
+    const body = read('skills/maintain-host/SKILL.md');
+    expect(body).toContain('VOLTMIND_RUNTIME_ROLE');
+  });
+
   test('client root mutation remains discoverable CLI-only client file-plane work', () => {
     expect(operationNames.has('client_roots')).toBe(false);
     const cli = read('src/cli.ts');

@@ -1,12 +1,11 @@
 ---
 name: maintain
-version: 1.0.0
+version: 2.0.0
 description: |
-  Brain health checks: back-link enforcement, citation audit, filing validation,
-  stale info detection, orphan pages, external-file-reference backfill/path
-  cleanup, and benchmarks. Use when asked to check brain health, run
-  maintenance, audit quality, index legacy file links, or remove stored local
-  drive paths, or diagnose/reconcile long-running project tracking receipts.
+  Router for brain health checks and maintenance. Picks maintain-client (thin
+  client / cron agent) vs maintain-host (company server / full local install)
+  based on the runtime, then delegates. Read this first to route, then read the
+  chosen variant's SKILL.md for the workflow.
 triggers:
   - "brain health"
   - "check backlinks"
@@ -54,483 +53,66 @@ tools:
 mutating: true
 ---
 
-# Maintain Skill
-
-Periodic brain health checks and cleanup.
-
-## Contract
-
-This skill guarantees:
-- All health dimensions are checked (stale, orphan, dead links, cross-refs, backlinks, citations, filing, tags)
-- Each issue found has a specific fix action
-- Back-link iron law is enforced
-- Citation format is validated against the standard
-- Results are reported with counts per dimension
-- Long-running tracking is checked for failed/stalled receipts, stale project
-  state, invalid bindings, and unresolved candidates.
-
-## Phases
-
-### Long-running project tracking health
-
-1. Call `get_project_tracking_status` on the company Host source.
-2. Review failed/stalled receipts and `state/indexes/project-tracking-review`.
-3. Correct bindings only in project/workstream Frontmatter through the project
-   workflow; maintenance must not invent or silently change bindings.
-4. Call `reconcile_project_tracking` after a binding correction or recoverable
-   failure, then verify status again. This Host operation queues the protected
-   worker; it does not grant the client direct project-page write access.
-
-For a trusted shell on the company server, use `voltmind projects tracking
-status --source-id <company-source>` and, with
-`VOLTMIND_RUNTIME_ROLE=company-server`, `voltmind projects tracking reconcile
---source-id <company-source>`.
-
-### External file-reference maintenance
-
-Use source-scoped Host operations for legacy indexing and cleanup:
-
-1. Preview `backfill_file_refs`, then apply it only after reviewing counts.
-   On a thin client, `voltmind file-refs backfill --dry-run --root-key <key>`
-   supplies only transient matching hints; the Host never accesses the drive.
-2. Verify representative names or logical paths with `search_file_refs`.
-3. Preview `scrub_file_ref_open_paths`; apply only after confirming the affected
-   page/ref counts. This removes deprecated stored workstation paths and
-   rebuilds logical projections.
-4. Do not mark references missing because one client lacks a mapping or mount.
-
-CLI equivalents for an agent with the appropriate local shell are:
-
-```powershell
-voltmind file-refs backfill --dry-run --root-key synology-public
-voltmind file-refs backfill --root-key synology-public
-voltmind file-refs scrub-open-paths --dry-run
-voltmind file-refs scrub-open-paths --yes
-```
-
-### Autonomous path (v0.36.4.0) — when you want to reach a target score
-
-If the user asks "get my brain to 90/100" or "fix what's broken", prefer the
-one-command loop over walking each dimension by hand:
-
-```bash
-voltmind doctor --remediation-plan --json              # preview what would run
-voltmind doctor --remediate --yes --target-score 90 --max-usd 5
-```
-
-`--remediation-plan` prints a dependency-ordered list (sync before extract,
-embed after consolidate, etc.) with per-step `est_seconds` and `est_usd_cost`.
-`--remediate` walks the plan, submitting each step as a Minion job, re-checking
-score between every step. `--max-usd N` is a hard cost cap — submission refuses
-when the plan would exceed the cap (prevents synthesize loops from burning
-Anthropic credits unattended).
-
-When the target score is unreachable for the brain (empty brain with no entity
-pages → `graph_coverage` caps at 70; unconfigured embedding key → caps at 60),
-the command bails with a list of what's missing rather than looping.
-
-Use the per-dimension walk below (Phase 2 onward) when:
-- The user explicitly asks for a dimension-by-dimension audit
-- You're investigating why score is stuck below `--remediate`'s ceiling
-- A specific dimension needs manual judgment that the auto path skips
-
-### Manual path
-
-1. **Run health check.** Check voltmind health to get the dashboard.
-2. **Check each dimension:**
-
-### Stale pages
-Pages where compiled_truth is older than the latest timeline entry. The assessment hasn't been updated to reflect recent evidence.
-- Check the health output for stale page count
-- For each stale page: read the page from voltmind, review timeline, determine if compiled_truth needs rewriting
-
-### Orphan pages
-Pages with zero inbound links. Nobody references them.
-- Review orphans: are they genuinely isolated or just missing links?
-- Add links in voltmind from related pages or flag for deletion
-
-### Dead links
-Links pointing to pages that don't exist.
-- Remove dead links in voltmind
-
-### Missing cross-references
-Pages that mention entity names but don't have formal links.
-- Read compiled_truth from voltmind, extract entity mentions, create links in voltmind
-
-### Link graph extraction
-If link_count is 0 or low relative to page_count, run batch extraction:
-```bash
-voltmind extract links --dir ~/brain
-```
-This scans all markdown files for entity references, See Also sections, and
-frontmatter fields, then creates typed links in the database.
-
-### Timeline extraction
-If timeline_entry_count is 0, extract structured timeline from markdown:
-```bash
-voltmind extract timeline --dir ~/brain
-```
-
-### Dream cycle (v0.23): synthesize + patterns
-
-`voltmind dream` runs the full 8-phase maintenance cycle:
-
-```
-lint -> backlinks -> sync -> synthesize -> extract -> patterns -> embed -> orphans
-```
-
-The two new phases consolidate yesterday's conversations into long-term memory:
-
-**Synthesize phase:** reads transcripts from `dream.synthesize.session_corpus_dir`,
-runs a cheap Haiku verdict (cached in `dream_verdicts`) to filter routine
-ops sessions, then fans out one Sonnet subagent per worth-processing
-transcript. Each subagent writes reflections (`wiki/personal/reflections/...`),
-originals (`wiki/originals/ideas/...`), and people timeline entries. The
-orchestrator collects the slugs from `subagent_tool_executions` (NOT
-`pages.updated_at` — that would pick up unrelated writes) and reverse-renders
-each new page from DB → markdown on disk.
-
-**Patterns phase:** runs after `extract` (so the graph state is fresh).
-Reads recent reflections within `dream.patterns.lookback_days` (default 30),
-runs a single Sonnet pass to surface recurring themes, and writes pattern
-pages to `wiki/personal/patterns/<theme>` when ≥`dream.patterns.min_evidence`
-(default 3) reflections support a pattern.
-
-**Quality bar (Iron Law for synthesis):**
-1. Quote the user verbatim. Do not paraphrase memorable phrasings.
-2. Cross-reference compulsively: every new page MUST have at least one wikilink.
-3. Slug discipline: lowercase alphanumeric and hyphens only. NO underscores, NO file extensions.
-4. Edited transcripts produce NEW slugs (content-hash suffix changes) — never silently overwrite.
-
-**Trust boundary (`allowed_slug_prefixes`):** the synthesis subagent runs with an
-explicit allow-list of write paths sourced from `_brain-filing-rules.json`'s
-`dream_synthesize_paths.globs`. Even on prompt-injection success, the subagent
-cannot write outside that list. Trust comes from PROTECTED_JOB_NAMES — MCP
-cannot submit subagent jobs at all. Editing the JSON is the only way to add
-a new directory the synthesizer can write to.
-
-**Idempotency + privacy:** transcripts are keyed by `(file_path, content_hash)`,
-so re-running on the same content is a no-op. `dream.synthesize.exclude_patterns`
-(default `["medical", "therapy"]`) filters out transcripts before any LLM call.
-Each entry is auto-wrapped as a word-boundary regex (e.g. `medical` matches
-"medical advice" but NOT "comedical"). Power users may pass full regex.
-
-**Cooldown:** the cycle's spend cap. `dream.synthesize.cooldown_hours` (default
-12) means at most ~2 synthesize runs per day under autopilot. The completion
-timestamp is stored in `dream.synthesize.last_completion_ts` and is written
-ONLY on successful runs (not on skipped/failed). Explicit `--input` /
-`--date` / `--from` / `--to` invocations bypass cooldown.
-
-**`--dry-run` semantics:** runs the cheap Haiku significance filter (caches
-verdicts) but skips the Sonnet synthesis pass. NOT zero LLM calls.
-
-**Configure synthesize on a fresh brain:**
-```bash
-voltmind config set dream.synthesize.session_corpus_dir /path/to/transcripts
-voltmind config set dream.synthesize.enabled true
-voltmind dream --phase synthesize --dry-run --json   # preview
-voltmind dream                                       # full 8-phase cycle
-```
-
-**Invocation patterns:**
-```bash
-voltmind dream                                          # full cycle
-voltmind dream --phase synthesize                       # just synthesize
-voltmind dream --phase patterns                         # just patterns
-voltmind dream --input ~/transcripts/2026-04-25.txt     # ad-hoc one transcript
-voltmind dream --from 2026-04-01 --to 2026-04-25        # backfill range
-voltmind dream --json                                   # CycleReport JSON
-```
-
-**Auto-commit deferred to v1.1:** v1 writes files to `brain_dir` but does NOT
-`git add` / `commit` / `push`. Either commit yourself or let `voltmind autopilot`
-handle it.
-Parses `- **YYYY-MM-DD** | Source — Summary` and `### YYYY-MM-DD — Title` formats.
-Note: extracted entries improve structured queries (`voltmind timeline`), not vector search.
-
-### Autopilot check
-Verify autopilot is running:
-```bash
-voltmind autopilot --status
-```
-If not running, install it:
-```bash
-voltmind autopilot --install --repo ~/brain
-```
-Autopilot runs sync, extract, and embed in a continuous loop with adaptive scheduling.
-In v0.11.1+, autopilot dispatches each cycle as a single `autopilot-cycle`
-Minion job and supervises the worker child — one install step gives you
-sync + extract + embed + backlinks + durable job processing.
-
-### Fix a half-migrated install
-A v0.11.0 install where the migration skill never fired leaves Minions
-partially set up: schema is applied, but `~/.voltmind/preferences.json`
-doesn't exist, autopilot runs inline, host manifests still reference
-`agentTurn`. Repair:
-
-```bash
-# Check migration status
-voltmind apply-migrations --list
-
-# Apply pending migrations (idempotent; safe on healthy installs)
-voltmind apply-migrations --yes
-
-# If host-specific handlers are flagged in ~/.voltmind/migrations/pending-host-work.jsonl:
-# walk them per skills/migrations/v0.11.0.md + docs/guides/plugin-handlers.md,
-# ship handler registrations in the host repo, then re-run apply-migrations.
-```
-
-Full troubleshooting guide: `docs/guides/minions-fix.md`.
-
-### Back-link enforcement
-Check that the back-linking iron law is being followed:
-- For each recently updated page, check if entities mentioned in it have
-  corresponding back-links FROM those entity pages
-- A mention without a back-link is a broken brain
-- Fix: add the missing back-link to the entity's Timeline or See Also section
-- Format: `- **YYYY-MM-DD** | Referenced in [page title](path) -- brief context`
-
-### Filing rule violations
-Check for common misfiling patterns (see `skills/_brain-filing-rules.md`):
-- Content with clear primary subjects filed in `sources/` instead of the
-  appropriate directory (people/, companies/, concepts/, etc.)
-- Use voltmind search to find pages in `sources/` that reference specific
-  people, companies, or concepts -- these may be misfiled
-- Flag misfiled pages for review or re-filing
-
-### Citation audit
-Spot-check pages for missing `[Source: ...]` citations:
-- Read 5-10 recently updated pages
-- Check that compiled truth (above the line) has inline citations
-- Check that timeline entries have source attribution
-- Flag pages where facts appear without provenance
-
-### Tag consistency
-Inconsistent tagging (e.g., "vc" vs "venture-capital", "ai" vs "artificial-intelligence").
-- Standardize to the most common variant using voltmind tag operations
-
-### Graph population (v0.10.3+)
-
-The `links` and `timeline_entries` tables are the structured graph layer.
-Populate them periodically or after major imports:
-
-- `voltmind extract links --source db` — backfill structured links by walking pages
-  from the engine. Reads `[Name](people/slug)` / `[Name](companies/slug)` references
-  and infers relationship types (`attended`, `works_at`, `invested_in`, `founded`,
-  `advises`, `mentions`, `source`). Idempotent. Use `--source fs --dir <brain>`
-  if you have a markdown checkout to walk instead.
-- `voltmind extract timeline --source db` — backfill structured timeline entries.
-  Parses `- **YYYY-MM-DD** | summary` lines from page content. Idempotent (DB
-  UNIQUE constraint).
-- `voltmind extract all --source db` — both in one run.
-- `voltmind graph-query <slug> --depth 2` — verify connectivity (use any well-known
-  entity slug as a probe).
-- `voltmind stats` — verify `link_count > 0` and `timeline_entry_count > 0` after extraction.
-- `voltmind health` — review `link_coverage` and `timeline_coverage` percentages
-  on entity pages (person/company). Below 50% means more extraction is needed.
-
-Available link types (use with `voltmind graph-query --type`):
-`attended`, `works_at`, `invested_in`, `founded`, `advises`, `mentions`, `source`.
-
-Going forward, every `voltmind put` call auto-creates and reconciles links via the
-auto-link post-hook (default on; disable: `voltmind config set auto_link false`).
-So link-extract is mostly a one-time backfill. timeline-extract should be re-run
-after bulk imports or content edits that add new dated entries.
-
-### Embedding freshness
-Chunks without embeddings, or chunks embedded with an old model.
-- On macOS/Linux, for large embedding refreshes (>1000 chunks), use `nohup`:
-  `nohup voltmind embed --stale > /tmp/voltmind-embed.log 2>&1 &`
-- Then check progress: `tail -1 /tmp/voltmind-embed.log`
-- On Windows PowerShell, use `Start-Process` with separate logs:
-  ```powershell
-  $log = Join-Path $env:TEMP "voltmind-embed.log"
-  $err = Join-Path $env:TEMP "voltmind-embed.err.log"
-  $proc = Start-Process -FilePath "voltmind" `
-    -ArgumentList @("embed", "--stale") `
-    -RedirectStandardOutput $log -RedirectStandardError $err -PassThru
-  $proc.Id
-  Get-Content -Path $log -Tail 1
-  ```
-
-### Security (RLS verification)
-Run `voltmind doctor --json` and check the RLS status.
-All tables should show RLS enabled. If not, run `voltmind init` again.
-
-### Schema health
-Check that the schema version is up to date. `voltmind doctor --json` reports
-the current version vs expected. If behind, `voltmind init` runs migrations
-automatically.
-
-### File storage health
-Check the integrity of stored files and redirect pointers:
-- Run `voltmind files verify` to check all DB records have valid data
-- Run `voltmind files status` to see migration state (local, mirrored, redirected)
-- Check for orphan `.redirect.yaml` pointers that reference missing storage files
-- Check for large binary files (>= 100 MB) still in git that should be in cloud storage
-- If storage backend is configured: verify redirect pointers resolve (download test)
-
-### Open threads
-Timeline items older than 30 days with unresolved action items.
-- Flag for review
-
-### Long-running project tracking
-
-Run tracking diagnostics against the company-brain server with an explicit
-source. Do not run a client-local/default-source reconciliation:
-
-```bash
-voltmind projects tracking status --source-id <company-source>
-VOLTMIND_RUNTIME_ROLE=company-server \
-  voltmind projects tracking reconcile --source-id <company-source>
-```
-
-The status view is source-scoped. Reconcile requests a
-`tracking_maintenance` Dream phase; it audits client registrations and queues
-the generic subagent only for incomplete/ambiguous records. Before receipt
-audit it deterministically sweeps canonical `sources/teams/`,
-`sources/meetings/`, `sources/emails/`, and `sources/calendar/` pages for
-stable evidence identities with no matching receipt, records a pending
-`registration_missing` audit reason, and then routes that anomaly through the
-same repair path. It never modifies
-`tracking_bindings` and does not replay the removed real-time worker.
-
-Also verify:
-
-- the server uses Postgres and runs either
-  `voltmind autopilot --runtime-role company-server` or
-  `voltmind jobs work --runtime-role company-server`;
-- no failed/dead `tracking_maintenance` or compatibility `project_track_progress`
-  jobs are stranded;
-- the last successful receipt is at least as new as the latest bound evidence;
-- `tracking_bindings` still refer to live connector resources;
-- `state/indexes/project-tracking-review` candidates are being reviewed.
-
-Company-server Dream is the repair/audit executor after client writes. It does
-not replace client semantic classification; it only repairs receipt anomalies
-and records source-scoped maintenance outcomes.
-
-## Benchmark Testing
-
-Periodically verify search quality hasn't regressed. Run a battery of test
-queries across difficulty tiers:
-
-- **Tier 1 (entity lookup):** known names -- should always resolve
-- **Tier 2 (topic recall):** concepts, topics -- keyword search should handle
-- **Tier 3 (semantic):** queries with no exact keyword match -- needs embeddings
-- **Tier 4 (cross-domain):** relational/connection queries -- only semantic handles
-
-Compare results from `voltmind search` (keyword) vs `voltmind query` (hybrid).
-Quality matters more than speed (2.5s right > 200ms wrong).
-
-When to run benchmarks:
-- After major brain imports or re-imports
-- After voltmind version upgrades
-- After embedding regeneration
-- Monthly to track quality drift
-
-## Heartbeat Integration
-
-For production agents running on a schedule, integrate voltmind health checks into
-your operational heartbeat.
-
-### On every heartbeat (hourly or per-session)
-
-Run `voltmind doctor --json` and check for degradation. Report any failing checks
-to the user. Key signals: connection health, schema version, RLS status, embedding
-staleness.
-
-### Weekly maintenance
-
-Run `voltmind embed --stale` to refresh embeddings for pages that have changed since
-their last embedding. For large brains (>5000 pages), on macOS/Linux run this with `nohup`:
-```bash
-nohup voltmind embed --stale > /tmp/voltmind-embed.log 2>&1 &
-```
-On Windows, use the PowerShell `Start-Process` pattern from **Embedding
-freshness** above.
-
-### Daily verification
-
-Verify sync is running: check `voltmind stats` and confirm `last_sync` is within
-the last 24 hours. If sync has stopped, the brain is drifting from the repo.
-
-### Stale compiled truth detection
-
-Flag pages where compiled truth is >30 days old but the timeline has recent entries.
-This means new evidence exists that hasn't been synthesized. These pages need a
-compiled truth rewrite (see the maintain workflow above).
-
-## Report Storage
-
-After maintenance runs, save a report:
-- Health check results (before/after scores for each dimension)
-- Back-link violations found and fixed
-- Filing rule violations found
-- Citation gaps flagged
-- Benchmark results (if run)
-- Outstanding issues requiring user attention
-
-This creates an audit trail for brain health over time.
-
-## Quality Rules
-
-- Never delete pages without confirmation
-- Log all changes via timeline entries
-- Check voltmind health before and after to show improvement
-
-## Anti-Patterns
-
-- Fixing pages without reading them first -- you must understand context before editing
-- Silently skipping dimensions -- every dimension must be checked and reported, even if clean
-- Deleting orphan pages without checking if they should be linked instead
-- Running embedding refresh during peak usage hours
-- Batch-fixing back-links without verifying the relationship is real
-- Marking a dimension "clean" without actually querying it
-- Rewriting compiled truth without reading the full timeline first
-- Removing tags without checking if other pages use the same tag consistently
-
-## Output Format
-
-The maintenance report follows this structure:
-
-```
-## Brain Health Report — YYYY-MM-DD
-
-| Dimension           | Issues Found | Fixed | Remaining |
-|----------------------|-------------|-------|-----------|
-| Stale pages          | N           | N     | N         |
-| Orphan pages         | N           | N     | N         |
-| Dead links           | N           | N     | N         |
-| Missing cross-refs   | N           | N     | N         |
-| Back-link violations | N           | N     | N         |
-| Citation gaps        | N           | N     | N         |
-| Filing violations    | N           | N     | N         |
-| Tag inconsistencies  | N           | N     | N         |
-| Embedding staleness  | N           | N     | N         |
-| Security (RLS)       | N           | N     | N         |
-| Schema health        | N           | N     | N         |
-| File storage         | N           | N     | N         |
-| Open threads         | N           | N     | N         |
-
-### Details
-[Per-dimension breakdown with specific pages and actions taken]
-
-### Benchmark Results (if run)
-[Tier 1-4 query results with pass/fail]
-
-### Outstanding Issues
-[Items requiring user attention or confirmation]
-```
-
-## Tools Used
-
-- Check voltmind health (get_health)
-- List pages in voltmind with filters (list_pages)
-- Read a page from voltmind (get_page)
-- Check backlinks in voltmind (get_backlinks)
-- Link entities in voltmind (add_link)
-- Remove links in voltmind (remove_link)
-- Tag a page in voltmind (add_tag)
-- Remove a tag in voltmind (remove_tag)
-- View timeline in voltmind (get_timeline)
+# Maintain Skill (router)
+
+Routes maintenance work to the runtime-appropriate skill, then executes its
+workflow. **Always read the chosen skill's SKILL.md and follow it.**
+
+## Routing decision
+
+| Runtime | Skill to read & follow | Why |
+|---|---|---|
+| Thin client (OAuth MCP → remote Host), cron agent, client-scoped MCP | `skills/maintain-client/SKILL.md` | Read-only observation + client-authorized writes (evidence registration, file-ref backfill/scrub on own source, link/tag fixes on own source). Host-only work is escalated as a Host work request. |
+| Company server / full local install (`VOLTMIND_RUNTIME_ROLE=company-server` or local Postgres CLI) | `skills/maintain-host/SKILL.md` | Full surface: sync, extract, embed, dream, init, apply-migrations, `doctor --remediate`, `projects tracking reconcile`, schema/RLS health, autopilot install. |
+
+## Decide: which runtime am I?
+
+1. **Am I a thin client?** If `voltmind init --mcp-only` was used, or
+   `isThinClient(cfg)` is true (remote_mcp configured), or I am an agent
+   talking to a remote Host over OAuth MCP → **maintain-client**. Host-only CLI
+   (`sync/embed/extract/dream/init/apply-migrations/reconcile`) is refused on
+   thin clients by `voltmind` itself — do not bypass.
+2. **Am I a company server?** If this machine runs the company-brain Postgres
+   engine and `VOLTMIND_RUNTIME_ROLE=company-server` (autopilot / `jobs work` /
+   explicit env) → **maintain-host**.
+3. **Otherwise (full local install, local PGLite or Postgres CLI owner)** →
+   **maintain-host**, with the caveats in that skill about spending gates.
+
+## After routing
+
+- Read the chosen SKILL.md in full and follow its Phases.
+- Never run host-only commands (`dream`, `extract`, `embed`, `sync`, `init`,
+  `apply-migrations`, `projects tracking reconcile`, `doctor --remediate`)
+  from a client runtime, and never set `VOLTMIND_RUNTIME_ROLE=company-server`
+  on a client. File a Host work request instead.
+- `reconcile_project_tracking` is admin-scope AND company-server-only; a client
+  cannot and must not call it. Use `get_project_tracking_status` /
+  `list_project_tracking_receipts` / `register_tracking_evidence` on the
+  client, and escalate.
+
+## Legacy direct workflows (when routing is not needed)
+
+If the user explicitly asked for a dimension-by-dimension audit or a specific
+maintenance action, you may run the corresponding section directly from the
+chosen skill (maintain-host for full-surface dimensions, maintain-client for
+client-safe ones):
+
+- Stale pages / orphan pages / dead links / missing cross-references / back-link
+  enforcement / filing rule violations / citation audit / tag consistency:
+  see the chosen skill's dimension walk.
+- External file-reference backfill + scrub: both skills keep the identical
+  section (source-scoped, preview-before-apply).
+- Long-running project tracking health: `maintain-host` for status +
+  reconcile; `maintain-client` for status + review + registration + escalation.
+- Dream cycle (synthesize + patterns): host-only — `maintain-host`.
+- Autopilot check / install: host-only — `maintain-host`.
+- Schema/RLS/init/apply-migrations: host-only — `maintain-host`.
+- Benchmark Testing: both; host runs the full battery after imports/upgrades,
+  client runs spot-checks.
+- Report Storage: both; client report includes a **Host Work Requests** section.
+
+## Output
+
+Produce the maintenance report in the chosen skill's format (dimension counts
+table, details, benchmark if run, outstanding issues; client adds Host work
+requests).

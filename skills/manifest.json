@@ -28,7 +28,17 @@
     {
       "name": "maintain",
       "path": "maintain/SKILL.md",
-      "description": "Brain health and maintenance, including source-scoped project-tracking status, failed receipts, review backlog, and reconciliation."
+      "description": "Brain health and maintenance router: picks maintain-client (thin client / cron agent) vs maintain-host (company server / full local install) by runtime."
+    },
+    {
+      "name": "maintain-client",
+      "path": "maintain-client/SKILL.md",
+      "description": "Thin-client / cron-agent brain health checks: read-only observation, client-authorized backfill/scrub and evidence registration, and Host work requests for server-only maintenance."
+    },
+    {
+      "name": "maintain-host",
+      "path": "maintain-host/SKILL.md",
+      "description": "Company-server / full-install brain health and cleanup: dream cycle, sync/extract/embed, schema/RLS health, autopilot install, graph population, and long-running project-tracking reconcile."
     },
     {
       "name": "enrich",

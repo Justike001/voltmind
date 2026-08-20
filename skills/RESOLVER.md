@@ -82,17 +82,19 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | "onboard a user", "给新用户开通", "provision personal", "create personal brain", "add a user's personal source" | `skills/onboard-user/SKILL.md` |
 | "Now what?", "fill my brain", "cold start", "bootstrap", "import my data", "what should I import first" | `skills/cold-start/SKILL.md` |
 | "Migrate from Obsidian/Notion/Logseq" | `skills/migrate/SKILL.md` |
-| Brain health check, maintenance run | `skills/maintain/SKILL.md` |
-| "project tracking health", "failed tracking receipts", "reconcile project tracking", "项目追踪健康", "修复项目追踪" | `skills/maintain/SKILL.md` (Host status/reconcile operations; binding edits stay in `skills/project/SKILL.md`) |
-| "backfill file references", "index legacy file links", "scrub open paths", "remove stored drive paths" | `skills/maintain/SKILL.md` |
-| "Extract links", "build link graph", "populate timeline" | `skills/maintain/SKILL.md` (extraction sections) |
-| "Run dream", "process today's session", "synthesize my conversations", "consolidate yesterday's conversations", "what patterns did you see", "did the dream cycle run" | `skills/maintain/SKILL.md` (dream cycle section) |
+| Brain health check, maintenance run | `skills/maintain/SKILL.md` (router: thin client → `skills/maintain-client/SKILL.md`, host/full install → `skills/maintain-host/SKILL.md`) |
+| "client maintenance", "thin client maintenance", "cron maintenance", "客户端维护" | `skills/maintain-client/SKILL.md` (thin-client / cron-agent maintenance; host-only work becomes a Host work request) |
+| "host maintenance", "server brain maintenance", "公司脑维护" | `skills/maintain-host/SKILL.md` (company-server / full-install maintenance: dream, extract, embed, schema/RLS, reconcile) |
+| "project tracking health", "failed tracking receipts", "reconcile project tracking", "项目追踪健康", "修复项目追踪" | `skills/maintain-host/SKILL.md` (Host status/reconcile operations; client review + evidence registration stay in `skills/maintain-client/SKILL.md`; binding edits stay in `skills/project/SKILL.md`) |
+| "backfill file references", "index legacy file links", "scrub open paths", "remove stored drive paths" | `skills/maintain-client/SKILL.md` (client-authorized backfill/scrub); host equivalents in `skills/maintain-host/SKILL.md` |
+| "Extract links", "build link graph", "populate timeline" | `skills/maintain-host/SKILL.md` (extraction sections) |
+| "Run dream", "process today's session", "synthesize my conversations", "consolidate yesterday's conversations", "what patterns did you see", "did the dream cycle run" | `skills/maintain-host/SKILL.md` (dream cycle section) |
 | "Brain health", "what features am I missing", "brain score" | Run `voltmind features --json` |
 | "Set up autopilot", "run brain maintenance", "keep brain updated" | Run `voltmind autopilot --install` |
 | "Upgrade voltmind", "update voltmind", "voltmind update available", `UPGRADE_AVAILABLE`, "is voltmind up to date" | `skills/voltmind-upgrade/SKILL.md` |
 | Agent identity, "who am I", customize agent | `skills/soul-audit/SKILL.md` |
-| "Populate links", "extract links", "backfill graph" | `skills/maintain/SKILL.md` (graph population phase) |
-| "Populate timeline", "extract timeline entries" | `skills/maintain/SKILL.md` (graph population phase) |
+| "Populate links", "extract links", "backfill graph" | `skills/maintain-host/SKILL.md` (graph population phase) |
+| "Populate timeline", "extract timeline entries" | `skills/maintain-host/SKILL.md` (graph population phase) |
 
 ## Identity & access (always-on)
 

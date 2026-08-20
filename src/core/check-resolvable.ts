@@ -110,6 +110,7 @@ export interface FixResult {
 /** Skills that intentionally overlap with many others (always-on, routers). */
 const OVERLAP_WHITELIST = new Set([
   'ingest',           // router that delegates to idea-ingest, media-ingest, meeting-ingestion
+  'maintain',         // router that delegates to maintain-client / maintain-host
   'signal-detector',  // always-on, fires on every message
   'brain-ops',        // always-on, every brain read/write
 ]);
