@@ -72,8 +72,8 @@ describe('long-running project tracking capability injection', () => {
     };
     const project = catalog.skills.find(skill => skill.name === 'project');
     expect(project?.description).toContain('tracking candidates');
-    expect(catalog.version).toBe('0.41.21.3');
-    expect(bundle.version).toBe('0.41.21.3');
+    expect(catalog.version).toBe('0.41.21.4');
+    expect(bundle.version).toBe('0.41.21.4');
     expect(bundle.skills).toContain('skills/project');
     expect(bundle.shared_deps).toContain('skills/RESOLVER.md');
   });
