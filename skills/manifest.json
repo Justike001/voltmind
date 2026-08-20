@@ -1,6 +1,6 @@
 {
   "name": "voltmind",
-  "version": "0.41.21.3",
+  "version": "0.41.21.4",
   "conformance_version": "1.0.0",
   "enforce_resolver_inventory": true,
   "description": "VoltMind Personal Brain skills for hybrid RAG search and workflow loops",

@@ -4,6 +4,31 @@ All notable changes to VoltMind will be documented in this file.
 
 ## [Unreleased]
 
+## [0.41.21.4] - 2026-08-20
+
+**Safer hosted VoltMind connections and a more dependable release path.** This
+patch tightens the boundary around hosted MCP access, so restricted clients get
+only the data and operations their credentials allow. It also makes the
+production Host checks more repeatable: setup is idempotent, access rules are
+verified before use, and CI keeps its private test database separate from other
+environments. For a team running VoltMind through a shared Host, upgrades should
+be quieter and failures should point to the actual connection or permission
+problem rather than leave behind partial state.
+
+No migration or manual configuration is required. Upgrade normally, then run
+`voltmind doctor` if you operate a remote Host and want to confirm its health.
+
+### Itemized changes
+
+- Hardened restricted HTTP Host runtime behavior, OAuth token validation, MCP
+  resource metadata, and source-scoped read and audit access.
+- Made Host provisioning, migrations, and Postgres health checks idempotent for
+  repeatable CI and deployment runs.
+- Kept client and Host security domains isolated while improving gateway budget
+  accounting and thin-client capture behavior.
+- Added coverage for Host access control, source isolation, OAuth refresh-token
+  handling, and production connection checks.
+
 ## [0.41.21.3] - 2026-08-19
 
 - **More reliable fresh Postgres setup.** New VoltMind databases now create the
