@@ -7,6 +7,7 @@
  *   afterAll(async () => { await teardownDB(); });
  */
 
+import { randomBytes } from 'crypto';
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, resolve, relative, dirname, basename, extname } from 'path';
 import { PostgresEngine } from '../../src/core/postgres-engine.ts';
@@ -134,6 +135,35 @@ export function getConn() {
   return db.getConnection();
 }
 
+
+/**
+ * Provision the least-privilege login used by HTTP-host E2E tests. The test
+ * administrator prepares schema state; the spawned Host itself must never be
+ * a superuser or BYPASSRLS role.
+ */
+export async function provisionHttpRuntimeDatabaseUrl(): Promise<string> {
+  if (!DATABASE_URL) throw new Error('DATABASE_URL not set');
+  const role = 'voltmind_e2e_runtime';
+  const password = randomBytes(24).toString('hex');
+  const conn = getConn();
+  await conn.unsafe(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'voltmind_e2e_runtime') THEN
+        CREATE ROLE voltmind_e2e_runtime LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+      END IF;
+    END $$;
+    ALTER ROLE voltmind_e2e_runtime PASSWORD '${password}';
+    GRANT voltmind_oauth_runtime TO voltmind_e2e_runtime;
+    GRANT USAGE ON SCHEMA public TO voltmind_e2e_runtime;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO voltmind_e2e_runtime;
+    GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO voltmind_e2e_runtime;
+    GRANT EXECUTE ON FUNCTION public.voltmind_admin_source_ids() TO voltmind_e2e_runtime;
+  `);
+  const url = new URL(DATABASE_URL);
+  url.username = role;
+  url.password = password;
+  return url.toString();
+}
 /**
  * Import all fixture files from test/e2e/fixtures/ into the brain.
  * Returns the list of import results.

@@ -5,7 +5,7 @@ import express from 'express';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { MinionQueue } from '../src/core/minions/queue.ts';
 import { MIGRATIONS, LATEST_VERSION, runMigrations } from '../src/core/migrate.ts';
-import { adminV1OpenApi, createAdminV1Router, rotateOAuthClient } from '../src/commands/admin-v1.ts';
+import { adminV1OpenApi, createAdminV1Router, rotateOAuthClient, validateAdminMutationRequest } from '../src/commands/admin-v1.ts';
 import { VoltMindOAuthProvider } from '../src/core/oauth-provider.ts';
 import { sqlQueryForEngine } from '../src/core/sql-query.ts';
 
@@ -19,6 +19,20 @@ const session = { sessionId: 'admin-session-fixture', csrfToken: 'csrf-fixture',
 const activeSource = 'personal-example';
 const archivedSource = 'archived-example';
 const contactEmail = 'operator@example.com';
+
+describe('Admin mutation CSRF contract', () => {
+  test('requires the session CSRF token and rejects a foreign origin', () => {
+    expect(validateAdminMutationRequest({
+      origin: undefined, adminOrigin: 'https://admin.example', suppliedCsrfToken: undefined, sessionCsrfToken: 'csrf',
+    })).toMatchObject({ ok: false, code: 'csrf_failed' });
+    expect(validateAdminMutationRequest({
+      origin: 'https://attacker.example', adminOrigin: 'https://admin.example', suppliedCsrfToken: 'csrf', sessionCsrfToken: 'csrf',
+    })).toMatchObject({ ok: false, code: 'origin_failed' });
+    expect(validateAdminMutationRequest({
+      origin: 'https://admin.example', adminOrigin: 'https://admin.example', suppliedCsrfToken: 'csrf', sessionCsrfToken: 'csrf',
+    })).toEqual({ ok: true });
+  });
+});
 
 async function request(path: string, init: { method?: string; body?: unknown; csrf?: boolean; authenticated?: boolean } = {}) {
   const method = init.method ?? 'GET';

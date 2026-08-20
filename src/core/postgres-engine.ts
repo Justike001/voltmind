@@ -848,8 +848,7 @@ export class PostgresEngine implements BrainEngine {
     const sourceIds = rows[0]?.source_ids;
     if (!Array.isArray(sourceIds)) throw new Error("admin_source_scope_unavailable");
     const extras = extraSourceIds.map(String);
-    for (const sourceId of extras) assertValidSourceId(sourceId);
-    await this.setSourceReadScope([...sourceIds.map(String), ...extras]);
+    await this.setSourceReadScope([...extras, ...sourceIds.map(String)]);
   }
 
   async withReservedConnection<T>(fn: (conn: ReservedConnection) => Promise<T>): Promise<T> {
@@ -1578,12 +1577,10 @@ export class PostgresEngine implements BrainEngine {
       OFFSET ${offsetParam}
     `;
 
-    // Search-only timeout. SET LOCAL inside sql.begin() scopes the GUC
-    // to the transaction so it can never leak onto a pooled connection.
-    const rows = await sql.begin(async sql => {
-      await sql`SET LOCAL statement_timeout = '8s'`;
-      return await sql.unsafe(rawQuery, params as Parameters<typeof sql.unsafe>[1]);
-    });
+    // Dispatch already runs remote searches in a source-scoped transaction.
+    // Do not nest sql.begin(): the PgBouncer adapter intentionally has no
+    // begin() method, and the existing transaction safely scopes the GUCs.
+    const rows = await sql.unsafe(rawQuery, params as Parameters<typeof sql.unsafe>[1]);
     return rows.map(rowToSearchResult);
   }
 
@@ -1705,10 +1702,10 @@ export class PostgresEngine implements BrainEngine {
       OFFSET ${offsetParam}
     `;
 
-    const rows = await sql.begin(async sql => {
-      await sql`SET LOCAL statement_timeout = '8s'`;
-      return await sql.unsafe(rawQuery, params as Parameters<typeof sql.unsafe>[1]);
-    });
+    // Dispatch already runs remote searches in a source-scoped transaction.
+    // Do not nest sql.begin(): the PgBouncer adapter intentionally has no
+    // begin() method, and the existing transaction safely scopes the GUCs.
+    const rows = await sql.unsafe(rawQuery, params as Parameters<typeof sql.unsafe>[1]);
     return rows.map(rowToSearchResult);
   }
 
@@ -1817,7 +1814,10 @@ export class PostgresEngine implements BrainEngine {
     // in canonical Qwen3-VL 2048d space — no modality filter; the column itself
     // is the discriminator (rows without embedding_multimodal aren't searched).
     const resolvedCol = normalizeEngineColumn(opts?.embeddingColumn);
-    const { col, castSql } = buildVectorCastFragment(resolvedCol);
+    const { col, castSql: configuredCastSql } = buildVectorCastFragment(resolvedCol);
+    const castSql = resolvedCol.name === 'embedding'
+      ? await this.resolveContentChunksEmbeddingCast(configuredCastSql)
+      : configuredCastSql;
     let modalityFilter: string;
     if (resolvedCol.name === 'embedding_image') {
       modalityFilter = `AND cc.modality = 'image'`;
@@ -1867,10 +1867,10 @@ export class PostgresEngine implements BrainEngine {
       OFFSET ${offsetParam}
     `;
 
-    const rows = await sql.begin(async sql => {
-      await sql`SET LOCAL statement_timeout = '8s'`;
-      return await sql.unsafe(rawQuery, params as Parameters<typeof sql.unsafe>[1]);
-    });
+    // Dispatch already runs remote searches in a source-scoped transaction.
+    // Do not nest sql.begin(): the PgBouncer adapter intentionally has no
+    // begin() method, and the existing transaction safely scopes the GUCs.
+    const rows = await sql.unsafe(rawQuery, params as Parameters<typeof sql.unsafe>[1]);
     return rows.map(rowToSearchResult);
   }
 
@@ -3286,12 +3286,41 @@ export class PostgresEngine implements BrainEngine {
     return (result.count ?? 0) > 0;
   }
 
+  // Legacy Postgres brains can retain a valid embedding width after the
+  // configured gateway default changes. Query against the physical column,
+  // just as PGLite does, rather than casting every search to the new default.
+  private _contentChunksEmbeddingCast: string | null = null;
+
+  private async resolveContentChunksEmbeddingCast(fallback: string): Promise<string> {
+    if (this._contentChunksEmbeddingCast !== null) return this._contentChunksEmbeddingCast;
+    try {
+      const rows = await this.sql<Array<{ formatted: string | null }>>`
+        SELECT format_type(a.atttypid, a.atttypmod) AS formatted
+          FROM pg_attribute a
+          JOIN pg_class c ON c.oid = a.attrelid
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public'
+           AND c.relname = 'content_chunks'
+           AND a.attname = 'embedding'
+           AND NOT a.attisdropped
+      `;
+      const descriptor = /^(halfvec|vector)\((\d+)\)$/i.exec(rows[0]?.formatted ?? '');
+      this._contentChunksEmbeddingCast = descriptor
+        ? `$1::${descriptor[1].toLowerCase()}(${descriptor[2]})`
+        : fallback;
+    } catch {
+      this._contentChunksEmbeddingCast = fallback;
+    }
+    return this._contentChunksEmbeddingCast;
+  }
+
   /**
    * v0.41.15.0 (T6, codex #20): per-process cache for the
    * `facts.embedding` cast suffix. Migration v40 creates the column as
    * `halfvec(N)` on pgvector >= 0.7 but falls back to `vector(N)` on
    * older. The pre-v0.41.15 insert path always cast embeddings as
    * `::vector`, which works via implicit cast on pgvector >= 0.7 but
+
    * is honest-only when the column actually IS vector. Probing once
    * per process + caching the suffix lets the insert match the column
    * type exactly. Initialized lazily in `insertFacts`.

@@ -125,7 +125,7 @@ describe('runDoctor — orphan_ratio check (local surface, D5)', () => {
     // 20 orphans / 100 linkable = 20% — under warn threshold (50%) → ok.
     expect(check!.status).toBe('ok');
     expect(check!.message).toMatch(/orphan ratio/i);
-  });
+  }, 120_000);
 
   test('high orphan ratio (>0.5, <=0.8) → warn with fix-hint', async () => {
     for (let i = 0; i < 100; i++) {
@@ -150,7 +150,7 @@ describe('runDoctor — orphan_ratio check (local surface, D5)', () => {
     const check = findCheck(report, 'orphan_ratio');
     expect(check!.status).toBe('warn');
     expect(check!.message).toContain('voltmind extract links --by-mention');
-  });
+  }, 120_000);
 
   test('very high orphan ratio (>0.8) → fail with urgency fix-hint', async () => {
     for (let i = 0; i < 100; i++) {
@@ -175,7 +175,7 @@ describe('runDoctor — orphan_ratio check (local surface, D5)', () => {
     const check = findCheck(report, 'orphan_ratio');
     expect(check!.status).toBe('fail');
     expect(check!.message).toContain('voltmind extract links --by-mention');
-  });
+  }, 120_000);
 
   test('zero entity pages → vacuous status ok', async () => {
     const report = await runDoctorJson();

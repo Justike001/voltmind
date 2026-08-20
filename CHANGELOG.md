@@ -4,6 +4,15 @@ All notable changes to VoltMind will be documented in this file.
 
 ## [Unreleased]
 
+## [0.41.21.3] - 2026-08-19
+
+- **More reliable fresh Postgres setup.** New VoltMind databases now create the
+  complete schema in dependency order, so first-time setup can finish without a
+  manual schema repair.
+- **Safer Admin compatibility mode.** If an operator temporarily enables the
+  retired Admin mutation API for an older client, its requests now use the same
+  CSRF and origin checks as the current Admin API.
+
 - **Schema cold-start fix (`929e395`).** `migration_impact_log` FK-references
   `minion_jobs`, but that table is created later in `schema.sql` — PostgreSQL
   rejects forward FK references, so `initSchema()` could not apply the schema to

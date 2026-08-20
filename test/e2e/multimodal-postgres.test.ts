@@ -25,11 +25,23 @@ if (skip) {
 
 describe.skipIf(skip)('multimodal v0.27.1 against real Postgres', () => {
   let pg: PostgresEngine;
+  let primaryEmbeddingDimensions: number;
 
   beforeAll(async () => {
     pg = new PostgresEngine();
     await pg.connect({ database_url: DATABASE_URL! });
     await pg.initSchema();
+
+    const rows = await pg.executeRaw<{ formatted: string }>(`
+      SELECT format_type(atttypid, atttypmod) AS formatted
+        FROM pg_attribute
+       WHERE attrelid = 'content_chunks'::regclass
+         AND attname = 'embedding'
+         AND NOT attisdropped
+    `);
+    const match = rows[0]?.formatted.match(/^halfvec\((\d+)\)$/);
+    if (!match) throw new Error(`content_chunks.embedding must be halfvec(N), got ${rows[0]?.formatted ?? 'missing'}`);
+    primaryEmbeddingDimensions = Number(match[1]);
   }, 60_000);
 
   afterAll(async () => {
@@ -48,6 +60,12 @@ describe.skipIf(skip)('multimodal v0.27.1 against real Postgres', () => {
   function fakeImage2048(seed: number): Float32Array {
     const out = new Float32Array(2048);
     for (let i = 0; i < 2048; i++) out[i] = (i + seed) / 2048;
+    return out;
+  }
+
+  function fakePrimaryEmbedding(seed: number): Float32Array {
+    const out = new Float32Array(primaryEmbeddingDimensions);
+    for (let i = 0; i < primaryEmbeddingDimensions; i++) out[i] = (i + seed) / primaryEmbeddingDimensions;
     return out;
   }
 
@@ -172,10 +190,8 @@ describe.skipIf(skip)('multimodal v0.27.1 against real Postgres', () => {
   }, 30_000);
 
   test('searchVector with embeddingColumn=embedding_image returns image rows on Postgres', async () => {
-    // Seed: one text page (1536-dim primary embedding) and two image pages
-    // (2048-dim embedding_image).
-    const textVec = new Float32Array(1536);
-    for (let i = 0; i < 1536; i++) textVec[i] = i / 1536;
+    // Seed one text page using the configured primary dimension and two image pages.
+    const textVec = fakePrimaryEmbedding(0);
     await pg.putPage('notes/text-only', {
       type: 'note', title: 'text only', compiled_truth: 'body', timeline: '',
     });
@@ -221,8 +237,7 @@ describe.skipIf(skip)('multimodal v0.27.1 against real Postgres', () => {
 
   test('searchKeyword hides image rows by default (modality filter on Postgres)', async () => {
     // Seed text + image pages with chunk_text the FTS would normally match.
-    const textVec = new Float32Array(1536);
-    for (let i = 0; i < 1536; i++) textVec[i] = (i + 1) / 1536;
+    const textVec = fakePrimaryEmbedding(1);
     await pg.putPage('notes/keyword', {
       type: 'note', title: 'keyword', compiled_truth: 'sunset photo at the beach', timeline: '',
     });

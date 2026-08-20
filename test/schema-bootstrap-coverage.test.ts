@@ -736,6 +736,11 @@ const COLUMN_EXEMPTIONS = new Set<string>([
   // be added to the latest-schema bootstrap.
   'subagent_tool_executions.gbrain_tool_use_id',
   'gbrain_cycle_locks.last_refreshed_at',
+  // v132 reconciles fields on the deprecated action-plan table. It is absent
+  // from PGLITE_SCHEMA_SQL, so it cannot be a schema-replay forward reference.
+  'action_index.outcome',
+  'action_index.next_step',
+  'action_index.plan_json',
 ]);
 
 test('every ALTER TABLE ADD COLUMN in MIGRATIONS is covered by applyForwardReferenceBootstrap (column-only class)', async () => {

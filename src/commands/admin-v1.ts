@@ -46,6 +46,26 @@ const JOB_STATUSES = new Set<MinionJobStatus>([
 const ADMIN_OAUTH_SCOPES = new Set(['read', 'write']);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Keep every cookie-authenticated Admin mutation on one CSRF/Origin contract.
+ * The opt-in legacy routes in serve-http.ts call this too, so an operator
+ * cannot accidentally re-enable a weaker mutation surface for an old SPA.
+ */
+export function validateAdminMutationRequest(input: {
+  origin: string | undefined;
+  adminOrigin: string;
+  suppliedCsrfToken: string | undefined;
+  sessionCsrfToken: string;
+}): { ok: true } | { ok: false; status: 403; code: 'origin_failed' | 'csrf_failed'; message: string } {
+  if (input.origin && input.origin !== input.adminOrigin) {
+    return { ok: false, status: 403, code: 'origin_failed', message: 'Request Origin does not match the configured Admin public URL' };
+  }
+  if (!input.suppliedCsrfToken || input.suppliedCsrfToken !== input.sessionCsrfToken) {
+    return { ok: false, status: 403, code: 'csrf_failed', message: 'Missing or invalid X-VoltMind-CSRF token' };
+  }
+  return { ok: true };
+}
+
 function adminOAuthScopes(raw: unknown): string {
   if (raw === undefined || raw === null) throw new Error('scopes must be explicitly provided');
   const normalized = normalizeScopesInput(raw);
@@ -285,14 +305,13 @@ export function createAdminV1Router(options: AdminV1Options): express.Router {
     if (!session) return fail(res, 401, 'admin_auth_required', 'Admin authentication required');
     res.locals.adminSession = session;
     if (MUTATIONS.has(req.method)) {
-      const origin = req.header('Origin');
-      if (origin && origin !== adminOrigin) {
-        return fail(res, 403, 'origin_failed', 'Request Origin does not match the configured Admin public URL');
-      }
-      const supplied = req.header('X-VoltMind-CSRF');
-      if (!supplied || supplied !== session.csrfToken) {
-        return fail(res, 403, 'csrf_failed', 'Missing or invalid X-VoltMind-CSRF token');
-      }
+      const validation = validateAdminMutationRequest({
+        origin: req.header('Origin'),
+        adminOrigin,
+        suppliedCsrfToken: req.header('X-VoltMind-CSRF'),
+        sessionCsrfToken: session.csrfToken,
+      });
+      if (!validation.ok) return fail(res, validation.status, validation.code, validation.message);
     }
     next();
   });

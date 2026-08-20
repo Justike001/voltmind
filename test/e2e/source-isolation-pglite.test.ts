@@ -17,17 +17,21 @@
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { PGLiteEngine } from '../../src/core/pglite-engine.ts';
+import { DEFAULT_EMBEDDING_DIMENSIONS } from '../../src/core/ai/defaults.ts';
+import { configureGateway } from '../../src/core/ai/gateway.ts';
 import { resetPgliteState } from '../helpers/reset-pglite.ts';
 
 let engine: PGLiteEngine;
 
 beforeAll(async () => {
+  configureGateway({ embedding_model: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B', embedding_dimensions: DEFAULT_EMBEDDING_DIMENSIONS, env: { ...process.env } });
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
 });
 
 afterAll(async () => {
+  configureGateway({ embedding_model: 'openai:text-embedding-3-large', embedding_dimensions: 1536, env: { ...process.env } });
   await engine.disconnect();
 });
 
@@ -174,7 +178,7 @@ describe('v0.34.1 source-isolation regression (#861)', () => {
     // gate filters them out. We assert the contract via an empty result
     // rather than a positive match: with sourceId set, the SQL still runs
     // (no type or undefined-column errors).
-    const synth = new Float32Array(2048).fill(0.01);
+    const synth = new Float32Array(DEFAULT_EMBEDDING_DIMENSIONS).fill(0.01);
     const results = await engine.searchVector(synth, { sourceId: 'src-b' });
     // Either empty (no embeddings) or all from src-b. Both prove the
     // filter is wired without a runtime error.

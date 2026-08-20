@@ -122,7 +122,10 @@ PGLite remains local-only by design, while its schema now contains local
 `access_tokens` and `mcp_request_log` tables for parity and audit tests. Local
 agents continue to use stdio (`voltmind serve`); the HTTP transport still refuses
 to run against a PGLite-backed install and fails fast with a clear startup
-error.
+error. Remote HTTP startup also refuses PostgreSQL `SUPERUSER` or `BYPASSRLS`
+runtime roles: point `VOLTMIND_DATABASE_URL` at a `NOSUPERUSER NOBYPASSRLS`
+application role, while retaining a separate direct maintenance URL for schema
+migrations if your deployment uses one.
 
 ### CORS
 

@@ -15,7 +15,7 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { mkdirSync, writeFileSync, rmSync, chmodSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { hasDatabase, setupDB, teardownDB } from './helpers.ts';
+import { hasDatabase, setupDB, teardownDB, provisionHttpRuntimeDatabaseUrl } from './helpers.ts';
 
 const skip = !hasDatabase();
 const describeE2E = skip ? describe.skip : describe;
@@ -109,6 +109,7 @@ async function callMcp(token: string, opName: string, args: Record<string, unkno
 describeE2E('sources-remote-mcp E2E (gstack /setup-voltmind Path 4)', () => {
   let serverProcess: ReturnType<typeof import('child_process').spawn> | null = null;
   let clientId: string | undefined;
+  let runtimeDatabaseUrl: string;
   let token: string | undefined;
   let readOnlyClientId: string | undefined;
   let readOnlyToken: string | undefined;
@@ -116,9 +117,9 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-voltmind Path 4)', () => {
   beforeAll(async () => {
     // Truncate + apply schema/migrations before any subprocess hits the DB.
     await setupDB();
+    runtimeDatabaseUrl = await provisionHttpRuntimeDatabaseUrl();
     // setupDB's ALL_TABLES list does not include sources / oauth_clients —
-    // those accumulate across runs and cause Q4 pre-flight collisions on
-    // re-run. Wipe them explicitly. CASCADE on sources cleans pages too.
+    // those accumulate across runs and cause Q4 pre-flight collisions on re-run.
     {
       const { getConn } = await import('./helpers.ts');
       const sql = getConn();
@@ -136,11 +137,13 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-voltmind Path 4)', () => {
     // Subprocess inherits process.env — but we need to thread:
     //   - PATH: prepend FAKE_GIT_DIR so the spawned brain spawns OUR git
     //   - VOLTMIND_HOME: scope the clone dir to FIXTURE_DIR
-    const subprocessEnv = {
+    const subprocessEnv: NodeJS.ProcessEnv = {
       ...process.env,
       PATH: `${FAKE_GIT_DIR}:${process.env.PATH ?? ''}`,
       VOLTMIND_HOME,
     };
+    delete subprocessEnv.DATABASE_URL;
+    subprocessEnv.VOLTMIND_DATABASE_URL = runtimeDatabaseUrl;
 
     // Register a sources_admin-scoped client (the "gstack token").
     const reg1 = execSync(
@@ -226,6 +229,8 @@ describeE2E('sources-remote-mcp E2E (gstack /setup-voltmind Path 4)', () => {
       }
     }
     rmSync(FIXTURE_DIR, { recursive: true, force: true });
+    const { getConn } = await import('./helpers.ts');
+    await getConn()`DELETE FROM sources WHERE id IN ('e2e-yc-artifacts', 'e2e-removable', 'e2e-confirm-test')`;
     await teardownDB();
   }, 30_000);
 

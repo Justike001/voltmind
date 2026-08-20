@@ -460,6 +460,13 @@ export function sourceScopeOpts(ctx: OperationContext): { sourceId?: string; sou
   return {};
 }
 
+/** Install a transaction-local all-source directory scope for authorized source administrators. */
+async function installSourceAdminScope(ctx: OperationContext, extraSourceIds: string[] = []): Promise<void> {
+  if (ctx.remote !== false && hasScope(ctx.auth?.scopes ?? [], 'sources_admin')) {
+    await ctx.engine.setAdminSourceScope(extraSourceIds);
+  }
+}
+
 /**
  * Resolve an optional per-call read-source selector without allowing an
  * untrusted caller to expand its OAuth-derived source scope.
@@ -4502,135 +4509,78 @@ const whoami: Operation = {
 
 const sources_add: Operation = {
   name: 'sources_add',
-  description:
-    'Register a new source. Supports either --path (existing v0.17 behavior) ' +
-    'or --url (v0.28 federated remote-clone path: parses the URL through the ' +
-    'SSRF gate, clones into $VOLTMIND_HOME/clones/<id>/ via temp-dir + rename ' +
-    'atomicity, and stores remote_url in sources.config). Pre-flight collision ' +
-    'check on id; rollback on either-side failure.',
+  description: 'Register a new source. Remote callers may only clone an SSRF-guarded HTTPS URL into the managed clone directory.',
   params: {
-    id: {
-      type: 'string',
-      required: true,
-      description: 'Source id ([a-z0-9-]{1,32}). Immutable citation key.',
-    },
+    id: { type: 'string', required: true, description: 'Source id ([a-z0-9-]{1,32}). Immutable citation key.' },
     name: { type: 'string', description: 'Display name (defaults to id).' },
-    path: { type: 'string', description: 'Local path. Mutually optional with url.' },
-    url: {
-      type: 'string',
-      description:
-        'HTTPS git URL. Cloned into $VOLTMIND_HOME/clones/<id>/. SSRF-guarded.',
-    },
-    federated: {
-      type: 'boolean',
-      description: 'true → cross-source default search. false → isolated.',
-    },
-    clone_dir: {
-      type: 'string',
-      description:
-        'Override clone destination (only valid with url). Default: $VOLTMIND_HOME/clones/<id>/.',
-    },
+    path: { type: 'string', description: 'Local path. CLI-only for remote callers.' },
+    url: { type: 'string', description: 'HTTPS git URL.' },
+    federated: { type: 'boolean', description: 'true → cross-source default search. false → isolated.' },
+    clone_dir: { type: 'string', description: 'Clone destination override. CLI-only for remote callers.' },
   },
   mutating: true,
   scope: 'sources_admin',
   handler: async (ctx, p) => {
-    const { addSource } = await import('./sources-ops.ts');
-
-    // v0.28.1 codex finding (CRITICAL + HIGH): a `sources_admin` token over
-    // HTTP MCP must not be able to plant content at arbitrary host paths.
-    //
-    // - `path` lets a remote caller register `/etc/` (or any host dir) as a
-    //   "source"; later `voltmind sync --all` walks every sources.local_path,
-    //   which exfiltrates host content into the brain.
-    // - `clone_dir` lets a remote caller name the destination directly;
-    //   addSource's renameSync places the cloned tree there with no
-    //   confinement, AND validateRepoState's degraded-state recovery later
-    //   does rm -rf on src.local_path, so the same primitive doubles as
-    //   arbitrary-delete.
-    //
-    // Both fields are CLI-only (the operator runs `voltmind sources add --path
-    // /home/me/notes`). For HTTP MCP, ignore overrides — clone_dir defaults
-    // to $VOLTMIND_HOME/clones/<id>/ and path is rejected. Local CLI callers
-    // (ctx.remote === false, per F7b fail-closed contract) keep the override.
+    const { addSource, SourceOpError } = await import('./sources-ops.ts');
+    // A sources_admin token is authorized to manage the source directory. The
+    // RLS scope remains transaction-local; include a new id before its INSERT.
+    await installSourceAdminScope(ctx, [p.id as string]);
     const isLocal = ctx.remote === false;
     const remotePath = isLocal ? (p.path as string | undefined) ?? null : null;
     const remoteCloneDir = isLocal ? (p.clone_dir as string | undefined) : undefined;
     if (!isLocal && (p.path !== undefined || p.clone_dir !== undefined)) {
-      ctx.logger.warn(
-        '[sources_add] ignoring path/clone_dir overrides on HTTP MCP transport ' +
-          '(remote callers can only register a remote --url; the clone path is ' +
-          'fixed under $VOLTMIND_HOME/clones/).',
-      );
+      ctx.logger.warn('[sources_add] ignoring path/clone_dir overrides on HTTP MCP transport');
     }
-
-    const row = await addSource(ctx.engine, {
-      id: p.id as string,
-      name: p.name as string | undefined,
-      localPath: remotePath,
-      remoteUrl: p.url as string | undefined,
-      federated:
-        p.federated === undefined ? null : (p.federated as boolean),
-      cloneDir: remoteCloneDir,
-    });
-    return row;
+    try {
+      return await addSource(ctx.engine, {
+        id: p.id as string,
+        name: p.name as string | undefined,
+        localPath: remotePath,
+        remoteUrl: p.url as string | undefined,
+        federated: p.federated === undefined ? null : (p.federated as boolean),
+        cloneDir: remoteCloneDir,
+      });
+    } catch (error) {
+      if (error instanceof SourceOpError) throw new OperationError(error.code, error.message);
+      throw error;
+    }
   },
   cliHints: { name: 'sources_add', hidden: true },
 };
 
 const sources_list: Operation = {
   name: 'sources_list',
-  description:
-    'List registered sources with page counts and remote_url. v0.28 surfaces ' +
-    'the new remote_url field so a remote MCP caller can confirm a source is ' +
-    'managed by clone+pull rather than user-supplied path.',
-  params: {
-    include_archived: { type: 'boolean', description: 'Include soft-deleted sources.' },
-  },
+  description: 'List registered sources with page counts and remote URL metadata.',
+  params: { include_archived: { type: 'boolean', description: 'Include soft-deleted sources.' } },
   scope: 'read',
   handler: async (ctx, p) => {
     const { listSources } = await import('./sources-ops.ts');
-    // Local CLI and OAuth clients with sources_admin may inspect the complete
-    // registry. Every other remote caller sees only its federated read grant
-    // (or its single write source when no federated grant exists).
+    await installSourceAdminScope(ctx);
     const canListAll = ctx.remote === false || hasScope(ctx.auth?.scopes ?? [], 'sources_admin');
     const scope = canListAll ? undefined : sourceScopeOpts(ctx);
-    const sourceIds = scope
-      ? (scope.sourceIds ?? (scope.sourceId ? [scope.sourceId] : []))
-      : undefined;
-    return {
-      sources: await listSources(ctx.engine, {
-        includeArchived: (p.include_archived as boolean) === true,
-        ...(sourceIds !== undefined ? { sourceIds } : {}),
-      }),
-    };
+    const sourceIds = scope ? (scope.sourceIds ?? (scope.sourceId ? [scope.sourceId] : [])) : undefined;
+    return { sources: await listSources(ctx.engine, {
+      includeArchived: (p.include_archived as boolean) === true,
+      ...(sourceIds !== undefined ? { sourceIds } : {}),
+    }) };
   },
   cliHints: { name: 'sources_list', hidden: true },
 };
 
 const sources_remove: Operation = {
   name: 'sources_remove',
-  description:
-    'Hard-remove a source (cascades pages/chunks/embeddings). Refuses to ' +
-    'delete the auto-managed clone dir unless its resolved path is confined ' +
-    'under $VOLTMIND_HOME/clones/ (realpath+lstat — symlink-safe). For most ' +
-    'workflows prefer sources_archive for the soft-delete path.',
+  description: 'Hard-remove a source after destructive confirmation, with managed clone confinement.',
   params: {
     id: { type: 'string', required: true },
-    confirm_destructive: {
-      type: 'boolean',
-      description:
-        'Required when the source has data (pages, chunks). Without it the op refuses.',
-    },
+    confirm_destructive: { type: 'boolean', description: 'Required when the source has data.' },
     dry_run: { type: 'boolean', description: 'Preview impact without side effects.' },
-    keep_storage: {
-      type: 'boolean',
-      description: 'Skip clone-dir cleanup even when the source is auto-managed.',
-    },
+    keep_storage: { type: 'boolean', description: 'Skip managed clone cleanup.' },
   },
   mutating: true,
   scope: 'sources_admin',
   handler: async (ctx, p) => {
     const { removeSource } = await import('./sources-ops.ts');
+    await installSourceAdminScope(ctx, [p.id as string]);
     return removeSource(ctx.engine, {
       id: p.id as string,
       confirmDestructive: (p.confirm_destructive as boolean) === true,
@@ -4643,18 +4593,14 @@ const sources_remove: Operation = {
 
 const sources_status: Operation = {
   name: 'sources_status',
-  description:
-    'Per-source diagnostic. Returns clone_state ("healthy" | "missing" | ' +
-    '"not-a-dir" | "no-git" | "url-drift" | "corrupted" | "not-applicable") ' +
-    'so a remote MCP caller can diagnose whether the on-disk clone is ' +
-    'syncable without SSH access to the brain host.',
-  params: {
-    id: { type: 'string', required: true },
-  },
+  description: 'Return source metadata and managed-clone diagnostic state.',
+  params: { id: { type: 'string', required: true } },
   scope: 'read',
   handler: async (ctx, p) => {
     const { getSourceStatus } = await import('./sources-ops.ts');
-    const scope = resolveReadSourceScope(ctx, p.id as string);
+    const isSourceAdmin = hasScope(ctx.auth?.scopes ?? [], 'sources_admin');
+    await installSourceAdminScope(ctx);
+    const scope = isSourceAdmin ? undefined : resolveReadSourceScope(ctx, p.id as string);
     return getSourceStatus(ctx.engine, p.id as string, scope);
   },
   cliHints: { name: 'sources_status', hidden: true },

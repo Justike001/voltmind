@@ -31,7 +31,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { hasDatabase } from './helpers.ts';
+import { hasDatabase, setupDB, teardownDB, provisionHttpRuntimeDatabaseUrl } from './helpers.ts';
 
 const skip = !hasDatabase();
 const describeE2E = skip ? describe.skip : describe;
@@ -49,13 +49,25 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
   let clientSecret: string | undefined;
 
   beforeAll(async () => {
+    // Prepare the schema on the privileged test URL first.
+    await setupDB();
+    // The HTTP Host must run as a least-privilege role: assertHttpRuntimeIsolation()
+    // (serve-http.ts) refuses to start under a superuser/BYPASSRLS role and requires
+    // voltmind_oauth_runtime membership. `provisionHttpRuntimeDatabaseUrl()` creates
+    // that `voltmind_e2e_runtime` login for us.
+    const runtimeDatabaseUrl = await provisionHttpRuntimeDatabaseUrl();
+    // The spawned server + client writes must use the restricted runtime identity;
+    // schema setup stays on the privileged DATABASE_URL.
+    const subprocessEnv: NodeJS.ProcessEnv = { ...process.env };
+    delete subprocessEnv.DATABASE_URL;
+    subprocessEnv.VOLTMIND_DATABASE_URL = runtimeDatabaseUrl;
     const { execSync, spawn } = await import('child_process');
 
     // Register a confidential client with both read and write scopes.
     // The write scope is what POST /ingest gates on.
     const regOutput = execSync(
-      'bun run src/cli.ts auth register-client e2e-webhook-test --grant-types client_credentials --scopes "read write admin"',
-      { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env } },
+      'bun run src/cli.ts auth register-client e2e-webhook-test --grant-types client_credentials --scopes "read write admin" --source default',
+      { cwd: process.cwd(), encoding: 'utf8', env: subprocessEnv },
     );
     const idMatch = regOutput.match(/Client ID:\s+(voltmind_cl_\S+)/);
     const secretMatch = regOutput.match(/Client Secret:\s+(voltmind_cs_\S+)/);
@@ -79,7 +91,7 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
       ],
       {
         cwd: process.cwd(),
-        env: process.env,
+        env: subprocessEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
@@ -127,6 +139,7 @@ describeE2E('serve-http POST /ingest webhook (v0.38)', () => {
         console.error(`[afterAll] revoke-client cleanup failed: ${(e as Error).message}`);
       }
     }
+    await teardownDB();
   }, 30_000);
 
   // Helper — mint a token with a specific scope subset.

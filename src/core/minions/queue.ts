@@ -84,6 +84,17 @@ export class MinionQueue {
     data?: Record<string, unknown>,
     opts?: Partial<MinionJobInput>,
     trusted?: TrustedSubmitOpts,
+    // Restricted-runtime role: minion_jobs is FORCE RLS and gates every row
+    // on app.source_id. When a caller enqueues on behalf of a specific
+    // source (e.g. the webhook/relay HTTP routes), apply the source scope
+    // INSIDE this transaction so the INSERT satisfies the policy. Callers
+    // that already run inside a source-scoped transaction (submit_job via
+    // dispatch) pass nothing and keep the pre-existing behavior.
+    //
+    // Named submitSourceId to avoid clashing with the transaction-local
+    // `const sourceId` derived from data.source_id below (which would be a
+    // temporal dead zone reference from this earlier statement).
+    submitSourceId?: string,
   ): Promise<MinionJob> {
     // Normalize first so the protected-name check and the insert use the same
     // canonical form. Without the trim-before-check, `queue.add(' shell ', ...)`
@@ -135,6 +146,10 @@ export class MinionQueue {
     const maxSpawnDepth = opts?.max_spawn_depth ?? this.maxSpawnDepth;
 
     return this.engine.transaction(async (tx) => {
+      if (submitSourceId) {
+        await tx.setSourceScope(submitSourceId);
+        await tx.setSourceReadScope?.([submitSourceId]);
+      }
       // 1. Idempotency fast path — if a row already exists for this key AND is
       //    still in flight (non-terminal), return it without doing any other work.
       //    The unique partial index guarantees no second row can be inserted with

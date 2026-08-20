@@ -46,12 +46,8 @@ applyLegacy();
 // hooks; this fires before every test in every file in the shard.
 //
 // Tests that need a different gateway config (the new v0.37 tests,
-// future ZE-1280 tests) call `configureGateway()` in their own
-// beforeAll AFTER this beforeEach runs. Order is:
-//   1. legacy preload beforeEach → applyLegacy (1536)
-//   2. file-local beforeAll → may overwrite to ZE/1280
-// Since beforeAll runs once per file BEFORE the first beforeEach,
-// file-local beforeAll wins for that file's tests. ✓
+// future ZE-1280 tests) call `configureGateway()` explicitly in their own
+// beforeAll, which runs before their first file-local beforeEach.
 beforeEach(() => {
   try {
     // Only re-apply if the gateway was reset (or never configured).

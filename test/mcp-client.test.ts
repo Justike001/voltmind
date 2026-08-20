@@ -58,7 +58,11 @@ beforeAll(async () => {
       res.setHeader('Content-Type', 'application/json');
       if (tokenStatus === 200) {
         const chunks: Buffer[] = [];
-        for await (const chunk of req) chunks.push(chunk as Buffer);
+        try {
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+        } catch {
+          return;
+        }
         const form = new URLSearchParams(Buffer.concat(chunks).toString('utf-8'));
         tokenResources.push(form.get('resource'));
         res.end(JSON.stringify({
@@ -93,7 +97,11 @@ beforeAll(async () => {
       }
       // Read JSON-RPC body
       const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(chunk as Buffer);
+      try {
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+      } catch {
+        return;
+      }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
       const isNotification = body.id === undefined;
       // Notifications get 202 No Content

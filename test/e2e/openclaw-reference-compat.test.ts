@@ -114,7 +114,7 @@ describe('OpenClaw reference workspace compat (W1 + W2 + W3)', () => {
     expect(env.ok).toBe(true);
   });
 
-  it('skillpack install against OpenClaw-reference layout writes managed block to AGENTS.md', () => {
+  it('skillpack install prefers the installed skills resolver over workspace AGENTS.md', () => {
     // Copy fixture into a tmp workspace so we can install without
     // polluting the fixture itself.
     const target = mkdtempSync(join(tmpdir(), 'openclaw-ref-install-'));
@@ -139,12 +139,13 @@ describe('OpenClaw reference workspace compat (W1 + W2 + W3)', () => {
     const result = applyInstall(plan, opts);
     expect(result.summary.wroteNew).toBeGreaterThan(0);
     expect(result.managedBlock.applied).toBe(true);
-    expect(result.managedBlock.resolverFile).toBe(join(target, 'AGENTS.md'));
+    expect(result.managedBlock.resolverFile).toBe(join(target, 'skills', 'RESOLVER.md'));
 
     const agents = readFileSync(join(target, 'AGENTS.md'), 'utf-8');
-    expect(agents).toContain('voltmind:skillpack:begin');
-    expect(agents).toContain('`skills/brain-ops/SKILL.md`');
     // Pre-existing resolver table preserved.
     expect(agents).toContain('| Trigger | Skill |');
+    const resolver = readFileSync(join(target, 'skills', 'RESOLVER.md'), 'utf-8');
+    expect(resolver).toContain('voltmind:skillpack:begin');
+    expect(resolver).toContain('`skills/brain-ops/SKILL.md`');
   });
 });

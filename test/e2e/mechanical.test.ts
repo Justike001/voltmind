@@ -642,7 +642,7 @@ describeE2E('E2E: file_list LIMIT enforcement', () => {
       await sql`
         INSERT INTO files (page_slug, filename, storage_path, mime_type, size_bytes, content_hash, metadata)
         VALUES (${testSlug}, ${'file-' + String(i).padStart(3, '0') + '.txt'}, ${testSlug + '/file-' + i + '.txt'}, ${'text/plain'}, ${100}, ${'hash-' + i}, ${'{}'}::jsonb)
-        ON CONFLICT (storage_path) DO NOTHING
+        ON CONFLICT (source_id, storage_path) DO NOTHING
       `;
     }
 
@@ -1133,18 +1133,21 @@ describeE2E('E2E: RLS Verification', () => {
         ON CONFLICT (key) DO UPDATE SET value = '23'
       `);
 
+      // Keep the CLI's requested embedding contract equal to this legacy
+      // fixture. This test exercises v24 migration recovery, not the separate
+      // embedding-dimension safety guard that runs before migrations.
       // Re-trigger initSchema via the CLI. With the guard, this should
       // apply v24 cleanly and advance version to 24. Without the guard,
       // this would error out with 42P01 and leave version at 23.
       const result = Bun.spawnSync({
-        cmd: ['bun', 'run', 'src/cli.ts', 'init', '--non-interactive', '--url', process.env.DATABASE_URL!],
+        cmd: ['bun', 'run', 'src/cli.ts', 'init', '--non-interactive', '--url', process.env.DATABASE_URL!, '--embedding-model', 'openai:text-embedding-3-small', '--embedding-dimensions', '1536'],
         cwd: cliCwd, env: cliEnv(), timeout: 30_000,
       });
       const stdout = new TextDecoder().decode(result.stdout);
       const stderr = new TextDecoder().decode(result.stderr);
 
       // Must succeed — no 42P01, no transaction rollback.
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode, stderr + stdout).toBe(0);
       expect(stderr + stdout).not.toMatch(/42P01|does not exist.*budget/i);
 
       // Version must have advanced PAST 24. Since v0.18.1, v25-v29 (v0.19.0

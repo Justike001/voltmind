@@ -427,9 +427,8 @@ describe('sources_add SSRF gate (delegated to parseRemoteUrl)', () => {
         });
         throw new Error('expected throw');
       } catch (e) {
-        // The handler raises SourceOpError(invalid_remote_url). At the
-        // dispatch layer this gets serialized as a normal error response.
-        expect((e as Error).name).toBe('SourceOpError');
+        // Handler maps the domain error into the dispatcher-safe envelope.
+        expect((e as Error).name).toBe('OperationError');
         expect((e as any).code).toBe('invalid_remote_url');
       }
     });

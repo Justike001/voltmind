@@ -17,12 +17,14 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../../src/core/pglite-engine.ts';
 import type { ChunkInput, SearchResult } from '../../src/core/types.ts';
 import type { BrainEngine } from '../../src/core/engine.ts';
-import { hasDatabase, setupDB, teardownDB, getEngine } from './helpers.ts';
-
+import { configureGateway, resetGateway } from '../../src/core/ai/gateway.ts';
+import { DEFAULT_EMBEDDING_DIMENSIONS } from '../../src/core/ai/defaults.ts';
+import { hasDatabase, setupDB, teardownDB } from './helpers.ts';
+let parityEmbeddingDimensions = DEFAULT_EMBEDDING_DIMENSIONS;
 const SKIP_PG = !hasDatabase();
 const describeBoth = SKIP_PG ? describe.skip : describe;
 
-function basisEmbedding(idx: number, dim = 1536): Float32Array {
+function basisEmbedding(idx: number, dim = parityEmbeddingDimensions): Float32Array {
   const emb = new Float32Array(dim);
   emb[idx % dim] = 1.0;
   return emb;
@@ -104,13 +106,36 @@ const QUERIES = [
   'fat code thin harness part 3',
   'fat code production',
 ];
-
 describeBoth('Engine parity — Postgres vs PGLite', () => {
   let pgEngine: BrainEngine;
-  let pgliteEngine: PGLiteEngine;
+  let pgliteEngine!: PGLiteEngine;
 
   beforeAll(async () => {
     pgEngine = await setupDB();
+
+    // The shared Postgres E2E fixture can legitimately be an older 1536d
+    // brain or a current 2048d brain. Read its actual halfvec width and use
+    // that exact contract for PGLite before seeding either engine.
+    const columns = await pgEngine.executeRaw<{ formatted: string }>(`
+      SELECT format_type(a.atttypid, a.atttypmod) AS formatted
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND c.relname = 'content_chunks'
+        AND a.attname = 'embedding'
+        AND NOT a.attisdropped
+    `);
+    const match = /^halfvec\((\d+)\)$/.exec(columns[0]?.formatted ?? '');
+    if (!match) throw new Error(`content_chunks.embedding must be halfvec(N), got ${columns[0]?.formatted ?? 'missing'}`);
+    parityEmbeddingDimensions = Number(match[1]);
+
+    resetGateway();
+    configureGateway({
+      embedding_model: 'openai:text-embedding-3-small',
+      embedding_dimensions: parityEmbeddingDimensions,
+      env: { ...process.env },
+    });
     await seedEngine(pgEngine);
 
     pgliteEngine = new PGLiteEngine();
@@ -120,7 +145,8 @@ describeBoth('Engine parity — Postgres vs PGLite', () => {
   }, 90_000);
 
   afterAll(async () => {
-    await pgliteEngine.disconnect();
+    if (pgliteEngine) await pgliteEngine.disconnect();
+    resetGateway();
     await teardownDB();
   }, 30_000);
 

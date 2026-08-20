@@ -178,10 +178,9 @@ describe('v0.28.5 cluster B — embedding dim corruption regression', () => {
     }
   }, 60000);
 
-  test('large-dim init (>2000) templates the column without HNSW (Voyage 4 Large case)', async () => {
-    // Codex finding #8: dims > 2000 cannot be HNSW-indexed in pgvector.
-    // The schema templating path must skip the HNSW CREATE INDEX while
-    // still creating the underlying `vector(N)` column.
+  test('large-dim init at 2048 retains the halfvec HNSW index (Voyage 4 Large case)', async () => {
+    // halfvec HNSW supports up to 4000 dimensions, so the canonical 2048d
+    // column remains indexed rather than silently falling back to exact scans.
     const { configureGateway } = await import('../../src/core/ai/gateway.ts');
     configureGateway({
       embedding_model: 'voyage:voyage-4-large',
@@ -192,14 +191,12 @@ describe('v0.28.5 cluster B — embedding dim corruption regression', () => {
     const engine = new PGLiteEngine();
     await engine.connect({});
     try {
-      // initSchema must NOT crash even though the HNSW index would otherwise
-      // refuse a 2048-d vector column.
       await engine.initSchema();
       const dim = await readContentChunksEmbeddingDim(engine);
       expect(dim.exists).toBe(true);
       expect(dim.dims).toBe(2048);
 
-      // Confirm the HNSW index was correctly skipped.
+      // Confirm the halfvec HNSW index is present.
       const idx = await engine.executeRaw<{ exists: boolean }>(
         `SELECT EXISTS (
            SELECT 1 FROM pg_indexes
@@ -208,7 +205,7 @@ describe('v0.28.5 cluster B — embedding dim corruption regression', () => {
              AND indexname = 'idx_chunks_embedding'
          ) AS exists`,
       );
-      expect(idx[0]?.exists).toBe(false);
+      expect(idx[0]?.exists).toBe(true);
     } finally {
       await engine.disconnect();
       configureGateway({ env: { ...process.env } });
@@ -221,10 +218,7 @@ describe('v0.28.5 A4 — existing-brain dim mismatch loud failure', () => {
     const engine = new PGLiteEngine();
     await engine.connect({});
     try {
-      // v0.36.0.0: default flipped to 1280; explicitly configure the gateway
-      // to 1536 so the test still exercises the "existing brain at 1536d"
-      // path it was designed for. This mirrors how a real v0.18-vintage brain
-      // would look post-upgrade.
+      // Explicitly configure 1536 so this exercises the legacy-brain path.
       const { configureGateway, resetGateway } = await import('../../src/core/ai/gateway.ts');
       resetGateway();
       configureGateway({
@@ -237,11 +231,6 @@ describe('v0.28.5 A4 — existing-brain dim mismatch loud failure', () => {
       expect(existing.exists).toBe(true);
       expect(existing.dims).toBe(1536);
 
-      // Simulate the user passing --embedding-dimensions 768 against this
-      // existing 1536 brain. Build the mismatch message that init would
-      // print to stderr before exiting 1.
-      // v0.37 fix wave: engineKind now required. This E2E uses PGLite; pin
-      // the PGLite recipe (wipe-and-reinit, not ALTER COLUMN).
       const msg = embeddingMismatchMessage({
         currentDims: existing.dims!,
         requestedDims: 768,
@@ -250,11 +239,10 @@ describe('v0.28.5 A4 — existing-brain dim mismatch loud failure', () => {
         engineKind: 'pglite',
       });
 
-      // PGLite branch: wipe-and-reinit recipe (no ALTER COLUMN — that fails
-      // on PGLite's WASM pgvector). Asserts the recipe references the
-      // correct dim and model and points at `voltmind init --pglite`.
-      expect(msg).toContain('vector(1536)');
-      expect(msg).toContain('vector(768)');
+      // PGLite's destructive wipe-and-reinit recipe must name both halfvec
+      // widths and preserve the documented recovery steps.
+      expect(msg).toContain('halfvec(1536)');
+      expect(msg).toContain('halfvec(768)');
       expect(msg).toContain('voltmind init --pglite --embedding-model ollama:nomic-embed-text --embedding-dimensions 768');
       expect(msg).toContain('PGLite cannot ALTER vector column types');
       expect(msg).toContain('docs/embedding-migrations.md');
@@ -264,10 +252,8 @@ describe('v0.28.5 A4 — existing-brain dim mismatch loud failure', () => {
     }
   }, 60000);
 
-  test('mismatch message for dims > 2000 explicitly skips the HNSW reindex (codex finding #8)', () => {
-    // The exact case the user pasting a recipe would otherwise crash on:
-    // CREATE INDEX HNSW on a 2048-d vector column is rejected by pgvector.
-    // Postgres branch: HNSW reindex must be skipped for dims > 2000 (pgvector cap).
+  test('mismatch message at 2048 emits the supported halfvec HNSW reindex', () => {
+    // halfvec HNSW supports the canonical 2048 dimensions (cap: 4000).
     const msg = embeddingMismatchMessage({
       currentDims: 1536,
       requestedDims: 2048,
@@ -276,11 +262,7 @@ describe('v0.28.5 A4 — existing-brain dim mismatch loud failure', () => {
       engineKind: 'postgres',
     });
 
-    expect(msg).toContain('vector(2048)');
-    expect(msg).toContain('Skip reindex');
-    expect(msg).toContain("exceeds pgvector's HNSW cap");
-    // The HNSW CREATE INDEX line must NOT appear in the 2048-d recipe —
-    // a user pasting it would crash trying to recreate the index.
-    expect(msg).not.toMatch(/CREATE INDEX[^\n]*idx_chunks_embedding[^\n]*USING hnsw/);
+    expect(msg).toContain('halfvec(2048)');
+    expect(msg).toMatch(/CREATE INDEX[^\n]*idx_chunks_embedding[\s\S]*USING hnsw \(embedding halfvec_cosine_ops\)/);
   });
 });

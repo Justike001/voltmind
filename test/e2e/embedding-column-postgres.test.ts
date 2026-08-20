@@ -157,8 +157,9 @@ if (!dbUrl) {
       const byName = new Map<string, string>();
       for (const r of rows) byName.set(r.attname, r.formatted);
 
-      // Default 'embedding' is vector(1536) by committed schema.
-      expect(byName.get('embedding')).toMatch(/^vector\(\d+\)/);
+      // The primary dimension is deployment-configurable (the current schema
+      // uses 2048, while upgraded brains can retain a legacy dimension).
+      expect(byName.get('embedding')).toMatch(/^halfvec\(\d+\)$/);
       // Voyage is vector(1024) per the ALTER above.
       expect(byName.get('embedding_voyage')).toBe('vector(1024)');
       // ZE is halfvec(2560) per the ALTER above.

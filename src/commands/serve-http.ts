@@ -877,8 +877,54 @@ export async function queryAgentClientSpend(engine: BrainEngine): Promise<AgentC
   }));
 }
 
+/**
+ * HTTP callers are untrusted (`OperationContext.remote = true`), so source
+ * isolation must be enforced by PostgreSQL RLS. PGLite has no RLS and a
+ * PostgreSQL role with BYPASSRLS (or superuser) can silently defeat every
+ * policy. Keep this at the transport boundary: local stdio/CLI remains able
+ * to use PGLite, but it can never accidentally become a remote host.
+ */
+export async function assertHttpRuntimeIsolation(
+  engine: Pick<BrainEngine, 'kind' | 'executeRaw'>,
+): Promise<void> {
+  if (engine.kind !== 'postgres') {
+    throw new Error(
+      'Refusing HTTP Host startup: remote MCP/Admin requires PostgreSQL RLS; ' +
+      'PGLite is supported only for trusted local CLI/stdio use.',
+    );
+  }
+
+  const rows = await engine.executeRaw<{
+    is_superuser?: boolean | string;
+    bypass_rls?: boolean | string;
+    oauth_control_plane?: boolean | string;
+  }>(`
+    SELECT r.rolsuper AS is_superuser,
+           r.rolbypassrls AS bypass_rls,
+           COALESCE(pg_has_role(r.oid, to_regrole('voltmind_oauth_runtime'), 'MEMBER'), false) AS oauth_control_plane
+      FROM pg_roles r
+     WHERE r.rolname = current_user
+  `);
+  const role = rows[0];
+  const isTrue = (value: boolean | string | undefined) => value === true || value === 't' || value === 'true';
+  if (!role || isTrue(role.is_superuser) || isTrue(role.bypass_rls)) {
+    throw new Error(
+      'Refusing HTTP Host startup: the PostgreSQL runtime role must be ' +
+      'NOSUPERUSER and NOBYPASSRLS so source RLS cannot be bypassed. ' +
+      'Configure a restricted application role (for example voltmind_restricted).',
+    );
+  }
+  if (!isTrue(role.oauth_control_plane)) {
+    throw new Error(
+      'Refusing HTTP Host startup: the runtime role lacks voltmind_oauth_runtime. ' +
+      'Apply migration v129, then grant that NOLOGIN control-plane role to the restricted runtime role.',
+    );
+  }
+}
+
 export async function runServeHttp(engine: BrainEngine, options: ServeHttpOptions) {
   const { port, tokenTtl, enableDcr, enableDcrInsecure, publicUrl, mcpPublicUrl, adminPublicUrl, logFullParams } = options;
+  await assertHttpRuntimeIsolation(engine);
   // v0.34.1 (#864, D11): default bind flipped from 0.0.0.0 to 127.0.0.1.
   // voltmind's primary use case is a personal-knowledge brain on a laptop;
   // the pre-v0.34 default exposed brains on every interface. Server
@@ -1533,7 +1579,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   // ---------------------------------------------------------------------------
   // Admin API endpoints
   // ---------------------------------------------------------------------------
-  const { createAdminV1Router } = await import('./admin-v1.ts');
+  const { createAdminV1Router, validateAdminMutationRequest } = await import('./admin-v1.ts');
   app.use('/admin/api/v1', createAdminV1Router({
     engine, sql, oauthProvider, adminOrigin: adminUrl.origin,
     getSession: (req) => {
@@ -1565,7 +1611,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
           req.method + ' ' + req.path,
           res.statusCode < 400 ? 'ok' : 'error',
           JSON.stringify({ body_keys: bodyKeys, duration_ms: Date.now() - started }),
-          req.ip ?? null,
+          null,
           res.locals.errorCode ?? (res.statusCode < 400 ? null : 'legacy_admin_mutation_failed'),
         ],
       ).catch(err => console.error('[admin-legacy] audit insert failed:', err instanceof Error ? err.message : err));
@@ -1592,7 +1638,28 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       });
       return;
     }
-    requireAdmin(req, res, () => auditLegacyAdminMutation(req, res, next));
+    requireAdmin(req, res, () => {
+      const sessionId = (req.cookies as Record<string, string>)?.voltmind_admin;
+      const session = sessionId ? adminSessions.get(sessionId) : undefined;
+      // requireAdmin above guarantees a live session; fail closed if that
+      // invariant changes rather than restoring a CSRF-free compatibility API.
+      if (!session) {
+        res.status(401).json({ error: 'Admin authentication required' });
+        return;
+      }
+      const validation = validateAdminMutationRequest({
+        origin: req.header('Origin'),
+        adminOrigin: adminUrl.origin,
+        suppliedCsrfToken: req.header('X-VoltMind-CSRF'),
+        sessionCsrfToken: session.csrfToken,
+      });
+      if (!validation.ok) {
+        res.locals.errorCode = validation.code;
+        res.status(validation.status).json({ error: { code: validation.code, message: validation.message } });
+        return;
+      }
+      auditLegacyAdminMutation(req, res, next);
+    });
   });
 
 
@@ -3026,6 +3093,17 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   const ingestQueue = options.queueAdd ? null : new MinionQueue(engine);
   const queueAdd: ServeQueueAdd = options.queueAdd ?? ((name, data, opts, trusted) =>
     ingestQueue!.add(name, data, opts, trusted));
+  // Source-owned webhook work must establish RLS state inside MinionQueue's
+  // own transaction. The daemon callback keeps its existing 4-argument API.
+  const queueAddForSource = async (
+    name: string,
+    data: Record<string, unknown> | undefined,
+    opts: Partial<MinionJobInput> | undefined,
+    trusted: TrustedSubmitOpts | undefined,
+    sourceId: string,
+  ): Promise<MinionJob> => options.queueAdd
+    ? options.queueAdd(name, data, opts, trusted)
+    : ingestQueue!.add(name, data, opts, trusted, sourceId);
 
   const installReceiptErrorEnvelope = (res: Response, requestId: string) => {
     const originalJson = res.json.bind(res);
@@ -3171,10 +3249,16 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         });
         return;
       }
-      const sourceRows = await engine.executeRaw<{ id: string }>(
-        'SELECT id FROM sources WHERE id=$1 LIMIT 1',
-        [sourceId],
-      );
+      const sourceRows = await withOperationSourceScope(engine, sourceId, async (scoped) => {
+        // The sources table is FORCE RLS under a restricted runtime role:
+        // sources_source_read gates on app.source_id. Without the scoped
+        // transaction the existence check sees zero rows and every write-
+        // scoped webhook POST fails with source_scope_invalid.
+        return scoped.executeRaw<{ id: string }>(
+          'SELECT id FROM sources WHERE id=$1 LIMIT 1',
+          [sourceId],
+        );
+      });
       if (sourceRows.length === 0) {
         res.status(403).json({
           error: 'source_scope_invalid',
@@ -3213,7 +3297,11 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       }
 
       try {
-        const job = await queueAdd(
+        // Restricted-runtime role: MinionQueue.add now accepts a sourceId and
+        // applies app.source_id inside its own transaction (minion_jobs is
+        // FORCE RLS), so we don't need to nest a source-scoped transaction
+        // here — the scoped tx engine can't open a second begin() anyway.
+        const job = await queueAddForSource(
           'ingest_capture',
           {
             event,
@@ -3234,6 +3322,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
             maxWaiting: 50,
             rejectOnBackpressure: true,
           },
+          undefined,
+          sourceId,
         );
 
         const latency = Date.now() - startTime;
@@ -3332,10 +3422,13 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
         });
         return;
       }
-      const sourceRows = await engine.executeRaw<{ id: string }>(
-        'SELECT id FROM sources WHERE id=$1 LIMIT 1',
-        [sourceId],
-      );
+      const sourceRows = await withOperationSourceScope(engine, sourceId, async (scoped) => {
+        // Same FORCE-RLS scoping as the POST /ingest route (see above).
+        return scoped.executeRaw<{ id: string }>(
+          'SELECT id FROM sources WHERE id=$1 LIMIT 1',
+          [sourceId],
+        );
+      });
       if (sourceRows.length === 0) {
         res.status(403).json({
           error: 'source_scope_invalid',
@@ -3445,9 +3538,11 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       try {
         for (const { event, slug } of events) {
           const idempotencyKey = `ingest:microsoft:${sourceId}:${event.source_uri}:${event.event_id}:${event.event_version}`;
-          const existing = await engine.executeRaw<{ id: number }>(
-            'SELECT id FROM minion_jobs WHERE idempotency_key = $1 LIMIT 1',
-            [idempotencyKey],
+          const existing = await withOperationSourceScope(engine, sourceId, async (scoped) =>
+            scoped.executeRaw<{ id: number }>(
+              'SELECT id FROM minion_jobs WHERE idempotency_key = $1 LIMIT 1',
+              [idempotencyKey],
+            )
           );
           if (existing[0]?.id !== undefined) {
             const duplicateReceipt = makeReceiptProjection({
@@ -3460,7 +3555,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
             results.push({ event_id: event.event_id!, status: 'duplicate', ...duplicateReceipt });
             continue;
           }
-          const job = await queueAdd(
+          const job = await queueAddForSource(
             'ingest_capture',
             {
               event,
@@ -3474,6 +3569,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
               idempotency_key: idempotencyKey,
               maxWaiting: 50,
             },
+            undefined,
+            sourceId,
           );
           const receipt = makeReceiptProjection({
             jobId: job.id,
@@ -3575,13 +3672,18 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
       }
 
       // Source lookup via the v87 partial expression index on
-      // config->>'github_repo'. fast even on large brains.
+      // config->>'github_repo'. GitHub cannot carry an OAuth source claim, so
+      // resolve the candidate internally through the identifier-only admin
+      // directory; no source or config reaches the caller before HMAC passes.
       let source: { id: string; config: Record<string, unknown> | string } | null = null;
       try {
-        const rows = await engine.executeRaw<{ id: string; config: Record<string, unknown> | string }>(
-          `SELECT id, config FROM sources WHERE config->>'github_repo' = $1 LIMIT 1`,
-          [fullName],
-        );
+        const rows = await engine.transaction(async (tx) => {
+          await tx.setAdminSourceScope();
+          return tx.executeRaw<{ id: string; config: Record<string, unknown> | string }>(
+            `SELECT id, config FROM sources WHERE config->>'github_repo' = $1 LIMIT 1`,
+            [fullName],
+          );
+        });
         source = rows[0] ?? null;
       } catch (err) {
         console.error('webhook: source lookup error:', err);
@@ -3636,7 +3738,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
 
       // Submit sync job with priority -10 (above autopilot's 0).
       try {
-        const job = await queueAdd(
+        const job = await queueAddForSource(
           'sync',
           {
             sourceId: source.id,
@@ -3652,6 +3754,8 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
             idempotency_key: `webhook:sync:${source.id}:${Math.floor(Date.now() / 30_000)}`,
             maxWaiting: 1,
           },
+          undefined,
+          source.id,
         );
         const receipt = makeReceiptProjection({
           jobId: job.id,

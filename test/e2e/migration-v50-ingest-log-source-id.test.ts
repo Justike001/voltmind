@@ -42,7 +42,13 @@ if (!skip && !v50) {
 
 async function dropSourceIdColumn(): Promise<void> {
   const conn = getConn();
-  await conn.unsafe(`ALTER TABLE ingest_log DROP COLUMN IF EXISTS source_id`);
+  // ingest_log joined the source-owned RLS policy loop (voltmind_source_read /
+  // insert / update / delete all reference source_id). Simulating a legacy
+  // pre-v50 brain therefore means dropping the column AND its dependent RLS
+  // policies. CASCADE removes both in one step: an old brain never had the
+  // policies (they were added to the loop later), so dropping them matches
+  // the pre-RLS shape the migration assumes.
+  await conn.unsafe(`ALTER TABLE ingest_log DROP COLUMN IF EXISTS source_id CASCADE`);
   await conn.unsafe(`DROP INDEX IF EXISTS idx_ingest_log_source_type_created`);
 }
 

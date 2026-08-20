@@ -202,7 +202,7 @@ SELECTED=$(bun run scripts/select-e2e.ts)
 if [ -z "$SELECTED" ]; then
   echo "[runner] selector emitted nothing (doc-only diff); skipping E2E."
 else
-  DATABASE_URL=postgresql://postgres:postgres@postgres-1:5432/voltmind_test echo "$SELECTED" | xargs bash scripts/run-e2e.sh
+  echo "$SELECTED" | DATABASE_URL=postgresql://postgres:postgres@postgres-1:5432/gbrain_test xargs bash scripts/run-e2e.sh
 fi'
   else
     RUN_PHASES_CMD='echo "[runner] guards + typecheck"
@@ -214,7 +214,7 @@ bun run typecheck
 echo "[runner] unit (unsharded, DATABASE_URL unset)"
 env -u DATABASE_URL bash scripts/run-unit-shard.sh
 echo "[runner] e2e (unsharded)"
-DATABASE_URL=postgresql://postgres:postgres@postgres-1:5432/voltmind_test bash scripts/run-e2e.sh'
+DATABASE_URL=postgresql://postgres:postgres@postgres-1:5432/gbrain_test bash scripts/run-e2e.sh'
   fi
 else
   # Tier 1 sharded path. Each shard runs unit+E2E sequentially against its
@@ -242,7 +242,8 @@ if [ ! -f test/fixtures/pglite-snapshot.tar ] || [ ! -f test/fixtures/pglite-sna
 else
   echo \"[runner] snapshot fixture exists; engine will validate hash at load time\"
 fi
-export VOLTMIND_PGLITE_SNAPSHOT=test/fixtures/pglite-snapshot.tar
+# Do not export the snapshot globally: PGLite regression tests exercise schema
+# upgrades and legacy 1536d fixtures, both of which require a fresh database.
 echo \"[runner] resolving E2E file selection (--diff aware)\"
 ${DIFF_E2E_PREP}
 mkdir -p /tmp/shard-logs
@@ -262,11 +263,11 @@ printf '%s\\n' 1 2 3 4 | xargs -P4 -I{} sh -c '
   echo \"[shard \${shard}] e2e phase (SHARD=\${shard}/4, DATABASE_URL=postgres-\${shard})\" >> \$log
   if [ -s /tmp/e2e-selected.txt ]; then
     SHARD=\${shard}/4 \\
-    DATABASE_URL=postgresql://postgres:postgres@postgres-\${shard}:5432/voltmind_test \\
+    DATABASE_URL=postgresql://postgres:postgres@postgres-\${shard}:5432/gbrain_test \\
     xargs -a /tmp/e2e-selected.txt bash scripts/run-e2e.sh >> \$log 2>&1
   else
     SHARD=\${shard}/4 \\
-    DATABASE_URL=postgresql://postgres:postgres@postgres-\${shard}:5432/voltmind_test \\
+    DATABASE_URL=postgresql://postgres:postgres@postgres-\${shard}:5432/gbrain_test \\
     bash scripts/run-e2e.sh >> \$log 2>&1
   fi
   e2e_exit=\$?
@@ -302,7 +303,7 @@ fi
 echo \"[runner] All 4 shards passed.\""
 fi
 
-INNER_CMD=$(cat <<'EOF'
+INNER_PREFIX=$(cat <<'EOF'
 set -euo pipefail
 echo "[runner] bun version: $(bun --version)"
 # oven/bun:1 omits git; many unit tests use mkdtemp + git init for fixtures.
@@ -318,10 +319,12 @@ if [ ! -d /app/node_modules ] || [ -z "$(ls -A /app/node_modules 2>/dev/null)" ]
   echo "[runner] First run (or --clean): bun install --frozen-lockfile"
   bun install --frozen-lockfile
 fi
-__RUN_PHASES__
 EOF
 )
-INNER_CMD="${INNER_CMD/__RUN_PHASES__/$RUN_PHASES_CMD}"
+# Do not use Bash's ${var/pattern/replacement} form here: an ampersand in the
+# replacement expands to the matched pattern, corrupting shell redirections
+# such as `2>&1` into a workspace artifact named `__RUN_PHASES__1`.
+INNER_CMD="${INNER_PREFIX}"$'\n'"${RUN_PHASES_CMD}"
 
 # Conductor / git-worktree support: when `.git` is a file (not a directory),
 # it points at a host gitdir outside the bind-mount. Without remounting that

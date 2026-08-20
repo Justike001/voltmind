@@ -5,6 +5,13 @@
  * exact path broke: schema sized to 1536 (stale default), embed pipeline
  * used ZE/1280, first chunk insert failed with vector dim mismatch.
  *
+ * v0.45: the system embedding default is now the company-internal
+ * qwen-vllm provider at 2048 (ai/defaults.ts). qwen-vllm is a local-only
+ * recipe (auth_env.required = []), so init's env auto-pick intentionally
+ * skips it — these tests pass --embedding-model/--embedding-dimensions
+ * explicitly pinned to the canonical default and assert the schema/config
+ * stay aligned with DEFAULT_EMBEDDING_MODEL/DIMENSIONS.
+ *
  * Hermetic: in-process (NOT a CLI subprocess), VOLTMIND_HOME pinned to a
  * tmpdir, embed transport stubbed via `__setEmbedTransportForTests` so we
  * don't need real provider credentials. CDX2-12 from the plan explicitly
@@ -29,23 +36,25 @@ describe('E2E: fresh voltmind init --pglite → import → embed works end-to-en
   let origZeKey: string | undefined;
   let origOpenaiKey: string | undefined;
   let origVoyageKey: string | undefined;
+  let origOpenrouterKey: string | undefined;
 
   beforeEach(() => {
     tmpHome = mkdtempSync(join(tmpdir(), 'voltmind-e2e-fresh-'));
     origHome = process.env.VOLTMIND_HOME;
+    // Save + clear every embed provider key. The init calls below pass
+    // explicit --embedding-model/--embedding-dimensions pinned to the
+    // ai/defaults.ts qwen-vllm 2048d default, so env detection is skipped
+    // entirely and a dev machine's ambient keys can't redirect the resolved
+    // shape (which would fail the dim assertions in this file).
     origZeKey = process.env.ZEROENTROPY_API_KEY;
-    // Save + clear OPENAI_API_KEY + VOYAGE_API_KEY so init only sees
-    // one provider as env-ready (ZE). Without this, dev machines with
-    // multi-provider env (Garry's setup) fail init's disambiguation gate
-    // ("Multiple embedding providers env-ready: openai, voyage,
-    // zeroentropyai") before the test body runs.
     origOpenaiKey = process.env.OPENAI_API_KEY;
     origVoyageKey = process.env.VOYAGE_API_KEY;
+    origOpenrouterKey = process.env.OPENROUTER_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.VOYAGE_API_KEY;
+    delete process.env.ZEROENTROPY_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
     process.env.VOLTMIND_HOME = tmpHome;
-    // Stub key so init's setup-hint check passes.
-    process.env.ZEROENTROPY_API_KEY = 'sk-test-ze';
   });
 
   afterEach(() => {
@@ -56,6 +65,7 @@ describe('E2E: fresh voltmind init --pglite → import → embed works end-to-en
     else process.env.ZEROENTROPY_API_KEY = origZeKey;
     if (origOpenaiKey !== undefined) process.env.OPENAI_API_KEY = origOpenaiKey;
     if (origVoyageKey !== undefined) process.env.VOYAGE_API_KEY = origVoyageKey;
+    if (origOpenrouterKey !== undefined) process.env.OPENROUTER_API_KEY = origOpenrouterKey;
     __setEmbedTransportForTests(null);
     // Restore legacy-preload gateway state.
     configureGateway({
@@ -65,11 +75,12 @@ describe('E2E: fresh voltmind init --pglite → import → embed works end-to-en
     });
   });
 
-  test('bare `init --pglite`: schema sized to gateway defaults (ZE/1280)', async () => {
-    // Reset gateway so init.ts has to resolve defaults from
-    // ai/defaults.ts. This is the actual production code path for a
-    // fresh install: bare `voltmind init --pglite` with no env or file
-    // config.
+  test('bare `init --pglite`: schema sized to gateway defaults (qwen-vllm/2048)', async () => {
+    // Reset gateway so init.ts re-resolves from the explicit flags. We pin
+    // them to the canonical ai/defaults.ts default (qwen-vllm at 2048d), passed
+    // explicitly because qwen-vllm is a local-only provider (auth required:
+    // []) that init's env auto-pick intentionally skips — so a truly bare
+    // env can't select it.
     resetGateway();
 
     // Stub embed transport to return synthetic 1280-dim vectors. The
@@ -97,7 +108,14 @@ describe('E2E: fresh voltmind init --pglite → import → embed works end-to-en
     };
 
     try {
-      await runInit(['--pglite', '--non-interactive']);
+      await runInit([
+        '--pglite',
+        '--non-interactive',
+        '--embedding-model',
+        DEFAULT_EMBEDDING_MODEL,
+        '--embedding-dimensions',
+        String(DEFAULT_EMBEDDING_DIMENSIONS),
+      ]);
     } finally {
       process.stderr.write = origStderrWrite;
       console.log = origLog;
@@ -146,7 +164,14 @@ describe('E2E: fresh voltmind init --pglite → import → embed works end-to-en
 
     try {
       const { runInit } = await import('../../src/commands/init.ts');
-      await runInit(['--pglite', '--non-interactive']);
+      await runInit([
+        '--pglite',
+        '--non-interactive',
+        '--embedding-model',
+        DEFAULT_EMBEDDING_MODEL,
+        '--embedding-dimensions',
+        String(DEFAULT_EMBEDDING_DIMENSIONS),
+      ]);
     } finally {
       console.log = origLog;
       console.warn = origWarn;

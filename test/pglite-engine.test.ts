@@ -7,12 +7,21 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { DEFAULT_EMBEDDING_DIMENSIONS } from '../src/core/ai/defaults.ts';
+import { configureGateway } from '../src/core/ai/gateway.ts';
 import type { BrainEngine } from '../src/core/engine.ts';
 import type { PageInput, ChunkInput } from '../src/core/types.ts';
 
 let engine: PGLiteEngine;
 
 beforeAll(async () => {
+  // This suite exercises the current canonical schema. Pin its process-global
+  // gateway input before initSchema so its fixtures never inherit another
+  // suite's legacy 1536d setup.
+  configureGateway({
+    embedding_model: 'qwen-vllm:./models/Qwen3-VL-Embedding-2B',
+    embedding_dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
+    env: { ...process.env },
+  });
   engine = new PGLiteEngine();
   await engine.connect({}); // in-memory
   await engine.initSchema();
@@ -20,6 +29,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await engine.disconnect();
+  configureGateway({
+    embedding_model: 'openai:text-embedding-3-large',
+    embedding_dimensions: 1536,
+    env: { ...process.env },
+  });
 });
 
 // Helper to reset data between test groups
@@ -383,7 +397,7 @@ describe('PGLiteEngine: Chunks', () => {
 
   test('getChunksWithEmbeddings returns embedding data', async () => {
     await engine.putPage('test/embed', testPage);
-    const embedding = new Float32Array(1536).fill(0.1);
+    const embedding = new Float32Array(DEFAULT_EMBEDDING_DIMENSIONS).fill(0.1);
     await engine.upsertChunks('test/embed', [
       { chunk_index: 0, chunk_text: 'With embedding', chunk_source: 'compiled_truth', embedding },
     ]);
@@ -411,7 +425,7 @@ describe('PGLiteEngine: stale chunk pagination (D7 + REGRESSION)', () => {
     await engine.putPage('test/stale-a', testPage);
     await engine.upsertChunks('test/stale-a', [
       { chunk_index: 0, chunk_text: 'no embed', chunk_source: 'compiled_truth' },
-      { chunk_index: 1, chunk_text: 'has embed', chunk_source: 'compiled_truth', embedding: new Float32Array(1536).fill(0.1) },
+      { chunk_index: 1, chunk_text: 'has embed', chunk_source: 'compiled_truth', embedding: new Float32Array(DEFAULT_EMBEDDING_DIMENSIONS).fill(0.1) },
     ]);
     expect(await engine.countStaleChunks()).toBe(1);
   });

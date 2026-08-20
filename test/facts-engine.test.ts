@@ -13,10 +13,19 @@
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
+import { configureGateway } from '../src/core/ai/gateway.ts';
 
 let engine: PGLiteEngine;
 
 beforeAll(async () => {
+  // This suite owns 1536d fixture vectors. Configure before initSchema so a
+  // preceding suite's process-global gateway cannot create a 2048d facts
+  // column for these fixtures.
+  configureGateway({
+    embedding_model: 'openai:text-embedding-3-large',
+    embedding_dimensions: 1536,
+    env: { ...process.env },
+  });
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
@@ -24,6 +33,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await engine.disconnect();
+  configureGateway({
+    embedding_model: 'openai:text-embedding-3-large',
+    embedding_dimensions: 1536,
+    env: { ...process.env },
+  });
 });
 
 const vec = (...vals: number[]): Float32Array => {

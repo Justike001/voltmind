@@ -75,9 +75,9 @@ describeE2E('E2E: runCycle against real Postgres', () => {
     );
     expect(rows.length).toBe(1);
 
-    // idx_cycle_locks_ttl index also exists.
+    // The namespaced lock TTL index also exists.
     const idx = await conn.unsafe(
-      `SELECT indexname FROM pg_indexes WHERE indexname = 'idx_cycle_locks_ttl'`,
+      `SELECT indexname FROM pg_indexes WHERE indexname = 'idx_voltmind_cycle_locks_ttl'`,
     );
     expect(idx.length).toBe(1);
   });

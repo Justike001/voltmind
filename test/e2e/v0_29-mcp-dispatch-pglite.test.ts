@@ -9,8 +9,8 @@
  *   2. buildOperationContext (ctx.remote, ctx.engine, ctx.config wiring)
  *   3. handler invocation + JSON serialization (ToolResult shape)
  *   4. Error path: OperationError → isError + JSON envelope
- *   5. Retrieval readout: ctx.remote === true on get_recent_transcripts
- *      reaches the handler and succeeds as a read-only op.
+ *   5. Trust boundary: ctx.remote === true on get_recent_transcripts is denied
+ *      because transcript files are not source-scoped; trusted CLI still works.
  *
  * Runs against PGLite in-memory. No DATABASE_URL, no API keys.
  */
@@ -108,14 +108,13 @@ describe('v0.29 E2E — dispatchToolCall for the three new ops', () => {
     }
   });
 
-  test('get_recent_transcripts succeeds when ctx.remote === true', async () => {
+  test('get_recent_transcripts is denied when ctx.remote === true', async () => {
     const result = await dispatchToolCall(engine, 'get_recent_transcripts', {
       days: 7,
     }, { remote: true });
 
-    expect(result.isError).toBeFalsy();
-    const rows = JSON.parse(result.content[0].text);
-    expect(Array.isArray(rows)).toBe(true);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('local-only');
   });
 
   test('get_recent_transcripts succeeds when ctx.remote === false (CLI path)', async () => {

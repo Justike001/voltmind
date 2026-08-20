@@ -33,6 +33,8 @@ import {
   formatDiffForFailure,
   isCleanDiff,
 } from '../helpers/schema-diff.ts';
+import { configureGateway } from '../../src/core/ai/gateway.ts';
+import { DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from '../../src/core/ai/defaults.ts';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const skip = !DATABASE_URL;
@@ -70,6 +72,21 @@ describe.skipIf(skip)('schema drift: PGLite ↔ Postgres post-initSchema parity 
   let pgSnap: SchemaSnapshot;
 
   beforeAll(async () => {
+    // Pin the gateway to the canonical embedding default BEFORE the PGLite
+    // engine reads it. `src/schema.sql` hardcodes the content_chunks.model
+    // column default to the qwen-vllm 2048d literal (line ~226), while the
+    // PGLite path substitutes the gateway-resolved __EMBEDDING_MODEL__ token.
+    // Under the shared legacy-embedding-preload (which forces OpenAI/1536 for
+    // older fixtures) the un-pinned PGLite side would default to
+    // 'openai:text-embedding-3-large', making the two engines' content_chunks
+    // defaults drift. Pinning to ai/defaults.ts (qwen-vllm/2048) keeps the
+    // snapshots on the same contract as schema.sql so parity holds.
+    configureGateway({
+      embedding_model: DEFAULT_EMBEDDING_MODEL,
+      embedding_dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
+      env: { ...process.env },
+    });
+
     // PGLite side: in-memory, run the canonical initSchema.
     pglite = new PGLiteEngine();
     await pglite.connect({});
@@ -97,10 +114,12 @@ describe.skipIf(skip)('schema drift: PGLite ↔ Postgres post-initSchema parity 
     const dbName = url.pathname.replace(/^\//, '');
     const host = url.hostname;
     const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
-    // db-name pattern is the floor: voltmind_test, *_test, test_*, *_e2e.
+    // db-name pattern is the floor: voltmind_test, gbrain_test, *_test,
+    // test_*, *_e2e. gbrain_test is the disposable database created by the
+    // repository's Docker CI compose file.
     // Required REGARDLESS of any override — a production db named "production_data"
     // cannot be reset even with VOLTMIND_TEST_DB=1.
-    const looksLikeTestDb = /^(voltmind_test|.*_test|test_.*|.*_e2e)$/i.test(dbName);
+    const looksLikeTestDb = /^(voltmind_test|gbrain_test|.*_test|test_.*|.*_e2e)$/i.test(dbName);
     const ciOptIn = process.env.VOLTMIND_TEST_DB === '1';
     // resetAllowed semantics: db name is test-shaped AND (localhost OR ci-opt-in).
     // Neither host nor env-var alone is sufficient.
@@ -112,7 +131,7 @@ describe.skipIf(skip)('schema drift: PGLite ↔ Postgres post-initSchema parity 
       // Surface a loud, paste-ready hint. The test will still try initSchema;
       // if the caller already had a fresh DB the parity check passes anyway.
       const reason = !looksLikeTestDb
-        ? `db name "${dbName}" doesn't match the test pattern (voltmind_test, *_test, test_*, *_e2e). ` +
+        ? `db name "${dbName}" doesn't match the test pattern (voltmind_test, gbrain_test, *_test, test_*, *_e2e). ` +
           `VOLTMIND_TEST_DB=1 does NOT override this — db name is the hard floor.`
         : `host="${host}" is non-local AND VOLTMIND_TEST_DB=1 is not set. ` +
           `Set VOLTMIND_TEST_DB=1 to allow non-local hosts (e.g. CI service names) — ` +

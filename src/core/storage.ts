@@ -35,10 +35,16 @@ export interface StorageConfig {
 export async function createStorage(config: StorageConfig): Promise<StorageBackend> {
   switch (config.backend) {
     case 's3': {
+      if (!config.accessKeyId || !config.secretAccessKey) {
+        throw new Error('S3 storage requires accessKeyId and secretAccessKey in config');
+      }
       const { S3Storage } = await import('./storage/s3.ts');
       return new S3Storage(config);
     }
     case 'supabase': {
+      if (!config.projectUrl || !config.serviceRoleKey) {
+        throw new Error('Supabase storage requires projectUrl and serviceRoleKey in config');
+      }
       const { SupabaseStorage } = await import('./storage/supabase.ts');
       return new SupabaseStorage(config);
     }

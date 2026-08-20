@@ -13,7 +13,7 @@
  *      semantics and ORDER BY ran_at DESC stability.
  *   5. The P2 cache TTL semantics with real `now()` and ON CONFLICT
  *      DO UPDATE.
- *   6. The find_contradictions MCP op end-to-end via the dispatch path.
+ *   6. The local-only find_contradictions operation and its remote denial.
  *
  * Runs only when DATABASE_URL is set. Skips gracefully otherwise.
  */
@@ -241,8 +241,8 @@ describe('E2E: M5 trend semantics on Postgres', () => {
   });
 });
 
-describe('E2E: find_contradictions MCP op on Postgres', () => {
-  test('returns "no probe runs" note on empty table', async () => {
+describe('E2E: find_contradictions trusted local path on Postgres', () => {
+  test('rejects remote callers because cached reports are not source-scoped', async () => {
     if (!engine) return;
     const op = operationsByName['find_contradictions'];
     const ctx: OperationContext = {
@@ -253,12 +253,25 @@ describe('E2E: find_contradictions MCP op on Postgres', () => {
       remote: true,
       sourceId: 'default',
     };
+    await expect(op.handler(ctx, {})).rejects.toThrow('local-only');
+  });
+  test('returns "no probe runs" note for the trusted local CLI path', async () => {
+    if (!engine) return;
+    const op = operationsByName['find_contradictions'];
+    const ctx: OperationContext = {
+      engine,
+      config: {} as OperationContext['config'],
+      logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as unknown as OperationContext['logger'],
+      dryRun: false,
+      remote: false,
+      sourceId: 'default',
+    };
     const result = await op.handler(ctx, {}) as { contradictions: unknown[]; note?: string };
     expect(result.contradictions).toEqual([]);
     expect(result.note).toContain('No probe runs');
   });
 
-  test('returns latest run findings with slug+severity filters', async () => {
+  test('returns latest run findings with slug+severity filters for the trusted local CLI path', async () => {
     if (!engine) return;
     await writeRunRow(engine, mkReport({
       run_id: 'pg-mcp',
@@ -303,7 +316,7 @@ describe('E2E: find_contradictions MCP op on Postgres', () => {
       config: {} as OperationContext['config'],
       logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as unknown as OperationContext['logger'],
       dryRun: false,
-      remote: true,
+      remote: false,
       sourceId: 'default',
     };
 

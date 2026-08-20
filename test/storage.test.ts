@@ -30,7 +30,7 @@ describe('LocalStorage', () => {
   });
 
   test('download throws for missing file', async () => {
-    expect(storage.download('nonexistent.txt')).rejects.toThrow('not found');
+    await expect(storage.download('nonexistent.txt')).rejects.toThrow('not found');
   });
 
   test('exists returns true for uploaded file', async () => {
@@ -155,14 +155,14 @@ describe('createStorage', () => {
   });
 
   test('throws for unknown backend', async () => {
-    expect(createStorage({ backend: 'unknown' as any, bucket: 'test' })).rejects.toThrow('Unknown storage backend');
+    await expect(createStorage({ backend: 'unknown' as any, bucket: 'test' })).rejects.toThrow('Unknown storage backend');
   });
 
   test('S3Storage requires credentials', async () => {
-    expect(createStorage({ backend: 's3', bucket: 'test' })).rejects.toThrow('accessKeyId');
+    await expect(createStorage({ backend: 's3', bucket: 'test' })).rejects.toThrow('accessKeyId');
   });
 
   test('SupabaseStorage requires projectUrl', async () => {
-    expect(createStorage({ backend: 'supabase', bucket: 'test' })).rejects.toThrow('projectUrl');
+    await expect(createStorage({ backend: 'supabase', bucket: 'test' })).rejects.toThrow('projectUrl');
   });
 });

@@ -4,7 +4,7 @@
 // soft-delete exclusion, sample-slug payload, dead-prefix hint,
 // per-source write scoping, PGLite parity. Phase 3 of the cathedral.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,6 +37,12 @@ beforeEach(async () => {
   _resetPackCacheForTests();
   _resetPackLocatorForTests();
   tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-sync-test-'));
+});
+
+afterEach(() => {
+  _resetPackCacheForTests();
+  _resetPackLocatorForTests();
+  try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* swallow */ }
 });
 
 function ctxOf(remote = false): OperationContext {

@@ -227,11 +227,8 @@ describe('v0.41.8.0 — PGLite CLI read commands exit cleanly (#1247/#1269/#1290
   }, 30_000);
 });
 
-describe('v0.41.8.0 — daemon survival (regression guard for narrow force-exit)', () => {
-  test('voltmind serve --http stays alive past the timeout window', async () => {
-    // Pick a likely-free ephemeral port. We're testing "still alive
-    // 3 seconds after startup" — if the force-exit guard misfired
-    // on 'serve', the process would die immediately after binding.
+describe('remote Host isolation guard', () => {
+  test('voltmind serve --http refuses a PGLite runtime', async () => {
     const port = 31000 + Math.floor(Math.random() * 1000);
     const child = spawn(
       SHIM_PATH,
@@ -250,15 +247,12 @@ describe('v0.41.8.0 — daemon survival (regression guard for narrow force-exit)
       earlyCode = code;
     });
 
-    // Give the server 3 seconds. If the force-exit narrow guard is
-    // working, the daemon stays alive past this window.
-    await new Promise((r) => setTimeout(r, 3_000));
+    await new Promise((r) => setTimeout(r, 1_000));
 
     const wasAlive = !exitedEarly;
     try {
       child.kill('SIGTERM');
-      // Give it a moment to clean up
-      await new Promise((r) => setTimeout(r, 1_000));
+      await new Promise((r) => setTimeout(r, 250));
       if (!exitedEarly) {
         try { child.kill('SIGKILL'); } catch { /* already dead */ }
       }
@@ -266,13 +260,7 @@ describe('v0.41.8.0 — daemon survival (regression guard for narrow force-exit)
       /* already dead */
     }
 
-    if (!wasAlive) {
-      throw new Error(
-        `voltmind serve --http exited within 3s (code=${earlyCode}). ` +
-          `If the narrow force-exit guard misclassified 'serve' as a ` +
-          `non-daemon command, this is the regression.`,
-      );
-    }
-    expect(wasAlive).toBe(true);
+    expect(wasAlive).toBe(false);
+    expect(Number(earlyCode)).toBe(1);
   }, 15_000);
 });

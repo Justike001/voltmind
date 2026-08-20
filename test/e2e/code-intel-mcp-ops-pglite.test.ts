@@ -6,7 +6,11 @@
  * them and fell through to text search.
  *
  * This E2E pins:
- *   - All four ops appear in the operations registry with scope:'read'.
+ *   - All four ops appear in the operations registry with scope:'admin'.
+ *     (v0.41.x source-scope hardening moved them from 'read' to 'admin': they
+ *      traverse the symbol/call graph, so a federated read grant must not be
+ *      allowed to enumerate an out-of-scope source's private symbols. The
+ *      default stdio MCP scope set is read+write, so admin ops are opt-in.)
  *   - Tool descriptions match the constants in operations-descriptions.ts
  *     so the LLM tool-selection prompt sees the right wording (D10 fix).
  *   - Each op routes to the right engine method / library function and
@@ -47,27 +51,27 @@ beforeEach(async () => {
 });
 
 describe('v0.34 W3 — code-intel MCP ops registered', () => {
-  test('code_callers exists with scope:read and v0.34 description', () => {
+  test('code_callers exists with scope:admin and v0.34 description', () => {
     expect(operationsByName.code_callers).toBeDefined();
-    expect(operationsByName.code_callers!.scope).toBe('read');
+    expect(operationsByName.code_callers!.scope).toBe('admin');
     expect(operationsByName.code_callers!.description).toBe(CODE_CALLERS_DESCRIPTION);
   });
 
-  test('code_callees exists with scope:read and v0.34 description', () => {
+  test('code_callees exists with scope:admin and v0.34 description', () => {
     expect(operationsByName.code_callees).toBeDefined();
-    expect(operationsByName.code_callees!.scope).toBe('read');
+    expect(operationsByName.code_callees!.scope).toBe('admin');
     expect(operationsByName.code_callees!.description).toBe(CODE_CALLEES_DESCRIPTION);
   });
 
-  test('code_def exists with scope:read and v0.34 description', () => {
+  test('code_def exists with scope:admin and v0.34 description', () => {
     expect(operationsByName.code_def).toBeDefined();
-    expect(operationsByName.code_def!.scope).toBe('read');
+    expect(operationsByName.code_def!.scope).toBe('admin');
     expect(operationsByName.code_def!.description).toBe(CODE_DEF_DESCRIPTION);
   });
 
-  test('code_refs exists with scope:read and v0.34 description', () => {
+  test('code_refs exists with scope:admin and v0.34 description', () => {
     expect(operationsByName.code_refs).toBeDefined();
-    expect(operationsByName.code_refs!.scope).toBe('read');
+    expect(operationsByName.code_refs!.scope).toBe('admin');
     expect(operationsByName.code_refs!.description).toBe(CODE_REFS_DESCRIPTION);
   });
 

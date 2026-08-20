@@ -3,7 +3,7 @@
 // Multi-source aware, soft-delete exclusion, dead-prefix detection,
 // PGLite parity. Phase 3 of the schema cathedral v3 plan.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,6 +36,12 @@ beforeEach(async () => {
   _resetPackCacheForTests();
   _resetPackLocatorForTests();
   tmpDir = mkdtempSync(join(tmpdir(), 'voltmind-stats-test-'));
+});
+
+afterEach(() => {
+  _resetPackCacheForTests();
+  _resetPackLocatorForTests();
+  try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* swallow */ }
 });
 
 function ctxOf(remote = false): OperationContext {

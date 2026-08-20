@@ -968,7 +968,6 @@ export async function scanPendingInteractiveActionRuns(
     processingRunIds?: Set<number>;
   } = {},
 ): Promise<InteractiveWritebackWatcherResult> {
-  await ensureActionSchema(engine);
   const limit = Math.max(1, Math.min(opts.limit ?? 50, 200));
   const rows = await engine.executeRaw<ActionRunRecord>(
     `SELECT id, source_id, action_slug, idempotency_key, status, dry_run, prompt, user_prompt,

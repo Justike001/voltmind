@@ -23,6 +23,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
+import { setupDB, teardownDB, provisionHttpRuntimeDatabaseUrl } from './helpers.ts';
 function test(name: string, fn: () => void | Promise<unknown>): void {
   testRaw(name, fn, 120000);
 }
@@ -68,9 +69,12 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
   let serverProc: ReturnType<typeof Bun.spawn> | null = null;
   let serverPort: number;
   let clientId: string;
+  let runtimeDatabaseUrl: string;
   let clientSecret: string;
 
   beforeAll(async () => {
+    await setupDB();
+    runtimeDatabaseUrl = await provisionHttpRuntimeDatabaseUrl();
     hostHome = mkdtempSync(join(tmpdir(), 'voltmind-thin-host-'));
     clientHome = mkdtempSync(join(tmpdir(), 'voltmind-thin-client-'));
 
@@ -89,9 +93,11 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
     for (const [k, v] of Object.entries(process.env)) {
       if (v !== undefined) env[k] = v;
     }
+    delete env.DATABASE_URL;
+    env.VOLTMIND_DATABASE_URL = runtimeDatabaseUrl;
     env.VOLTMIND_HOME = hostHome;
     serverProc = Bun.spawn({
-      cmd: ['bun', 'run', CLI, 'serve', '--http', '--port', String(serverPort)],
+      cmd: ['bun', 'run', CLI, 'serve', '--http', '--port', String(serverPort), '--public-url', `http://127.0.0.1:${serverPort}`],
       env,
       stdin: 'ignore',
       stdout: 'pipe',
@@ -145,6 +151,7 @@ describeWhen('thin-client end-to-end (requires DATABASE_URL)', () => {
     }
     try { rmSync(hostHome, { recursive: true, force: true }); } catch { /* best-effort */ }
     try { rmSync(clientHome, { recursive: true, force: true }); } catch { /* best-effort */ }
+    await teardownDB();
   });
 
   test('init --mcp-only succeeds against the live host', async () => {

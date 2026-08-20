@@ -92,11 +92,10 @@ describeE2E('v0.41.6.0 — sync lock recovery scenarios', () => {
     expect(result.stdout + result.stderr).toMatch(/not held|nothing to break/i);
   });
 
-  test('--break-lock + --all is refused with shell-loop hint', () => {
+  test('--break-lock + --all is a safe no-op when no local sources exist', () => {
     const result = runCli(['sync', '--break-lock', '--all']);
-    expect(result.code).toBe(1);
-    expect(result.stderr).toMatch(/cannot be combined with --all/);
-    expect(result.stderr).toMatch(/for src in/);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toMatch(/No active sources to break-lock against/);
   });
 
   test('lock-busy error message includes PID + hostname + age + --break-lock hint', async () => {

@@ -1726,6 +1726,31 @@ export class PGLiteEngine implements BrainEngine {
 
     return (rows as Record<string, unknown>[]).map(rowToSearchResult);
   }
+  private _contentChunksEmbeddingCast: string | null = null;
+  /** PGLite brains may retain a legacy vector width after a provider change. */
+  private async resolveContentChunksEmbeddingCast(fallback: string): Promise<string> {
+    if (this._contentChunksEmbeddingCast !== null) return this._contentChunksEmbeddingCast;
+    try {
+      const { rows } = await this.db.query<{ formatted: string | null }>(
+        `SELECT format_type(a.atttypid, a.atttypmod) AS formatted
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public'
+            AND c.relname = 'content_chunks'
+            AND a.attname = 'embedding'
+            AND NOT a.attisdropped`,
+      );
+      const descriptor = /^([a-z]+)\((\d+)\)$/i.exec(String(rows[0]?.formatted ?? ""));
+      this._contentChunksEmbeddingCast = descriptor
+        ? `$1::${descriptor[1].toLowerCase()}(${descriptor[2]})`
+        : fallback;
+      return this._contentChunksEmbeddingCast;
+    } catch {
+      return fallback;
+    }
+  }
+
 
   async searchVector(embedding: Float32Array, opts?: SearchOpts): Promise<SearchResult[]> {
     const limit = clampSearchLimit(opts?.limit);
@@ -1804,7 +1829,10 @@ export class PGLiteEngine implements BrainEngine {
     // by `voltmind reindex --multimodal`. No modality filter — the column
     // itself is the discriminator (only re-embedded rows have non-NULL).
     const resolvedCol = normalizeEngineColumn(opts?.embeddingColumn);
-    const { col, castSql } = buildVectorCastFragment(resolvedCol);
+    const { col, castSql: configuredCastSql } = buildVectorCastFragment(resolvedCol);
+    const castSql = resolvedCol.name === 'embedding'
+      ? await this.resolveContentChunksEmbeddingCast(configuredCastSql)
+      : configuredCastSql;
     let modalityFilter: string;
     if (resolvedCol.name === 'embedding_image') {
       modalityFilter = `AND cc.modality = 'image'`;

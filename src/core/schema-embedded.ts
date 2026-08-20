@@ -2009,6 +2009,63 @@ AS \$fn\$
 \$fn\$;
 
 
+CREATE OR REPLACE FUNCTION public.voltmind_take_id_source_write_scope_matches(target_take_id BIGINT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS \$fn\$
+DECLARE
+  matches BOOLEAN;
+BEGIN
+  -- \`schema.sql\` is also run against an empty bootstrap database, before
+  -- older schema packs create \`takes\`. Resolve the table only at execution
+  -- time so the helper remains fail-closed without breaking that bootstrap.
+  IF to_regclass('public.takes') IS NULL OR to_regclass('public.pages') IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  EXECUTE \$sql\$
+    SELECT EXISTS (
+      SELECT 1 FROM public.takes t
+      JOIN public.pages p ON p.id = t.page_id
+      WHERE t.id = \$1
+        AND public.voltmind_source_write_scope_contains(p.source_id)
+    )
+  \$sql\$ INTO matches USING target_take_id;
+  RETURN COALESCE(matches, FALSE);
+END;
+\$fn\$;
+
+CREATE OR REPLACE FUNCTION public.voltmind_take_id_source_scope_matches(target_take_id BIGINT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS \$fn\$
+DECLARE
+  matches BOOLEAN;
+BEGIN
+  -- See the write helper below: the bootstrap schema may precede \`takes\`.
+  IF to_regclass('public.takes') IS NULL OR to_regclass('public.pages') IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  EXECUTE \$sql\$
+    SELECT EXISTS (
+      SELECT 1 FROM public.takes t
+      JOIN public.pages p ON p.id = t.page_id
+      WHERE t.id = \$1
+        AND public.voltmind_source_scope_contains(p.source_id)
+    )
+  \$sql\$ INTO matches USING target_take_id;
+  RETURN COALESCE(matches, FALSE);
+END;
+\$fn\$;
+
+
 CREATE OR REPLACE FUNCTION public.voltmind_job_source_scope_matches(target_job_id BIGINT)
 RETURNS BOOLEAN
 LANGUAGE sql

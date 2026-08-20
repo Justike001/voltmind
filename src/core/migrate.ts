@@ -1351,9 +1351,10 @@ export const MIGRATIONS: Migration[] = [
           RAISE EXCEPTION 'v24 rls_backfill_missing_tables: role % does not have BYPASSRLS privilege — cannot enable RLS safely. Re-run as postgres (or another BYPASSRLS role). The migration will retry automatically on the next initSchema call.', current_user;
         END IF;
 
-        -- These 8 are guaranteed to exist: schema.sql creates them (idempotent
+        -- These 7 are guaranteed to exist: schema.sql creates them (idempotent
         -- via IF NOT EXISTS) on every initSchema call, and initSchema runs
-        -- before this migration. Bare ALTER TABLE is safe.
+        -- before this migration. The legacy gbrain lock was renamed by a
+        -- later migration, so it remains conditional for replay safety.
         ALTER TABLE access_tokens ENABLE ROW LEVEL SECURITY;
         ALTER TABLE mcp_request_log ENABLE ROW LEVEL SECURITY;
         ALTER TABLE minion_inbox ENABLE ROW LEVEL SECURITY;
@@ -1361,7 +1362,10 @@ export const MIGRATIONS: Migration[] = [
         ALTER TABLE subagent_messages ENABLE ROW LEVEL SECURITY;
         ALTER TABLE subagent_tool_executions ENABLE ROW LEVEL SECURITY;
         ALTER TABLE subagent_rate_leases ENABLE ROW LEVEL SECURITY;
-        ALTER TABLE gbrain_cycle_locks ENABLE ROW LEVEL SECURITY;
+        IF EXISTS (SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = 'gbrain_cycle_locks') THEN
+          ALTER TABLE gbrain_cycle_locks ENABLE ROW LEVEL SECURITY;
+        END IF;
 
         -- budget_ledger + budget_reservations are migration-only (v12). Not
         -- in schema.sql, not re-created on every initSchema. In normal flow
@@ -5275,6 +5279,8 @@ export const MIGRATIONS: Migration[] = [
         requires_confirmation BOOLEAN NOT NULL DEFAULT true,
         requires_approval BOOLEAN NOT NULL DEFAULT false,
         max_autonomy TEXT,
+        outcome TEXT,
+        next_step TEXT,
         agent_contract JSONB NOT NULL DEFAULT '{}'::jsonb,
         automation JSONB NOT NULL DEFAULT '{}'::jsonb,
         allowed_tools JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -5290,6 +5296,7 @@ export const MIGRATIONS: Migration[] = [
         last_run_at TIMESTAMPTZ,
         last_run_status TEXT,
         tool_route_json JSONB,
+        plan_json JSONB,
         last_scanned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         PRIMARY KEY (source_id, slug)
@@ -6755,10 +6762,60 @@ export const MIGRATIONS: Migration[] = [
         REVOKE ALL ON FUNCTION public.voltmind_sync_admin_source_directory() FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION public.voltmind_admin_source_ids() TO CURRENT_USER;
       `,
-      pglite: `-- PGLite has no database roles or RLS; Admin session auth remains authoritative.`,
+      pglite: `
+        -- PGLite has no database roles or RLS, but the Admin API uses the
+        -- same identifier-only source directory contract as Postgres.
+        CREATE TABLE IF NOT EXISTS admin_source_directory (
+          source_id TEXT PRIMARY KEY REFERENCES sources(id) ON DELETE CASCADE
+        );
+        INSERT INTO admin_source_directory (source_id)
+          SELECT id FROM sources
+          ON CONFLICT (source_id) DO NOTHING;
+
+        CREATE OR REPLACE FUNCTION voltmind_sync_admin_source_directory()
+        RETURNS TRIGGER
+        LANGUAGE plpgsql
+        AS $fn$
+        BEGIN
+          INSERT INTO admin_source_directory (source_id)
+          VALUES (NEW.id)
+          ON CONFLICT (source_id) DO NOTHING;
+          RETURN NEW;
+        END;
+        $fn$;
+
+        DROP TRIGGER IF EXISTS voltmind_sync_admin_source_directory ON sources;
+        CREATE TRIGGER voltmind_sync_admin_source_directory
+          AFTER INSERT ON sources
+          FOR EACH ROW
+          EXECUTE FUNCTION voltmind_sync_admin_source_directory();
+
+        CREATE OR REPLACE FUNCTION voltmind_admin_source_ids()
+        RETURNS TEXT[]
+        LANGUAGE sql
+        STABLE
+        AS $fn$
+          SELECT COALESCE(array_agg(d.source_id ORDER BY d.source_id), ARRAY[]::TEXT[])
+          FROM admin_source_directory d;
+        $fn$;
+      `,
     },
     verify: async (engine) => {
-      if (engine.kind === "pglite") return true;
+      if (engine.kind === "pglite") {
+        const rows = await engine.executeRaw<{ table_ok: boolean; trigger_ok: boolean; function_ok: boolean }>(`
+          SELECT
+            to_regclass('public.admin_source_directory') IS NOT NULL AS table_ok,
+            EXISTS (
+              SELECT 1 FROM pg_trigger
+               WHERE tgname = 'voltmind_sync_admin_source_directory'
+                 AND tgrelid = 'public.sources'::regclass
+            ) AS trigger_ok,
+            to_regprocedure('public.voltmind_admin_source_ids()') IS NOT NULL AS function_ok
+        `);
+        return rows[0]?.table_ok === true
+          && rows[0]?.trigger_ok === true
+          && rows[0]?.function_ok === true;
+      }
       const rows = await engine.executeRaw<{ table_ok: boolean; trigger_ok: boolean; function_ok: boolean; public_execute: boolean; current_user_execute: boolean }>(`
         SELECT
           to_regclass('public.admin_source_directory') IS NOT NULL AS table_ok,
@@ -6801,9 +6858,6 @@ export const MIGRATIONS: Migration[] = [
         GRANT SELECT, INSERT, UPDATE, DELETE
           ON public.oauth_clients, public.oauth_tokens, public.oauth_codes
           TO voltmind_oauth_runtime;
-        GRANT USAGE, SELECT, UPDATE
-          ON ALL SEQUENCES IN SCHEMA public TO voltmind_oauth_runtime;
-        GRANT voltmind_oauth_runtime TO CURRENT_USER;
 
         ALTER TABLE public.oauth_clients ENABLE ROW LEVEL SECURITY;
         ALTER TABLE public.oauth_clients FORCE ROW LEVEL SECURITY;
@@ -6919,6 +6973,109 @@ export const MIGRATIONS: Migration[] = [
       );
       return rows[0]?.public_execute === false
         && rows[0]?.current_user_execute === true;
+    },
+  },
+  {
+    version: 132,
+    name: "engine_schema_parity_reconciliation",
+    sql: "",
+    idempotent: true,
+    sqlFor: {
+      postgres: `
+        -- v104 originally created the action table without these fields.
+        -- Reconcile already-upgraded brains; new brains receive them from
+        -- schema.sql and the corrected v104 definition.
+        ALTER TABLE public.action_index ADD COLUMN IF NOT EXISTS outcome TEXT;
+        ALTER TABLE public.action_index ADD COLUMN IF NOT EXISTS next_step TEXT;
+        ALTER TABLE public.action_index ADD COLUMN IF NOT EXISTS plan_json JSONB;
+      `,
+      pglite: `
+        ALTER TABLE action_index ADD COLUMN IF NOT EXISTS outcome TEXT;
+        ALTER TABLE action_index ADD COLUMN IF NOT EXISTS next_step TEXT;
+        ALTER TABLE action_index ADD COLUMN IF NOT EXISTS plan_json JSONB;
+
+        CREATE TABLE IF NOT EXISTS admin_source_directory (
+          source_id TEXT PRIMARY KEY REFERENCES sources(id) ON DELETE CASCADE
+        );
+        INSERT INTO admin_source_directory (source_id)
+          SELECT id FROM sources
+          ON CONFLICT (source_id) DO NOTHING;
+
+        CREATE OR REPLACE FUNCTION voltmind_sync_admin_source_directory()
+        RETURNS TRIGGER
+        LANGUAGE plpgsql
+        AS $fn$
+        BEGIN
+          INSERT INTO admin_source_directory (source_id)
+          VALUES (NEW.id)
+          ON CONFLICT (source_id) DO NOTHING;
+          RETURN NEW;
+        END;
+        $fn$;
+
+        DROP TRIGGER IF EXISTS voltmind_sync_admin_source_directory ON sources;
+        CREATE TRIGGER voltmind_sync_admin_source_directory
+          AFTER INSERT ON sources
+          FOR EACH ROW
+          EXECUTE FUNCTION voltmind_sync_admin_source_directory();
+
+        CREATE OR REPLACE FUNCTION voltmind_admin_source_ids()
+        RETURNS TEXT[]
+        LANGUAGE sql
+        STABLE
+        AS $fn$
+          SELECT COALESCE(array_agg(d.source_id ORDER BY d.source_id), ARRAY[]::TEXT[])
+          FROM admin_source_directory d;
+        $fn$;
+      `,
+    },
+    verify: async (engine) => {
+      const rows = await engine.executeRaw<{
+        outcome: boolean; next_step: boolean; plan_json: boolean; admin_directory: boolean;
+      }>(`
+        SELECT
+          EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = 'public' AND table_name = 'action_index' AND column_name = 'outcome') AS outcome,
+          EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = 'public' AND table_name = 'action_index' AND column_name = 'next_step') AS next_step,
+          EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = 'public' AND table_name = 'action_index' AND column_name = 'plan_json') AS plan_json,
+          to_regclass('public.admin_source_directory') IS NOT NULL AS admin_directory
+      `);
+      return rows[0]?.outcome === true
+        && rows[0]?.next_step === true
+        && rows[0]?.plan_json === true
+        && (engine.kind !== 'pglite' || rows[0]?.admin_directory === true);
+    },
+  },
+  {
+    version: 133,
+    name: "runtime_schema_version_read_rls",
+    sql: "",
+    idempotent: true,
+    sqlFor: {
+      postgres: `
+        ALTER TABLE public.config ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE public.config FORCE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS config_runtime_schema_version_read ON public.config;
+        CREATE POLICY config_runtime_schema_version_read ON public.config
+          FOR SELECT TO voltmind_oauth_runtime
+          USING (key = 'version');
+      `,
+      pglite: "",
+    },
+    verify: async (engine) => {
+      if (engine.kind === "pglite") return true;
+      const rows = await engine.executeRaw<{ policy_ok: boolean }>(`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename = 'config'
+            AND policyname = 'config_runtime_schema_version_read'
+            AND 'voltmind_oauth_runtime' = ANY(roles)
+        ) AS policy_ok
+      `);
+      return rows[0]?.policy_ok === true;
     },
   },
 

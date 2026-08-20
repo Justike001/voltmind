@@ -676,7 +676,7 @@ export async function doctorReportRemote(engine: BrainEngine): Promise<DoctorRep
     try {
       const rows = await engine.executeRaw<{ stalled: string | number }>(
         `SELECT COUNT(*) AS stalled FROM minion_jobs
-          WHERE state = 'active'
+          WHERE status = 'active'
             AND started_at IS NOT NULL
             AND started_at < NOW() - INTERVAL '1 hour'`,
       );

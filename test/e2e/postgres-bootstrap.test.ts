@@ -62,7 +62,10 @@ describe.skipIf(skip)('PostgresEngine forward-reference bootstrap (E2E)', () => 
       ALTER TABLE pages DROP COLUMN IF EXISTS source_id CASCADE;
       DROP TABLE IF EXISTS sources CASCADE;
     `);
-    await engine.setConfig('version', '20');
+    // Dropping sources cascades source-owned tables introduced after v16.
+    // Rewind before v16 so the migration chain recreates the lock primitive
+    // before v20 restores sources and their source-owned dependents.
+    await engine.setConfig('version', '15');
 
     // The path under test: full PostgresEngine.initSchema() including the
     // bootstrap call, SCHEMA_SQL replay, and runMigrations chain.
