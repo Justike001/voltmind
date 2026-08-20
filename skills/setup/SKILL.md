@@ -1,6 +1,6 @@
 ---
 name: setup
-description: User-agent setup manual: provision a personal Gogs source, obtain source-scoped read/write OAuth credentials, connect as a thin client to the company VoltMind Host, and persist the connection; local checkout/runtime setup is an explicit standalone exception.
+description: "User-agent setup manual: provision a personal Gogs source, obtain source-scoped read/write OAuth credentials, connect as a thin client to the company VoltMind Host, and persist the connection; local checkout/runtime setup is an explicit standalone exception."
 triggers:
   - "set up voltmind"
   - "initialize brain"
