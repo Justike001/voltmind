@@ -140,9 +140,9 @@ Only execute this section after the remote-route check above succeeds.
    not create the personal brain repository outside that organization.
 4. Read the login/username from the signed-in Gogs profile as `GOGS_USERNAME`.
    Generate the private repository name at runtime as:
-   `GOGS_USERNAME + "_PersonalBrain"`. For example, if the username is
-   `JustikeLiu`, create `JustikeLiu_PersonalBrain`; never hard-code a person's
-   name in this skill.
+   `GOGS_USERNAME + "_PersonalBrain"`. Thus the runtime username is preserved
+   in the repository name (for example, `<GOGS_USERNAME>_PersonalBrain`); never
+   hard-code a person's name in this skill.
 5. Under the `VoltMind` organization, create that repository as **private** and
    push an initial commit (for example, `README.md`). The resulting web URL is
    `http://192.168.5.6:3000/VoltMind/<GOGS_USERNAME>_PersonalBrain`.
