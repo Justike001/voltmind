@@ -6,7 +6,13 @@ remote brain is its synchronized index, graph, and audit surface.
 
 ## Required order
 
-1. Read the active schema and perform Brain-First Lookup.
+1. Read the active schema and perform Brain-First Lookup. For a thin-client
+   local semantic write, also complete
+   [client-vault-taxonomy.md](../ingest/references/client-vault-taxonomy.md): read the local vault's
+   root `index.md`, `RESOLVER.md`, `schema.md`, `README.md`, and the relevant
+   schema-directory README files before selecting a new route. The active
+   schema pack remains the machine authority; these local files add placement
+   context and constraints.
 2. Create or resume a durable local ingest manifest before connector reads.
 3. Write raw evidence to the local vault first, with stable event identity.
 4. Route semantic signal locally: update confirmed canonical pages, append

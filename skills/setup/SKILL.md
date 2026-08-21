@@ -203,6 +203,12 @@ git remote -v
 The checkout must be the personal source granted by the Host. Never use a
 shared or another teammate's vault.
 
+Resolve the checkout to an absolute path before continuing. This path is the
+client vault path: it is the local write-ahead truth surface where
+`voltmind put` and thin-client ingest write and validate `<slug>.md` before any
+remote `put_page` call. It is not the Host database path and it is not the
+agent skill repository.
+
 The `--vault-path` argument also initializes the local Markdown vault before
 the thin-client configuration is saved. This is additive and never overwrites
 existing user files. It installs the canonical `voltmind-personal-brain`
@@ -237,6 +243,14 @@ Before running this command, have the OS secret manager inject
 intentionally omitted from the command so the secret cannot land in shell
 history or an instruction file.
 
+After this command succeeds, confirm that the reported `client_vault_path` is
+the same absolute directory that was scaffolded. `init --mcp-only` binds this
+path in four stages: it reads `--vault-path` (or
+`VOLTMIND_CLIENT_VAULT_PATH`), validates that the directory exists, installs
+the additive local scaffold after the MCP smoke succeeds, and persists the
+resolved path as `client_vault_path` in `~/.voltmind/config.json`. It does not
+persist an operating-system environment variable itself.
+
 ## Phase A.8: Persist non-secret configuration safely
 
 The source id, issuer URL, MCP URL, and client id are non-secret routing
@@ -250,7 +264,44 @@ export VOLTMIND_SOURCE="<source_id from provision response>"
 export VOLTMIND_REMOTE_ISSUER_URL="https://voltage3d.tailce7d39.ts.net"
 export VOLTMIND_REMOTE_MCP_URL="https://voltage3d.tailce7d39.ts.net/mcp"
 export VOLTMIND_REMOTE_CLIENT_ID="<client_id>"
+export VOLTMIND_CLIENT_VAULT_PATH="<absolute-client-vault-path>"
 ```
+
+Persist `VOLTMIND_CLIENT_VAULT_PATH` in the client workstation's environment
+using its normal environment manager as well as the current shell. On
+PowerShell, the current-session form is:
+
+```powershell
+$clientVaultPath = (Resolve-Path '<client-vault-dir>').Path
+$env:VOLTMIND_CLIENT_VAULT_PATH = $clientVaultPath
+[Environment]::SetEnvironmentVariable('VOLTMIND_CLIENT_VAULT_PATH', $clientVaultPath, 'User')
+```
+
+Use the OS/user environment settings or an untracked, permission-protected
+environment file for persistence across new terminals. The variable is a
+runtime override for `client_vault_path`; when both are present, the environment
+value wins. Keep them identical to avoid writing one path locally while setup
+documentation points at another.
+
+Add the following non-secret, local operating note to the agent's `AGENTS.md`
+(or its equivalent local-only agent instructions), replacing the placeholder
+with the resolved absolute path:
+
+```markdown
+## VoltMind client vault
+
+- `VOLTMIND_CLIENT_VAULT_PATH`: `<absolute-client-vault-path>`
+- Purpose: local write-ahead vault for client-first ingest. `voltmind put`
+  writes and validates `<vault>/<slug>.md` here before synchronizing the exact
+  Markdown through remote `put_page`.
+- The Host database, OAuth secret, and remote MCP credentials do not belong in
+  this vault-path note.
+```
+
+Write the actual path only to the user's local AGENTS instructions. If the
+project's tracked `AGENTS.md` is public or shared, use its ignored/local
+equivalent rather than committing a workstation-specific path. Never put the
+OAuth client secret in this block.
 
 If an environment file is used, keep it outside version control with restrictive
 permissions and load it through the platform's secret mechanism as

@@ -4,6 +4,12 @@ This is the agent-side dispatcher for VoltMind. Skills are the implementation.
 **Read the skill file before acting.** If two skills could match, read both. They
 are designed to chain (e.g., ingest then enrich for each entity).
 
+**Resolver distinction:** this file routes an agent request to a skill. A
+client vault's own `RESOLVER.md` is file-plane filing policy; in thin-client
+client-first ingest it is read through
+`skills/ingest/references/client-vault-taxonomy.md` and must not be treated as
+the agent skill dispatcher.
+
 ## Always-on
 
 | Trigger | Skill |

@@ -59,9 +59,12 @@ Ingest meetings, articles, media, documents, and conversations into the brain.
 > **Filing rule:** Read `skills/_brain-filing-rules.md` before creating any new page.
 
 > **Taxonomy rule:** For every new page, route through `brain-taxonomist` and the
-> active schema pack (`voltmind schema show --json`). Do not use `RESOLVER.md`
-> or a vault `index.md` as the runtime taxonomy source. Folder README files may
-> explain a type, but the active pack is the machine-readable authority.
+> active schema pack (`voltmind schema show --json`). In client-first thin-client
+> mode, also read the local-vault taxonomy preflight in
+> [client-vault-taxonomy.md](references/client-vault-taxonomy.md) before choosing
+> or validating the slug. The active pack remains the machine-readable routing
+> authority; vault resolver/schema/index/README files supply local policy and
+> directory context and must not be silently ignored.
 
 <!-- ingest-reference-router -->
 ## Reference Router
