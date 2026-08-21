@@ -140,9 +140,32 @@ export function getConn() {
  * Provision the least-privilege login used by HTTP-host E2E tests. The test
  * administrator prepares schema state; the spawned Host itself must never be
  * a superuser or BYPASSRLS role.
+ *
+ * Two provisioning modes:
+ *
+ * 1. Host Postgres CI (pre-provisioned, `VOLTMIND_RESTRICTED_DATABASE_URL`
+ *    set): the restricted role is pre-created as a member of
+ *    `voltmind_oauth_runtime` by scripts/ci-init-and-demote-postgres-owner.sh
+ *    and its URL is injected by the workflow. The Host guard requires that
+ *    membership, so we reuse that URL verbatim — no CREATE/GRANT, which the
+ *    demoted migration owner could not authorize anyway.
+ *
+ * 2. Local disposable docker CI (superuser migration owner, no
+ *    `VOLTMIND_RESTRICTED_DATABASE_URL`): create the per-run
+ *    `voltmind_e2e_runtime` login, grant it the control-plane role and table
+ *    privileges, and return a URL bound to it.
  */
 export async function provisionHttpRuntimeDatabaseUrl(): Promise<string> {
   if (!DATABASE_URL) throw new Error('DATABASE_URL not set');
+
+  const preProvisionedRestrictedUrl = process.env.VOLTMIND_RESTRICTED_DATABASE_URL;
+  if (preProvisionedRestrictedUrl) {
+    // Host CI path: the restricted role is already a voltmind_oauth_runtime
+    // member (verified by ci-demote-postgres-owner.sh postcondition). The
+    // HTTP Host runs as this least-privilege role.
+    return preProvisionedRestrictedUrl;
+  }
+
   const role = 'voltmind_e2e_runtime';
   const password = randomBytes(24).toString('hex');
   const conn = getConn();

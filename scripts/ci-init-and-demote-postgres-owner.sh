@@ -31,6 +31,53 @@ if [ "${CI_HOST_POSTGRES:-0}" = "1" ]; then
     exit 1
   fi
   echo "Host-ci pre-provisioned schema owner: $current_role ($current_role_state); skipping recurring DDL."
+
+  # v0.41.21.3 (HTTP Host runtime isolation): the Host refuses to start unless
+  # the runtime role is a member of `voltmind_oauth_runtime` (created by
+  # migration v129). The OAuth HTTP E2E runs the Host as the pre-provisioned
+  # `voltmind_restricted` role (its URL is injected as
+  # VOLTMIND_RESTRICTED_DATABASE_URL), so that role must carry the
+  # control-plane membership. Ensure it idempotently here; the postcondition
+  # is re-verified in ci-demote-postgres-owner.sh. If the role already exists
+  # with the grant, this is a no-op.
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+DO $$
+DECLARE
+  can_create boolean;
+  owner_superuser_or_admin boolean;
+  oauth_exists boolean;
+  restricted_member boolean;
+BEGIN
+  SELECT (rolsuper OR rolcreaterole) INTO can_create
+    FROM pg_roles WHERE rolname = current_user;
+  SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'voltmind_oauth_runtime')
+    INTO oauth_exists;
+  IF NOT oauth_exists THEN
+    IF NOT can_create THEN
+      RAISE EXCEPTION 'host-ci cannot create voltmind_oauth_runtime (owner lacks CREATEROLE)';
+    END IF;
+    EXECUTE 'CREATE ROLE voltmind_oauth_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE';
+    EXECUTE 'GRANT voltmind_oauth_runtime TO voltmind_restricted';
+  ELSE
+    SELECT EXISTS (
+      SELECT 1 FROM pg_auth_members m
+      JOIN pg_roles r ON r.oid = m.roleid
+      WHERE r.rolname = 'voltmind_oauth_runtime'
+        AND m.member::regrole::text = 'voltmind_restricted'
+    ) INTO restricted_member;
+    SELECT (rolsuper OR pg_has_role(current_user, (SELECT oid FROM pg_roles WHERE rolname = 'voltmind_oauth_runtime'), 'MEMBER'))
+      INTO owner_superuser;
+    IF NOT restricted_member THEN
+      IF NOT owner_superuser THEN
+        RAISE EXCEPTION 'voltmind_restricted is not a member of voltmind_oauth_runtime and owner cannot grant it; re-provision Host Postgres with migration v129 + GRANT';
+      END IF;
+      EXECUTE 'GRANT voltmind_oauth_runtime TO voltmind_restricted';
+    END IF;
+  END IF;
+END
+$$;
+SQL
+  echo "Host-ci ensured voltmind_oauth_runtime membership for voltmind_restricted."
   exit 0
 fi
 

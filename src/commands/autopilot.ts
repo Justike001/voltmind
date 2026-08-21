@@ -210,6 +210,7 @@ export async function submitVerificationCycle(engine: BrainEngine, args: string[
   }
 
   const { MinionQueue } = await import('../core/minions/queue.ts');
+  const { DEFAULT_SOURCE_ID } = await import('../core/sync-failure-ledger.ts');
   const queue = new MinionQueue(engine);
   const job = await queue.add(
     'autopilot-cycle',
@@ -225,6 +226,12 @@ export async function submitVerificationCycle(engine: BrainEngine, args: string[
       // prior full cycle is waiting; the cycle lock still protects active work.
       maxWaiting: 1,
     },
+    undefined, // trusted
+    // v0.42 restricted-role follow-up (TODO-RLS-AUTOPILOT-1): the legacy/
+    // single-source verification enqueue is source-agnostic, so scope it to
+    // the canonical default source to satisfy the FORCE-RLS minion_jobs
+    // INSERT policy under a non-BYPASSRLS runtime role.
+    DEFAULT_SOURCE_ID,
   );
 
   const result = { status: 'submitted', job_id: job.id, name: 'autopilot-cycle', queue: 'default' };

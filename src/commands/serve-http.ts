@@ -883,14 +883,28 @@ export async function queryAgentClientSpend(engine: BrainEngine): Promise<AgentC
  * PostgreSQL role with BYPASSRLS (or superuser) can silently defeat every
  * policy. Keep this at the transport boundary: local stdio/CLI remains able
  * to use PGLite, but it can never accidentally become a remote host.
+ *
+ * Escape hatch: `VOLTMIND_ALLOW_PGLITE_HTTP=1` explicitly opts IN to
+ * serving HTTP host endpoints on PGLite. This exists ONLY for local dev
+ * and test fixtures that exercise the HTTP surface (admin embed, CORS,
+ * ingestion webhooks) without a Postgres. It is off by default and is a
+ * deliberate, loud commitment — the caller must set it, it is never
+ * inferred. Production deploys must keep it unset so the RLS guarantee
+ * holds.
  */
 export async function assertHttpRuntimeIsolation(
   engine: Pick<BrainEngine, 'kind' | 'executeRaw'>,
 ): Promise<void> {
+  const allowPgliteHttp = process.env.VOLTMIND_ALLOW_PGLITE_HTTP === '1';
   if (engine.kind !== 'postgres') {
+    if (allowPgliteHttp) {
+      // Local-dev / test-only escape hatch. Never enable in production.
+      return;
+    }
     throw new Error(
       'Refusing HTTP Host startup: remote MCP/Admin requires PostgreSQL RLS; ' +
-      'PGLite is supported only for trusted local CLI/stdio use.',
+      'PGLite is supported only for trusted local CLI/stdio use. ' +
+      'Local developers and tests may opt in with VOLTMIND_ALLOW_PGLITE_HTTP=1.',
     );
   }
 

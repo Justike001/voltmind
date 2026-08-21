@@ -31,7 +31,8 @@
  */
 
 import type { BrainEngine, SourceRow } from '../core/engine.ts';
-import type { MinionQueue } from '../core/minions/queue.ts';
+import { MinionQueue } from '../core/minions/queue.ts';
+import { DEFAULT_SOURCE_ID } from '../core/sync-failure-ledger.ts';
 
 const FULL_CYCLE_FLOOR_MIN = 60;
 
@@ -161,9 +162,28 @@ export async function dispatchPerSource(
   const emit = opts.emit ?? ((line) => process.stderr.write(line + '\n'));
   const log = opts.log ?? ((line) => console.log(line));
 
+  // v0.42 restricted-role follow-up (TODO-RLS-AUTOPILOT-1): source
+  // enumeration must run under an installed read scope. Under a non-BYPASSRLS
+  // role (voltmind_restricted) the sources table is FORCE RLS and
+  // listAllSources without a scope fail-closes to [] — the tick silently
+  // falls back to the legacy single-job path.
+  //
+  // We enumerate in a SHORT transaction: setAdminSourceScope() installs the
+  // read scope for ALL current sources (voltmind_admin_source_ids() is
+  // SECURITY DEFINER and bypasses the sources read policy), listAllSources
+  // runs inside it, then the scope dies with the transaction. We deliberately
+  // do NOT hold an outer transaction across the enqueues: queue.add() opens
+  // its own engine.transaction() with submitSourceId (per-source write scope)
+  // and postgres-js transaction objects cannot nest begin() (savepoints are
+  // not exposed this way) — the earlier attempted nested-add threw
+  // `begin is not a function`. PGLite overrides are no-ops; postgres
+  // (BYPASSRLS) is unaffected.
   let sources: SourceRow[];
   try {
-    sources = await engine.listAllSources({ localPathOnly: true });
+    sources = await engine.transaction(async (scopedTx) => {
+      await scopedTx.setAdminSourceScope();
+      return scopedTx.listAllSources({ localPathOnly: true });
+    });
   } catch (e) {
     // Brand-new brain without sources table (pre-v0.18) — fall through
     // to the legacy single-job path. The error path here also covers
@@ -179,7 +199,10 @@ export async function dispatchPerSource(
     // (default source) and pre-v0.18 brains without the sources table.
     const job = await queue.add(
       'autopilot-cycle',
-      { repoPath: opts.repoPath },
+      // source_id must be present so the INSERT's source_id column equals the
+      // scoped app.source_id GUC (submitSourceId below) — otherwise the
+      // FORCE-RLS write policy compares NULL = 'default' and rejects.
+      { repoPath: opts.repoPath, source_id: DEFAULT_SOURCE_ID },
       {
         queue: 'default',
         idempotency_key: `autopilot-cycle:${opts.slot}`,
@@ -187,6 +210,11 @@ export async function dispatchPerSource(
         timeout_ms: opts.timeoutMs,
         maxWaiting: 1,
       },
+      undefined, // trusted
+      // v0.42 restricted-role follow-up (TODO-RLS-AUTOPILOT-1): legacy
+      // fallback enqueues a source-agnostic cycle, so scope it to the
+      // canonical default source to satisfy FORCE-RLS minion_jobs policy.
+      DEFAULT_SOURCE_ID,
     );
     if (opts.jsonMode) {
       emit(JSON.stringify({ event: 'dispatched', job_id: job.id, mode: 'legacy', slot: opts.slot }));
@@ -223,6 +251,12 @@ export async function dispatchPerSource(
           // already provides the right dedup granularity (one job per
           // source per slot, regardless of how many ticks try).
         },
+        undefined, // trusted
+        // v0.42 restricted-role follow-up (TODO-RLS-AUTOPILOT-1): scope
+        // each per-source enqueue to its own source so the FORCE-RLS
+        // minion_jobs INSERT policy passes under a non-BYPASSRLS role.
+        // Must match data.source_id above (the policy checks it).
+        src.id,
       );
       dispatched.push(src.id);
       if (opts.jsonMode) {

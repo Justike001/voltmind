@@ -16,9 +16,15 @@
  * DIFFERENT connections. Worst case: the 8s GUC sticks on some pooled
  * connection and clips the next caller's long-running query; or the
  * reset to 0 lands on a connection that other code expected to be
- * protected. The fix wraps each query in sql.begin() and uses
- * SET LOCAL so the GUC is transaction-scoped and auto-resets on
- * COMMIT/ROLLBACK, regardless of error path.
+ * protected.
+ *
+ * Since v0.41.21.3 the search paths no longer open their own
+ * transaction. Dispatch already runs remote searches inside a
+ * source-scoped transaction, and the PgBouncer adapter intentionally
+ * has no begin() method, so nesting sql.begin() here would crash on
+ * pooler URLs. The timeout GUC is owned by that outer transaction;
+ * these methods must neither nest a begin() nor issue their own
+ * SET/SET LOCAL that could leak onto a pooled connection.
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -48,21 +54,27 @@ describe('postgres-engine / search path timeout isolation', () => {
     expect(bare).toBeNull();
   });
 
-  test('searchKeyword wraps its query in sql.begin()', () => {
-    const fn = extractMethod(SRC, 'searchKeyword');
-    expect(fn).toMatch(/sql\.begin\s*\(\s*async\s+sql\s*=>/);
+  test('searchKeyword does not nest its own transaction', () => {
+    const fn = stripComments(extractMethod(SRC, 'searchKeyword'));
+    expect(fn).not.toMatch(/sql\.begin\s*\(/);
+    // The query itself still runs through sql.unsafe against the pool.
+    expect(fn).toMatch(/sql\.unsafe\(rawQuery/);
   });
 
-  test('searchVector wraps its query in sql.begin()', () => {
-    const fn = extractMethod(SRC, 'searchVector');
-    expect(fn).toMatch(/sql\.begin\s*\(\s*async\s+sql\s*=>/);
+  test('searchVector does not nest its own transaction', () => {
+    const fn = stripComments(extractMethod(SRC, 'searchVector'));
+    expect(fn).not.toMatch(/sql\.begin\s*\(/);
+    expect(fn).toMatch(/sql\.unsafe\(rawQuery/);
   });
 
-  test('both search methods use SET LOCAL for the timeout', () => {
-    const keyword = extractMethod(SRC, 'searchKeyword');
-    const vector = extractMethod(SRC, 'searchVector');
-    expect(keyword).toMatch(/SET\s+LOCAL\s+statement_timeout/);
-    expect(vector).toMatch(/SET\s+LOCAL\s+statement_timeout/);
+  test('neither search method issues its own SET LOCAL statement_timeout', () => {
+    // The timeout GUC is owned by the outer source-scoped transaction
+    // (dispatch), so the methods must not issue their own SET LOCAL —
+    // outside a transaction boundary that would leak onto the pool.
+    const keyword = stripComments(extractMethod(SRC, 'searchKeyword'));
+    const vector = stripComments(extractMethod(SRC, 'searchVector'));
+    expect(keyword).not.toMatch(/SET\s+LOCAL\s+statement_timeout/);
+    expect(vector).not.toMatch(/SET\s+LOCAL\s+statement_timeout/);
   });
 
   test('connect() with poolSize honors resolvePrepare (PgBouncer regression guard)', () => {

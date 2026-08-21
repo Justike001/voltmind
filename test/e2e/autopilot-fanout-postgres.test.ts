@@ -204,8 +204,11 @@ describeIfDB('autopilot fan-out — Postgres E2E', () => {
     );
     expect(jobs.length).toBe(1);
     expect(jobs[0].idempotency_key).toBe('autopilot-cycle:legacy-test');
-    // No source_id in data (legacy shape)
+    // v0.42 follow-up (TODO-RLS-AUTOPILOT-1): the legacy enqueue now carries
+    // source_id = 'default' (DEFAULT_SOURCE_ID) so the FORCE-RLS minion_jobs
+    // INSERT policy passes under a restricted runtime role. Pre-patch this
+    // was undefined.
     const data = typeof jobs[0].data === 'string' ? JSON.parse(jobs[0].data) : jobs[0].data;
-    expect(data.source_id).toBeUndefined();
+    expect(data.source_id).toBe('default');
   });
 });

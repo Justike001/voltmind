@@ -89,6 +89,11 @@ async function spawnServer(): Promise<ServeProc> {
         HOME: home,
         VOLTMIND_HOME: home,
         VOLTMIND_ADMIN_BOOTSTRAP_TOKEN: bootstrapToken,
+        // The HTTP Host runtime-isolation guard refuses PGLite (source RLS
+        // cannot be enforced without Postgres). This test only exercises the
+        // embedded admin asset path, not source isolation, so it explicitly
+        // opts in via the documented local-dev/test escape hatch.
+        VOLTMIND_ALLOW_PGLITE_HTTP: '1',
         // Don't let test-process inherit any auth keys it doesn't need.
         OPENAI_API_KEY: '',
         ANTHROPIC_API_KEY: '',

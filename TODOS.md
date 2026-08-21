@@ -1,5 +1,30 @@
 # TODOS
 
+## v0.42 restricted-role autopilot enqueue follow-ups (2026-08-21 production outage)
+
+Full spec: `docs/plans/2026-08-21-autopilot-rls-submitSourceId.md`
+
+- **TODO-RLS-AUTOPILOT-1 (P1)**: Autopilot enqueue must carry `submitSourceId`
+  (source scope) so the FORCE-RLS `minion_jobs` INSERT policy passes under the
+  `voltmind_restricted` (non-BYPASSRLS) runtime role. Three call sites:
+  `src/commands/autopilot.ts:214` (`submitVerificationCycle`),
+  `src/commands/autopilot-fanout.ts:180` (legacy fallback), and
+  `src/commands/autopilot-fanout.ts:205` (per-source fan-out). `MinionQueue.add()`
+  already accepts the `submitSourceId` 5th arg (queue.ts:97) — the autopilot call
+  sites simply never pass it. Without this, restoring the pool URL to
+  `voltmind_restricted` (i.e. re-enabling RLS) breaks every `autopilot-cycle`
+  enqueue with `new row violates row-level security policy` and trips
+  cycle-failure-cap auto-stop. This is the definitive fix behind the option-A
+  hotfix (pool pointed at `postgres`, which bypasses RLS and is not the intended
+  long-term posture).
+
+- **TODO-RUNIX-AUTOPP-2 (P1)**: Regression test: Postgres backed enqueue as a
+  non-BYPASSRLS role. Positive: with `submitSourceId` set, `minion_jobs` insert
+  passes. Negative control: a raw `queue.add` without scope under the same
+  role must FAIL with the RLS policy error (proves the harness actually enforces
+  RLS, not a false green). Mirror the `test/e2e/autopilot-fanout-postgres.test.ts`
+  harness
+
 ## v0.41.19.0 status + doctor-categories wave follow-ups (v0.42+)
 
 - **TODO-V19-A (P3)**: Persistent `cycle_runs` table. v0.41.19.0 infers

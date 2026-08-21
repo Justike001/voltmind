@@ -278,6 +278,8 @@ jobs:
           VOLTMIND_RESTRICTED_DATABASE_URL: ${{ secrets.VOLTMIND_CI_RESTRICTED_DATABASE_URL }}
         run: bash scripts/ci-demote-postgres-owner.sh
       - name: Run OAuth HTTP E2E as demoted migration/test owner
+        env:
+          VOLTMIND_RESTRICTED_DATABASE_URL: ${{ secrets.VOLTMIND_CI_RESTRICTED_DATABASE_URL }}
         run: bash scripts/run-e2e.sh test/e2e/serve-http-oauth.test.ts
       - name: Run restricted source-scope E2E as rolbypassrls=false
         env:

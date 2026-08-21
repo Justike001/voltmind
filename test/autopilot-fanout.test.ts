@@ -167,6 +167,13 @@ describe('dispatchPerSource — integration with stubbed engine + queue', () => 
         if (opts?.listThrows) throw new Error('sources table missing');
         return sources;
       },
+      // v0.42 restricted-role follow-up: dispatchPerSource enumerates inside
+      // a scoped transaction. The unit stub has no real DB; run the callback
+      // against the same engine object so listAllSources/setAdminSourceScope
+      // behave as if inside a transaction (their assertions don't depend on
+      // transaction semantics).
+      transaction: async (fn: (e: unknown) => unknown) => fn(engine),
+      setAdminSourceScope: async () => {},
     } as unknown as BrainEngine;
     const queue = {
       add: async (name: string, data: unknown, addOpts: Record<string, unknown>) => {
@@ -194,7 +201,11 @@ describe('dispatchPerSource — integration with stubbed engine + queue', () => 
     expect(result.legacy_fallback).toBe(true);
     expect(added.length).toBe(1);
     expect(added[0].name).toBe('autopilot-cycle');
-    expect((added[0].data as Record<string, unknown>).source_id).toBeUndefined();
+    // v0.42 follow-up (TODO-RLS-AUTOPILOT-1): the legacy enqueue now carries
+    // source_id = DEFAULT_SOURCE_ID so the FORCE-RLS minion_jobs INSERT policy
+    // (which compares source_id to the scoped app.source_id GUC) passes under
+    // a restricted runtime role. Pre-patch this was undefined.
+    expect((added[0].data as Record<string, unknown>).source_id).toBe('default');
     expect(added[0].opts.idempotency_key).toBe('autopilot-cycle:2026-05-22T12:00:00.000Z');
   });
 
@@ -251,6 +262,8 @@ describe('dispatchPerSource — integration with stubbed engine + queue', () => 
     const engine = {
       kind: 'postgres' as const,
       listAllSources: async () => sources,
+      transaction: async (fn: (e: unknown) => unknown) => fn(engine),
+      setAdminSourceScope: async () => {},
     } as unknown as BrainEngine;
     const queue = {
       add: async (name: string, data: unknown, opts: Record<string, unknown>) => {
