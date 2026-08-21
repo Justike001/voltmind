@@ -63,6 +63,26 @@ Ingest meetings, articles, media, documents, and conversations into the brain.
 > or a vault `index.md` as the runtime taxonomy source. Folder README files may
 > explain a type, but the active pack is the machine-readable authority.
 
+<!-- ingest-reference-router -->
+## Reference Router
+
+This file remains the mandatory core workflow. Before performing a matching
+specialized operation, read every applicable reference completely. References
+add mode-specific constraints; they do not replace, reorder, or relax the
+evidence, citation, entity-linking, tracking, and completion requirements in
+this file. Multiple rows may apply to one ingest.
+
+| Ingest signal or operation | Required reference |
+|---|---|
+| Ambiguous or incomplete notable signal; clarification before semantic commit | [clarification-and-semantic-commit.md](references/clarification-and-semantic-commit.md) |
+| Teams, Outlook Email, Outlook Calendar, Microsoft relay, or Microsoft file reference | [microsoft-connectors.md](references/microsoft-connectors.md) |
+| RaiDrive, SMB, UNC, mapped-drive configuration, normalization, lookup, or materialization | [mapped-shared-drive.md](references/mapped-shared-drive.md) |
+| Any ingest pass: entity mentions or the user's original thinking | [entity-detection.md](references/entity-detection.md) |
+| Article, video, podcast, PDF, image, meeting transcript, social post, or raw-source storage | [media-and-raw-source.md](references/media-and-raw-source.md) |
+| Client-authored local-first semantic write, remote synchronization, receipt, or incremental Teams checkpoint | [client-write-through.md](references/client-write-through.md) |
+| Teams/Outlook cold start, history window, 99-result cap, saturation, 429, or cold-start manifest | [teams-cold-start.md](references/teams-cold-start.md) |
+<!-- /ingest-reference-router -->
+
 ## Contract
 
 - Every fact written to a brain page carries an inline `[Source: ...]` citation with date and provenance.

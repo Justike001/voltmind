@@ -16,6 +16,10 @@ const referenceNames = [
 
 function reconstructOriginal(): string {
   let text = readFileSync(skillPath, 'utf8');
+  text = text.replace(
+    /<!-- ingest-reference-router -->\r?\n[\s\S]*?<!-- \/ingest-reference-router -->\r?\n\r?\n/,
+    '',
+  );
   for (const name of referenceNames) {
     const path = `skills/ingest/references/${name}.md`;
     const exactSection = readFileSync(path, 'utf8');
@@ -36,6 +40,8 @@ describe('ingest skill lossless reference split', () => {
 
   test('keeps every reference first-level and directly discoverable', () => {
     const skill = readFileSync(skillPath, 'utf8');
+    expect(skill).toContain('## Reference Router');
+    expect(skill).toContain('Multiple rows may apply to one ingest.');
     for (const name of referenceNames) {
       const path = `skills/ingest/references/${name}.md`;
       expect(existsSync(path)).toBe(true);
