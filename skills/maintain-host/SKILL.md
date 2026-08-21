@@ -89,6 +89,11 @@ This skill guarantees:
   state, invalid bindings, and unresolved candidates.
 
 ## Phases
+> **Autopilot already covers these every cycle** (10-min): lint, backlinks,
+> sync, synthesize, extract (links+timeline), patterns, embed, orphans,
+> tracking_maintenance, consolidate, takes, purge, schema-suggest. The
+> phases below are the **non-duplicated** remainder — run these on a cron.
+
 
 ### Long-running project tracking health
 
@@ -176,97 +181,6 @@ Links pointing to pages that don't exist.
 Pages that mention entity names but don't have formal links.
 - Read compiled_truth from voltmind, extract entity mentions, create links in voltmind
 
-### Link graph extraction
-If link_count is 0 or low relative to page_count, run batch extraction:
-```bash
-voltmind extract links --dir ~/brain
-```
-This scans all markdown files for entity references, See Also sections, and
-frontmatter fields, then creates typed links in the database.
-
-### Timeline extraction
-If timeline_entry_count is 0, extract structured timeline from markdown:
-```bash
-voltmind extract timeline --dir ~/brain
-```
-
-### Dream cycle (v0.23): synthesize + patterns
-
-`voltmind dream` runs the full 8-phase maintenance cycle:
-
-```
-lint -> backlinks -> sync -> synthesize -> extract -> patterns -> embed -> orphans
-```
-
-The two new phases consolidate yesterday's conversations into long-term memory:
-
-**Synthesize phase:** reads transcripts from `dream.synthesize.session_corpus_dir`,
-runs a cheap Haiku verdict (cached in `dream_verdicts`) to filter routine
-ops sessions, then fans out one Sonnet subagent per worth-processing
-transcript. Each subagent writes reflections (`wiki/personal/reflections/...`),
-originals (`wiki/originals/ideas/...`), and people timeline entries. The
-orchestrator collects the slugs from `subagent_tool_executions` (NOT
-`pages.updated_at` — that would pick up unrelated writes) and reverse-renders
-each new page from DB → markdown on disk.
-
-**Patterns phase:** runs after `extract` (so the graph state is fresh).
-Reads recent reflections within `dream.patterns.lookback_days` (default 30),
-runs a single Sonnet pass to surface recurring themes, and writes pattern
-pages to `wiki/personal/patterns/<theme>` when ≥`dream.patterns.min_evidence`
-(default 3) reflections support a pattern.
-
-**Quality bar (Iron Law for synthesis):**
-1. Quote the user verbatim. Do not paraphrase memorable phrasings.
-2. Cross-reference compulsively: every new page MUST have at least one wikilink.
-3. Slug discipline: lowercase alphanumeric and hyphens only. NO underscores, NO file extensions.
-4. Edited transcripts produce NEW slugs (content-hash suffix changes) — never silently overwrite.
-
-**Trust boundary (`allowed_slug_prefixes`):** the synthesis subagent runs with an
-explicit allow-list of write paths sourced from `_brain-filing-rules.json`'s
-`dream_synthesize_paths.globs`. Even on prompt-injection success, the subagent
-cannot write outside that list. Trust comes from PROTECTED_JOB_NAMES — MCP
-cannot submit subagent jobs at all. Editing the JSON is the only way to add
-a new directory the synthesizer can write to.
-
-**Idempotency + privacy:** transcripts are keyed by `(file_path, content_hash)`,
-so re-running on the same content is a no-op. `dream.synthesize.exclude_patterns`
-(default `["medical", "therapy"]`) filters out transcripts before any LLM call.
-Each entry is auto-wrapped as a word-boundary regex (e.g. `medical` matches
-"medical advice" but NOT "comedical"). Power users may pass full regex.
-
-**Cooldown:** the cycle's spend cap. `dream.synthesize.cooldown_hours` (default
-12) means at most ~2 synthesize runs per day under autopilot. The completion
-timestamp is stored in `dream.synthesize.last_completion_ts` and is written
-ONLY on successful runs (not on skipped/failed). Explicit `--input` /
-`--date` / `--from` / `--to` invocations bypass cooldown.
-
-**`--dry-run` semantics:** runs the cheap Haiku significance filter (caches
-verdicts) but skips the Sonnet synthesis pass. NOT zero LLM calls.
-
-**Configure synthesize on a fresh brain:**
-```bash
-voltmind config set dream.synthesize.session_corpus_dir /path/to/transcripts
-voltmind config set dream.synthesize.enabled true
-voltmind dream --phase synthesize --dry-run --json   # preview
-voltmind dream                                       # full 8-phase cycle
-```
-
-**Invocation patterns:**
-```bash
-voltmind dream                                          # full cycle
-voltmind dream --phase synthesize                       # just synthesize
-voltmind dream --phase patterns                         # just patterns
-voltmind dream --input ~/transcripts/2026-04-25.txt     # ad-hoc one transcript
-voltmind dream --from 2026-04-01 --to 2026-04-25        # backfill range
-voltmind dream --json                                   # CycleReport JSON
-```
-
-**Auto-commit deferred to v1.1:** v1 writes files to `brain_dir` but does NOT
-`git add` / `commit` / `push`. Either commit yourself or let `voltmind autopilot`
-handle it.
-Parses `- **YYYY-MM-DD** | Source — Summary` and `### YYYY-MM-DD — Title` formats.
-Note: extracted entries improve structured queries (`voltmind timeline`), not vector search.
-
 ### Autopilot check
 Verify autopilot is running:
 ```bash
@@ -308,14 +222,6 @@ voltmind apply-migrations --yes
 
 Full troubleshooting guide: `docs/guides/minions-fix.md`.
 
-### Back-link enforcement
-Check that the back-linking iron law is being followed:
-- For each recently updated page, check if entities mentioned in it have
-  corresponding back-links FROM those entity pages
-- A mention without a back-link is a broken brain
-- Fix: add the missing back-link to the entity's Timeline or See Also section
-- Format: `- **YYYY-MM-DD** | Referenced in [page title](path) -- brief context`
-
 ### Filing rule violations
 Check for common misfiling patterns (see `skills/_brain-filing-rules.md`):
 - Content with clear primary subjects filed in `sources/` instead of the
@@ -335,58 +241,11 @@ Spot-check pages for missing `[Source: ...]` citations:
 Inconsistent tagging (e.g., "vc" vs "venture-capital", "ai" vs "artificial-intelligence").
 - Standardize to the most common variant using voltmind tag operations
 
-### Graph population (v0.10.3+)
-
-The `links` and `timeline_entries` tables are the structured graph layer.
-Populate them periodically or after major imports:
-
-- `voltmind extract links --source db` — backfill structured links by walking pages
-  from the engine. Reads `[Name](people/slug)` / `[Name](companies/slug)` references
-  and infers relationship types (`attended`, `works_at`, `invested_in`, `founded`,
-  `advises`, `mentions`, `source`). Idempotent. Use `--source fs --dir <brain>`
-  if you have a markdown checkout to walk instead.
-- `voltmind extract timeline --source db` — backfill structured timeline entries.
-  Parses `- **YYYY-MM-DD** | summary` lines from page content. Idempotent (DB
-  UNIQUE constraint).
-- `voltmind extract all --source db` — both in one run.
-- `voltmind graph-query <slug> --depth 2` — verify connectivity (use any well-known
-  entity slug as a probe).
-- `voltmind stats` — verify `link_count > 0` and `timeline_entry_count > 0` after extraction.
-- `voltmind health` — review `link_coverage` and `timeline_coverage` percentages
-  on entity pages (person/company). Below 50% means more extraction is needed.
-  On brains with very few entity pages these report "too few to grade" (`null` in
-  JSON, with `entity_page_count` carrying the denominator) instead of a
-  misleading 0%/100% — grow the entity set before acting on coverage.
-
-Available link types (use with `voltmind graph-query --type`):
-`attended`, `works_at`, `invested_in`, `founded`, `advises`, `mentions`, `source`.
-
-Going forward, every `voltmind put` call auto-creates and reconciles links via the
-auto-link post-hook (default on; disable: `voltmind config set auto_link false`).
-So link-extract is mostly a one-time backfill. timeline-extract should be re-run
-after bulk imports or content edits that add new dated entries.
-
 ### Feature adoption check (weekly)
 
 Run `voltmind features --json` — scan for underused features + recommendations.
 Run weekly alongside lint. Surfaces missing embeddings, unused integrations, and
 configuration improvements.
-
-### Embedding freshness
-Chunks without embeddings, or chunks embedded with an old model.
-- On macOS/Linux, for large embedding refreshes (>1000 chunks), use `nohup`:
-  `nohup voltmind embed --stale > /tmp/voltmind-embed.log 2>&1 &`
-- Then check progress: `tail -1 /tmp/voltmind-embed.log`
-- On Windows PowerShell, use `Start-Process` with separate logs:
-  ```powershell
-  $log = Join-Path $env:TEMP "voltmind-embed.log"
-  $err = Join-Path $env:TEMP "voltmind-embed.err.log"
-  $proc = Start-Process -FilePath "voltmind" `
-    -ArgumentList @("embed", "--stale") `
-    -RedirectStandardOutput $log -RedirectStandardError $err -PassThru
-  $proc.Id
-  Get-Content -Path $log -Tail 1
-  ```
 
 ### Security (RLS verification)
 Run `voltmind doctor --json` and check the RLS status.

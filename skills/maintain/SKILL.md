@@ -97,14 +97,17 @@ maintenance action, you may run the corresponding section directly from the
 chosen skill (maintain-host for full-surface dimensions, maintain-client for
 client-safe ones):
 
-- Stale pages / orphan pages / dead links / missing cross-references / back-link
-  enforcement / filing rule violations / citation audit / tag consistency:
-  see the chosen skill's dimension walk.
+- Stale pages / orphan pages / dead links / missing cross-references / filing
+  rule violations / citation audit / tag consistency:
+  see the chosen skill's dimension walk. (Back-link enforcement is covered by
+  autopilot's `backlinks` phase — no manual cron needed.)
 - External file-reference backfill + scrub: both skills keep the identical
   section (source-scoped, preview-before-apply).
 - Long-running project tracking health: `maintain-host` for status +
   reconcile; `maintain-client` for status + review + registration + escalation.
-- Dream cycle (synthesize + patterns): host-only — `maintain-host`.
+- Dream cycle (synthesize + patterns): autopilot's `synthesize`/`patterns`
+  phases already run it every cycle. Only run `voltmind dream` manually when
+  autopilot is down.
 - Autopilot check / install: host-only — `maintain-host`.
 - Schema/RLS/init/apply-migrations: host-only — `maintain-host`.
 - Benchmark Testing: both; host runs the full battery after imports/upgrades,

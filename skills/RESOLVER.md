@@ -87,14 +87,14 @@ are designed to chain (e.g., ingest then enrich for each entity).
 | "host maintenance", "server brain maintenance", "公司脑维护" | `skills/maintain-host/SKILL.md` (company-server / full-install maintenance: dream, extract, embed, schema/RLS, reconcile) |
 | "project tracking health", "failed tracking receipts", "reconcile project tracking", "项目追踪健康", "修复项目追踪" | `skills/maintain-host/SKILL.md` (Host status/reconcile operations; client review + evidence registration stay in `skills/maintain-client/SKILL.md`; binding edits stay in `skills/project/SKILL.md`) |
 | "backfill file references", "index legacy file links", "scrub open paths", "remove stored drive paths" | `skills/maintain-client/SKILL.md` (client-authorized backfill/scrub); host equivalents in `skills/maintain-host/SKILL.md` |
-| "Extract links", "build link graph", "populate timeline" | `skills/maintain-host/SKILL.md` (extraction sections) |
-| "Run dream", "process today's session", "synthesize my conversations", "consolidate yesterday's conversations", "what patterns did you see", "did the dream cycle run" | `skills/maintain-host/SKILL.md` (dream cycle section) |
+| "Extract links", "build link graph", "populate timeline" | `voltmind extract all --source db` / autopilot `extract` phase (auto, 10-min cycle). See `skills/maintain-host/SKILL.md` Autopilot check. |
+| "Run dream", "process today's session", "synthesize my conversations", "consolidate yesterday's conversations", "what patterns did you see", "did the dream cycle run" | `voltmind dream` — but autopilot's `synthesize`/`patterns` phases already run it every cycle; only run manually when autopilot is down. See `skills/maintain-host/SKILL.md` Autopilot check. |
 | "Brain health", "what features am I missing", "brain score" | Run `voltmind features --json` |
 | "Set up autopilot", "run brain maintenance", "keep brain updated" | Run `voltmind autopilot --install` |
 | "Upgrade voltmind", "update voltmind", "voltmind update available", `UPGRADE_AVAILABLE`, "is voltmind up to date" | `skills/voltmind-upgrade/SKILL.md` |
 | Agent identity, "who am I", customize agent | `skills/soul-audit/SKILL.md` |
-| "Populate links", "extract links", "backfill graph" | `skills/maintain-host/SKILL.md` (graph population phase) |
-| "Populate timeline", "extract timeline entries" | `skills/maintain-host/SKILL.md` (graph population phase) |
+| "Populate links", "extract links", "backfill graph" | `voltmind extract all --source db` (autopilot `extract` phase covers it). See `skills/maintain-host/SKILL.md` |
+| "Populate timeline", "extract timeline entries" | `voltmind extract timeline --source db` (autopilot `extract` phase covers it). See `skills/maintain-host/SKILL.md` |
 
 ## Identity & access (always-on)
 
