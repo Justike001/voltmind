@@ -371,16 +371,7 @@ export class MinionWorker extends EventEmitter {
               // jobs accumulate in `waiting`. Only counts work THIS worker would
               // actually have claimed.
               const handlerNames = this.registeredNames;
-              const rows = handlerNames.length === 0
-                ? [] as { cnt: string }[]
-                : await this.engine.executeRaw<{ cnt: string }>(
-                    `SELECT count(*)::text AS cnt FROM minion_jobs
-                     WHERE status = 'waiting'
-                       AND queue = $1
-                       AND name = ANY($2::text[])`,
-                    [this.opts.queue, handlerNames],
-                  );
-              const waiting = parseInt(rows[0]?.cnt ?? '0', 10);
+              const waiting = await this.queue.countWaitingForNames(this.opts.queue, handlerNames);
               const idleMinutes = Math.round(idleMs / 60_000);
               if (waiting > 0) {
                 // Two thresholds, both measured from `lastCompletionTime` (NOT
@@ -521,35 +512,41 @@ export class MinionWorker extends EventEmitter {
         // see the cancellation and roll up correctly. A direct status='cancelled'
         // UPDATE strands parents forever (no inbox, no dependency resolution).
         // Release our lock first so cancelJob's descendant walk sees a clean state.
-        await this.engine.executeRaw(
-          `UPDATE minion_jobs SET lock_token = NULL, lock_until = NULL, updated_at = now()
-           WHERE id = $1 AND lock_token = $2`,
-          [job.id, lockToken],
-        );
+        await this.queue.withJobSourceScoped(job.id, async (tx) => {
+          await tx.executeRaw(
+            `UPDATE minion_jobs SET lock_token = NULL, lock_until = NULL, updated_at = now()
+             WHERE id = $1 AND lock_token = $2`,
+            [job.id, lockToken],
+          );
+        });
         try {
           await this.queue.cancelJob(job.id);
         } catch {
           // cancelJob best-effort — if the parent rollup path errors, we still
           // want the job out of 'active' rather than re-claimed on next tick.
-          await this.engine.executeRaw(
-            `UPDATE minion_jobs
-             SET status = 'cancelled', error_text = 'skipped_quiet_hours', updated_at = now()
-             WHERE id = $1 AND status NOT IN ('completed','failed','dead')`,
-            [job.id],
-          );
+          await this.queue.withJobSourceScoped(job.id, async (tx) => {
+            await tx.executeRaw(
+              `UPDATE minion_jobs
+               SET status = 'cancelled', error_text = 'skipped_quiet_hours', updated_at = now()
+               WHERE id = $1 AND status NOT IN ('completed','failed','dead')`,
+              [job.id],
+            );
+          });
         }
         console.log(`Quiet-hours skip: ${job.name} (id=${job.id})`);
       } else {
         // Defer: release back to delayed, push delay ~15 minutes to avoid
         // immediate re-claim loops when the claim query re-runs.
-        await this.engine.executeRaw(
-          `UPDATE minion_jobs
-           SET status = 'delayed', lock_token = NULL, lock_until = NULL,
-               delay_until = now() + interval '15 minutes',
-               updated_at = now()
-           WHERE id = $1 AND lock_token = $2`,
-          [job.id, lockToken],
-        );
+        await this.queue.withJobSourceScoped(job.id, async (tx) => {
+          await tx.executeRaw(
+            `UPDATE minion_jobs
+             SET status = 'delayed', lock_token = NULL, lock_until = NULL,
+                 delay_until = now() + interval '15 minutes',
+                 updated_at = now()
+             WHERE id = $1 AND lock_token = $2`,
+            [job.id, lockToken],
+          );
+        });
         console.log(`Quiet-hours defer: ${job.name} (id=${job.id}) → retry after 15m`);
       }
     } catch (e) {
@@ -805,18 +802,22 @@ export class MinionWorker extends EventEmitter {
       },
       log: async (message: string | Record<string, unknown>) => {
         const value = typeof message === 'string' ? message : JSON.stringify(message);
-        await this.engine.executeRaw(
-          `UPDATE minion_jobs SET stacktrace = COALESCE(stacktrace, '[]'::jsonb) || to_jsonb($1::text),
-            updated_at = now()
-           WHERE id = $2 AND status = 'active' AND lock_token = $3`,
-          [value, job.id, lockToken]
-        );
+        await this.queue.withJobSourceScoped(job.id, async (tx) => {
+          await tx.executeRaw(
+            `UPDATE minion_jobs SET stacktrace = COALESCE(stacktrace, '[]'::jsonb) || to_jsonb($1::text),
+              updated_at = now()
+             WHERE id = $2 AND status = 'active' AND lock_token = $3`,
+            [value, job.id, lockToken]
+          );
+        });
       },
       isActive: async () => {
-        const rows = await this.engine.executeRaw<{ id: number }>(
-          `SELECT id FROM minion_jobs WHERE id = $1 AND status = 'active' AND lock_token = $2`,
-          [job.id, lockToken]
-        );
+        const rows = await this.queue.withJobSourceScoped(job.id, async (tx) => {
+          return tx.executeRaw<{ id: number }>(
+            `SELECT id FROM minion_jobs WHERE id = $1 AND status = 'active' AND lock_token = $2`,
+            [job.id, lockToken]
+          );
+        });
         return rows.length > 0;
       },
       readInbox: async () => {

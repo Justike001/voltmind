@@ -51,9 +51,214 @@ export class MinionQueue {
   readonly maxSpawnDepth: number;
   readonly maxAttachmentBytes: number;
 
+  /** v0.42 task C: cached result of whether the runtime role enforces RLS on
+   *  minion_jobs (non-BYPASSRLS role). Cleared lazily; see rlsEnforced(). */
+  private _rlsEnforced: boolean | null = null;
+
   constructor(private engine: BrainEngine, opts: MinionQueueOpts = {}) {
     this.maxSpawnDepth = opts.maxSpawnDepth ?? DEFAULT_MAX_SPAWN_DEPTH;
     this.maxAttachmentBytes = opts.maxAttachmentBytes ?? DEFAULT_MAX_ATTACHMENT_BYTES;
+  }
+
+  /**
+   * v0.42 task C: does the runtime role enforce RLS on minion_jobs (so worker
+   * reads/writes require a source scope)? `postgres` (BYPASSRLS) and PGLite
+   * do not — nothing is filtered and no scope install is needed. A non-BYPASSRLS
+   * role (voltmind_restricted / voltmind_e2e_runtime) reports true, so each
+   * worker→queue operation installs a transaction-local source scope.
+   *
+   * Detected from the connection's CURRENT_USER once and cached (the runtime
+   * role is fixed for the engine's lifetime). Falls back to "no RLS" on any
+   * query failure so a mis-probe degrades to the legacy (unfiltered-role)
+   * behavior rather than throwing.
+   */
+  private async rlsEnforced(exec?: BrainEngine): Promise<boolean> {
+    if (this._rlsEnforced !== null) return this._rlsEnforced;
+    const target = exec ?? this.engine;
+    try {
+      const rows = await target.executeRaw<{ rolbypassrls: boolean }>(
+        `SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`,
+      );
+      this._rlsEnforced = rows[0]?.rolbypassrls === false;
+    } catch {
+      this._rlsEnforced = false;
+    }
+    return this._rlsEnforced;
+  }
+
+  /**
+   * Install a source scope on `tx` so the subsequent statement can READ the
+   * given source's rows. `set_config(..., true)` (used by setSourceScope /
+   * setSourceReadScope / setAdminSourceScope) is transaction-local, so this
+   * MUST be called inside the transaction that owns the write, never outside
+   * one (an unscoped call throws `source_scope_not_applied`). No-op under the
+   * BYPASSRLS postgres app role / PGLite (nothing is filtered).
+   */
+  private async txScopeRead(tx: BrainEngine, sourceIds: string[]): Promise<void> {
+    if (!(await this.rlsEnforced(tx))) return;
+    await tx.setSourceReadScope?.(sourceIds);
+  }
+
+  /**
+   * Install a scalar WRITE scope (app.source_id) on `tx` so a subsequent
+   * UPDATE/DELETE on a row of `sourceId` passes the FORCE-RLS write policy
+   * (voltmind_source_write_scope_contains compares the row's source_id to the
+   * scalar app.source_id — admin scope only grants writes to the FIRST source).
+   * Must be called inside the owning transaction.
+   */
+  private async txScopeWrite(tx: BrainEngine, sourceId: string | null): Promise<void> {
+    if (!(await this.rlsEnforced(tx)) || sourceId == null) return;
+    await tx.setSourceScope(sourceId);
+  }
+
+  /**
+   * Resolve the source ids the runtime role can scope to (ALL sources, via
+   * the SECURITY DEFINER `voltmind_admin_source_ids()` — bypasses the sources
+   * read policy without granting the app role BYPASSRLS). Used to loop a
+   * cross-source bulk sweep (stall/timeout/promote) one source at a time:
+   * admin scope alone can only WRITE the first source, so a sweep must set
+   * the write scalar per source. Returns [] under BYPASSRLS postgres (where
+   * the single unscoped run already covers every source) and on PGLite / any
+   * probe failure (falls back to the legacy single run).
+   */
+  private async allSourceIds(): Promise<string[]> {
+    if (!(await this.rlsEnforced())) return [];
+    try {
+      const rows = await this.engine.executeRaw<{ source_ids: string[] | null }>(
+        `SELECT public.voltmind_admin_source_ids() AS source_ids`,
+      );
+      return rows[0]?.source_ids ?? [];
+    } catch {
+      return [];
+    }
+  }
+  private async scopeJobTx(tx: BrainEngine, jobId: number): Promise<string | null> {
+    if (!(await this.rlsEnforced(tx))) return null;
+    await tx.setAdminSourceScope();
+    const rows = await tx.executeRaw<{ source_id: string | null }>(
+      `SELECT source_id FROM minion_jobs WHERE id = $1`,
+      [jobId],
+    );
+    const sourceId = rows[0]?.source_id ?? null;
+    await this.txScopeWrite(tx, sourceId);
+    await this.txScopeRead(tx, sourceId != null ? [sourceId] : []);
+    return sourceId;
+  }
+
+  /**
+   * v0.42 task C: wrap a SINGLE-job write in a transaction that installs the
+   * job's source scope first. Under BYPASSRLS postgres / PGLite this is a
+   * no-op scope, but still runs inside a transaction (harmless — a single
+   * bodied statement is already atomic). Used by the byte-level job methods
+   * (renewLock/cancel-internal/progress/tokens/inbox/release/remove/retry).
+   */
+  private async runJobWrite<T>(
+    id: number,
+    fn: (tx: BrainEngine) => Promise<T>,
+  ): Promise<T> {
+    // Legacy path (BYPASSRLS postgres / PGLite): RLS isn't enforced, no scope
+    // is needed, and the original methods ran as a bare executeRaw (no
+    // transaction). Keeping that exact shape matters — PGLite's transaction()
+    // clones `this`, and when `this` is a test proxy that intercepts
+    // executeRaw, the clone's executeRaw routes back to the main connection
+    // while the tx is open, deadlocking a single-connection engine.
+    if (!(await this.rlsEnforced())) return fn(this.engine);
+    return this.engine.transaction(async (tx) => {
+      await this.scopeJobTx(tx, id);
+      return fn(tx);
+    });
+  }
+
+  /**
+   * v0.42 task C: run a cross-source bulk sweep the way the runtime role
+   * requires. Under BYPASSRLS postgres / PGLite (RLS not enforced) a single
+   * unscoped pass already sees and writes every source — the legacy behavior.
+   *
+   * Under the restricted role, the FORCE-RLS write policy is single-source
+   * scalar, so a sweep that must reach ALL sources' rows runs ONE pass per
+   * source, each scoped to that source. `body` receives the transaction and
+   * returns the rows it processed for that pass; this helper concatenates the
+   * per-source results so callers see a single merged result identical in
+   * shape to the unscoped pass.
+   *
+   * `legacyInTransaction`: the original handleTimeouts / handleWallClockTimeouts
+   * wrapped their multi-statement body (dead-letter UPDATE + inbox INSERTs +
+   * parent resolve) in ONE engine.transaction for atomicity; promoteDelayed and
+   * handleStalled ran as a bare executeRaw. Preserve each method's original
+   * shape in the legacy (non-RLS) path so the PGLite worker tests whose proxy
+   * intercepts engine.executeRaw keep working (a PGLite transaction clone of a
+   * proxied engine deadlocks a single-connection backend).
+   */
+  private async runSweepPerSource<T>(
+    run: (tx: BrainEngine, sourceId: string | null) => Promise<T[]>,
+    opts: { legacyInTransaction?: boolean } = {},
+  ): Promise<T[]> {
+    if (!(await this.rlsEnforced())) {
+      if (opts.legacyInTransaction) {
+        return this.engine.transaction((tx) => run(tx, null));
+      }
+      return run(this.engine, null);
+    }
+    const sources = await this.allSourceIds();
+    // No known sources (brand-new brain, or an errored probe) → fall back to a
+    // single admin-scoped pass so legacy single-`default` brains still sweep
+    // (admin scope reads all; write scalar = single source is a no-op when
+    // there's exactly one source).
+    if (sources.length === 0) {
+      return this.engine.transaction(async (tx) => {
+        await tx.setAdminSourceScope();
+        return run(tx, null);
+      });
+    }
+    const merged: T[] = [];
+    for (const src of sources) {
+      const part = await this.engine.transaction(async (tx) => {
+        await this.txScopeWrite(tx, src);
+        await this.txScopeRead(tx, [src]);
+        return run(tx, src);
+      });
+      merged.push(...part);
+    }
+    return merged;
+  }
+
+  /**
+   * v0.42 task C: public wrapper so the MinionWorker's direct engine writes
+   * (quiet-hours defer/skip, handler context.log / isActive / readInbox, health
+   * counts) can run inside a transaction with the job's source installed.
+   * Under BYPASSRLS postgres / PGLite the scope is a no-op (still runs inside
+   * a transaction — harmless for a bodied statement). Returns fn's result.
+   */
+  async withJobSourceScoped<T extends string | number | boolean | null | void | unknown[]>(
+    jobId: number,
+    fn: (tx: BrainEngine) => Promise<T>,
+  ): Promise<T> {
+    return this.runJobWrite(jobId, fn);
+  }
+
+  /**
+   * v0.42 task C: public helper for the worker health monitor's waiting-count
+   * read. Kept on the engine's bare executeRaw (NOT admin-scoped) so worker
+   * unit tests that mock engine.executeRaw (makeProbeEngine) keep intercepting
+   * it. Under the restricted role an unscoped minion_jobs count fails closed to
+   * 0 — identical to the pre-task-C behavior, so the health monitor neither
+   * false-positives nor regresses here (the worker's actual claim path is
+   * separately scoped).
+   */
+  async countWaitingForNames(queue: string, names: string[]): Promise<number> {
+    if (names.length === 0) return 0;
+    // v0.42 task C: kept on the engine's executeRaw so worker unit tests that
+    // mock engine.executeRaw (makeProbeEngine) keep intercepting the stall
+    // count. Under the restricted role an unscoped minion_jobs count fails
+    // closed to 0 — identical to the pre-task-C behavior, so the health
+    // monitor neither false-positives nor regresses here (the worker's actual
+    // claim path is separately scoped).
+    const rows = await this.engine.executeRaw<{ cnt: string }>(
+      `SELECT count(*)::text AS cnt FROM minion_jobs
+       WHERE status = 'waiting' AND queue = $1 AND name = ANY($2::text[])`,
+      [queue, names],
+    );
+    return parseInt(rows[0]?.cnt ?? '0', 10);
   }
 
   /** Verify minion_jobs table exists (migration v5+). Call before first operation. */
@@ -450,6 +655,9 @@ export class MinionQueue {
    */
   async cancelJob(id: number): Promise<MinionJob | null> {
     return this.engine.transaction(async (tx) => {
+      // v0.42 task C: install the root job's source scope so the FORCE-RLS
+      // write policy matches the rows we cancel.
+      await this.scopeJobTx(tx, id);
       const rows = await tx.executeRaw<Record<string, unknown>>(
         `WITH RECURSIVE descendants AS (
           SELECT id, 0 AS d FROM minion_jobs WHERE id = $1
@@ -620,28 +828,74 @@ export class MinionQueue {
   async claim(lockToken: string, lockDurationMs: number, queue: string, registeredNames: string[]): Promise<MinionJob | null> {
     if (registeredNames.length === 0) return null;
 
-    const rows = await this.engine.executeRaw<Record<string, unknown>>(
-      `UPDATE minion_jobs SET
-        status = 'active',
-        lock_token = $1,
-        lock_until = now() + ($2::double precision * interval '1 millisecond'),
-        timeout_at = CASE WHEN timeout_ms IS NOT NULL
-                          THEN now() + (timeout_ms::double precision * interval '1 millisecond')
-                          ELSE NULL END,
-        attempts_started = attempts_started + 1,
-        started_at = COALESCE(started_at, now()),
-        updated_at = now()
-       WHERE id = (
-         SELECT id FROM minion_jobs
-         WHERE queue = $3 AND status = 'waiting' AND name = ANY($4)
-         ORDER BY priority ASC, created_at ASC
-         FOR UPDATE SKIP LOCKED
-         LIMIT 1
-       )
-       RETURNING *`,
-      [lockToken, lockDurationMs, queue, registeredNames]
-    );
-    return rows.length > 0 ? rowToMinionJob(rows[0]) : null;
+    // v0.42 task C: fast path unchanged for BYPASSRLS postgres / PGLite.
+    if (!(await this.rlsEnforced())) {
+      const rows = await this.engine.executeRaw<Record<string, unknown>>(
+        `UPDATE minion_jobs SET
+          status = 'active',
+          lock_token = $1,
+          lock_until = now() + ($2::double precision * interval '1 millisecond'),
+          timeout_at = CASE WHEN timeout_ms IS NOT NULL
+                            THEN now() + (timeout_ms::double precision * interval '1 millisecond')
+                            ELSE NULL END,
+          attempts_started = attempts_started + 1,
+          started_at = COALESCE(started_at, now()),
+          updated_at = now()
+         WHERE id = (
+           SELECT id FROM minion_jobs
+           WHERE queue = $3 AND status = 'waiting' AND name = ANY($4)
+           ORDER BY priority ASC, created_at ASC
+           FOR UPDATE SKIP LOCKED
+           LIMIT 1
+         )
+         RETURNING *`,
+        [lockToken, lockDurationMs, queue, registeredNames]
+      );
+      return rows.length > 0 ? rowToMinionJob(rows[0]) : null;
+    }
+
+    // Restricted-role route (task C): the claim must pick the next waiting job
+    // AND THEN narrow the WRITE scalar to that job's source, because the
+    // FORCE-RLS write policy compares `source_id = current_setting('app.source_id')`
+    // (scalar, single-source). Admin scope alone sets the scalar to the FIRST
+    // source, so a single admin-scoped UPDATE can only ever claim the first
+    // source's jobs. Two-hop inside ONE transaction:
+    //   1. admin READ scope → select the candidate across all sources (no
+    //      FOR UPDATE here: locking a row also requires its write scalar, and
+    //      we don't know the source until we pick — verified by the restricted
+    //      repro that admin-scope FOR UPDATE returns 0 for a non-first source).
+    //   2. set the write scalar to the candidate's source → claim it by id,
+    //      guarded on status='waiting' so only one concurrent worker's UPDATE
+    //      matches (atomicity preserved without FOR UPDATE).
+    return this.engine.transaction(async (tx) => {
+      await tx.setAdminSourceScope();
+      const cand = await tx.executeRaw<{ id: number; source_id: string | null }>(
+        `SELECT id, source_id FROM minion_jobs
+          WHERE queue = $1 AND status = 'waiting' AND name = ANY($2)
+          ORDER BY priority ASC, created_at ASC
+          LIMIT 1`,
+        [queue, registeredNames],
+      );
+      if (cand.length === 0) return null;
+      await this.txScopeWrite(tx, cand[0].source_id);
+      await this.txScopeRead(tx, cand[0].source_id != null ? [cand[0].source_id] : []);
+      const rows = await tx.executeRaw<Record<string, unknown>>(
+        `UPDATE minion_jobs SET
+          status = 'active',
+          lock_token = $1,
+          lock_until = now() + ($2::double precision * interval '1 millisecond'),
+          timeout_at = CASE WHEN timeout_ms IS NOT NULL
+                            THEN now() + (timeout_ms::double precision * interval '1 millisecond')
+                            ELSE NULL END,
+          attempts_started = attempts_started + 1,
+          started_at = COALESCE(started_at, now()),
+          updated_at = now()
+         WHERE id = $3 AND status = 'waiting'
+         RETURNING *`,
+        [lockToken, lockDurationMs, cand[0].id],
+      );
+      return rows.length > 0 ? rowToMinionJob(rows[0]) : null;
+    });
   }
 
   /**
@@ -657,7 +911,8 @@ export class MinionQueue {
    * but will be caught the next one (after re-claim). Never double-handled.
    */
   async handleTimeouts(): Promise<MinionJob[]> {
-    return this.engine.transaction(async (tx) => {
+    return this.runSweepPerSource<MinionJob>(
+      async (tx) => {
       const rows = await tx.executeRaw<Record<string, unknown>>(
         `UPDATE minion_jobs SET
           status = 'dead',
@@ -717,7 +972,9 @@ export class MinionQueue {
       }
 
       return rows.map(rowToMinionJob);
-    });
+    },
+      { legacyInTransaction: true },
+    );
   }
 
   /**
@@ -730,7 +987,8 @@ export class MinionQueue {
    *   timeout_ms null  -> 2 * lockDurationMs * max_stalled
    */
   async handleWallClockTimeouts(lockDurationMs: number): Promise<MinionJob[]> {
-    return this.engine.transaction(async (tx) => {
+    return this.runSweepPerSource<MinionJob>(
+      async (tx) => {
       const rows = await tx.executeRaw<Record<string, unknown>>(
         `UPDATE minion_jobs SET
           status = 'dead',
@@ -788,7 +1046,9 @@ export class MinionQueue {
       }
 
       return rows.map(rowToMinionJob);
-    });
+    },
+      { legacyInTransaction: true },
+    );
   }
 
   /**
@@ -808,6 +1068,9 @@ export class MinionQueue {
    */
   async completeJob(id: number, lockToken: string, result?: Record<string, unknown>): Promise<MinionJob | null> {
     return this.engine.transaction(async (tx) => {
+      // v0.42 task C: install the job's source scope so the FORCE-RLS write
+      // policy matches the row we complete.
+      await this.scopeJobTx(tx, id);
       // Peek at parent_job_id before the UPDATE so we can lock the parent row
       // FIRST. Without this SELECT FOR UPDATE, two siblings completing
       // concurrently each see the other as still active (pre-commit snapshot
@@ -922,6 +1185,9 @@ export class MinionQueue {
     backoffMs?: number
   ): Promise<MinionJob | null> {
     return this.engine.transaction(async (tx) => {
+      // v0.42 task C: install the job's source scope so the FORCE-RLS write
+      // policy matches the row we fail.
+      await this.scopeJobTx(tx, id);
       // Lock the parent row first so concurrent sibling completions/failures
       // serialize on the parent — same race fix as completeJob.
       const peek = await tx.executeRaw<{ parent_job_id: number | null }>(
@@ -1064,19 +1330,21 @@ export class MinionQueue {
     errorText: string,
     backoffMs: number,
   ): Promise<MinionJob | null> {
-    const rows = await this.engine.executeRaw<Record<string, unknown>>(
-      `UPDATE minion_jobs SET
-        status = 'delayed',
-        error_text = $1,
-        stacktrace = COALESCE(stacktrace, '[]'::jsonb) || to_jsonb($1::text),
-        delay_until = now() + ($2::double precision * interval '1 millisecond'),
-        lock_token = NULL, lock_until = NULL, updated_at = now()
-       WHERE id = $3 AND status = 'active' AND lock_token = $4
-       RETURNING *`,
-      [errorText, backoffMs, id, lockToken],
-    );
-    if (rows.length === 0) return null;
-    return rowToMinionJob(rows[0]);
+    return this.runJobWrite(id, async (tx) => {
+      const rows = await tx.executeRaw<Record<string, unknown>>(
+        `UPDATE minion_jobs SET
+          status = 'delayed',
+          error_text = $1,
+          stacktrace = COALESCE(stacktrace, '[]'::jsonb) || to_jsonb($1::text),
+          delay_until = now() + ($2::double precision * interval '1 millisecond'),
+          lock_token = NULL, lock_until = NULL, updated_at = now()
+         WHERE id = $3 AND status = 'active' AND lock_token = $4
+         RETURNING *`,
+        [errorText, backoffMs, id, lockToken],
+      );
+      if (rows.length === 0) return null;
+      return rowToMinionJob(rows[0]);
+    });
   }
 
   /**
@@ -1091,89 +1359,152 @@ export class MinionQueue {
     errorText: string,
     backoffMs: number,
   ): Promise<MinionJob | null> {
-    const rows = await this.engine.executeRaw<Record<string, unknown>>(
-      `UPDATE minion_jobs SET
-        status = 'delayed',
-        error_text = $1,
-        stacktrace = COALESCE(stacktrace, '[]'::jsonb) || to_jsonb($1::text),
-        delay_until = now() + ($2::double precision * interval '1 millisecond'),
-        lock_token = NULL, lock_until = NULL, updated_at = now()
-       WHERE id = $3 AND status = 'active' AND lock_token = $4
-       RETURNING *`,
-      [errorText, backoffMs, id, lockToken],
-    );
-    if (rows.length === 0) return null;
-    return rowToMinionJob(rows[0]);
+    return this.runJobWrite(id, async (tx) => {
+      const rows = await tx.executeRaw<Record<string, unknown>>(
+        `UPDATE minion_jobs SET
+          status = 'delayed',
+          error_text = $1,
+          stacktrace = COALESCE(stacktrace, '[]'::jsonb) || to_jsonb($1::text),
+          delay_until = now() + ($2::double precision * interval '1 millisecond'),
+          lock_token = NULL, lock_until = NULL, updated_at = now()
+         WHERE id = $3 AND status = 'active' AND lock_token = $4
+         RETURNING *`,
+        [errorText, backoffMs, id, lockToken],
+      );
+      if (rows.length === 0) return null;
+      return rowToMinionJob(rows[0]);
+    });
   }
 
   /** Update job progress (token-fenced). */
   async updateProgress(id: number, lockToken: string, progress: unknown): Promise<boolean> {
-    const rows = await this.engine.executeRaw<Record<string, unknown>>(
-      `UPDATE minion_jobs SET progress = $1::jsonb, updated_at = now()
-       WHERE id = $2 AND status = 'active' AND lock_token = $3
-       RETURNING id`,
-      [progress, id, lockToken]
-    );
-    return rows.length > 0;
+    return this.runJobWrite(id, async (tx) => {
+      const rows = await tx.executeRaw<Record<string, unknown>>(
+        `UPDATE minion_jobs SET progress = $1::jsonb, updated_at = now()
+         WHERE id = $2 AND status = 'active' AND lock_token = $3
+         RETURNING id`,
+        [progress, id, lockToken]
+      );
+      return rows.length > 0;
+    });
   }
 
   /** Renew lock (token-fenced). Returns false if token mismatch (job was reclaimed). */
   async renewLock(id: number, lockToken: string, lockDurationMs: number): Promise<boolean> {
-    const rows = await this.engine.executeRaw<Record<string, unknown>>(
-      `UPDATE minion_jobs SET lock_until = now() + ($1::double precision * interval '1 millisecond'), updated_at = now()
-       WHERE id = $2 AND lock_token = $3 AND status = 'active'
-       RETURNING id`,
-      [lockDurationMs, id, lockToken]
-    );
-    return rows.length > 0;
+    return this.runJobWrite(id, async (tx) => {
+      const rows = await tx.executeRaw<Record<string, unknown>>(
+        `UPDATE minion_jobs SET lock_until = now() + ($1::double precision * interval '1 millisecond'), updated_at = now()
+         WHERE id = $2 AND lock_token = $3 AND status = 'active'
+         RETURNING id`,
+        [lockDurationMs, id, lockToken]
+      );
+      return rows.length > 0;
+    });
   }
 
   /** Promote delayed jobs whose delay_until has passed. Returns promoted jobs. */
   async promoteDelayed(): Promise<MinionJob[]> {
-    const rows = await this.engine.executeRaw<Record<string, unknown>>(
-      `UPDATE minion_jobs SET status = 'waiting', delay_until = NULL,
-        lock_token = NULL, lock_until = NULL, updated_at = now()
-       WHERE status = 'delayed' AND delay_until <= now()
-       RETURNING *`
-    );
-    return rows.map(rowToMinionJob);
+    return this.runSweepPerSource<MinionJob>(async (tx) => {
+      const rows = await tx.executeRaw<Record<string, unknown>>(
+        `UPDATE minion_jobs SET status = 'waiting', delay_until = NULL,
+          lock_token = NULL, lock_until = NULL, updated_at = now()
+         WHERE status = 'delayed' AND delay_until <= now()
+         RETURNING *`
+      );
+      return rows.map(rowToMinionJob);
+    });
   }
 
   /** Detect and handle stalled jobs. Single CTE, no off-by-one. Returns affected jobs. */
   async handleStalled(): Promise<{ requeued: MinionJob[]; dead: MinionJob[] }> {
-    const rows = await this.engine.executeRaw<Record<string, unknown> & { action: string }>(
-      `WITH stalled AS (
-        SELECT id, stalled_counter, max_stalled
-        FROM minion_jobs
-        WHERE status = 'active' AND lock_until < now()
-        FOR UPDATE SKIP LOCKED
-      ),
-      requeued AS (
-        UPDATE minion_jobs SET
-          status = 'waiting', stalled_counter = stalled_counter + 1,
-          lock_token = NULL, lock_until = NULL, updated_at = now()
-        WHERE id IN (SELECT id FROM stalled WHERE stalled_counter + 1 < max_stalled)
-        RETURNING *, 'requeued' as action
-      ),
-      dead_lettered AS (
-        UPDATE minion_jobs SET
-          status = 'dead', stalled_counter = stalled_counter + 1,
-          error_text = 'max stalled count exceeded',
-          lock_token = NULL, lock_until = NULL, finished_at = now(), updated_at = now()
-        WHERE id IN (SELECT id FROM stalled WHERE stalled_counter + 1 >= max_stalled)
-        RETURNING *, 'dead' as action
-      )
-      SELECT * FROM requeued UNION ALL SELECT * FROM dead_lettered`
-    );
+    // v0.42 task C: legacy single pass (BYPASSRLS / PGLite).
+    if (!(await this.rlsEnforced())) {
+      const rows = await this.engine.executeRaw<Record<string, unknown> & { action: string }>(
+        `WITH stalled AS (
+          SELECT id, stalled_counter, max_stalled
+          FROM minion_jobs
+          WHERE status = 'active' AND lock_until < now()
+          FOR UPDATE SKIP LOCKED
+        ),
+        requeued AS (
+          UPDATE minion_jobs SET
+            status = 'waiting', stalled_counter = stalled_counter + 1,
+            lock_token = NULL, lock_until = NULL, updated_at = now()
+          WHERE id IN (SELECT id FROM stalled WHERE stalled_counter + 1 < max_stalled)
+          RETURNING *, 'requeued' as action
+        ),
+        dead_lettered AS (
+          UPDATE minion_jobs SET
+            status = 'dead', stalled_counter = stalled_counter + 1,
+            error_text = 'max stalled count exceeded',
+            lock_token = NULL, lock_until = NULL, finished_at = now(), updated_at = now()
+          WHERE id IN (SELECT id FROM stalled WHERE stalled_counter + 1 >= max_stalled)
+          RETURNING *, 'dead' as action
+        )
+        SELECT * FROM requeued UNION ALL SELECT * FROM dead_lettered`
+      );
 
-    const requeued: MinionJob[] = [];
-    const dead: MinionJob[] = [];
-    for (const r of rows) {
-      const job = rowToMinionJob(r);
-      if (r.action === 'requeued') requeued.push(job);
-      else dead.push(job);
+      const requeued: MinionJob[] = [];
+      const dead: MinionJob[] = [];
+      for (const r of rows) {
+        const job = rowToMinionJob(r);
+        if (r.action === 'requeued') requeued.push(job);
+        else dead.push(job);
+      }
+      return { requeued, dead };
     }
-    return { requeued, dead };
+
+    // Restricted-role route: the FORCE-RLS write policy is single-source
+    // scalar, so a stall sweep that must reach every source's stalled jobs
+    // runs one pass per source (each scoped to that source) and merges.
+    const sources = await this.allSourceIds();
+    const allRequeeued: MinionJob[] = [];
+    const allDead: MinionJob[] = [];
+    const pass = async (src: string | null): Promise<void> => {
+      const rows = await this.engine.transaction(async (tx) => {
+        if (src != null) {
+          await tx.setSourceScope(src);
+          await tx.setSourceReadScope?.([src]);
+        } else if (sources.length === 0) {
+          await tx.setAdminSourceScope();
+        }
+        return tx.executeRaw<Record<string, unknown> & { action: string }>(
+          `WITH stalled AS (
+            SELECT id, stalled_counter, max_stalled
+            FROM minion_jobs
+            WHERE status = 'active' AND lock_until < now()
+            FOR UPDATE SKIP LOCKED
+          ),
+          requeued AS (
+            UPDATE minion_jobs SET
+              status = 'waiting', stalled_counter = stalled_counter + 1,
+              lock_token = NULL, lock_until = NULL, updated_at = now()
+            WHERE id IN (SELECT id FROM stalled WHERE stalled_counter + 1 < max_stalled)
+            RETURNING *, 'requeued' as action
+          ),
+          dead_lettered AS (
+            UPDATE minion_jobs SET
+              status = 'dead', stalled_counter = stalled_counter + 1,
+              error_text = 'max stalled count exceeded',
+              lock_token = NULL, lock_until = NULL, finished_at = now(), updated_at = now()
+            WHERE id IN (SELECT id FROM stalled WHERE stalled_counter + 1 >= max_stalled)
+            RETURNING *, 'dead' as action
+          )
+          SELECT * FROM requeued UNION ALL SELECT * FROM dead_lettered`
+        );
+      });
+      for (const r of rows) {
+        const job = rowToMinionJob(r);
+        if (r.action === 'requeued') allRequeeued.push(job);
+        else allDead.push(job);
+      }
+    };
+    if (sources.length === 0) {
+      await pass(null);
+    } else {
+      for (const src of sources) await pass(src);
+    }
+    return { requeued: allRequeeued, dead: allDead };
   }
 
   /**
@@ -1258,35 +1589,45 @@ export class MinionQueue {
 
   /** Read unread inbox messages for a job. Token-fenced. Marks messages as read. */
   async readInbox(jobId: number, lockToken: string): Promise<InboxMessage[]> {
-    // Verify lock ownership
-    const lockCheck = await this.engine.executeRaw<{ id: number }>(
-      `SELECT id FROM minion_jobs WHERE id = $1 AND lock_token = $2 AND status = 'active'`,
-      [jobId, lockToken]
-    );
-    if (lockCheck.length === 0) return [];
+    // Verify lock ownership (needs the job's source scope to read minion_jobs).
+    const lockOk = await this.runJobWrite(jobId, async (tx) => {
+      const lockCheck = await tx.executeRaw<{ id: number }>(
+        `SELECT id FROM minion_jobs WHERE id = $1 AND lock_token = $2 AND status = 'active'`,
+        [jobId, lockToken]
+      );
+      return lockCheck.length > 0;
+    });
+    if (!lockOk) return [];
 
-    const rows = await this.engine.executeRaw<Record<string, unknown>>(
-      `UPDATE minion_inbox SET read_at = now()
-       WHERE job_id = $1 AND read_at IS NULL
-       RETURNING *`,
-      [jobId]
-    );
-    return rows.map(rowToInboxMessage);
+    // v0.42 task C: minion_inbox is also FORCE RLS (via voltmind_job_source_
+    // scope_matches(job_id) → the job's source). Scope this write to the job's
+    // source in its own transaction.
+    return this.runJobWrite(jobId, async (tx) => {
+      const rows = await tx.executeRaw<Record<string, unknown>>(
+        `UPDATE minion_inbox SET read_at = now()
+         WHERE job_id = $1 AND read_at IS NULL
+         RETURNING *`,
+        [jobId]
+      );
+      return rows.map(rowToInboxMessage);
+    });
   }
 
   /** Update token counts for a job. Accumulates (adds to existing). Token-fenced. */
   async updateTokens(id: number, lockToken: string, tokens: TokenUpdate): Promise<boolean> {
-    const rows = await this.engine.executeRaw<Record<string, unknown>>(
-      `UPDATE minion_jobs SET
-        tokens_input = tokens_input + $1,
-        tokens_output = tokens_output + $2,
-        tokens_cache_read = tokens_cache_read + $3,
-        updated_at = now()
-       WHERE id = $4 AND status = 'active' AND lock_token = $5
-       RETURNING id`,
-      [tokens.input ?? 0, tokens.output ?? 0, tokens.cache_read ?? 0, id, lockToken]
-    );
-    return rows.length > 0;
+    return this.runJobWrite(id, async (tx) => {
+      const rows = await tx.executeRaw<Record<string, unknown>>(
+        `UPDATE minion_jobs SET
+          tokens_input = tokens_input + $1,
+          tokens_output = tokens_output + $2,
+          tokens_cache_read = tokens_cache_read + $3,
+          updated_at = now()
+         WHERE id = $4 AND status = 'active' AND lock_token = $5
+         RETURNING id`,
+        [tokens.input ?? 0, tokens.output ?? 0, tokens.cache_read ?? 0, id, lockToken]
+      );
+      return rows.length > 0;
+    });
   }
 
   /** Replay a completed/failed/dead job with optional data overrides. Creates a new job. */

@@ -1,6 +1,32 @@
 # TODOS
 
-## v0.42 restricted-role autopilot enqueue follow-ups (2026-08-21 production outage)
+## v0.42 restricted-role worker-consume follow-up (2026-08-21, task C after B) — task C COMPLETE
+
+Full spec: `docs/plans/2026-08-21-autopilot-rls-worker-scope.md`
+
+- **TODO-RLS-WORKER-1 (P1)**: DONE. Decided **Option B (per-method transaction-local
+  scope)** after the required minimal reproduce proved Option A impossible
+  (`setAdminSourceScope` uses `set_config(..., true)` = SET LOCAL; calling it outside
+  an explicit transaction throws `source_scope_not_applied`, and even inside a
+  transaction admin scope only enables writes to the FIRST source — the FORCE-RLS
+  write policy matches the scalar `app.source_id`). Implemented:
+  - `queue.ts`: `claim()` two-hops (admin read → narrow write scalar to the candidate's
+    source → claim by id); job-specific writes (`completeJob`/`failJob`/`cancelJob`/
+    `renewLock`/`updateProgress`/`updateTokens`/`readInbox`/release*) scope to the
+    job's source; the four bulk sweeps (`handleStalled`/`handleTimeouts`/
+    `handleWallClockTimeouts`/`promoteDelayed`) run one scoped pass per source;
+    `rlsEnforced()` detects the non-BYPASSRLS role (cached), and every scoped helper
+    is a no-op under BYPASSRLS postgres / PGLite so legacy paths are byte-identical.
+  - `worker.ts`: quiet-hours defer/skip, handler `context.log`/`isActive`, and the
+    health stall-count read route through scoped queue helpers.
+  - New restricted-role e2e: `test/e2e/autopilot-rls-worker-scope.test.ts` (full
+    worker claim→run→complete + 4 multi-source sweep tests + raw-unscoped-UPDATE
+    negative control). Focused gate: 269 pass / 0 fail (incl. 172 PGLite minions).
+  - Remaining: deployed-state confirmation on the real service after rollout
+    (worker actually processing jobs under `voltmind_restricted`, no REL errors in
+    `autopilot.err`).
+
+## v0.42 restricted-role autopilot enqueue follow-ups (2026-08-21 production outage) — task B COMPLETE
 
 Full spec: `docs/plans/2026-08-21-autopilot-rls-submitSourceId.md`
 

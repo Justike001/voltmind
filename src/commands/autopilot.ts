@@ -216,7 +216,10 @@ export async function submitVerificationCycle(engine: BrainEngine, args: string[
     'autopilot-cycle',
     // Explicitly disable pull for a local verification run. The normal
     // per-source dispatcher enables it only when the source has a remote.
-    { repoPath, pull: false },
+    // source_id must be present so the INSERT's source_id column equals the
+    // scoped app.source_id GUC (submitSourceId below) — otherwise the
+    // FORCE-RLS write policy compares NULL = 'default' and rejects.
+    { repoPath, pull: false, source_id: DEFAULT_SOURCE_ID },
     {
       queue: 'default',
       idempotency_key: `autopilot-verify:${Date.now()}:${process.pid}`,
