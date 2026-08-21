@@ -155,8 +155,21 @@ describe('voltmind init --mcp-only — happy path', () => {
     expect(r.exitCode).toBe(0);
     const cfg = JSON.parse(readFileSync(configPath(), 'utf-8'));
     expect(cfg.client_vault_path).toBe(vault);
+    expect(cfg.schema_pack).toBe('voltmind-personal-brain');
+    expect(existsSync(join(vault, 'RESOLVER.md'))).toBe(true);
+    expect(existsSync(join(vault, 'schema.md'))).toBe(true);
+    expect(existsSync(join(vault, 'index.md'))).toBe(true);
+    expect(existsSync(join(vault, 'state', 'indexes'))).toBe(true);
+    expect(existsSync(join(vault, 'sources', 'teams'))).toBe(true);
+    expect(existsSync(join(vault, 'sources', 'meetings'))).toBe(true);
+    expect(existsSync(join(vault, 'sources', 'emails'))).toBe(true);
+    expect(existsSync(join(vault, 'sources', 'calendar'))).toBe(true);
+    expect(existsSync(join(vault, 'contribution', 'candidates', 'README.md'))).toBe(true);
     const parsed = JSON.parse(r.stdout.trim().split('\n').pop()!);
     expect(parsed.client_vault_path).toBe(vault);
+    expect(parsed.schema_pack).toBe('voltmind-personal-brain');
+    expect(parsed.vault_scaffold.source).toMatch(/^(draft|embedded)$/);
+    expect(parsed.vault_scaffold.created_files).toBeGreaterThan(0);
   });
 
   test('writes remote_mcp config and creates NO local DB', async () => {

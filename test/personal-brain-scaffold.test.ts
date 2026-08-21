@@ -22,6 +22,19 @@ describe('VoltMind Personal Brain scaffold', () => {
       expect(existsSync(join(root, 'RESOLVER.md'))).toBe(true);
       expect(existsSync(join(root, 'index.md'))).toBe(true);
       expect(existsSync(join(root, 'schema.md'))).toBe(true);
+      expect(existsSync(join(root, 'log.md'))).toBe(true);
+      for (const directory of [
+        'inbox', 'daily', 'people', 'orgs', 'companies', 'workstreams',
+        'projects', 'meetings', 'artifacts', 'concepts', 'ideas', 'policy',
+        'sources', 'private', 'archive',
+        'state/decisions', 'state/commitments', 'state/actions',
+        'state/risks', 'state/indexes',
+        'contribution/candidates', 'contribution/published',
+        'contribution/rejected', 'contribution/redacted', 'contribution/reviews',
+        'sources/teams', 'sources/meetings', 'sources/emails', 'sources/calendar',
+      ]) {
+        expect(existsSync(join(root, directory))).toBe(true);
+      }
       expect(existsSync(join(root, 'policy', 'privacy-policy.md'))).toBe(true);
       expect(existsSync(join(root, '.system', 'policy-config.json'))).toBe(true);
       expect(existsSync(join(root, '.system', 'entity-registry.json'))).toBe(true);

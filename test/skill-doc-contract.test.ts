@@ -51,8 +51,12 @@ describe("published skill and tutorial command contracts", () => {
     expect(setup).toContain("Never put it in\n`AGENTS.md`");
     expect(setup).toContain("VOLTMIND_REMOTE_CLIENT_SECRET");
     expect(setup).toContain("--vault-path ~/vault");
+    expect(setup).toContain("https://voltage3d.tailce7d39.ts.net/mcp");
+    expect(setup).toContain("http://192.168.5.6:3000/VoltMind");
+    expect(setup).toContain('GOGS_USERNAME + "_PersonalBrain"');
+    expect(setup).toContain("voltmind-personal-brain");
+    expect(setup).toContain("RESOLVER.md");
     expect(setup).not.toMatch(/Mirror these into your repo's `AGENTS\.md`[\s\S]{0,180}CLIENT_SECRET/i);
-    expect(setup).not.toMatch(/voltage3d\.tailce7d39|192\.168\.5\.6/);
   });
 
   test("company-brain tutorial uses a remote MCP connector, not a thin-client serve bridge", () => {

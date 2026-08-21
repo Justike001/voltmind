@@ -11,6 +11,9 @@ import { createEngine } from '../core/engine-factory.ts';
 import { createRemoteProbeDeadline, discoverOAuth, mintClientCredentialsToken, smokeTestMcp } from '../core/remote-mcp-probe.ts';
 import { validateRemoteMcpUrl } from '../core/oauth-url-validation.ts';
 import { defaultPersonalBrainRoot, installPersonalBrainScaffold } from '../core/personal-brain-scaffold.ts';
+import { loadActivePack } from '../core/schema-pack/index.ts';
+
+const PERSONAL_BRAIN_SCHEMA_PACK = 'voltmind-personal-brain';
 
 export async function runInit(args: string[]) {
   // Help guard: cli.ts only routes --help to printOpHelp() for shared-op
@@ -541,7 +544,9 @@ async function initMigrateOnly(opts: { jsonOutput: boolean }) {
 /**
  * `voltmind init --mcp-only` — thin-client setup. Writes a `remote_mcp` config
  * field, runs three pre-flight smokes (OAuth discovery, token round-trip,
- * MCP initialize), and never creates a local engine.
+ * MCP initialize), and never creates a local engine. When --vault-path is
+ * supplied, it also installs the additive personal-brain Markdown scaffold
+ * and activates the local voltmind-personal-brain schema pack.
  *
  * Required flags (or env vars):
  *   --issuer-url <url>          (or VOLTMIND_REMOTE_ISSUER_URL)
@@ -615,6 +620,28 @@ async function initRemoteMcp(opts: {
     );
   }
 
+  // The thin client has no local engine, but it still needs the same
+  // file-plane contract as a local personal brain for client-first writes.
+  // Validate the bundled pack before touching the user's vault; the scaffold
+  // itself is installed only after the remote MCP smoke succeeds below.
+  if (clientVaultPath) {
+    try {
+      await loadActivePack({
+        cfg: {
+          ...(existing ?? { engine: 'postgres' as const }),
+          schema_pack: PERSONAL_BRAIN_SCHEMA_PACK,
+        },
+        remote: false,
+        perCall: PERSONAL_BRAIN_SCHEMA_PACK,
+      });
+    } catch (error) {
+      fail(
+        'schema_pack_invalid',
+        `Cannot activate ${PERSONAL_BRAIN_SCHEMA_PACK}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   if (!jsonOutput) {
     console.log('Thin-client setup — running pre-flight smoke...');
     console.log(`  issuer: ${issuerUrl}`);
@@ -675,6 +702,18 @@ async function initRemoteMcp(opts: {
   probeDeadline.cleanup();
   if (!jsonOutput) console.log(`  ✓ MCP initialize`);
 
+  let vaultScaffold: ReturnType<typeof installPersonalBrainScaffold> | null = null;
+  if (clientVaultPath) {
+    try {
+      vaultScaffold = installPersonalBrainScaffold(resolve(clientVaultPath));
+    } catch (error) {
+      fail(
+        'client_vault_scaffold_failed',
+        `Could not initialize the local Markdown vault at ${resolve(clientVaultPath)}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   // 4. Persist config. Preserve any existing AI/storage/etc. fields on
   // the existing config — only overwrite remote_mcp + drop engine/database
   // fields if this install is converting from local-engine to thin-client.
@@ -700,7 +739,12 @@ async function initRemoteMcp(opts: {
         ? {}
         : { oauth_client_secret: clientSecret }),
     },
-    ...(clientVaultPath ? { client_vault_path: resolve(clientVaultPath) } : {}),
+    ...(clientVaultPath
+      ? {
+        client_vault_path: resolve(clientVaultPath),
+        schema_pack: PERSONAL_BRAIN_SCHEMA_PACK,
+      }
+      : {}),
   };
   // database_url / database_path get explicitly removed when converting; the
   // spread above with `undefined` doesn't drop them in JSON, so prune.
@@ -718,6 +762,15 @@ async function initRemoteMcp(opts: {
       oauth_client_id: config.remote_mcp!.oauth_client_id,
       oauth_secret_in_config: 'oauth_client_secret' in config.remote_mcp!,
       client_vault_path: config.client_vault_path ?? null,
+      schema_pack: config.schema_pack ?? null,
+      vault_scaffold: vaultScaffold
+        ? {
+          root: vaultScaffold.root,
+          source: vaultScaffold.source,
+          created_files: vaultScaffold.createdFiles.length,
+          skipped_files: vaultScaffold.skippedFiles.length,
+        }
+        : null,
     }));
   } else {
     console.log('');
@@ -725,6 +778,10 @@ async function initRemoteMcp(opts: {
     console.log(`  Config: ${configPath()}`);
     console.log(`  Talks to: ${config.remote_mcp!.mcp_url}`);
     console.log(`  Local vault: ${config.client_vault_path ?? '(not configured — put is disabled until --vault-path is set)'}`);
+    if (vaultScaffold) {
+      console.log(`  Vault scaffold: ${vaultScaffold.createdFiles.length} files created, ${vaultScaffold.skippedFiles.length} existing files preserved`);
+      console.log(`  Schema pack: ${PERSONAL_BRAIN_SCHEMA_PACK} (validated and activated locally)`);
+    }
     console.log('');
     console.log('Next steps:');
     console.log('  1. Use local `voltmind put <slug> < page.md` for semantic writes; it writes the vault before remote MCP.');
@@ -1569,6 +1626,9 @@ EXAMPLES
 NOTES
   - Bare \`voltmind init\` defaults to PGLite at ~/.voltmind/brain.pglite and
     creates a local Personal Brain markdown scaffold at ./brain.
+  - \`voltmind init --mcp-only --vault-path <DIR>\` creates the same additive
+    Markdown scaffold at <DIR>, validates and activates
+    \`voltmind-personal-brain\`, and still creates no local database.
   - Existing config is preserved unless --force is passed.
 `.trim());
 }

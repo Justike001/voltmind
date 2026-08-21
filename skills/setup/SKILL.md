@@ -203,6 +203,17 @@ git remote -v
 The checkout must be the personal source granted by the Host. Never use a
 shared or another teammate's vault.
 
+The `--vault-path` argument also initializes the local Markdown vault before
+the thin-client configuration is saved. This is additive and never overwrites
+existing user files. It installs the canonical `voltmind-personal-brain`
+scaffold, including the root `RESOLVER.md`, `schema.md`, `index.md`, and
+`log.md`; the primary homes; `state/`; `contribution/`; the nested
+`sources/teams/`, `sources/meetings/`, `sources/emails/`, and
+`sources/calendar/` directories; each schema directory's `README.md`; and the
+agent-facing templates and policy files. The runtime validates and activates
+`voltmind-personal-brain` in the local client configuration. This creates no
+local database: the thin client still uses the Host's MCP database.
+
 ## Phase A.7: Connect as a thin client
 
 ```bash
