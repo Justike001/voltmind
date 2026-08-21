@@ -60,7 +60,7 @@ const DEFAULT_CHAT_MODEL = DEFAULT_OPENROUTER_CHAT_MODEL;
 // v0.35.0.0+: reranker default. Used only when search.reranker.enabled is set
 // AND no explicit reranker_model is configured. Mode bundles' per-mode
 // `reranker_model` default to this same value but can be overridden.
-const DEFAULT_RERANKER_MODEL = 'qwen-vllm-reranker:Qwen3-VL-Reranker-2B';
+const DEFAULT_RERANKER_MODEL = 'qwen-vllm-reranker:Qwen3-Reranker-4B';
 
 let _config: AIGatewayConfig | null = null;
 const _modelCache = new Map<string, any>();

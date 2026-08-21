@@ -20,7 +20,7 @@ describe('Mode bundle defaults (D6)', () => {
   });
 
   test('balanced reranker model is the canonical Qwen3-VL reranker', () => {
-    expect(MODE_BUNDLES.balanced.reranker_model).toBe('qwen-vllm-reranker:Qwen3-VL-Reranker-2B');
+    expect(MODE_BUNDLES.balanced.reranker_model).toBe('qwen-vllm-reranker:Qwen3-Reranker-4B');
   });
 
   test('conservative reranker stays off (cheap tier)', () => {

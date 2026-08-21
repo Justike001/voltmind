@@ -9,7 +9,7 @@ import {
 import { AIConfigError } from '../src/core/ai/errors.ts';
 
 const EMBED_MODEL = 'qwen-vllm:./models/Qwen3-VL-Embedding-2B';
-const RERANK_MODEL = 'qwen-vllm-reranker:Qwen3-VL-Reranker-2B';
+const RERANK_MODEL = 'qwen-vllm-reranker:Qwen3-Reranker-4B';
 const originalFetch = globalThis.fetch;
 
 function vector(dims = 2048): number[] {
@@ -97,7 +97,7 @@ describe('company Qwen vLLM adapters', () => {
 
     expect(url).toBe('http://rerank.internal:8003/v1/rerank');
     expect(body).toEqual({
-      model: 'Qwen3-VL-Reranker-2B',
+      model: 'Qwen3-Reranker-4B',
       query: 'internal retrieval',
       documents: ['unrelated', 'matching'],
     });

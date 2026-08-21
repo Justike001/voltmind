@@ -1,6 +1,6 @@
 import type { Recipe } from '../types.ts';
 
-/** Company-internal vLLM deployment of Qwen3-VL-Reranker-2B. */
+/** Company-internal vLLM deployment of Qwen3-Reranker-4B. */
 export const qwenVllmReranker: Recipe = {
   id: 'qwen-vllm-reranker',
   name: 'Company internal Qwen3-VL Reranker (vLLM)',
@@ -13,8 +13,8 @@ export const qwenVllmReranker: Recipe = {
   },
   touchpoints: {
     reranker: {
-      models: ['Qwen3-VL-Reranker-2B'],
-      default_model: 'Qwen3-VL-Reranker-2B',
+      models: ['Qwen3-Reranker-4B'],
+      default_model: 'Qwen3-Reranker-4B',
       cost_per_1m_tokens_usd: 0,
       price_last_verified: '2026-07-17',
       max_payload_bytes: 5_000_000,
@@ -24,5 +24,5 @@ export const qwenVllmReranker: Recipe = {
   },
   setup_hint:
     'Set provider_base_urls.qwen-vllm-reranker to your internal vLLM `/v1` base URL, ' +
-    'then enable search.reranker with qwen-vllm-reranker:Qwen3-VL-Reranker-2B.',
+    'then enable search.reranker with qwen-vllm-reranker:Qwen3-Reranker-4B.',
 };

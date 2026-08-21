@@ -54,7 +54,7 @@ describe('resolveLiveRerankerModel — divergence fix', () => {
     configureGateway({ env: {} });
     const engine = makeEngineStub({});
     const resolved = await resolveLiveRerankerModel(engine);
-    expect(resolved).toBe('qwen-vllm-reranker:Qwen3-VL-Reranker-2B');
+    expect(resolved).toBe('qwen-vllm-reranker:Qwen3-Reranker-4B');
   });
 
   test('returns undefined when reranker is explicitly disabled via config', async () => {
@@ -94,6 +94,6 @@ describe('resolveLiveRerankerModel — divergence fix', () => {
     // balanced mode bundle is the safety fallback when search.mode is unset
     // (and here, every config read failed) — and balanced enables
     // the canonical Qwen3-VL reranker by default.
-    expect(resolved).toBe('qwen-vllm-reranker:Qwen3-VL-Reranker-2B');
+    expect(resolved).toBe('qwen-vllm-reranker:Qwen3-Reranker-4B');
   });
 });

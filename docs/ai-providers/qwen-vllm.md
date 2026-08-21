@@ -10,7 +10,7 @@ setup, not an in-place migration guide.
 | --- | --- | --- | --- |
 | Text embedding | `http://192.168.70.249:8000` | `./models/Qwen3-VL-Embedding-2B` | `/v1/embeddings` |
 | Image / mixed embedding | `http://192.168.70.249:8000` | `./models/Qwen3-VL-Embedding-2B` | `/v2/embed` |
-| Reranking | `http://192.168.70.249:8003` | `Qwen3-VL-Reranker-2B` | `/v1/rerank` |
+| Reranking | `http://192.168.70.249:8003` | `Qwen3-Reranker-4B` | `/v1/rerank` |
 
 The embedding model emits its native **2048 dimensions**. Do not send
 `dimensions`, `output_dimension`, or `input_type`: the deployed model rejects
@@ -60,7 +60,7 @@ voltmind init --supabase \
 
 voltmind config set embedding_multimodal true
 voltmind config set search.reranker.enabled true
-voltmind config set search.reranker.model 'qwen-vllm-reranker:Qwen3-VL-Reranker-2B'
+voltmind config set search.reranker.model 'qwen-vllm-reranker:Qwen3-Reranker-4B'
 ```
 
 Do not set `search.unified_multimodal` yet. First import and build coverage:
