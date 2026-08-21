@@ -61,11 +61,6 @@
       "description": "Set up VoltMind: local PGLite, Personal Brain scaffold, AGENTS.md guidance, and first import"
     },
     {
-      "name": "onboard-user",
-      "path": "onboard-user/SKILL.md",
-      "description": "Provision an employee's isolated personal knowledge-base source and source-scoped thin-client credential on the company Host."
-    },
-    {
       "name": "publish",
       "path": "publish/SKILL.md",
       "description": "Share brain pages as beautiful password-protected HTML (code + skill pair, zero LLM calls)"
