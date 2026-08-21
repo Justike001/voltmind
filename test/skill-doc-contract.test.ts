@@ -56,6 +56,8 @@ describe("published skill and tutorial command contracts", () => {
     expect(setup).toContain('GOGS_USERNAME + "_PersonalBrain"');
     expect(setup).toContain("voltmind-personal-brain");
     expect(setup).toContain("RESOLVER.md");
+    expect(setup).toContain("Host-managed / pending confirmation");
+    expect(setup).not.toContain("## Phase H: Live Sync Setup");
     expect(setup).not.toMatch(/Mirror these into your repo's `AGENTS\.md`[\s\S]{0,180}CLIENT_SECRET/i);
   });
 

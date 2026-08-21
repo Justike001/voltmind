@@ -485,7 +485,7 @@ voltmind sync --no-pull --no-embed
 
 > **Thin client:** `sync` is refused locally. Use `voltmind put` or `voltmind
 > capture` so the local vault and pending receipt are written first; then let
-> the Host process the receipt or trigger a cycle with `voltmind remote ping`.
+> the Host process the receipt through its normal ingestion/autopilot path.
 
 This indexes new/changed files without pulling from git or regenerating embeddings.
 Embeddings can be refreshed later in batch (`voltmind embed --stale`).
@@ -559,7 +559,7 @@ output. It checks connection, pgvector, RLS, schema version, and embeddings.
 | `token_*` failed | Wrong `client_id`/`client_secret`, or the client lacks scopes | Re-request credentials from the Host; do not add a client-side scope flag |
 | `mcp_smoke_*` failed | Wrong `--mcp-url` path, or the Host isn't serving `/mcp` | Confirm `<issuer>/mcp` matches the Host's served path |
 | `missing_scope` on a tool call | The source-scoped client was not minted with the expected permission | Ask the Host to re-issue the client; the normal self-provision grant is fixed at `read write`, never `sources_admin` |
-| `sync`/`embed`/`sources` errors | These run on the Host, not the thin client | Use `voltmind remote ping`, or run on the Host |
+| `sync`/`embed`/`sources` errors | These run on the Host, not the thin client | Ask the Host operator to inspect or trigger the Host-side job; do not request admin scope for a personal client |
 | No pages found | Querying before the source is populated | Ask the Host to import/sync the source, then re-search |
 
 ## Phase G: Auto-Update Check (if not already configured)
@@ -577,62 +577,23 @@ If they agree:
 
 If already configured or user declines, skip.
 
-## Phase H: Live Sync Setup (MUST ADD)
+## Phase I: Client Verification
 
-The brain repo is the source of truth. If sync doesn't run automatically, the
-vector DB falls behind and voltmind returns stale answers. This phase is not optional.
+For a personal thin client, verify the client connection and local write path.
+Host-side sync, indexing, embedding, and `voltmind remote ping` are outside this
+setup skill because the personal client intentionally has only source-scoped
+`read write`, not `admin` scope.
 
-> **Thin client:** sync/embed run on the Host (they are refused locally on a thin
-> client). Trigger a Host cycle with `voltmind remote ping`; the Host's autopilot
-> handles the rest. This phase is for the Host operator only.
+1. Run `voltmind doctor --json` and confirm OAuth/MCP connectivity.
+2. Confirm the personal vault commit was pushed to the user's private Gogs repo.
+3. Run a remote search. A zero-result search is inconclusive until the Host has
+   pulled and indexed the source; ask the Host operator to verify sync before
+   diagnosing the source or vault.
+4. Read `docs/VOLTMIND_VERIFY.md` only when operating the Host-side verification
+   workflow; do not block personal client setup on its Host sync checks.
 
-Read `docs/VOLTMIND_SKILLPACK.md` Section 18 for the full reference. Key points:
-
-1. **Check the connection first.** VoltMind is tuned for the Supabase **Transaction
-   pooler** (port 6543): it auto-disables prepared statements there and routes
-   migrations, DDL, and sync transactions to a separate direct connection. That
-   derived direct connection (`db.<ref>.supabase.co:5432`) is IPv6-only, so on an
-   IPv4-only host, reads work but sync silently skips pages. Fix by making the
-   direct connection reachable: set `VOLTMIND_DIRECT_DATABASE_URL` to the **Session
-   pooler** string (port 5432 on the `pooler.supabase.com` host, IPv4), or enable
-   Supabase's IPv4 add-on.
-
-2. **Set up automatic sync.** Choose the approach that fits your environment:
-   - **Cron** (recommended for agents): register a cron every 5-30 minutes:
-     `voltmind sync --repo /data/brain && voltmind embed --stale`
-   - **Watch mode**: `voltmind sync --watch --repo /data/brain` under a process
-     manager. Pair with a cron fallback (watch exits after 5 consecutive failures).
-   - **Webhook or git hook**: if available in your environment.
-
-3. **Verify sync works.** Don't just check that the command ran. Check that it
-   worked:
-   - `voltmind stats` should show page count close to syncable file count in the repo.
-   - If page count is way too low, the direct connection is unreachable on IPv4 and
-     sync is silently skipping pages (see point 1).
-   - Push a test change and confirm it appears in `voltmind search`.
-
-4. **Chain sync + embed.** Always run both: `voltmind sync --repo <path> && voltmind
-   embed --stale`. For small syncs, embeddings are generated inline. The `embed
-   --stale` is a safety net for any stale chunks.
-
-Tell the user: "Live sync is configured. The brain will stay current automatically.
-I'll verify it's working in the next phase."
-
-## Phase I: Full Verification
-
-Run the full verification runbook to confirm the entire installation is working.
-
-1. Read `docs/VOLTMIND_VERIFY.md`
-2. Execute each check in order
-3. Report results to the user
-4. Fix any failures before declaring setup complete
-
-Every check in the runbook should pass. The most important one is check 4 (live
-sync actually works): push a change, wait for sync, search for the corrected text.
-"Sync ran" is not the same as "sync worked."
-
-Tell the user: "I've verified the full VoltMind installation. Here's the status of
-each check: [list results]. Everything is working / [specific item] needs attention."
+Report Host indexing as `Host-managed / pending confirmation` when it has not yet
+been verified. Do not ask the personal user to re-register with admin scope.
 
 If already configured or user declines, skip.
 
@@ -685,10 +646,10 @@ re-suggesting things the user already declined.
 - **Ending setup without offering cold-start.** An empty brain is useless. Phase J (cold-start) is where setup pays off. Always present the "Ready to populate?" prompt after verification. Skipping this is like installing an app and never logging in.
 - **Asking for a database connection string or Supabase key on a thin client.**
   You connect to the Host's MCP server with OAuth credentials; the database stays host-side.
-- **Skipping live sync setup.** If sync doesn't run automatically, the vector DB falls behind and search returns stale answers. Phase H is not optional.
-- **Declaring setup complete without verification.** "The command ran" is not the same as "it worked." Push a test change, wait for sync, search for the corrected text.
+- **Treating Host sync as a personal-client setup failure.** Host sync and indexing are operator-managed; a personal client must not request admin scope just to trigger them.
+- **Declaring client setup complete without verification.** "The command ran" is not the same as "it worked." Run `doctor --json`, verify the personal commit was pushed, and report Host indexing as pending when it has not been confirmed.
 - **Leaving the direct connection unreachable on IPv4.** VoltMind uses the Transaction pooler (port 6543) for reads and a derived direct connection (`db.<ref>.supabase.co:5432`, IPv6-only) for migrations, DDL, and sync transactions. On an IPv4-only host, reads work but sync silently skips pages. Set `VOLTMIND_DIRECT_DATABASE_URL` to the Session pooler string (port 5432, IPv4), or enable the IPv4 add-on.
-- **Importing without proving search.** The magical moment is the user seeing search find things grep couldn't. Don't skip it.
+- **Declaring a remote search failure before Host indexing is confirmed.** A zero-result query can mean the Host has not pulled or indexed the source yet; ask the Host operator to verify sync first.
 
 ## Output Format
 
@@ -701,7 +662,7 @@ Source: [default / <source id>]
 Connection: [OAuth verified / MCP initialize OK]
 Pages imported: N
 Embeddings: N/N (keyword search active, semantic improving)
-Live sync: [configured / method]
+Live sync: Host-managed / [confirmed / pending]
 Health check: all OK / [specific failures]
 Verification: [VOLTMIND_VERIFY.md results]
 
@@ -716,7 +677,6 @@ with a bullet list.** The bullet list is for when the user defers cold-start.
 ## Tools Used
 
 - `voltmind init --mcp-only --vault-path ... --issuer-url ... --mcp-url ... --oauth-client-id ...` -- connect to the Host as a thin client; read `VOLTMIND_REMOTE_CLIENT_SECRET` from the OS secret manager
-- `voltmind remote ping` -- trigger a Host sync/embed cycle
 - `voltmind import <dir> --no-embed [--workers N]` -- import files (Host only)
 - `voltmind search <query>` -- search brain
 - `voltmind doctor --json` -- health check
