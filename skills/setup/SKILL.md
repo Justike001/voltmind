@@ -98,21 +98,20 @@ repo in the company Gogs, get your own **sourceID** + **read/write** permission 
 the Host, connect as a thin client to the Host's MCP server, and persist those
 credentials so your agent can use them on every run.
 
-## Host-provided endpoints
+## Company deployment endpoints
 
-The Host operator must provide the following values for the deployment. Keep
-these as deployment-local configuration; do not copy a particular company's
-URLs, LAN addresses, or repository names into a published skill:
+This setup manual targets the company's fixed VoltMind deployment. Use these
+endpoints exactly; do not replace them with generic placeholders:
 
 | What | Value |
 |---|---|
-| MCP / OAuth issuer | `<https://brain.example.invalid>` |
-| MCP endpoint | `<https://brain.example.invalid/mcp>` |
-| Self-provision (`/provision/request`) | `<https://brain.example.invalid/provision/request>` |
-| Company Git service | `<https://git.example.invalid>` |
-| Git organization | `<https://git.example.invalid/<org>>` |
-| Git API | `<https://git.example.invalid/api/v1>` |
-| Git SSH clone form | `<git-user@git.example.invalid:<org>/<repo>.git>` |
+| MCP / OAuth issuer | `https://voltage3d.tailce7d39.ts.net` |
+| MCP endpoint | `https://voltage3d.tailce7d39.ts.net/mcp` |
+| Self-provision (`/provision/request`) | `https://voltage3d.tailce7d39.ts.net/provision/request` |
+| Company Gogs | `http://192.168.5.6:3000` |
+| Gogs organization | `http://192.168.5.6:3000/VoltMind` |
+| Gogs API | `http://192.168.5.6:3000/api/v1` |
+| Gogs SSH clone form | `voltage@192.168.5.6:VoltMind/<repo>.git` |
 
 **Security boundary you rely on:** you (the user's agent) only ever get
 **read/write on your OWN `personal-*` source** — never admin, never anyone else's
@@ -126,16 +125,34 @@ data. The Host keeps the Gogs-admin key and all admin credentials to itself.
 - You never receive a database connection string, the Gogs-admin SSH key, or any
   admin credential.
 
-### Phase A — create your personal knowledge repo in the company Gogs
+### Phase A — obtain a Gogs account and create your personal knowledge repo
 
 Only execute this section after the remote-route check above succeeds.
 
-1. You already have a company Git account. In the Git service (`<git-web-url>`),
-   under the org `VoltMind`, create a **private** personal knowledge repo, e.g.
-   `VoltMind/<name>_PersonalBrain`, and push an initial commit (e.g. `README.md`).
-2. Get the repo's **SSH clone address** from the repository's Clone → SSH menu.
-3. Create a **Gogs personal access token** for your account: Gogs → Settings →
-   Applications → Generate New Token (read scope is enough).
+1. Open the company Gogs at `http://192.168.5.6:3000`.
+2. If you do not have a Gogs account, use the visible **Register** flow with
+   your company email. If registration is disabled, ask the company Gogs
+   administrator to create your account and add it to the `VoltMind`
+   organization; do not continue until the account can sign in and the
+   organization is visible.
+3. If you have an account but are not a member of `VoltMind`, request an
+   invitation or membership from the organization administrator. The agent must
+   not create the personal brain repository outside that organization.
+4. Read the login/username from the signed-in Gogs profile as `GOGS_USERNAME`.
+   Generate the private repository name at runtime as:
+   `GOGS_USERNAME + "_PersonalBrain"`. For example, if the username is
+   `JustikeLiu`, create `JustikeLiu_PersonalBrain`; never hard-code a person's
+   name in this skill.
+5. Under the `VoltMind` organization, create that repository as **private** and
+   push an initial commit (for example, `README.md`). The resulting web URL is
+   `http://192.168.5.6:3000/VoltMind/<GOGS_USERNAME>_PersonalBrain`.
+6. Get the repository's **SSH clone address** from Gogs → repository → Clone →
+   SSH. It must have the form
+   `voltage@192.168.5.6:VoltMind/<GOGS_USERNAME>_PersonalBrain.git`.
+7. Create a Gogs personal access token from Gogs → Settings → Applications →
+   Generate New Token. Grant only the minimum repository-read permission needed
+   for the Host ownership check; this PAT is separate from the MCP OAuth
+   client credentials.
 
 ## Phase A.5: Apply to the Host for your sourceID + read/write (self-provision)
 
@@ -144,11 +161,11 @@ One request to the Host creates your **source**, **checks out your repo**, and
 one step. Use the Gogs API token you just made:
 
 ```bash
-curl -X POST "<issuer-url>/provision/request" \
+curl -X POST "https://voltage3d.tailce7d39.ts.net/provision/request" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "<your company email>",
-    "repo_url": "<ssh-clone-url>",
+    "repo_url": "voltage@192.168.5.6:VoltMind/<GOGS_USERNAME>_PersonalBrain.git",
     "gogs_token": "<your Gogs personal access token>"
   }'
 ```
@@ -161,6 +178,13 @@ and that you can read the repo — so you get **only your own** source. Response
   "clone_path": "...", "owner_email": "...",
   "client_id": "...", "client_secret": "..." }
 ```
+
+Record `source_id` and `client_id` from this response as non-secret local
+configuration. Store the returned `client_secret` immediately in the operating
+system's secret manager under `VOLTMIND_REMOTE_CLIENT_SECRET`; never put it in
+the repository, `AGENTS.md`, a prompt, shell history, or a committed `.env`
+file. The Host currently grants the MCP client `read write` on this source;
+there is no user-supplied OAuth `scope` field and the agent must not invent one.
 
 > If `/provision/request` returns `404` (the operator keeps self-provision OFF by
 > default), ask the Host's agent / admin to run the admin path or switch it on.
@@ -184,12 +208,18 @@ shared or another teammate's vault.
 ```bash
 voltmind init --mcp-only \
   --vault-path ~/vault \
-  --issuer-url "<issuer-url>" \
-  --mcp-url "<mcp-url>" \
+  --issuer-url "https://voltage3d.tailce7d39.ts.net" \
+  --mcp-url "https://voltage3d.tailce7d39.ts.net/mcp" \
   --oauth-client-id "<client_id>"
 voltmind doctor --json       # expect "status": "ok"
 voltmind search "<a topic>"  # first retrieval
 ```
+
+`voltmind init --mcp-only` is the MCP smoke test: it performs OAuth discovery,
+the token round-trip, and an MCP `initialize` handshake before saving the
+remote configuration. Treat a successful `init` as proof that the issuer,
+client credentials, and MCP endpoint work together. Do not add a user-supplied
+`--scopes` flag; the Host grants the source-scoped `read write` permission.
 
 Before running this command, have the OS secret manager inject
 `VOLTMIND_REMOTE_CLIENT_SECRET` into the process environment. The variable is
@@ -205,9 +235,9 @@ manager or an untracked, permission-protected environment file. Never put it in
 `AGENTS.md`, a brain page, a prompt, shell history, or a committed repository.
 
 ```bash
-export VOLTMIND_SOURCE="personal-<name>"
-export VOLTMIND_REMOTE_ISSUER_URL="<issuer-url>"
-export VOLTMIND_REMOTE_MCP_URL="<mcp-url>"
+export VOLTMIND_SOURCE="<source_id from provision response>"
+export VOLTMIND_REMOTE_ISSUER_URL="https://voltage3d.tailce7d39.ts.net"
+export VOLTMIND_REMOTE_MCP_URL="https://voltage3d.tailce7d39.ts.net/mcp"
 export VOLTMIND_REMOTE_CLIENT_ID="<client_id>"
 ```
 
@@ -464,9 +494,9 @@ output. It checks connection, pgvector, RLS, schema version, and embeddings.
 | What You See | Why | Fix |
 |---|---|---|
 | OAuth discovery failed (`discovery_*`) | Wrong `--issuer-url`, Host unreachable, or `serve --http` not running on the Host | Confirm the issuer URL and that the Host is up; `curl` the `/.well-known/oauth-authorization-server` |
-| `token_*` failed | Wrong `client_id`/`client_secret`, or the client lacks scopes | Re-request credentials from the Host; confirm `--scopes read write` was set |
+| `token_*` failed | Wrong `client_id`/`client_secret`, or the client lacks scopes | Re-request credentials from the Host; do not add a client-side scope flag |
 | `mcp_smoke_*` failed | Wrong `--mcp-url` path, or the Host isn't serving `/mcp` | Confirm `<issuer>/mcp` matches the Host's served path |
-| `missing_scope` on a tool call | Your OAuth client isn't granted that scope | Host re-registers the client with the needed scope (read / write / sources_admin) |
+| `missing_scope` on a tool call | The source-scoped client was not minted with the expected permission | Ask the Host to re-issue the client; the normal self-provision grant is fixed at `read write`, never `sources_admin` |
 | `sync`/`embed`/`sources` errors | These run on the Host, not the thin client | Use `voltmind remote ping`, or run on the Host |
 | No pages found | Querying before the source is populated | Ask the Host to import/sync the source, then re-search |
 
@@ -604,7 +634,7 @@ re-suggesting things the user already declined.
 VOLTMIND SETUP COMPLETE
 =====================
 
-Endpoint: https://<host-public-url>/mcp
+Endpoint: https://voltage3d.tailce7d39.ts.net/mcp
 Source: [default / <source id>]
 Connection: [OAuth verified / MCP initialize OK]
 Pages imported: N
@@ -623,7 +653,7 @@ with a bullet list.** The bullet list is for when the user defers cold-start.
 
 ## Tools Used
 
-- `voltmind init --mcp-only --issuer-url ... --mcp-url ... --oauth-client-id ... --oauth-client-secret ...` -- connect to the Host as a thin client
+- `voltmind init --mcp-only --vault-path ... --issuer-url ... --mcp-url ... --oauth-client-id ...` -- connect to the Host as a thin client; read `VOLTMIND_REMOTE_CLIENT_SECRET` from the OS secret manager
 - `voltmind remote ping` -- trigger a Host sync/embed cycle
 - `voltmind import <dir> --no-embed [--workers N]` -- import files (Host only)
 - `voltmind search <query>` -- search brain
