@@ -7,6 +7,7 @@ import { sqlQueryForEngine } from "../../src/core/sql-query.ts";
 import { PostgresEngine } from '../../src/core/postgres-engine.ts';
 import type { BrainEngine } from '../../src/core/engine.ts';
 import { dispatchToolCall } from "../../src/mcp/dispatch.ts";
+import { addSource } from '../../src/core/sources-ops.ts';
 
 const restrictedUrl = process.env.VOLTMIND_RESTRICTED_DATABASE_URL;
 const setupUrl = process.env.VOLTMIND_RLS_SETUP_DATABASE_URL || process.env.DATABASE_URL;
@@ -313,6 +314,30 @@ run('restricted Postgres source scope (VOLTMIND_RESTRICTED_DATABASE_URL)', () =>
       );
       expect(Number(pageRows[0]?.count ?? 0)).toBe(2);
     });
+  });
+
+  test('addSource can create a source through the restricted (NOBYPASSRLS) role', async () => {
+    // Regression for the RLS chicken-and-egg: sources_source_insert requires
+    // id = current_setting('app.source_id') at INSERT time, but a brand-new
+    // source cannot be in scope before it exists. addSource now scopes the
+    // INSERT (and the post-INSERT read) transaction-locally to the new id,
+    // so the restricted app role can provision sources directly.
+    const newSource = 'rls-provided-' + suffix;
+    const row = await addSource(engine, { id: newSource, localPath: '/tmp/' + newSource });
+    expect(row.id).toBe(newSource);
+    // The row must be readable back under the same role.
+    await engine.transaction(async (tx) => {
+      await tx.setSourceScope(newSource);
+      const rows = await tx.executeRaw<{ id: string }>(
+        'SELECT id FROM sources WHERE id = $1', [newSource],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.id).toBe(newSource);
+    });
+    // Cleanup: drop the row via the privileged setup role so later runs stay
+    // independent; the restricted role can delete it too (same scope), but
+    // the setup role is the canonical owner here.
+    await setupEngine.executeRaw('DELETE FROM sources WHERE id = $1', [newSource]);
   });
 
   test('take-owned rows and domain assignments inherit source RLS', async () => {

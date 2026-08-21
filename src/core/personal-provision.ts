@@ -324,6 +324,38 @@ export function assertSshHostAllowed(url: string, expectedHost: string = GOGS_SS
 }
 
 /**
+ * Read a sources row by id under the row's own transaction-local scope.
+ *
+ * v0.42 #7: `sources_source_read` filters by current_setting('app.source_id'),
+ * so under the restricted (NOBYPASSRLS) role a bare SELECT cannot see rows
+ * outside the current scope. Re-provisioning an existing personal source
+ * therefore misread the row as absent and re-INSERTed, tripping the PK.
+ *
+ * Scoping to the target id is the minimal read that can observe exactly the
+ * row in question (idempotency), without granting cross-source visibility.
+ * Engines without a real `transaction` (test stubs) fall back to the plain
+ * read — they have no RLS to satisfy.
+ */
+async function fetchSourceByIdScoped(
+  engine: BrainEngine,
+  id: string,
+): Promise<Array<{ id: string; config: unknown }>> {
+  if (typeof engine.transaction !== 'function' || typeof engine.setSourceScope !== 'function') {
+    return engine.executeRaw<{ id: string; config: unknown }>(
+      'SELECT id, config FROM sources WHERE id = $1',
+      [id],
+    );
+  }
+  return engine.transaction(async (tx) => {
+    await tx.setSourceScope(id);
+    return tx.executeRaw<{ id: string; config: unknown }>(
+      'SELECT id, config FROM sources WHERE id = $1',
+      [id],
+    );
+  });
+}
+
+/**
  * Provision a personal knowledge base for one company email:
  *   1. derive + validate source id (deterministic from email — dedup by id)
  *   2. if the source doesn't exist yet, create it (optionally git-checkout
@@ -355,10 +387,14 @@ export async function provisionPersonalSource(
 
   // Deterministic dedup: one email → one source id. Re-provisioning mints a
   // fresh client against the SAME source instead of a duplicate.
-  let existing = await engine.executeRaw<{ id: string; config: unknown }>(
-    'SELECT id, config FROM sources WHERE id = $1',
-    [sourceId],
-  );
+  //
+  // v0.42 #7 (RLS idempotency): under the restricted (NOBYPASSRLS) role,
+  // `sources_source_read` filters by current_setting('app.source_id'), so a
+  // bare SELECT cannot see a row outside the current scope — including the
+  // very source this email already owns. That made re-provisioning look like
+  // a first-time request and blow up on the sources PK. Read under the
+  // target source's transaction-local scope instead.
+  let existing = await fetchSourceByIdScoped(engine, sourceId);
 
   // Source ids predate self-service and intentionally normalize dots and
   // underscores. Two distinct valid emails can therefore derive the same id.
@@ -379,10 +415,7 @@ export async function provisionPersonalSource(
   if (existing.length === 0) {
     const legacySourceId = deriveLegacySourceIdFromEmail(email);
     if (legacySourceId && legacySourceId !== sourceId) {
-      const legacy = await engine.executeRaw<{ id: string; config: unknown }>(
-        "SELECT id, config FROM sources WHERE id = $1",
-        [legacySourceId],
-      );
+      const legacy = await fetchSourceByIdScoped(engine, legacySourceId);
       if (legacy[0] && sourceOwnerEmail(legacy[0].config) === email) {
         sourceId = legacySourceId;
         existing = legacy;

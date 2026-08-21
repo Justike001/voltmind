@@ -288,6 +288,73 @@ export function isPathContained(child: string, parent: string): boolean {
 
 // ── addSource ───────────────────────────────────────────────────────────────
 
+/**
+ * RLS chicken-and-egg helpers (v0.42 #7).
+ *
+ * `sources_source_insert` / `sources_source_read` / `sources_source_delete`
+ * all require `current_setting('app.source_id')` to match the row's id. A
+ * brand-new source cannot be in scope before it exists, so under the
+ * restricted (NOBYPASSRLS) role every source creation deadlocks on the
+ * policy. These helpers scope each sources-table statement transaction-locally
+ * to the new id (SET LOCAL rolls back with the transaction, so the scope never
+ * leaks to callers' later statements).
+ *
+ * Engines that lack a real `transaction` (e.g. the minimal BrainEngine stub in
+ * unit tests) fall back to the historical direct executeRaw path — they have
+ * no RLS to satisfy.
+ */
+
+function canScopeTransaction(engine: BrainEngine): boolean {
+  return typeof engine.transaction === 'function' && typeof engine.setSourceScope === 'function';
+}
+
+async function insertSourceRow(
+  engine: BrainEngine,
+  id: string,
+  name: string,
+  localPath: string | null | undefined,
+  config: Record<string, unknown>,
+): Promise<void> {
+  const insert = `INSERT INTO sources (id, name, local_path, config)
+       VALUES ($1, $2, $3, $4::text::jsonb)`;
+  const params: unknown[] = [id, name, localPath ?? null, JSON.stringify(config)];
+  if (!canScopeTransaction(engine)) {
+    await engine.executeRaw(insert, params);
+    return;
+  }
+  await engine.transaction(async (tx) => {
+    await tx.setSourceScope(id);
+    await tx.executeRaw(insert, params);
+  });
+}
+
+async function readSourceRowInScope(
+  engine: BrainEngine,
+  id: string,
+): Promise<SourceRow | null> {
+  if (!canScopeTransaction(engine)) {
+    return fetchSourceRow(engine, id);
+  }
+  return engine.transaction(async (tx) => {
+    await tx.setSourceScope(id);
+    return fetchSourceRow(tx, id);
+  });
+}
+
+async function deleteSourceRowBestEffort(engine: BrainEngine, id: string): Promise<void> {
+  const del = `DELETE FROM sources WHERE id = $1`;
+  if (!canScopeTransaction(engine)) {
+    await engine.executeRaw(del, [id]).catch(() => {});
+    return;
+  }
+  await engine
+    .transaction(async (tx) => {
+      await tx.setSourceScope(id);
+      await tx.executeRaw(del, [id]);
+    })
+    .catch(() => {});
+}
+
 export async function addSource(
   engine: BrainEngine,
   opts: AddSourceOpts,
@@ -364,14 +431,18 @@ export async function addSource(
     if (opts.federated !== null && opts.federated !== undefined) {
       config.federated = opts.federated;
     }
-    const displayName = opts.name ?? opts.id;
+const displayName = opts.name ?? opts.id;
 
     try {
-      await engine.executeRaw(
-        `INSERT INTO sources (id, name, local_path, config)
-             VALUES ($1, $2, $3, $4::text::jsonb)`,
-        [opts.id, displayName, finalPath, JSON.stringify(config)],
-      );
+      // v0.42 #7 (RLS chicken-and-egg): `sources_source_insert` requires
+      // id = current_setting('app.source_id') at INSERT time. A brand-new
+      // source cannot be in scope before it exists, so under the restricted
+      // (NOBYPASSRLS) role every source creation deadlocks on the policy.
+      // Scope the INSERT (and post-INSERT read) transaction-locally to the
+      // new id; SET LOCAL rolls back with the transaction so the scope never
+      // leaks to callers' later statements. Test stubs without a real
+      // `transaction` fall back to the historical direct INSERT.
+      await insertSourceRow(engine, opts.id, displayName, finalPath, config);
     } catch (e) {
       rmSync(tempDir, { recursive: true, force: true });
       throw new SourceOpError(
@@ -396,10 +467,9 @@ export async function addSource(
       renameSync(tempDir, finalPath!);
     } catch (e) {
       rmSync(tempDir, { recursive: true, force: true });
-      // Best-effort DB rollback.
-      await engine
-        .executeRaw(`DELETE FROM sources WHERE id = $1`, [opts.id])
-        .catch(() => {});
+      // Best-effort DB rollback. The DELETE is also RLS-guarded, so run it
+      // inside the same transaction-local source scope as the INSERT.
+      await deleteSourceRowBestEffort(engine, opts.id);
       throw new SourceOpError(
         'rename_failed',
         `Could not move clone to final path ${finalPath}: ${(e as Error).message}`,
@@ -413,14 +483,14 @@ export async function addSource(
       config.federated = opts.federated;
     }
     const displayName = opts.name ?? opts.id;
-    await engine.executeRaw(
-      `INSERT INTO sources (id, name, local_path, config)
-           VALUES ($1, $2, $3, $4::text::jsonb)`,
-      [opts.id, displayName, finalPath, JSON.stringify(config)],
-    );
+    // Same RLS chicken-and-egg fix as Path A: scope the INSERT to the new id.
+    await insertSourceRow(engine, opts.id, displayName, finalPath, config);
   }
 
-  const created = await fetchSourceRow(engine, opts.id);
+  // The post-INSERT read is also RLS-guarded by `sources_source_read`, so it
+  // must observe the row under the same transaction-local scope. Without the
+  // scope the row is invisible and addSource reports a phantom "disappeared".
+  const created = await readSourceRowInScope(engine, opts.id);
   if (!created) {
     throw new SourceOpError(
       'insert_failed',
