@@ -28,8 +28,6 @@ triggers:
   - "客户端维护"
 tools:
   - get_brain_identity
-  - get_health
-  - get_stats
   - search
   - query
   - get_page
@@ -104,11 +102,13 @@ threat model depends on you NOT bypassing it:
    (`voltmind remote doctor`) with a scope probe; report failing checks to the
    user. Key signals: connection health, schema version, RLS status, embedding
    staleness.
-3. `get_health` (admin scope) — the full health dashboard. NOTE: admin-scope MCP
-   clients see this filtered out of `get_skill`'s usable tools; full local
-   installs reach it via `voltmind health` / `voltmind stats`. If unavailable,
-   proceed with `get_brain_identity` + `doctor --json` and note the gap.
-4. Any host-only gap (schema behind, RLS off, embeddings stale, sync stale)
+3. `get_project_tracking_status` + `list_project_tracking_receipts` (read) —
+   source-scoped tracking health on your authorized source.
+4. The full health dashboard (`voltmind health` / `voltmind stats`, embed
+   coverage, stale/orphan counts) is **admin-scope** — a client cannot call it.
+   If per-dimension scores are required, request them from the Host in the
+   report under Host work requests (Host runs `voltmind health --json`).
+5. Any host-only gap (schema behind, RLS off, embeddings stale, sync stale)
    becomes a Host work request item — do NOT run `init` / `apply-migrations` /
    `embed` from the client.
 
@@ -228,19 +228,25 @@ When to run spot-checks:
 
 ## Host work request (escalation)
 
-Anything server-only becomes a structured list. For each item, give the exact
-host command or the Host skill phase to run:
+Anything server-only becomes a structured list. **Do not paste exact host-only
+commands here** — the client cannot run them, and the commands live in
+`maintain-host` (single source of truth). Name the **capability** you need and
+point at the maintain-host section that covers it:
 
-- Schema / RLS / migrations: `voltmind doctor --json`, then `voltmind apply-migrations --yes` on the host
-- Embeddings: `voltmind embed --stale` on the host
-- Sync: `voltmind sync` / `voltmind remote ping` on the host
-- Graph extraction: `voltmind extract links --source db` / `voltmind extract timeline --source db` on the host
-- Dream cycle: `voltmind dream` on the host
-- Tracking reconcile: `VOLTMIND_RUNTIME_ROLE=company-server voltmind projects tracking reconcile --source-id <company-source>`
-- Backfill/scrub a shared mount without a client mapping: host-side `voltmind file-refs ...`
+| Capability needed | Where it's done | Client's role |
+|---|---|---|
+| Sync on demand | `voltmind remote ping` — **client can run this itself** (queues an autopilot-cycle job on the Host); `voltmind sync` is host-only | client runs `remote ping` |
+| Embeddings stale | `maintain-host` → Embedding freshness (or `voltmind remote ping`) | escalate; client never runs `embed` |
+| Schema / RLS / migrations | `maintain-host` → Schema health / Security (RLS) | escalate; client never runs `init`/`apply-migrations` |
+| Graph extraction (links/timeline) | `maintain-host` → Autopilot check (autopilot covers it; manual only if down) | escalate |
+| Dream cycle | `maintain-host` → Autopilot check (autopilot covers it; manual only if down) | escalate |
+| Tracking reconcile | `maintain-host` → Long-running project tracking health | escalate (client cannot call `reconcile_project_tracking`) |
+| File ref backfill/scrub on a shared mount without client mapping | `maintain-host` → External file-reference maintenance | escalate |
+| Full per-dimension health scores | Host runs `voltmind health --json` | ask in report |
 
 Ship this list to the host agent (report file, queue message, or user approval)
-instead of running any of it locally.
+instead of running any of it locally. The one thing the client CAN trigger is
+`voltmind remote ping` — that is a client-side convenience, not a host command.
 
 ## Report Storage
 
@@ -310,7 +316,8 @@ The maintenance report follows this structure:
 ## Tools Used
 
 - Check brain identity + counters (get_brain_identity)
-- Check voltmind health (get_health / `voltmind doctor --json` / `voltmind remote doctor`)
+- Check voltmind health (`voltmind doctor --json` / `voltmind remote doctor`; full
+  `voltmind health` dashboard is admin-scope → Host work request)
 - List pages in voltmind with filters (list_pages)
 - Read a page from voltmind (get_page)
 - Check backlinks in voltmind (get_backlinks)

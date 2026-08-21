@@ -97,6 +97,12 @@ This skill guarantees:
 
 ### Long-running project tracking health
 
+> **Autopilot online?** The `tracking_maintenance` cycle phase (every 10-min
+> cycle) already audits client receipts and queues generic repair for
+> anomalies — manual `reconcile_project_tracking` is redundant while autopilot
+> is healthy. Run it only when autopilot is down, after a binding correction,
+> or to verify status.
+
 1. Call `get_project_tracking_status` on the company Host source.
 2. Review failed/stalled receipts and `state/indexes/project-tracking-review`.
 3. Correct bindings only in project/workstream Frontmatter through the project
