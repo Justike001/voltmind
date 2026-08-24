@@ -1,69 +1,19 @@
----
-name: maintain-client
-version: 1.0.0
-description: |
-  CLIENT-side brain health checks and cleanup for thin-client / cron agents:
-  read-only health observation, back-link and citation spot-checks on the
-  client's authorized source, client-owned file-reference backfill/scrub,
-  long-running project-tracking review + evidence registration, benchmark
-  spot-checks, and a Host work request for anything server-only. Use when
-  asked to run maintenance on a thin client, check brain health from a
-  client agent, or when the user says the cron maintenance agent may not
-  run host-only commands.
-triggers:
-  - "brain health"
-  - "check backlinks"
-  - "maintenance"
-  - "orphan pages"
-  - "stale pages"
-  - "backfill file references"
-  - "index legacy file links"
-  - "scrub open paths"
-  - "remove stored drive paths"
-  - "补录文件引用"
-  - "清理本地文件路径"
-  - "client maintenance"
-  - "thin client maintenance"
-  - "cron maintenance"
-  - "客户端维护"
-tools:
-  - get_brain_identity
-  - search
-  - query
-  - get_page
-  - list_pages
-  - get_backlinks
-  - get_timeline
-  - add_link
-  - remove_link
-  - add_tag
-  - remove_tag
-  - put_page
-  - search_file_refs
-  - backfill_file_refs
-  - scrub_file_ref_open_paths
-  - get_project_tracking_status
-  - list_project_tracking_receipts
-  - register_tracking_evidence
-mutating: true
----
-
-# Maintain Client Skill
+# Client / Thin-Client Maintenance Reference
 
 Periodic brain health checks and cleanup — **thin-client / cron agent variant**.
 
 ## Runtime role gate
 
 - **Thin client** (OAuth MCP pointing at a remote Host): this is the right
-  skill. Read-only observation via MCP read tools; client-owned writes on your
+  reference. Read-only observation via MCP read tools; client-owned writes on your
   authorized source; everything host-only goes into the **Host work request**.
-- **Full local install / company server**: stop and read
-  `skills/maintain-host/SKILL.md` instead. `voltmind sync / extract / embed /
+- **Full local install / company server**: stop and read [host.md](host.md)
+  instead. `voltmind sync / extract / embed /
   dream / init / apply-migrations / doctor --remediate / projects tracking
   reconcile` are host-only here and are refused on thin clients by `voltmind`
   itself.
 
-## Trust boundary (what this skill never does)
+## Trust boundary (what this reference never does)
 
 Never attempt these from a client runtime — the server refuses them and the
 threat model depends on you NOT bypassing it:
@@ -83,11 +33,15 @@ threat model depends on you NOT bypassing it:
 
 ## Contract
 
-- All client-visible health dimensions are checked (stale, orphan, dead links,
-  cross-refs, backlinks, citations, filing, tags) and reported with counts per
-  dimension — **read-only** or on pages your authorized source owns.
-- Each issue found has a specific fix action, and a **host: <command>** line for
-  anything only the Host can fix.
+- The configured local semantic vault is the client's primary maintenance
+  surface and source of truth. Remote MCP is an optional projection and health
+  surface, not a prerequisite for local inspection or repair.
+- Every in-scope local Markdown page is checked deterministically for structural
+  and semantic hygiene; database-only dimensions are reported separately and
+  never represented as a complete local-vault audit.
+- Each issue found has a specific local fix, review action, or Host capability
+  request. Do not claim a clean dimension unless the scanned scope and any
+  exclusions are reported.
 - Back-link iron law is enforced on client-owned writes.
 - Citation format is validated against the standard.
 - Long-running tracking is reviewed (status + receipts) and client-authored
@@ -95,7 +49,28 @@ threat model depends on you NOT bypassing it:
 
 ## Phases
 
-### 0. Health snapshot (read-only)
+### 0. Resolve and inventory the local vault
+
+1. Resolve the vault from the already-configured `client_vault_path` or
+   `VOLTMIND_CLIENT_VAULT_PATH`. In repository-governed environments that name
+   `VOLTMIND_LOCAL_BRAIN_VAULT`, resolve that variable before brain work. If no
+   configured vault exists, stop and request the path; never infer, echo, or
+   commit a private path.
+2. Read the vault's root `index.md`, `RESOLVER.md`, `schema.md`, `README.md`, and
+   relevant schema-directory README files before judging filing or page shape.
+   The active schema pack and canonical page-template contract remain the
+   machine authority.
+3. Enumerate local Markdown files directly from the vault. Exclude `.git/`,
+   `.voltmind/`, generated reports, templates, backups, binaries, and paths the
+   vault resolver explicitly excludes. Do not use `list_pages` as an exhaustive
+   inventory: it is a bounded remote projection, not a pageable vault walker.
+4. Record the exact scan scope: files discovered, files checked, exclusions,
+   parse failures, and whether this was a recent-change pass or a rotating full
+   sweep. Cron runs should check files changed since the last durable local
+   receipt plus a bounded rotating slice of older pages; run a full sweep on a
+   slower cadence or when requested.
+
+### 1. Optional remote health snapshot (read-only)
 
 1. `get_brain_identity` (read scope) — version, engine kind, page/chunk counts.
 2. `voltmind doctor --json` — on a thin client this runs the **remote doctor**
@@ -111,6 +86,70 @@ threat model depends on you NOT bypassing it:
 5. Any host-only gap (schema behind, RLS off, embeddings stale, sync stale)
    becomes a Host work request item — do NOT run `init` / `apply-migrations` /
    `embed` from the client.
+6. If network, OAuth, MCP, or the Host is unavailable, mark remote dimensions
+   `unavailable` and continue the local vault audit. Remote failure must not
+   turn a completed local scan into a generic maintenance failure.
+
+### 2. Local semantic page maintenance (primary)
+
+For every page in the recorded local scan scope, read the complete Markdown
+before proposing a change. Apply deterministic checks first, then semantic
+checks that require evidence-aware judgment.
+
+#### Deterministic structure and timeline checks
+
+- Parse YAML/frontmatter and validate the slug/path, declared type, required
+  fields, canonical headings, and timeline marker against the active schema and
+  page-template contract. Route focused malformed-frontmatter repair through
+  `skills/frontmatter-guard/SKILL.md`; do not normalize unknown custom fields
+  away.
+- Parse every `## Timeline` entry. Require a real `YYYY-MM-DD` date, newest-first
+  ordering across the complete section, no exact duplicate
+  `{date, summary, detail}`, and a source citation for every durable event.
+  Same-date order is not significant. This audit applies to existing pages;
+  the local writer's preflight only protects pages when they are written again.
+- Resolve Markdown links and wikilinks against the local vault. Distinguish a
+  missing target from a valid alias or resolver mapping before flagging it.
+- Check citations structurally and verify local page/evidence targets when the
+  citation names one. Never fabricate provenance to silence a citation gap.
+
+#### Semantic consistency checks
+
+- Compare current `State`/compiled truth with newer cited timeline and raw
+  evidence. Flag a page when current state omits, contradicts, or predates a
+  material confirmed update; do not rewrite state from an inference.
+- Check whether confirmed material facts in `sources/teams/`,
+  `sources/meetings/`, `sources/emails/`, and `sources/calendar/` have been
+  projected to the appropriate canonical person/company/project/workstream
+  page or a durable clarification queue. Raw evidence itself remains unchanged.
+- Detect likely duplicate canonical entities, inconsistent aliases, and filing
+  that conflicts with the vault resolver or primary-subject rule. Similar names
+  are review candidates, not automatic merges.
+- Check meaningful person/company mentions for local reciprocal references and
+  check `state/indexes/ingest-clarification-review`,
+  `state/indexes/project-tracking-review`, and `state/actions/` for stale or
+  contradictory status. Maintenance may flag or reconcile deterministically;
+  it must not invent an answer, owner, deadline, binding, or confirmation.
+
+#### Local-first repair path
+
+1. Read the target page, cited evidence, and related canonical pages needed to
+   justify the change.
+2. Preserve raw evidence, custom frontmatter, citations, and unrelated user
+   edits. Make the smallest coherent Markdown correction; do not append a
+   maintenance event merely for formatting-only normalization.
+3. For every canonical semantic-page change, run local
+   `voltmind put <slug> < page.md`. It validates and atomically writes the exact
+   Markdown to `client_vault_path` before attempting remote `put_page`.
+   Direct remote `put_page`, `add_link`, `remove_link`, `add_tag`, or
+   `remove_tag` is not a substitute for the local semantic write.
+4. If remote synchronization fails or the automation has no network, retain
+   the local write and its `local_written_remote_pending` receipt. Report the
+   pending projection and retry later from the exact local file; do not create
+   another semantic event during retry.
+5. Never delete, merge, or refile a page without confirmation unless a separate
+   deterministic workflow explicitly authorizes that operation and preserves a
+   recoverable backup.
 
 ### Long-running project tracking review + registration
 
@@ -154,14 +193,16 @@ voltmind file-refs scrub-open-paths --dry-run
 voltmind file-refs scrub-open-paths --yes
 ```
 
-### Light dimension walk
+### 3. Remote projection dimension walk
 
-Apply the same per-dimension checks as the Host skill, but on pages your client
-can see and may fix on its authorized source:
+Apply the existing database-oriented checks below only to pages the client can
+see on its authorized source. Treat them as projection checks supplementing the
+local semantic audit, not as exhaustive vault counts:
 
 ### Stale pages
 Pages where compiled_truth is older than the latest timeline entry. The assessment hasn't been updated to reflect recent evidence.
-- Check the health output for stale page count
+- Use available remote health output for the stale count; if unavailable,
+  report this projection dimension as unavailable rather than clean.
 - For each stale page: read the page from voltmind, review timeline, determine if compiled_truth needs rewriting
 
 ### Orphan pages
@@ -182,7 +223,9 @@ Check that the back-linking iron law is being followed:
 - For each recently updated page, check if entities mentioned in it have
   corresponding back-links FROM those entity pages
 - A mention without a back-link is a broken brain
-- Fix: add the missing back-link to the entity's Timeline or See Also section
+- Fix the owning local Markdown page through the local-first repair path; use a
+  direct graph operation only for a relationship that is intentionally
+  database-only and cannot be represented in the canonical page.
 - Format: `- **YYYY-MM-DD** | Referenced in [page title](path) -- brief context`
 
 ### Filing rule violations
@@ -194,7 +237,8 @@ Check for common misfiling patterns (see `skills/_brain-filing-rules.md`):
 - Flag misfiled pages for review or re-filing
 
 ### Citation audit
-Spot-check pages for missing `[Source: ...]` citations:
+Use this remote spot-check to detect projection drift after the local
+deterministic citation scan:
 - Read 5-10 recently updated pages
 - Check that compiled truth (above the line) has inline citations
 - Check that timeline entries have source attribution
@@ -230,18 +274,18 @@ When to run spot-checks:
 
 Anything server-only becomes a structured list. **Do not paste exact host-only
 commands here** — the client cannot run them, and the commands live in
-`maintain-host` (single source of truth). Name the **capability** you need and
-point at the maintain-host section that covers it:
+[host.md](host.md) (single source of truth). Name the **capability** you need
+and point at the relevant Host reference section:
 
 | Capability needed | Where it's done | Client's role |
 |---|---|---|
 | Sync on demand | `voltmind remote ping` — **client can run this itself** (queues an autopilot-cycle job on the Host); `voltmind sync` is host-only | client runs `remote ping` |
-| Embeddings stale | `maintain-host` → Embedding freshness (or `voltmind remote ping`) | escalate; client never runs `embed` |
-| Schema / RLS / migrations | `maintain-host` → Schema health / Security (RLS) | escalate; client never runs `init`/`apply-migrations` |
-| Graph extraction (links/timeline) | `maintain-host` → Autopilot check (autopilot covers it; manual only if down) | escalate |
-| Dream cycle | `maintain-host` → Autopilot check (autopilot covers it; manual only if down) | escalate |
-| Tracking reconcile | `maintain-host` → Long-running project tracking health | escalate (client cannot call `reconcile_project_tracking`) |
-| File ref backfill/scrub on a shared mount without client mapping | `maintain-host` → External file-reference maintenance | escalate |
+| Embeddings stale | Host reference → Embedding freshness (or `voltmind remote ping`) | escalate; client never runs `embed` |
+| Schema / RLS / migrations | Host reference → Schema health / Security (RLS) | escalate; client never runs `init`/`apply-migrations` |
+| Graph extraction (links/timeline) | Host reference → Autopilot check (autopilot covers it; manual only if down) | escalate |
+| Dream cycle | Host reference → Autopilot check (autopilot covers it; manual only if down) | escalate |
+| Tracking reconcile | Host reference → Long-running project tracking health | escalate (client cannot call `reconcile_project_tracking`) |
+| File ref backfill/scrub on a shared mount without client mapping | Host reference → External file-reference maintenance | escalate |
 | Full per-dimension health scores | Host runs `voltmind health --json` | ask in report |
 
 Ship this list to the host agent (report file, queue message, or user approval)
@@ -251,6 +295,9 @@ instead of running any of it locally. The one thing the client CAN trigger is
 ## Report Storage
 
 After maintenance runs, save a report:
+- Local vault scan scope, exclusions, parse failures, and offline/online state
+- Timeline order/duplicate/date/citation violations found and fixed
+- Semantic state/evidence inconsistencies and unprojected confirmed evidence
 - Health check results (before/after scores for each dimension the client can observe)
 - Back-link violations found and fixed
 - Filing rule violations found
@@ -272,6 +319,9 @@ This creates an audit trail for brain health over time.
 
 - Running host-only CLI from a thin client (dream/extract/embed/sync/init/apply-migrations/reconcile)
 - Faking `VOLTMIND_RUNTIME_ROLE=company-server` on a client
+- Treating bounded `list_pages` or unavailable remote health as a complete local-vault audit
+- Stopping the local semantic audit merely because network/MCP is unavailable
+- Calling remote `put_page` or graph/tag mutations instead of updating the authoritative local Markdown
 - Fixing pages without reading them first -- you must understand context before editing
 - Silently skipping dimensions -- every dimension must be checked and reported, even if clean
 - Deleting orphan pages without checking if they should be linked instead
@@ -299,12 +349,19 @@ The maintenance report follows this structure:
 | Filing violations    | N           | N     | N         | y/n   |
 | Tag inconsistencies  | N           | N     | N         | y/n   |
 | Open threads         | N           | N     | N         | y/n   |
+| Timeline integrity   | N           | N     | N         | n     |
+| Template/frontmatter | N           | N     | N         | n     |
+| State/evidence drift | N           | N     | N         | n     |
+| Unprojected evidence | N           | N     | N         | n     |
 
 ### Details
 [Per-dimension breakdown with specific pages and actions taken]
 
+### Local Scan Scope
+[Files discovered/checked, exclusions, incremental/full-sweep mode, remote availability]
+
 ### Host Work Requests
-[Exact host commands / Host skill phases required, one per line]
+[Required Host capabilities / reference phases, one per line]
 
 ### Benchmark Results (if run)
 [Tier 1-4 query results with pass/fail]
@@ -315,6 +372,8 @@ The maintenance report follows this structure:
 
 ## Tools Used
 
+- Enumerate and read local Markdown under the resolved client vault
+- Validate canonical pages through local `voltmind put`
 - Check brain identity + counters (get_brain_identity)
 - Check voltmind health (`voltmind doctor --json` / `voltmind remote doctor`; full
   `voltmind health` dashboard is admin-scope → Host work request)

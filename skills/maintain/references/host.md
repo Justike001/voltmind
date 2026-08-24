@@ -1,76 +1,15 @@
----
-name: maintain-host
-version: 1.0.0
-description: |
-  HOST-side brain health checks and cleanup: back-link enforcement, citation
-  audit, filing validation, stale info detection, orphan pages, external-file-
-  reference backfill/path cleanup, graph population, dream cycle, autopilot
-  install, schema/RLS health, and long-running project-tracking reconcile.
-  Run on the company server / full local install where sync, extract, embed,
-  dream, init, apply-migrations, and `reconcile_project_tracking` are legal.
-  Thin-client agents MUST use maintain-client instead; this skill's CLI paths
-  are refused on thin clients by `voltmind` itself.
-triggers:
-  - "extract links"
-  - "build link graph"
-  - "populate timeline"
-  - "populate links"
-  - "backfill graph"
-  - "extract timeline entries"
-  - "run dream"
-  - "process today's session"
-  - "process yesterday's transcripts"
-  - "synthesize my conversations"
-  - "what patterns did you see"
-  - "did the dream cycle run"
-  - "consolidate yesterday's conversations"
-  - "get my brain to 90/100"
-  - "fix what's broken"
-  - "project tracking health"
-  - "failed tracking receipts"
-  - "reconcile project tracking"
-  - "项目追踪健康"
-  - "修复项目追踪"
-  - "host maintenance"
-  - "server brain maintenance"
-  - "公司脑维护"
-tools:
-  - get_health
-  - get_stats
-  - run_doctor
-  - get_page
-  - put_page
-  - list_pages
-  - get_backlinks
-  - get_timeline
-  - add_link
-  - remove_link
-  - add_tag
-  - remove_tag
-  - search
-  - query
-  - search_file_refs
-  - backfill_file_refs
-  - scrub_file_ref_open_paths
-  - get_project_tracking_status
-  - list_project_tracking_receipts
-  - reconcile_project_tracking
-  - register_tracking_evidence
-mutating: true
----
-
-# Maintain Host Skill
+# Host / Full-Install Maintenance Reference
 
 Periodic brain health checks and cleanup — **host/company-server variant**.
 
 ## Runtime role gate
 
 - Full local install or company server (Postgres + `VOLTMIND_RUNTIME_ROLE=company-server`
-  where noted): this skill is the right one. `voltmind sync / extract / embed /
+  where noted): this reference is the right one. `voltmind sync / extract / embed /
   dream / init / apply-migrations / doctor --remediate / projects tracking
   reconcile` are all legal here.
 - **Thin client** (OAuth MCP pointing at a remote host): stop and read
-  `skills/maintain-client/SKILL.md` instead. `voltmind` refuses the host-only
+  [client.md](client.md) instead. `voltmind` refuses the host-only
   CLI commands above on thin clients with a hint pointing at the host; do not
   bypass that refusal by faking an engine or setting `VOLTMIND_RUNTIME_ROLE`.
 - Never set `VOLTMIND_RUNTIME_ROLE=company-server` on a client runtime. The
@@ -79,7 +18,7 @@ Periodic brain health checks and cleanup — **host/company-server variant**.
 
 ## Contract
 
-This skill guarantees:
+This reference guarantees:
 - All health dimensions are checked (stale, orphan, dead links, cross-refs, backlinks, citations, filing, tags)
 - Each issue found has a specific fix action
 - Back-link iron law is enforced

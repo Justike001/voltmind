@@ -63,7 +63,6 @@ the agent skill dispatcher.
 | Daily briefing, "what's happening today" | `skills/briefing/SKILL.md` |
 | Cron scheduling, quiet hours, job staggering | `skills/cron-scheduler/SKILL.md` |
 | Ingest produced local `state/actions/*.md`, recover omitted action details from cited Teams/Outlook evidence, schedule pending actions, collect remaining execution details and exact execution time | `skills/schedule-actions/SKILL.md` (action + raw source Markdown first; DB/MCP index is optional) |
-| "get more out of voltmind", "is my brain set up right", "weekly brain checkup", "advise me on my brain", "voltmind advisor" | `skills/voltmind-advisor/SKILL.md` |
 | Save or load reports | `skills/reports/SKILL.md` |
 | "Create a skill", "improve this skill" | `skills/skill-creator/SKILL.md` |
 | "Skillify this", "is this a skill?", "make this proper" | `skills/skillify/SKILL.md` |
@@ -87,19 +86,17 @@ the agent skill dispatcher.
 | "Set up VoltMind", first boot | `skills/setup/SKILL.md` |
 | "Now what?", "fill my brain", "cold start", "bootstrap", "import my data", "what should I import first" | `skills/cold-start/SKILL.md` |
 | "Migrate from Obsidian/Notion/Logseq" | `skills/migrate/SKILL.md` |
-| Brain health check, maintenance run | `skills/maintain/SKILL.md` (router: thin client → `skills/maintain-client/SKILL.md`, host/full install → `skills/maintain-host/SKILL.md`) |
-| "client maintenance", "thin client maintenance", "cron maintenance", "客户端维护" | `skills/maintain-client/SKILL.md` (thin-client / cron-agent maintenance; host-only work becomes a Host work request) |
-| "host maintenance", "server brain maintenance", "公司脑维护" | `skills/maintain-host/SKILL.md` (company-server / full-install maintenance: dream, extract, embed, schema/RLS, reconcile) |
-| "project tracking health", "failed tracking receipts", "reconcile project tracking", "项目追踪健康", "修复项目追踪" | `skills/maintain-host/SKILL.md` (Host status/reconcile operations; client review + evidence registration stay in `skills/maintain-client/SKILL.md`; binding edits stay in `skills/project/SKILL.md`) |
-| "backfill file references", "index legacy file links", "scrub open paths", "remove stored drive paths" | `skills/maintain-client/SKILL.md` (client-authorized backfill/scrub); host equivalents in `skills/maintain-host/SKILL.md` |
-| "Extract links", "build link graph", "populate timeline" | `voltmind extract all --source db` / autopilot `extract` phase (auto, 10-min cycle). See `skills/maintain-host/SKILL.md` Autopilot check. |
-| "Run dream", "process today's session", "synthesize my conversations", "consolidate yesterday's conversations", "what patterns did you see", "did the dream cycle run" | `voltmind dream` — but autopilot's `synthesize`/`patterns` phases already run it every cycle; only run manually when autopilot is down. See `skills/maintain-host/SKILL.md` Autopilot check. |
+| Brain health check, maintenance run, "client maintenance", "thin client maintenance", "cron maintenance", "客户端维护", "host maintenance", "server brain maintenance", "公司脑维护" | `skills/maintain/SKILL.md` (router: thin client/offline cron → `references/client.md`; host/full install → `references/host.md`) |
+| "project tracking health", "failed tracking receipts", "reconcile project tracking", "项目追踪健康", "修复项目追踪" | `skills/maintain/SKILL.md` (Host reference owns status/reconcile; client reference owns local review + evidence registration + capability request; binding edits stay in `skills/project/SKILL.md`) |
+| "backfill file references", "index legacy file links", "scrub open paths", "remove stored drive paths" | `skills/maintain/SKILL.md` (source-scoped client/Host file-reference sections selected by runtime) |
+| "Extract links", "build link graph", "populate timeline" | `voltmind extract all --source db` / autopilot `extract` phase (auto, 10-min cycle). See `skills/maintain/references/host.md` Autopilot check. |
+| "Run dream", "process today's session", "synthesize my conversations", "consolidate yesterday's conversations", "what patterns did you see", "did the dream cycle run" | `voltmind dream` — but autopilot's `synthesize`/`patterns` phases already run it every cycle; only run manually when autopilot is down. See `skills/maintain/references/host.md` Autopilot check. |
 | "Brain health", "what features am I missing", "brain score" | Run `voltmind features --json` |
 | "Set up autopilot", "run brain maintenance", "keep brain updated" | Run `voltmind autopilot --install` |
 | "Upgrade voltmind", "update voltmind", "voltmind update available", `UPGRADE_AVAILABLE`, "is voltmind up to date" | `skills/voltmind-upgrade/SKILL.md` |
 | Agent identity, "who am I", customize agent | `skills/soul-audit/SKILL.md` |
-| "Populate links", "extract links", "backfill graph" | `voltmind extract all --source db` (autopilot `extract` phase covers it). See `skills/maintain-host/SKILL.md` |
-| "Populate timeline", "extract timeline entries" | `voltmind extract timeline --source db` (autopilot `extract` phase covers it). See `skills/maintain-host/SKILL.md` |
+| "Populate links", "extract links", "backfill graph" | `voltmind extract all --source db` (autopilot `extract` phase covers it). See `skills/maintain/references/host.md` |
+| "Populate timeline", "extract timeline entries" | `voltmind extract timeline --source db` (autopilot `extract` phase covers it). See `skills/maintain/references/host.md` |
 
 ## Identity & access (always-on)
 

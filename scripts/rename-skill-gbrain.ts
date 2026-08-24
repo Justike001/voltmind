@@ -13,7 +13,7 @@
  *   - Rewrites the ENTIRE SKILL.md (YAML frontmatter AND body prose), so
  *     `name:`, `description:`, triggers, and prose all read VoltMind.
  *   - Renames any skill DIRECTORY whose name starts with the `gbrain` prefix
- *     (e.g. `gbrain-advisor` -> `voltmind-advisor`) so the directory name and
+ *     (e.g. `gbrain-example` -> `voltmind-example`) so the directory name and
  *     the frontmatter `name:` stay consistent.
  *   - Case-insensitive: `gbrain`, `Gbrain`, `GBrain`, `GBRAIN`, `gBrain` … are
  *     all rewritten to the lowercase `voltmind`, covering every casing variant.
@@ -54,7 +54,7 @@ export interface RenameResult {
 /**
  * Align GBrain skill branding to VoltMind:
  *   1. Rename any skill directory whose name starts with `gbrain` so the prefix
- *      becomes `voltmind` (e.g. `gbrain-advisor` -> `voltmind-advisor`).
+ *      becomes `voltmind` (e.g. `gbrain-example` -> `voltmind-example`).
  *   2. Replace every case-variant of "gbrain" with "voltmind" throughout each
  *      skill's SKILL.md — frontmatter AND body.
  *

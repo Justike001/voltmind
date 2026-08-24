@@ -28,17 +28,7 @@
     {
       "name": "maintain",
       "path": "maintain/SKILL.md",
-      "description": "Brain health and maintenance router: picks maintain-client (thin client / cron agent) vs maintain-host (company server / full local install) by runtime."
-    },
-    {
-      "name": "maintain-client",
-      "path": "maintain-client/SKILL.md",
-      "description": "Thin-client / cron-agent brain health checks: read-only observation, client-authorized backfill/scrub and evidence registration, and Host work requests for server-only maintenance."
-    },
-    {
-      "name": "maintain-host",
-      "path": "maintain-host/SKILL.md",
-      "description": "Company-server / full-install brain health and cleanup: dream cycle, sync/extract/embed, schema/RLS health, autopilot install, graph population, and long-running project-tracking reconcile."
+      "description": "Maintain brain health and semantic page quality; routes local-vault thin clients and offline cron agents to the client reference, and full installs/company servers to the Host reference."
     },
     {
       "name": "enrich",
@@ -244,11 +234,6 @@
       "name": "skill-optimizer",
       "path": "skill-optimizer/SKILL.md",
       "description": "Optimize skill routing and behavior with benchmarked evaluation loops."
-    },
-    {
-      "name": "voltmind-advisor",
-      "path": "voltmind-advisor/SKILL.md",
-      "description": "Advise on VoltMind setup, health, maintenance, and workflow improvements."
     },
     {
       "name": "voltmind-upgrade",

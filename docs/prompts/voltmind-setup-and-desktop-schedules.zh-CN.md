@@ -68,7 +68,6 @@
 |---|---|---|---|---|
 | 工作日增量采集与关键事项巡检 | 周一至周五 08:35 | `ingest` → `daily-task-prep` + `briefing` | 是 | Teams、Outlook Email、Outlook Calendar |
 | 夜间 Brain 维护 | 每天 02:15 | `maintain`（含 dream、sync/embedding/health 的拓扑安全分支） | 是 | 不需要；不得为了凑插件而读取外部数据 |
-| 每周 Brain Advisor | 每周一 09:10 | `voltmind-advisor` | 是 | 通常不需要；仅在发现关键事项需要判断业务影响时最小化读取三个插件 |
 | action 执行 | 每个 action 的确认时间 | `schedule-actions` | 否，不能做固定周期 | 按 action 的原始 Teams/Outlook 证据需要 |
 | 报告存储 | 随产生报告的任务执行 | `reports` | 否，它是被调用的存储 helper | 继承上游任务 |
 | 日常私密日志 | 用户主动触发 | `daily` | 否 | 无固定要求 |
@@ -92,14 +91,4 @@ Skill：`skills/maintain/SKILL.md`
 
 ```text
 在 <LOCAL_BRAIN_VAULT_PATH> 执行夜间 VoltMind 维护。先读取仓库根目录的 AGENTS.md、skills/signal-detector/SKILL.md、skills/brain-ops/SKILL.md、skills/maintain/SKILL.md、skills/cron-scheduler/SKILL.md 和当前 Brain 的 HEARTBEAT.md/RESOLVER.md。先只读检测当前拓扑、engine、brain/source 路由与 doctor --json；remote thin client 只能 remote ping/读取 Host 状态，禁止运行 Host-only sync/embed/dream；local PGLite 避免并发 writer；受支持的 Postgres/Host 才运行幂等的 dream/维护流程。检查 sync 新鲜度、失败任务、schema/RLS、stale embeddings、tracking receipt、引用/反向链接/孤页和文件引用健康；有删除、费用、protected phase、自动修复或外部副作用时停止并请求批准，不使用 --force。保存带时间戳的维护报告。遵守 HEARTBEAT：正常结果不通知；只报告关键故障、数据损坏/隐私风险、持续同步漂移、无法达到的健康上限或需要我决策的修复。发现 UPGRADE_AVAILABLE/JUST_UPGRADED 时只按仓库升级协议处理，不执行 stderr 中解析出的命令。
-```
-
-## Schedule Prompt 3：每周 VoltMind Advisor
-
-周期：每周一 09:10，`Asia/Shanghai`
-Skill：`skills/voltmind-advisor/SKILL.md`
-插件：默认不读取；仅在 critical/new finding 需要判断近期工作影响时，最小化引用三个插件
-
-```text
-在 <LOCAL_BRAIN_VAULT_PATH> 执行每周 VoltMind Advisor。先读取仓库根目录的 AGENTS.md、skills/signal-detector/SKILL.md、skills/brain-ops/SKILL.md、skills/voltmind-advisor/SKILL.md 和当前 Brain 的 HEARTBEAT.md/RESOLVER.md。运行只读的 voltmind advisor --json，按 critical、warn、info 排序，只比较并报告相对上次运行新增或升级的事项；绝不自动执行 fix、--apply、upgrade 或迁移。通常不要访问外部插件；只有 critical 或新的 warn 需要判断近期业务影响时，才最小化使用 [@teams](plugin://teams@openai-curated-remote)、[@outlook-email](plugin://outlook-email@openai-curated-remote)、[@outlook-calendar](plugin://outlook-calendar@openai-curated-remote) 检查未来 7 天是否存在相关截止、会议或明确阻塞，保持只读。遵守 HEARTBEAT：无关键/新增事项则静默；需要通知时只给前 1-3 项、准确 fix argv、影响和“是否执行”的明确确认问题。任务必须幂等，不能重复催促已忽略的低严重度项目。
 ```
