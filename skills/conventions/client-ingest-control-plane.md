@@ -14,7 +14,9 @@ remote brain is its synchronized index, graph, and audit surface.
    schema pack remains the machine authority; these local files add placement
    context and constraints.
 2. Create or resume a durable local ingest manifest before connector reads.
-3. Write raw evidence to the local vault first, with stable event identity.
+3. Write raw evidence to the local vault first, preserving the connector's
+   event identity. Treat it as stable only when the connector/provider contract
+   guarantees that property.
 4. Route semantic signal locally: update confirmed canonical pages, append
    project/workstream routing ambiguity to
    `state/indexes/project-tracking-review`, and append other notable ambiguity
@@ -43,8 +45,10 @@ semantic writes through the local VoltMind CLI/adapter.
 
 ## Evidence identity and coverage
 
-- Evidence frontmatter must include `event_id`, `event_version` when
-  available, `evidence_type`, and `tracking_refs`.
+- Evidence frontmatter must include the connector-provided `event_id`, plus
+  `event_version` when available, `evidence_type`, and `tracking_refs`. Do not
+  invent a version or describe a provider ID as stable when its contract does
+  not guarantee stability.
 - Deduplicate Teams by `teams:<container_id>:<message_id>`.
 - Keep one checkpoint and one manifest ledger per chat/channel. A 99-message
   result is `saturated`, never complete; a 429 is `rate_limited`, never

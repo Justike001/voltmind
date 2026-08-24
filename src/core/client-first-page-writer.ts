@@ -22,6 +22,8 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { VoltMindConfig } from './config.ts';
 import { createFrontmatterBackup } from './brain-writer.ts';
 import { CJK_SLUG_CHARS } from './cjk.ts';
+import { parseTimelineEntries } from './link-extraction.ts';
+import { parseMarkdown } from './markdown.ts';
 import { validateCanonicalPageTemplate } from './page-template-contract.ts';
 import { loadActivePack } from './schema-pack/load-active.ts';
 
@@ -56,6 +58,8 @@ export class ClientFirstPageWriteError extends Error {
       | 'path_outside_client_vault'
       | 'template_contract_violation'
       | 'template_contract_unavailable'
+      | 'timeline_not_reverse_chronological'
+      | 'timeline_duplicate_entry'
       | 'local_write_verification_failed',
     message: string,
     public readonly suggestion?: string,
@@ -130,6 +134,7 @@ export async function writeClientFirstPage(
       `Rewrite the page using ${validation.draftPath} and retry. No local or remote write occurred.`,
     );
   }
+  validateClientTimeline(input.content);
 
   const targetPath = resolve(vaultPath, ...input.slug.split('/')) + '.md';
   const rel = relative(vaultPath, targetPath);
@@ -190,6 +195,39 @@ export async function writeClientFirstPage(
     attempts: typeof priorReceipt.attempts === 'number' ? priorReceipt.attempts + 1 : 1,
   } satisfies ClientFirstSyncReceiptFile);
   return receipt;
+}
+
+/**
+ * Client-only preflight for semantic timeline writes. It deliberately uses the
+ * existing markdown and timeline parsers rather than defining another wire
+ * format. No markdown is rewritten: callers must submit a newest-first list
+ * before the local vault write, which is then forwarded unchanged to Host.
+ */
+function validateClientTimeline(content: string): void {
+  const entries = parseTimelineEntries(parseMarkdown(content).timeline);
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    const key = JSON.stringify([entry.date, entry.summary, entry.detail]);
+    if (seen.has(key)) {
+      throw new ClientFirstPageWriteError(
+        'timeline_duplicate_entry',
+        `Local timeline contains a duplicate entry on ${entry.date}: ${entry.summary}`,
+        'Remove the repeated timeline entry before retrying. No local or remote write occurred.',
+      );
+    }
+    seen.add(key);
+  }
+  for (let index = 1; index < entries.length; index++) {
+    const previous = entries[index - 1]!;
+    const current = entries[index]!;
+    if (current.date > previous.date) {
+      throw new ClientFirstPageWriteError(
+        'timeline_not_reverse_chronological',
+        `Local timeline must be newest-first; ${current.date} appears after ${previous.date}.`,
+        'Sort the existing `- **YYYY-MM-DD** | …` timeline entries before retrying. No local or remote write occurred.',
+      );
+    }
+  }
 }
 
 /**

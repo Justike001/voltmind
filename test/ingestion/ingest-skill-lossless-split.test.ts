@@ -13,6 +13,9 @@ const referenceNames = [
   'client-write-through',
   'teams-cold-start',
 ] as const;
+const additiveReferenceNames = [
+  'outlook-email-timeline-reconciliation',
+] as const;
 
 function reconstructOriginal(): string {
   let text = readFileSync(skillPath, 'utf8');
@@ -42,7 +45,7 @@ describe('ingest skill lossless reference split', () => {
     const skill = readFileSync(skillPath, 'utf8');
     expect(skill).toContain('## Reference Router');
     expect(skill).toContain('Multiple rows may apply to one ingest.');
-    for (const name of referenceNames) {
+    for (const name of [...referenceNames, ...additiveReferenceNames]) {
       const path = `skills/ingest/references/${name}.md`;
       expect(existsSync(path)).toBe(true);
       expect(skill).toContain(`(references/${name}.md)`);

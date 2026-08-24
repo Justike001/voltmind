@@ -129,6 +129,38 @@ describe('client-first semantic page writer', () => {
     expect(existsSync(target)).toBe(false);
   });
 
+  test('rejects an out-of-order timeline before touching the vault', async () => {
+    const target = join(vault, 'projects', 'out-of-order.md');
+    const outOfOrder = VALID_PROJECT.replace(
+      '- **2026-08-05** | 项目模板合同已启用。[Source: 测试]',
+      '- **2026-08-04** | 项目模板合同已启用。[Source: 测试]\n- **2026-08-05** | 项目已完成核对。[Source: 测试]',
+    );
+
+    await withEnv({ VOLTMIND_HOME: root }, async () => {
+      await expect(writeClientFirstPage(config, {
+        slug: 'projects/out-of-order',
+        content: outOfOrder,
+      })).rejects.toMatchObject({ code: 'timeline_not_reverse_chronological' });
+    });
+    expect(existsSync(target)).toBe(false);
+  });
+
+  test('rejects an exact duplicate timeline entry before touching the vault', async () => {
+    const target = join(vault, 'projects', 'duplicate-timeline.md');
+    const duplicateTimeline = VALID_PROJECT.replace(
+      '- **2026-08-05** | 项目模板合同已启用。[Source: 测试]',
+      '- **2026-08-05** | 项目模板合同已启用。[Source: 测试]\n- **2026-08-05** | 项目模板合同已启用。[Source: 测试]',
+    );
+
+    await withEnv({ VOLTMIND_HOME: root }, async () => {
+      await expect(writeClientFirstPage(config, {
+        slug: 'projects/duplicate-timeline',
+        content: duplicateTimeline,
+      })).rejects.toMatchObject({ code: 'timeline_duplicate_entry' });
+    });
+    expect(existsSync(target)).toBe(false);
+  });
+
   test('rejects path traversal before creating a file', async () => {
     await withEnv({ VOLTMIND_HOME: root }, async () => {
       await expect(writeClientFirstPage(config, {
