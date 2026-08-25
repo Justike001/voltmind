@@ -15,6 +15,7 @@ const referenceNames = [
 ] as const;
 const additiveReferenceNames = [
   'outlook-email-timeline-reconciliation',
+  'client-semantic-relations',
 ] as const;
 
 function reconstructOriginal(): string {
@@ -60,5 +61,16 @@ describe('ingest skill lossless reference split', () => {
     expect(reconstructed).toContain('semantic_status: review_required');
     expect(reconstructed).toContain('blocked_by_connector_pagination');
     expect(reconstructed).toContain('voltmind client-roots add synology-public');
+  });
+
+  test('keeps client-authored relationship materialization on the ingest path', () => {
+    const relationshipContract = readFileSync(
+      'skills/ingest/references/client-semantic-relations.md',
+      'utf8',
+    );
+    expect(relationshipContract).toContain('frontmatter_links');
+    expect(relationshipContract).toContain('canonical target slug');
+    expect(relationshipContract).toContain('voltmind link <from-slug> <to-slug> --type <declared-link-type>');
+    expect(relationshipContract).toContain('DB-only inferred');
   });
 });

@@ -83,7 +83,7 @@ this file. Multiple rows may apply to one ingest.
 | RaiDrive, SMB, UNC, mapped-drive configuration, normalization, lookup, or materialization | [mapped-shared-drive.md](references/mapped-shared-drive.md) |
 | Any ingest pass: entity mentions or the user's original thinking | [entity-detection.md](references/entity-detection.md) |
 | Article, video, podcast, PDF, image, meeting transcript, social post, or raw-source storage | [media-and-raw-source.md](references/media-and-raw-source.md) |
-| Client-authored local-first semantic write, remote synchronization, receipt, or incremental Teams checkpoint | [client-write-through.md](references/client-write-through.md) |
+| Client-authored local-first semantic write, remote synchronization, receipt, or incremental Teams checkpoint | [client-write-through.md](references/client-write-through.md) and [client-semantic-relations.md](references/client-semantic-relations.md) |
 | Teams cold start, history window, 99-result cap, saturation, 429, or cold-start manifest | [teams-cold-start.md](references/teams-cold-start.md) |
 <!-- /ingest-reference-router -->
 

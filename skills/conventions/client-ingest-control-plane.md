@@ -17,7 +17,12 @@ remote brain is its synchronized index, graph, and audit surface.
 3. Write raw evidence to the local vault first, preserving the connector's
    event identity. Treat it as stable only when the connector/provider contract
    guarantees that property.
-4. Route semantic signal locally: update confirmed canonical pages, append
+4. Route semantic signal locally: update confirmed canonical pages and
+   materialize every confirmed relationship in the local Markdown before
+   `voltmind put`. Prefer the active schema pack's typed frontmatter field and
+   canonical target slug. When no field maps the required relationship, keep a
+   cited wikilink in the page and create the link with an explicit `--type`;
+   never leave Host extraction to guess the relationship from prose. Append
    project/workstream routing ambiguity to
    `state/indexes/project-tracking-review`, and append other notable ambiguity
    to `state/indexes/ingest-clarification-review`.

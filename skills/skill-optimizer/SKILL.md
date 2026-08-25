@@ -77,16 +77,16 @@ voltmind skillopt <skill-name> [flags]
 
 **The user will NOT hand-write a benchmark, and you shouldn't start from a blank
 file either.** When the user says "make skill X better" and
-`skills/X/skillopt-benchmark.jsonl` doesn't exist, generate a starter from the
+the target skill's `skillopt-benchmark.jsonl` doesn't exist, generate a starter from the
 SKILL.md directly:
 
 1. **Generate the starter.** Run:
    ```
    voltmind skillopt X --bootstrap-from-skill
    ```
-   One LLM call reads `skills/X/SKILL.md`, infers what the skill produces and what
+   One LLM call reads the target skill's `SKILL.md`, infers what the skill produces and what
    "good" looks like, and writes ~15 tasks (each with rule judges) to
-   `skills/X/skillopt-benchmark.jsonl` plus a `# BOOTSTRAP_PENDING_REVIEW`
+   the target skill's `skillopt-benchmark.jsonl` plus a `# BOOTSTRAP_PENDING_REVIEW`
    sentinel. No `routing-eval.jsonl` is needed. Tune the count with
    `--bootstrap-tasks N` (max 50).
 2. **Review AND STRENGTHEN the judges.** This is YOUR job and it is load-bearing.
@@ -120,7 +120,7 @@ richer checks (or an `llm` judge) during review.
 **Fallback — author freehand.** If the generated starter is poor (rare, but
 possible for very behavior-shaped skills), discard it and write the JSONL
 yourself: read the SKILL.md, write ~15 realistic tasks covering the boring middle,
-attach >=2 rule checks each, save to `skills/X/skillopt-benchmark.jsonl`, run with
+attach >=2 rule checks each, save to the target skill's `skillopt-benchmark.jsonl`, run with
 `--split 1:1:1`. The human walkthrough lives at
 `docs/tutorials/improving-skills-with-skillopt.md`.
 
@@ -130,7 +130,7 @@ attach >=2 rule checks each, save to `skills/X/skillopt-benchmark.jsonl`, run wi
 |---|---|
 | Skill has no benchmark | `voltmind skillopt foo --bootstrap-from-skill` → review + strengthen the judges → delete sentinel → `voltmind skillopt foo --bootstrap-reviewed --split 1:1:1` (see section above) |
 | Skill has a `routing-eval.jsonl` and you want a head start | `voltmind skillopt foo --bootstrap-from-routing` → review the generated tasks → `--bootstrap-reviewed` (routing tasks test dispatch; tighten them into quality tasks before trusting) |
-| Iterating on an existing skill | `voltmind skillopt foo --benchmark skills/foo/skillopt-benchmark.jsonl` |
+| Iterating on an existing skill | `voltmind skillopt <skill-slug> --benchmark <skill-slug>/skillopt-benchmark.jsonl` |
 | Costly run, want preview | Add `--dry-run` |
 | Bundled skill (skills/ in voltmind repo) | Default writes proposed.md; to commit in place add `--allow-mutate-bundled` AND `--held-out <path>` (>=5 benchmark-disjoint tasks) — else it hard-refuses |
 | Want to review changes before applying | Add `--no-mutate` (writes proposed.md, no held-out needed) |

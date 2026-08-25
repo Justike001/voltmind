@@ -25,7 +25,7 @@ mutating: true
 This skill guarantees:
 - Schedule staggering: max 1 job per 5-minute slot, no collisions
 - Quiet hours gating: timezone-aware, with user-awake override
-- Thin job prompts: jobs say "Read skills/X/SKILL.md and run it" (no inline 3000-word prompts)
+- Thin job prompts: jobs say "Read the target skill's SKILL.md and run it" (no inline 3000-word prompts)
 - Idempotency: jobs can run twice without duplicate side effects
 - Results saved as reports: `reports/{job-name}/{YYYY-MM-DD-HHMM}.md`
 

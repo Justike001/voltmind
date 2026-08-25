@@ -70,8 +70,8 @@ flags). For these adjacent jobs, route elsewhere:
   already has a schema-check phase. Don't duplicate.
 - **Just looking up a type's settings** → `voltmind schema explain <type>`
   directly. This skill is for CHANGING the pack, not READING from it.
-- **Querying who knows about X** → `skills/expert-routing/SKILL.md` (or
-  `voltmind whoknows` directly). schema-author makes a type expert-routable;
+- **Querying who knows about X** → `voltmind whoknows` directly. schema-author
+  makes a type expert-routable;
   it does not run the query.
 
 ## Convention
@@ -92,7 +92,7 @@ Invoke when the user (or a sibling skill) says any of:
 - "Sync the new types to backfill existing pages"
 
 DON'T invoke for "where does THIS note go" (use brain-taxonomist) or
-"who knows about X" (use expert-routing / `voltmind whoknows`).
+"who knows about X" (use `voltmind whoknows`).
 
 ## Tutorial + vision
 

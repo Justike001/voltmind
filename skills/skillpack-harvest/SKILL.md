@@ -123,7 +123,7 @@ Ask the user:
 - What slug should the harvested skill have? (Slugs must be kebab-case,
   globally unique in the voltmind bundle.)
 - Which host repo is the source? (Path to repo root, not to the skill
-  directory — e.g. `~/git/wintermute`, not `~/git/wintermute/skills/foo`.)
+  directory — e.g. `~/git/wintermute`, not `~/git/wintermute/skills/<skill-slug>`.)
 - Should paired source files come along? (Check the host SKILL.md's
   frontmatter `sources:` array.)
 
