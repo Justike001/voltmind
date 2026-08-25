@@ -25,8 +25,8 @@ set -euo pipefail
 printf '%s\\036' "$*" >> "$PSQL_CALL_LOG"
 case "$*" in
   *'SELECT current_user'*) echo 'voltmind_test_owner' ;;
-  *'SELECT owner.rolsuper'*) echo 'false|false|false|false|false|true' ;;
-  *) cat >/dev/null ;;
+  *'SELECT owner.rolsuper'*) echo 'false|false|false|false|false|true|true' ;;
+  *) exit 0 ;;
 esac
 `);
   chmodSync(psql, 0o755);
@@ -46,7 +46,7 @@ esac
   });
 
   expect(result.status).toBe(0);
-  expect(result.stderr).toContain('Host-ci observed role/ACL state: false|false|false|false|false|true');
+  expect(result.stderr).toContain('Host-ci observed role/ACL state: false|false|false|false|false|true|true');
   expect(result.stdout).toContain('Host-ci Postgres provisioning postconditions passed.');
   const calls = readFileSync(callLog, 'utf8').split('\x1e').filter(Boolean);
   expect(calls).toHaveLength(2);

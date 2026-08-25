@@ -44,7 +44,7 @@ if [ "${CI_HOST_POSTGRES:-0}" = "1" ]; then
 DO $$
 DECLARE
   can_create boolean;
-  owner_superuser_or_admin boolean;
+  owner_superuser boolean;
   oauth_exists boolean;
   restricted_member boolean;
 BEGIN

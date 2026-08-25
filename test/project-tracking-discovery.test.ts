@@ -35,25 +35,25 @@ describe('long-running project tracking capability injection', () => {
     const meeting = read('skills/meeting-ingestion/SKILL.md');
     const project = read('skills/project/SKILL.md');
     const maintain = read('skills/maintain/SKILL.md');
-    const maintainHost = read('skills/maintain-host/SKILL.md');
-    const maintainClient = read('skills/maintain-client/SKILL.md');
+    const maintainHost = read('skills/maintain/references/host.md');
+    const maintainClient = read('skills/maintain/references/client.md');
     const resolver = read('skills/RESOLVER.md');
 
     expect(ingest).toContain('  - submit_ingestion_event');
     expect(meeting).toContain('  - register_tracking_evidence');
     expect(project).toContain('  - get_project_tracking_status');
     expect(project).toContain('  - reconcile_project_tracking');
-    // Host variant owns the server-side tracking operations; the thin-client
-    // variant must NOT declare them (a client cannot and must not call
-    // company-server-only reconcile).
-    expect(maintainHost).toContain('  - get_project_tracking_status');
-    expect(maintainHost).toContain('  - reconcile_project_tracking');
-    expect(maintainClient).toContain('  - get_project_tracking_status');
-    expect(maintainClient).toContain('  - list_project_tracking_receipts');
-    expect(maintainClient).toContain('  - register_tracking_evidence');
-    expect(maintainClient).not.toContain('  - reconcile_project_tracking');
-    expect(maintain).toContain('maintain-client');
-    expect(maintain).toContain('maintain-host');
+    // The single published maintain skill owns the operation union. References
+    // preserve the runtime-specific trust boundary without becoming skills.
+    expect(maintain).toContain('  - get_project_tracking_status');
+    expect(maintain).toContain('  - list_project_tracking_receipts');
+    expect(maintain).toContain('  - register_tracking_evidence');
+    expect(maintain).toContain('  - reconcile_project_tracking');
+    expect(maintainHost).toContain('reconcile_project_tracking');
+    expect(maintainClient).toContain('company-server-only');
+    expect(maintainClient).toContain('register_tracking_evidence');
+    expect(maintain).toContain('references/client.md');
+    expect(maintain).toContain('references/host.md');
     expect(ingest).toContain('Client-agent ingest may write `projects/`');
     expect(meeting).toContain('register_tracking_evidence');
     expect(resolver).toContain('"long-running project tracking", "project tracking", "tracking binding"');

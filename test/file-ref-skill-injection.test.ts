@@ -61,27 +61,26 @@ describe('external-file runtime skill injection', () => {
     }
   });
 
-  test('client maintenance declares client-authorized backfill/scrub and never the host-only reconcile', () => {
-    const skill = frontmatter('skills/maintain-client/SKILL.md');
-    expect(skill.triggers).toContain('backfill file references');
-    expect(skill.triggers).toContain('scrub open paths');
-    for (const tool of ['search_file_refs', 'backfill_file_refs', 'scrub_file_ref_open_paths']) {
-      expect(skill.tools).toContain(tool);
-      expect(operationNames.has(tool)).toBe(true);
-    }
-    expect(skill.tools).not.toContain('reconcile_project_tracking');
-    const body = read('skills/maintain-client/SKILL.md');
+  test('client maintenance reference keeps client-authorized backfill/scrub and rejects host reconcile', () => {
+    const body = read('skills/maintain/references/client.md');
+    expect(body).toContain('backfill_file_refs');
+    expect(body).toContain('scrub_file_ref_open_paths');
+    expect(body).toContain('reconcile_project_tracking` / `voltmind projects tracking reconcile`');
+    expect(body).toContain('admin-scope + company-server-only');
     expect(body).toContain('VOLTMIND_RUNTIME_ROLE');
     expect(body).toContain('Host work request');
+    expect(body).toContain('local semantic vault');
+    expect(body).toContain('newest-first');
+    expect(body).toContain('local_written_remote_pending');
   });
 
-  test('host maintenance declares the full host operation surface', () => {
-    const skill = frontmatter('skills/maintain-host/SKILL.md');
+  test('main maintenance publishes the full runtime operation union and routes Host detail to a reference', () => {
+    const skill = frontmatter('skills/maintain/SKILL.md');
     for (const tool of ['reconcile_project_tracking', 'get_project_tracking_status', 'backfill_file_refs', 'scrub_file_ref_open_paths', 'run_doctor']) {
       expect(skill.tools).toContain(tool);
       expect(operationNames.has(tool)).toBe(true);
     }
-    const body = read('skills/maintain-host/SKILL.md');
+    const body = read('skills/maintain/references/host.md');
     expect(body).toContain('VOLTMIND_RUNTIME_ROLE');
   });
 
