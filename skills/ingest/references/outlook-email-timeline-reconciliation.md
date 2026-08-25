@@ -21,7 +21,7 @@ Never invent `event_version`. Use a connector-provided version when available;
 otherwise retain content hashes and the observation time without pretending
 they are a provider revision.
 
-The Teams 99-result saturation rule does not apply to Outlook Email. Use the
+The Teams chat result-cap and saturation rule does not apply to Outlook Email. Use the
 Outlook connector's own pagination/continuation result and record incomplete
 coverage honestly.
 

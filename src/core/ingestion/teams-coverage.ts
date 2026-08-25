@@ -1,12 +1,13 @@
 /**
  * Teams message coverage guardrails for client-side incremental ingest.
  *
- * The Teams connector exposes a hard per-call result cap but no continuation
- * cursor. A saturated response therefore cannot advance a chat checkpoint,
- * even when the returned message IDs are otherwise valid.
+ * The Teams connector exposes only the latest capped result set and no
+ * continuation cursor. A saturated response cannot prove historical coverage,
+ * but after all returned events are durable it advances the incremental high
+ * watermark so later runs do not loop forever on the same 100 messages.
  */
 
-export const TEAMS_MESSAGE_RESULT_CAP = 99;
+export const TEAMS_MESSAGE_RESULT_CAP = 100;
 
 export type TeamsCoverageStatus = 'complete' | 'saturated' | 'incomplete';
 
@@ -25,16 +26,17 @@ export interface TeamsCoverageDecision {
 /**
  * Decide whether a client-side chat checkpoint may advance.
  *
- * `returnedCount === 99` is deliberately treated as saturated. A duplicate
- * event ID does not make a capped response complete because unseen messages
- * may still exist beyond the connector's result boundary.
+ * `returnedCount === 100` is deliberately treated as saturated. It may advance
+ * only the incremental high watermark after every returned event is registered;
+ * the status remains saturated because older messages may be unrecoverable.
  */
 export function decideTeamsCoverage(input: TeamsCoverageInput): TeamsCoverageDecision {
   if (input.returnedCount >= TEAMS_MESSAGE_RESULT_CAP) {
+    const canAdvanceIncremental = input.allEventsRegistered && Boolean(input.nextCheckpointIso);
     return {
       status: 'saturated',
-      shouldAdvanceCheckpoint: false,
-      nextCheckpointIso: null,
+      shouldAdvanceCheckpoint: canAdvanceIncremental,
+      nextCheckpointIso: canAdvanceIncremental ? input.nextCheckpointIso! : null,
     };
   }
 

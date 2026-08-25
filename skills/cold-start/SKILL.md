@@ -317,13 +317,13 @@ For every approved chat/group chat/channel:
 1. Create or resume the local cold-start manifest before any connector call.
    Record the approved scope, connector capabilities, and phase progress in
    its frontmatter.
-2. Read the newest available batch with `top=50` (or lower) and treat any
+2. For chats, read the newest available batch once with `top=100`. Treat any
    `[start, end)` values as manifest bookkeeping, not as a connector-enforced
-   historical query, unless the connector exposes a verified upper time bound
-   or continuation cursor.
+   historical query. `chat_list_messages` cannot page or split backward beyond
+   the connector's latest 100 messages.
 3. Before each read, select the next eligible manifest work unit and set it to
    `reading`. Persist raw evidence before marking the unit `captured`.
-4. If a read reaches the observed result cap (currently 99), preserve the
+4. If a chat read reaches the observed result cap (currently 100), preserve the
    newest captured batch, mark the older logical range `blocked` with
    `last_error: blocked_by_connector_pagination`, and do not declare that
    history complete. Do not create smaller historical child windows: a

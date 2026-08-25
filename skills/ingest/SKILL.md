@@ -80,11 +80,12 @@ this file. Multiple rows may apply to one ingest.
 | Ambiguous or incomplete notable signal; clarification before semantic commit | [clarification-and-semantic-commit.md](references/clarification-and-semantic-commit.md) |
 | Teams, Outlook Email, Outlook Calendar, Microsoft relay, or Microsoft file reference | [microsoft-connectors.md](references/microsoft-connectors.md) |
 | Outlook Email acquisition, reply/forward history, rolling announcement, semantic timeline write, revision, deduplication, or chronological reconciliation | [outlook-email-timeline-reconciliation.md](references/outlook-email-timeline-reconciliation.md) |
+| Teams `chat_list_messages` read, recent-message cap, or chat history coverage | [teams-chat-list-messages.md](references/teams-chat-list-messages.md) |
 | RaiDrive, SMB, UNC, mapped-drive configuration, normalization, lookup, or materialization | [mapped-shared-drive.md](references/mapped-shared-drive.md) |
 | Any ingest pass: entity mentions or the user's original thinking | [entity-detection.md](references/entity-detection.md) |
 | Article, video, podcast, PDF, image, meeting transcript, social post, or raw-source storage | [media-and-raw-source.md](references/media-and-raw-source.md) |
 | Client-authored local-first semantic write, remote synchronization, receipt, or incremental Teams checkpoint | [client-write-through.md](references/client-write-through.md) and [client-semantic-relations.md](references/client-semantic-relations.md) |
-| Teams cold start, history window, 99-result cap, saturation, 429, or cold-start manifest | [teams-cold-start.md](references/teams-cold-start.md) |
+| Teams cold start, 100-result cap, saturation, 429, or cold-start manifest | [teams-cold-start.md](references/teams-cold-start.md) |
 <!-- /ingest-reference-router -->
 
 ## Contract

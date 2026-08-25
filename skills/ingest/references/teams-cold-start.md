@@ -4,13 +4,12 @@ The client Teams connector is an official OAuth-bound connector; the agent does
 not modify its request schema or transport behavior. Skill rules therefore
 control call shape, pacing, and completeness claims only.
 
-- Prefer `top=50` or a smaller value for channel/chat history reads. Do not
-  probe larger values to work around the connector cap.
-- A one-day or half-day *logical* window is useful only while the returned count
-  stays comfortably below 99. It reduces saturation risk but does not remove the
-  need for `message_id` deduplication, raw-source persistence, and a completion
-  record. It is not a server-enforced `[start, end)` query when the connector
-  exposes only `sent_after`.
+- For `chat_list_messages`, request the latest batch once with `top=100`.
+  Do not lower `top`, paginate, or split time ranges to recover older chat
+  messages; the connector cannot fetch backward beyond its latest 100.
+- Treat any chat time window as manifest bookkeeping only. It does not remove
+  the need for `message_id` deduplication, raw-source persistence, and an honest
+  coverage record.
 - When the connector exposes only `sent_after`, post-filtering by an intended
   end time cannot recover messages displaced by a newest-first capped response.
   If the result is saturated, do not split and retry historical child windows:
@@ -78,7 +77,7 @@ evidence pages or the local index, not in the manifest.
 State transitions are deliberately conservative:
 
 1. Select the next eligible work unit from the manifest: due `rate_limited`,
-   then children of `saturated`, then `captured` with semantic work pending,
+   then `captured` with semantic work pending,
    then the oldest `pending` window. Do not repeatedly call `blocked` windows.
 2. Set `acquisition_status: reading` and increment `attempt_count` immediately
    before a connector read.
@@ -87,10 +86,10 @@ State transitions are deliberately conservative:
 4. Set `captured` only when raw evidence is durable and the result is not
    saturated. Set `semantic_status` separately after routing has reached
    `complete`, `no_signal`, `review_required`, or `skipped`.
-5. If the result is saturated, retain the logical range as `saturated` and set
-   `next_action: blocked_by_connector_pagination`. Do not create historical
-   child windows unless the connector has a verified upper-time-bound or
-   continuation cursor. For an ongoing incremental feed, record an explicit
+5. If the result returns 100 messages, retain the logical range as `saturated`
+   and set `next_action: blocked_by_connector_pagination`. Do not create
+   historical child windows or pagination attempts. For an ongoing incremental
+   feed, record an explicit
    `unrecoverable_gap` from the prior high watermark to `oldest_returned_at`,
    then advance a separate `incremental_high_watermark` to
    `newest_returned_at` so future messages can still be captured. Never label

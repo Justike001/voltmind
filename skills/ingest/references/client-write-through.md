@@ -33,14 +33,16 @@ remains company-server-only raw-ingest compatibility. The shared remote repo
 does not change this ownership boundary: runtime role and client tool bindings
 decide which path is allowed.
 
-For Teams incremental reads, keep one checkpoint per `chat_id` and query with
-`sent_after = checkpoint - overlap`; deduplicate by `message_id`. The connector
-result cap is 99 messages. The checkpoint is a **high watermark**: the newest
-durably captured message timestamp, never the oldest message in a batch. A
-result count below 99 may advance it to `newest_returned_at` only after every
-event in the batch has been registered. A result count at the cap is
-`saturated`: it proves an interval may have been lost; it cannot be replayed
-with this connector.
+For Teams incremental reads, keep one checkpoint per `chat_id`, call
+`chat_list_messages` once with `top=100` and
+`sent_after = checkpoint - overlap`, and deduplicate by `message_id`. Do not
+paginate or split historical time ranges: the connector exposes only its latest
+100 messages. The checkpoint is a **high watermark**: the newest durably
+captured message timestamp, never the oldest message in a batch. A result count
+below 100 may advance it to `newest_returned_at` only after every event in the
+batch has been registered. A result count at 100 remains `saturated`; after all
+returned events are durable, record the unrecoverable older gap and advance the
+incremental high watermark so later runs continue with new messages.
 Do not claim a complete historical window or perform a one-shot 30-day backfill
 for a high-volume chat while the connector exposes neither an upper time bound
 nor a continuation/delta cursor.

@@ -55,9 +55,12 @@ semantic writes through the local VoltMind CLI/adapter.
   invent a version or describe a provider ID as stable when its contract does
   not guarantee stability.
 - Deduplicate Teams by `teams:<container_id>:<message_id>`.
-- Keep one checkpoint and one manifest ledger per chat/channel. A 99-message
+- Keep one checkpoint and one manifest ledger per chat/channel. A 100-message
   result is `saturated`, never complete; a 429 is `rate_limited`, never
   `no_signal`.
+  After all 100 returned messages are durable, record the unrecoverable older
+  gap and advance only the incremental high watermark to the newest returned
+  timestamp; do not retry historical slices that the connector cannot fetch.
 - Preserve raw text, attachment markers, and message IDs. Do not invent
   meaning from opaque artifacts.
 
