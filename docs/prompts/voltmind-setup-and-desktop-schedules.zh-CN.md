@@ -1,6 +1,6 @@
 # VoltMind 初始化与 ChatGPT Desktop 周期任务 Prompt
 
-更新时间：2026-08-18
+更新时间：2026-08-26
 默认时区：`Asia/Shanghai`
 
 ## 使用边界
@@ -80,7 +80,87 @@ Skill：`skills/ingest/SKILL.md` → `skills/daily-task-prep/SKILL.md`、`skills
 插件：`[@teams](plugin://teams@openai-curated-remote)`、`[@outlook-email](plugin://outlook-email@openai-curated-remote)`、`[@outlook-calendar](plugin://outlook-calendar@openai-curated-remote)`
 
 ```text
-在 <LOCAL_BRAIN_VAULT_PATH> 执行工作日增量 ingest 与关键事项巡检。先读取仓库根目录的 AGENTS.md、skills/signal-detector/SKILL.md、skills/brain-ops/SKILL.md、skills/ingest/SKILL.md、skills/ingest/references/microsoft-connectors.md、skills/daily-task-prep/SKILL.md、skills/briefing/SKILL.md 和当前 Brain 的 HEARTBEAT.md/RESOLVER.md。使用 [@teams](plugin://teams@openai-curated-remote)、[@outlook-email](plugin://outlook-email@openai-curated-remote)、[@outlook-calendar](plugin://outlook-calendar@openai-curated-remote) 从各自已持久化 checkpoint/delta cursor 之后读取增量；首次没有 checkpoint 时只取最近 1 个工作日并先抽样 3-5 条验证，禁止无界全量抓取。按 Microsoft connector signal policy 过滤自动通知、营销邮件、utility calendar event 和跨源重复内容。对选中的高信号 Teams 消息、邮件线程、会议与日历事件，先保存带 event_id、event_version、evidence_type、tracking_refs 的本地 sources 原始证据，再做 brain-first lookup、taxonomy routing、引用、反向链接、timeline、project/workstream 与 canonical state 更新；所有事实带精确来源。成功写入和注册 receipt 后才推进各 connector checkpoint；单项失败保留旧 checkpoint 并记录可重试错误。附件和 SharePoint/OneDrive 引用只保存元数据，未获明确请求不得 materialize。不要发送 Teams 消息、回复邮件、修改日历、自动承诺或推断 owner。ingest 创建 state/actions 后，只将其标记为待 schedule-actions 访谈并通知我确认，绝不把提取结果当作执行授权，也不在无人值守任务中注册 action schedule。完成 ingest 后运行 daily-task-prep 与 briefing，只检查今天和未来 48 小时的关键截止、阻塞和决策点。遵守 HEARTBEAT：没有新 ingest 且没有关键变化时静默结束；有新 ingest 时保存可审计报告，但只在产生待澄清事项、待排期 action、关键截止/阻塞、安全隐私风险、重大项目变化或可能造成重大损失/错过机会时通知。任务必须幂等，不重复页面、timeline、receipt 或提醒。
+在真实的 Personal Brain Vault 中执行工作日增量 ingest 与关键事项巡检。
+
+【注册前置条件，必须先满足】
+1. 注册此 Codex automation 时，执行项目必须是 Personal Brain Vault 项目，
+   execution environment 必须是 local；不得使用 VoltMind 源码仓库或其 worktree
+   作为写入项目。将 <LOCAL_BRAIN_VAULT_PATH> 和 <VOLTMIND_SOURCE_CHECKOUT>
+   替换成真实的绝对路径；如果提示词中仍有任一尖括号占位符，立即停止，不得
+   读取任何 connector，也不得创建 tmp/ingest-* 文件。
+2. 读取 Windows 用户级环境变量 VOLTMIND_LOCAL_BRAIN_VAULT，并解析
+   VOLTMIND_CLIENT_VAULT_PATH 或 VoltMind config.client_vault_path。确认最终
+   client vault 是存在的目录、与 Personal Brain Vault 相同、且不等于或位于
+   VoltMind 源码 checkout 内。不要输出、回显或写入真实私有路径。
+3. 从 <VOLTMIND_SOURCE_CHECKOUT> 只读 AGENTS.md、CLAUDE.md、skills/RESOLVER.md、
+   skills/signal-detector/SKILL.md、skills/brain-ops/SKILL.md、skills/ingest/SKILL.md、
+   skills/ingest/references/microsoft-connectors.md、skills/ingest/references/
+   outlook-email-timeline-reconciliation.md、skills/ingest/references/
+   teams-chat-list-messages.md、skills/ingest/references/client-write-through.md、
+   skills/ingest/references/client-semantic-relations.md、skills/ingest/references/
+   client-vault-taxonomy.md、skills/ingest/references/entity-detection.md、
+   skills/ingest/references/clarification-and-semantic-commit.md、
+   skills/ingest/references/teams-cold-start.md、skills/_brain-filing-rules.md、
+   skills/conventions/quality.md、skills/conventions/brain-first.md、
+   skills/conventions/page-template-contract.md；再读取当前 Vault 的 index.md、
+   RESOLVER.md、schema.md、README.md 以及 active schema pack 声明的目录 README。
+4. 所有 VoltMind CLI 调用固定使用源码 checkout 的运行时：先切换到
+   <VOLTMIND_SOURCE_CHECKOUT>，使用 `bun run src/cli.ts <command>`。只有已证明
+   PATH 中的 `voltmind` 与该 checkout 是同一版本且满足 schema pack 要求时才可使用
+   简写 `voltmind`；不得静默使用旧的全局 CLI。
+5. 在 connector 读取前验证 CLI 版本、`schema show --json`、Brain/source 路由、
+   `doctor --json` 和（thin client 时）`remote doctor`。运行时版本低于 active
+   schema pack 的 `voltmind_min_version`、schema 无法加载、client vault 不可写、
+   或任一必需检查失败时，立即停止并报告阻塞原因；不得读取 Teams/Outlook，
+   不得把源码仓库 tmp、automation worktree 或报告附件计为本地 Brain 写入。
+
+【增量 ingest 流程】
+1. 先从各 connector 的本地 manifest/checkpoint 和 `.voltmind/pending-remote`
+   恢复未完成的同一事件；优先重试已有本地 canonical Markdown，不得因 remote
+   失败重新创建同一事件的页面、timeline 或 receipt。
+2. 使用 [@teams](plugin://teams@openai-curated-remote)、[@outlook-email](plugin://outlook-email@openai-curated-remote)、
+   [@outlook-calendar](plugin://outlook-calendar@openai-curated-remote) 从各自持久化
+   checkpoint/delta cursor 之后读取增量。首次没有 checkpoint 时只取最近 1 个工作日；
+   Teams chat 每个容器只调用一次 `chat_list_messages(top=100)`，先抽样 3-5 条验证，
+   禁止无界全量抓取、分页或拆分历史窗口。100 条返回标记为 saturated，并记录
+   unrecoverable gap；429 标记为 rate_limited，不得伪装成 no_signal。
+3. 按 Microsoft connector signal policy 过滤自动通知、营销邮件、utility calendar
+   event 和跨源重复内容，但先为每个返回事件保存本地原始 evidence。原始 source
+   必须位于已验证 Vault 的 `sources/teams/`、`sources/emails/` 或 `sources/calendar/`
+   下，并保留 connector 提供的 event_id、event_version（仅在实际提供时）、
+   evidence_type、tracking_refs 和原始时间。SharePoint/OneDrive/附件只保存元数据，
+   未获明确请求不得 materialize。
+4. 对每个选中的高信号事件执行完整链路：先 `search`，结果不足时 `query`，已知 slug
+   再 `get_page`；区分 observed、inferred、confirmed。使用 active schema pack 经过
+   brain-taxonomist 选择 page type/slug，遵守 Vault RESOLVER filing policy 和
+   notability gate。confirmed 信息才可进入 canonical entity/project/workstream/state
+   页面；notable 未决推断必须写入 `state/indexes/ingest-clarification-review`。
+5. 对每个新增或变化的人、组织、公司、项目、工作流、会议和 action 做实体传播：
+   更新现有页面或创建合规页面，重写当前 State，追加带精确 `[Source: ...]` 的 Timeline，
+   写入 confirmed typed frontmatter relations 或带引用的本地 wikilink，并为每个已有
+   person/company 建立反向链接。不能只生成摘要文件或只写 raw source 而跳过实体页。
+6. 所有 canonical semantic page 必须先通过本地 client-first `voltmind put <slug> < page.md`；
+   本地文件必须实际写入已验证 Vault，并回读校验内容和 SHA-256。随后才允许 remote
+   `put_page`，且不得直接调用 remote `put_page` 替代本地写入。remote 失败时保留
+   `.voltmind/pending-remote` 的 `local_written_remote_pending`，从同一文件幂等重试。
+7. 只有 raw source remote 写入成功、所有 semantic 页面同步成功、并且
+   `register_tracking_evidence` 成功后，才推进对应 connector checkpoint。任一项失败
+   保留旧 checkpoint，记录 retryable error，并明确报告 `local_written_remote_pending`、
+   `review_needed`、`saturated` 或 `rate_limited`；不得报告 generic success。
+8. ingest 创建 `state/actions/*.md` 后，只调用 `skills/schedule-actions/SKILL.md` 的
+   interview 流程并通知我确认；绝不把提取结果当作执行授权，也不在无人值守任务中
+   注册 action schedule。
+9. ingest 的本地证据和实体传播完成后，再运行 `daily-task-prep` 与 `briefing`，只检查
+   今天和未来 48 小时的关键截止、阻塞和决策点。若 thin-client 的 `recall` 不可用，
+   将其作为 briefing 的独立可见限制，不得回写或覆盖已完成的 ingest，也不得把它
+   伪装成 Teams ingest 成功。
+
+【输出与静默规则】
+输出审计报告时只报告数量、相对 Vault slug、覆盖状态、实体传播/反向链接/Timeline
+数量、同步与 receipt 状态、checkpoint 是否推进和可重试错误；不得输出 secret、token、
+database URL、真实 Vault 路径或原始 credential。没有新 ingest 且没有关键变化时静默
+结束；只有待澄清事项、待排期 action、关键截止/阻塞、安全隐私风险、重大项目变化或
+可能造成重大损失/错过机会时通知。任务必须幂等，不重复页面、timeline、receipt 或提醒。
 ```
 
 ## Schedule Prompt 2：夜间 Brain 维护
