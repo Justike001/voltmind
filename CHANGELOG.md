@@ -4,6 +4,44 @@ All notable changes to VoltMind will be documented in this file.
 
 ## [Unreleased]
 
+## [0.42.0.0] - 2026-08-31
+
+**Your active brain schema now refuses to run on an outdated CLI.** VoltMind
+now requires CLI 0.42.0 or newer for the built-in Personal Brain and Company
+Core schema packs. That stops an older workstation from writing pages with an
+incomplete understanding of the active schema. Client-first ingest also makes
+relationships explicit before synchronization, and its timeline guard rejects
+duplicate or out-of-order entries before they reach your vault or Host.
+
+Upgrade your CLI before loading an active schema pack. After upgrading, normal
+client-first ingest continues to write locally first, then confirms the exact
+Markdown with the Host. The included Teams coverage guidance is also stricter
+about incomplete batches, so an uncertain connector read cannot be reported as
+a completed history sweep.
+
+## To take advantage of v0.42.0.0
+
+`voltmind upgrade` should apply this automatically. If your active schema pack
+still reports that the CLI is too old:
+
+1. Run `voltmind upgrade`, then `voltmind apply-migrations --yes`.
+2. Your agent should read `skills/migrations/v0.42.0.0.md` before the next
+   client-first ingest run.
+3. Verify with:
+   ```bash
+   voltmind --version
+   voltmind schema show --json
+   voltmind doctor
+   ```
+
+### Itemized changes
+
+- Built-in active schema packs now require CLI `>= 0.42.0`.
+- Client-authored semantic writes validate timeline ordering and duplicate
+  entries before writing the local vault.
+- Client-first ingest documentation now makes relationship materialization and
+  remote confirmation explicit, including safer Teams coverage handling.
+
 ## [0.41.21.4] - 2026-08-20
 
 **Safer hosted VoltMind connections and a more dependable release path.** This
