@@ -11,7 +11,12 @@
 - 三个 Microsoft 插件的统一引用：
   - `[@teams](plugin://teams@openai-curated-remote)`
   - `[@outlook-email](plugin://outlook-email@openai-curated-remote)`
-  - `[@outlook-calendar](plugin://outlook-calendar@openai-curated-remote)`
+- `[@outlook-calendar](plugin://outlook-calendar@openai-curated-remote)`
+
+架构边界：Host 端的数据库和 source checkout 由 Host 管理，client 不需要、也不应
+访问 Host clone。client 只需要本地 Vault、client-first CLI/skills runtime，以及
+通过 OAuth 授权的 remote MCP；`VOLTMIND_SOURCE_CHECKOUT`（若设置）只能指向
+client 本机的 VoltMind runtime checkout，不能指向 Host、UNC、共享盘或远端 clone。
 
 ## Prompt A：刚 clone 仓库后的本地 standalone 初始化
 
@@ -66,7 +71,7 @@
 
 | 类型 | 周期 | Skill | 是否注册 | Microsoft 插件 |
 |---|---|---|---|---|
-| 工作日增量采集与关键事项巡检 | 周一至周五 08:35 | `ingest` → `daily-task-prep` + `briefing` | 是 | Teams、Outlook Email、Outlook Calendar |
+| 工作日增量采集与关键事项巡检 | 周一至周五 08:35 | `ingest` → `enrich` → `daily-task-prep` + `briefing` | 是 | Teams、Outlook Email、Outlook Calendar、网络搜索 |
 | 夜间 Brain 维护 | 每天 02:15 | `maintain`（含 dream、sync/embedding/health 的拓扑安全分支） | 是 | 不需要；不得为了凑插件而读取外部数据 |
 | action 执行 | 每个 action 的确认时间 | `schedule-actions` | 否，不能做固定周期 | 按 action 的原始 Teams/Outlook 证据需要 |
 | 报告存储 | 随产生报告的任务执行 | `reports` | 否，它是被调用的存储 helper | 继承上游任务 |
@@ -82,17 +87,42 @@ Skill：`skills/ingest/SKILL.md` → `skills/daily-task-prep/SKILL.md`、`skills
 ```text
 在真实的 Personal Brain Vault 中执行工作日增量 ingest 与关键事项巡检。
 
+【模型分工策略】
+主模型固定为 `gpt-5.6-sol`（约 1M、实际 1.05M context），负责加载全局上下文、
+决定任务难度和路由、处理身份/隐私/所有权/截止日期/跨源合并等高风险判断，执行最终
+语义写入、远端确认、receipt/checkpoint 决策和完整性验收。为节省 token，主模型应按
+以下规则派发受限 Subagent，并只接收结构化结果后自行复核：
+- `gpt-5.6-luna`：低难度、可并行、机械性任务，例如字段抽取、事件 ID/版本整理、
+  去重、来源元数据规范化、候选实体清单和已确认文本的格式检查；不做身份合并、事实
+  确认、网络研究或任何写入。
+- `gpt-5.6-terra`：中等难度的只读任务，例如单个实体的证据归纳、引用对齐、时间线
+  候选和受限的 connector/公开网络查询；不得执行 Brain 写入、remote `put_page`、
+  `register_tracking_evidence` 或 checkpoint 推进。
+- 任务存在歧义、敏感信息、实体冲突、owner/deadline 判断、跨源关系、重大风险或
+  Subagent 结果不一致时，禁止继续下放，必须由 `gpt-5.6-sol` 直接处理。Subagent
+  默认最多并行 4 个，只接收完成任务所需的最小脱敏上下文；主模型必须保留 event_id、
+  citation 和 provenance，并对所有 Subagent 结果做最终验证。
+
 【注册前置条件，必须先满足】
 1. 注册此 Codex automation 时，执行项目必须是 Personal Brain Vault 项目，
-   execution environment 必须是 local；不得使用 VoltMind 源码仓库或其 worktree
-   作为写入项目。将 <LOCAL_BRAIN_VAULT_PATH> 和 <VOLTMIND_SOURCE_CHECKOUT>
-   替换成真实的绝对路径；如果提示词中仍有任一尖括号占位符，立即停止，不得
-   读取任何 connector，也不得创建 tmp/ingest-* 文件。
-2. 读取 Windows 用户级环境变量 VOLTMIND_LOCAL_BRAIN_VAULT，并解析
+   execution environment 为 local 只表示本地文件和 CLI 的运行位置，不限制已授权
+   的网络 connector/MCP 调用；不得使用 VoltMind 源码仓库或其 worktree 作为写入项目。
+   不要把任何真实本地路径嵌入 automation prompt。运行时按 `Process → User → config`
+   的优先级解析 Vault：先读取 automation 进程可见的 `$env:VOLTMIND_LOCAL_BRAIN_VAULT`
+   和 `$env:VOLTMIND_CLIENT_VAULT_PATH`，再回退到 Windows User scope，最后读取
+   VoltMind config；禁止只查询 User scope。client 本地 CLI/skills runtime 优先从当前
+   工作目录或已验证的安装目录取得；`VOLTMIND_SOURCE_CHECKOUT` 仅是可选的 client-local
+   override，不能指向 Host clone、UNC、共享盘或远端路径。Vault、CLI 或 skills 无法验证
+   时立即停止，不得读取任何 connector，也不得创建 tmp/ingest-* 文件。
+   PowerShell 中必须使用上述精确变量名；变量名中的下划线前禁止出现反斜杠（`\_`），
+   不得把 Markdown 转义后的名称当作环境变量名。
+2. 读取 automation 进程和 User scope 中的 VOLTMIND_LOCAL_BRAIN_VAULT，并解析
    VOLTMIND_CLIENT_VAULT_PATH 或 VoltMind config.client_vault_path。确认最终
    client vault 是存在的目录、与 Personal Brain Vault 相同、且不等于或位于
    VoltMind 源码 checkout 内。不要输出、回显或写入真实私有路径。
-3. 从 <VOLTMIND_SOURCE_CHECKOUT> 只读 AGENTS.md、CLAUDE.md、skills/RESOLVER.md、
+3. 从 client 本地可验证的 CLI/skills runtime（优先当前工作目录或安装目录；若设置了
+   `VOLTMIND_SOURCE_CHECKOUT`，仅在确认它是 client-local 且不是 Host/共享路径后使用）
+   只读 AGENTS.md、CLAUDE.md、skills/RESOLVER.md、
    skills/signal-detector/SKILL.md、skills/brain-ops/SKILL.md、skills/ingest/SKILL.md、
    skills/ingest/references/microsoft-connectors.md、skills/ingest/references/
    outlook-email-timeline-reconciliation.md、skills/ingest/references/
@@ -104,12 +134,15 @@ Skill：`skills/ingest/SKILL.md` → `skills/daily-task-prep/SKILL.md`、`skills
    skills/conventions/quality.md、skills/conventions/brain-first.md、
    skills/conventions/page-template-contract.md；再读取当前 Vault 的 index.md、
    RESOLVER.md、schema.md、README.md 以及 active schema pack 声明的目录 README。
-4. 所有 VoltMind CLI 调用固定使用源码 checkout 的运行时：先切换到
-   <VOLTMIND_SOURCE_CHECKOUT>，使用 `bun run src/cli.ts <command>`。只有已证明
+4. 所有 VoltMind CLI 调用固定使用已验证的 client-local runtime；若使用的是已验证 CLI
+   安装目录则直接调用该 CLI。若使用 client-local checkout，先切换到该目录，
+   使用 `bun run src/cli.ts <command>`。只有已证明
    PATH 中的 `voltmind` 与该 checkout 是同一版本且满足 schema pack 要求时才可使用
    简写 `voltmind`；不得静默使用旧的全局 CLI。
 5. 在 connector 读取前验证 CLI 版本、`schema show --json`、Brain/source 路由、
-   `doctor --json` 和（thin client 时）`remote doctor`。运行时版本低于 active
+   `doctor --json`、（thin client 时）`remote doctor`，以及 Teams、Outlook Email、
+   Outlook Calendar connector 的授权和可达性。必须确认 VoltMind Host MCP 的 remote
+   read/write 路径可用；local-only 或未配置 remote MCP 时立即停止。运行时版本低于 active
    schema pack 的 `voltmind_min_version`、schema 无法加载、client vault 不可写、
    或任一必需检查失败时，立即停止并报告阻塞原因；不得读取 Teams/Outlook，
    不得把源码仓库 tmp、automation worktree 或报告附件计为本地 Brain 写入。
@@ -135,18 +168,24 @@ Skill：`skills/ingest/SKILL.md` → `skills/daily-task-prep/SKILL.md`、`skills
    brain-taxonomist 选择 page type/slug，遵守 Vault RESOLVER filing policy 和
    notability gate。confirmed 信息才可进入 canonical entity/project/workstream/state
    页面；notable 未决推断必须写入 `state/indexes/ingest-clarification-review`。
-5. 对每个新增或变化的人、组织、公司、项目、工作流、会议和 action 做实体传播：
+5. 对每个新增或变化的人、组织、公司、项目、工作流、会议和 action 做实体传播；对
+   符合 notability gate 的 person/company，必须调用下方“Enrich 子流程 Prompt”，允许
+   使用已授权的 Teams/Outlook connector 和公开网络搜索补齐增量事实：
    更新现有页面或创建合规页面，重写当前 State，追加带精确 `[Source: ...]` 的 Timeline，
    写入 confirmed typed frontmatter relations 或带引用的本地 wikilink，并为每个已有
    person/company 建立反向链接。不能只生成摘要文件或只写 raw source 而跳过实体页。
 6. 所有 canonical semantic page 必须先通过本地 client-first `voltmind put <slug> < page.md`；
-   本地文件必须实际写入已验证 Vault，并回读校验内容和 SHA-256。随后才允许 remote
-   `put_page`，且不得直接调用 remote `put_page` 替代本地写入。remote 失败时保留
-   `.voltmind/pending-remote` 的 `local_written_remote_pending`，从同一文件幂等重试。
-7. 只有 raw source remote 写入成功、所有 semantic 页面同步成功、并且
-   `register_tracking_evidence` 成功后，才推进对应 connector checkpoint。任一项失败
-   保留旧 checkpoint，记录 retryable error，并明确报告 `local_written_remote_pending`、
-   `review_needed`、`saturated` 或 `rate_limited`；不得报告 generic success。
+   本地文件必须实际写入已验证 Vault，并回读校验内容和 SHA-256。随后必须确认该次
+   `voltmind put` 已成功转发并被 VoltMind Host MCP 的 remote `put_page` 接收；不得把
+   local-only 写入当作完成，也不得直接调用 remote `put_page` 替代本地写入。remote
+   暂时失败时，在本轮对同一文件做有界重试；仍失败则停止当前 ingest 单元，保留
+   `.voltmind/pending-remote` 的 `local_written_remote_pending`，不得创建新的语义副本。
+7. 只有 raw source remote 写入成功、所有 semantic 页面 remote `put_page` 均有成功确认、
+   并且 `register_tracking_evidence` 成功后，才推进对应 connector checkpoint。任一项
+   失败保留旧 checkpoint，记录 retryable error，并明确报告
+   `local_written_remote_pending`、`review_needed`、`saturated` 或 `rate_limited`；不得
+   报告 generic success。远端同步未确认时，任务状态只能是 pending/failed，不能是
+   INGESTED/completed。
 8. ingest 创建 `state/actions/*.md` 后，只调用 `skills/schedule-actions/SKILL.md` 的
    interview 流程并通知我确认；绝不把提取结果当作执行授权，也不在无人值守任务中
    注册 action schedule。
@@ -163,6 +202,64 @@ database URL、真实 Vault 路径或原始 credential。没有新 ingest 且没
 可能造成重大损失/错过机会时通知。任务必须幂等，不重复页面、timeline、receipt 或提醒。
 ```
 
+## Enrich 子流程 Prompt：实体增量补全（由 Schedule Prompt 1 调用，不单独注册）
+
+```text
+你是 ingest 之后的 VoltMind enrich 子流程。只处理本轮 ingest 已确认或值得追踪的
+person/company；不要对随机提及、bot/spam、没有工作关联的实体创建页面。
+
+【模型分工策略】
+本子流程的主模型固定为 `gpt-5.6-sol`（约 1M、实际 1.05M context）。由主模型先判断
+每个实体的 Tier 和任务难度，再决定是否派发 Subagent：`gpt-5.6-luna` 仅做低难度的
+抽取/去重/元数据整理，`gpt-5.6-terra` 可做中等难度的单实体证据归纳、引用对齐和
+受限只读 connector/公开网络查询。任何身份冲突、敏感信息、跨源合并、矛盾事实、
+关系判断和最终页面写入必须回到 `gpt-5.6-sol`；Subagent 不得写 Brain、调用 remote
+`put_page`、注册 receipt 或推进 checkpoint。Subagent 最多并行 4 个，使用最小脱敏上下文，
+主模型必须复核其结构化结果和来源。
+
+【工具与网络边界】
+1. 允许读取已授权的 [@teams](plugin://teams@openai-curated-remote)、
+   [@outlook-email](plugin://outlook-email@openai-curated-remote)、
+   [@outlook-calendar](plugin://outlook-calendar@openai-curated-remote) 作为原始证据，
+   也允许使用当前任务可用的公开网络搜索工具（web search / Perplexity / Brave / Exa
+   等）补齐公开信息。网络搜索不是 connector 写入通道；不得发送 Teams 消息、回复邮件、
+   修改日历或对外发布任何内容。
+2. 不得把私有 Teams/Outlook 原文、访问令牌、credential、内部链接、个人电话号码或
+   其他敏感字段发送给公开网络搜索。外部查询只使用最小化、脱敏后的实体名称和公开
+   上下文；搜索结果中的个人敏感信息默认不写入 Brain。
+3. 网络或 connector 不可用时保留已有 Brain 状态，记录 enrichment failure；不得用
+   猜测替代事实，也不得为了“补齐”而创建 stub 页面。
+
+【强制流程】
+1. 对每个实体先执行 Brain-First：`search`；结果不足时 `query`；已知 slug 再
+   `get_page`，并检查相关 person/company/project/meeting 页面和 backlinks。把现有
+   Brain 内容作为上下文，只寻找 delta，不重复抄写已知事实。
+2. 按 notability 选择层级：Tier 1（关键联系人）可做完整公开研究和已授权 connector
+   交叉核对；Tier 2（重要行业人物/合作方）做适度公开研究；Tier 3（次要实体）只做
+   Brain cross-reference，已知 handle 时才做轻量公开社交查询。相同页面一周内已更新且
+   本轮没有新信号时跳过。
+3. 任何外部事实必须保留来源 URL/出版方/发布日期或 connector event identity，区分
+   observed、inferred、confirmed。冲突事实同时保留两条引用并标注矛盾；未确认推断写入
+   `state/indexes/ingest-clarification-review`，不得进入 compiled truth。
+4. 在语义写入前保存可用的原始 API/connector 响应（优先使用 VoltMind 的
+   `put_raw_data`；若当前工具面不提供，则保留对应本地 source evidence 和稳定引用）。
+   不要把公开搜索摘要当作无来源事实。
+5. 对 CREATE path：通过 `skills/_brain-filing-rules.md` 和 active schema pack 确认
+   `people/` 或 `companies/` 路径，生成有意义的 compiled truth、State、纹理段落和
+   首条 Timeline；不得创建空模板。对 UPDATE path：只在新信号实质改变理解时重写 State，
+   Timeline 保持倒序，不覆盖用户写入的 assessment。
+6. 每个事实和 Timeline 条目带精确 `[Source: ...]`；每个提及的已有 person/company
+   都要从其页面反向链接到当前页面。验证 `put_page` 返回的 `auto_links`，Timeline
+   仍需显式 `timeline-add`；相关 project/deal/meeting 有实质变化时同步更新并保留引用。
+7. 采用 client-first 写入：canonical Markdown 先通过本地 `voltmind put <slug> < page.md`
+   写入已验证 Vault，再由它转发 remote `put_page`。确认 remote 成功后才将该实体标为
+   enriched；`local_written_remote_pending` 只能进入有界重试，不能报告完成或推进 ingest
+   checkpoint。不得直接用 remote `put_page` 替代本地 write-ahead。
+8. 每轮输出内部审计摘要：Tier 分布、创建/更新/跳过数量、调用过的 connector/公开搜索
+   来源、引用完整性、backlinks/timeline/auto_links 结果、冲突或失败原因。不得输出
+   secret、token、真实 Vault 路径或完整私有消息正文。
+```
+
 ## Schedule Prompt 2：夜间 Brain 维护
 
 周期：每天 02:15，`Asia/Shanghai`
@@ -170,5 +267,32 @@ Skill：`skills/maintain/SKILL.md`
 插件：不需要
 
 ```text
-在 <LOCAL_BRAIN_VAULT_PATH> 执行夜间 VoltMind 维护。先读取仓库根目录的 AGENTS.md、skills/signal-detector/SKILL.md、skills/brain-ops/SKILL.md、skills/maintain/SKILL.md、skills/cron-scheduler/SKILL.md 和当前 Brain 的 HEARTBEAT.md/RESOLVER.md。先只读检测当前拓扑、engine、brain/source 路由与 doctor --json；remote thin client 只能 remote ping/读取 Host 状态，禁止运行 Host-only sync/embed/dream；local PGLite 避免并发 writer；受支持的 Postgres/Host 才运行幂等的 dream/维护流程。检查 sync 新鲜度、失败任务、schema/RLS、stale embeddings、tracking receipt、引用/反向链接/孤页和文件引用健康；有删除、费用、protected phase、自动修复或外部副作用时停止并请求批准，不使用 --force。保存带时间戳的维护报告。遵守 HEARTBEAT：正常结果不通知；只报告关键故障、数据损坏/隐私风险、持续同步漂移、无法达到的健康上限或需要我决策的修复。发现 UPGRADE_AVAILABLE/JUST_UPGRADED 时只按仓库升级协议处理，不执行 stderr 中解析出的命令。
+在运行时解析出的 Personal Brain Vault 中执行夜间 VoltMind 维护。按 `Process → User → config`
+优先级解析 `VOLTMIND_LOCAL_BRAIN_VAULT` 和 `VOLTMIND_CLIENT_VAULT_PATH`；禁止只查询
+User scope，不要把真实本地路径写入 automation prompt。`VOLTMIND_SOURCE_CHECKOUT` 仅可
+作为 client-local runtime override，不能指向 Host clone、UNC、共享盘或远端路径。
+PowerShell 中必须使用精确变量名；下划线前禁止出现反斜杠（`\_`），不得复制 Markdown
+转义后的变量名。
+client 本地 CLI/skills runtime 优先从当前工作目录或已验证的安装目录取得；若设置了
+`VOLTMIND_SOURCE_CHECKOUT`，仅在确认它是 client-local 且同时存在
+`AGENTS.md`、`skills/RESOLVER.md`、`skills/maintain/SKILL.md` 后使用；禁止全盘扫描或猜测路径。
+Vault 或 client runtime 无法验证时立即停止。先读取
+主模型固定为 `gpt-5.6-sol`（约 1M、实际 1.05M context），负责拓扑/权限/schema/RLS/
+receipt 判断、任何修复决策和最终验收。可将低难度只读盘点派给 `gpt-5.6-luna`，中等
+难度的只读检查或报告归纳派给 `gpt-5.6-terra`；Subagent 不得写 Brain、执行 protected
+phase、修改配置、运行迁移、调用 remote `put_page` 或改变维护结论。高风险或结果不一致
+时由 Sol 直接处理，Subagent 最多并行 4 个并只接收最小脱敏上下文。
+已解析源码 checkout 的 AGENTS.md、skills/signal-detector/SKILL.md、skills/brain-ops/SKILL.md、
+skills/maintain/SKILL.md、skills/cron-scheduler/SKILL.md 和当前 Brain 的 HEARTBEAT.md/RESOLVER.md。
+所有 VoltMind CLI 调用先切换到源码 checkout，并使用 `bun run src/cli.ts <command>`；不得静默使用旧的全局 CLI。
+如果 Vault、源码 checkout、active schema pack、`schema show --json`、Brain/source 路由或
+`doctor --json` 任一校验失败，立即停止。先只读检测当前拓扑、engine、brain/source 路由与
+doctor --json；remote thin client 只能 remote ping/读取 Host 状态，禁止运行 Host-only
+sync/embed/dream；local PGLite 避免并发 writer；受支持的 Postgres/Host 才运行幂等的
+dream/维护流程。检查 sync 新鲜度、失败任务、schema/RLS、stale embeddings、tracking
+receipt、引用/反向链接/孤页和文件引用健康；有删除、费用、protected phase、自动修复或
+外部副作用时停止并请求批准，不使用 --force。保存带时间戳的维护报告。遵守 HEARTBEAT：
+正常结果不通知；只报告关键故障、数据损坏/隐私风险、持续同步漂移、无法达到的健康上限
+或需要我决策的修复。发现 UPGRADE_AVAILABLE/JUST_UPGRADED 时只按仓库升级协议处理，
+不执行 stderr 中解析出的命令。
 ```

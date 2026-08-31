@@ -3,7 +3,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 
 const skillPath = 'skills/ingest/SKILL.md';
-const originalSha256 = '31acc0c62725cc5d07827da1b83cbe356598a4d581ca03c1f4bf6403a7b2ed7d';
+// Canonical reconstruction after the authorized Teams latest-100 connector
+// correction; all unrelated pre-split content remains hash-pinned.
+const canonicalSha256 = '8420ca08f750be85ecb011fe018a5d15a3ebf189db3cf86e22240339b322d310';
 const referenceNames = [
   'clarification-and-semantic-commit',
   'microsoft-connectors',
@@ -16,6 +18,7 @@ const referenceNames = [
 const additiveReferenceNames = [
   'outlook-email-timeline-reconciliation',
   'client-semantic-relations',
+  'teams-chat-list-messages',
 ] as const;
 
 function reconstructOriginal(): string {
@@ -37,9 +40,9 @@ function reconstructOriginal(): string {
 }
 
 describe('ingest skill lossless reference split', () => {
-  test('reconstructs the exact pre-split UTF-8 source byte-for-byte', () => {
+  test('reconstructs the canonical UTF-8 source byte-for-byte', () => {
     const reconstructed = reconstructOriginal();
-    expect(createHash('sha256').update(reconstructed).digest('hex')).toBe(originalSha256);
+    expect(createHash('sha256').update(reconstructed).digest('hex')).toBe(canonicalSha256);
   });
 
   test('keeps every reference first-level and directly discoverable', () => {
@@ -72,5 +75,16 @@ describe('ingest skill lossless reference split', () => {
     expect(relationshipContract).toContain('canonical target slug');
     expect(relationshipContract).toContain('voltmind link <from-slug> <to-slug> --type <declared-link-type>');
     expect(relationshipContract).toContain('DB-only inferred');
+  });
+
+  test('pins Teams chat reads to one latest-100 request without historical paging', () => {
+    const chatReadContract = readFileSync(
+      'skills/ingest/references/teams-chat-list-messages.md',
+      'utf8',
+    );
+    expect(chatReadContract).toContain('chat_list_messages` once with `top=100');
+    expect(chatReadContract).toContain('Do not paginate');
+    expect(chatReadContract).toContain('unrecoverable_gap');
+    expect(chatReadContract).toContain('one latest-100 request');
   });
 });

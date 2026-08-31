@@ -5,6 +5,10 @@ import {
 } from '../../src/core/ingestion/teams-coverage.ts';
 
 describe('Teams client coverage gate', () => {
+  test('uses the connector recent-message cap of 100', () => {
+    expect(TEAMS_MESSAGE_RESULT_CAP).toBe(100);
+  });
+
   test('a sub-cap batch advances only after every event is registered', () => {
     expect(decideTeamsCoverage({
       returnedCount: TEAMS_MESSAGE_RESULT_CAP - 1,
@@ -27,15 +31,15 @@ describe('Teams client coverage gate', () => {
     });
   });
 
-  test('a capped batch is saturated and never advances the checkpoint', () => {
+  test('a durable capped batch stays saturated but advances the incremental high watermark', () => {
     expect(decideTeamsCoverage({
       returnedCount: TEAMS_MESSAGE_RESULT_CAP,
       allEventsRegistered: true,
       nextCheckpointIso: '2026-08-04T00:00:00Z',
     })).toEqual({
       status: 'saturated',
-      shouldAdvanceCheckpoint: false,
-      nextCheckpointIso: null,
+      shouldAdvanceCheckpoint: true,
+      nextCheckpointIso: '2026-08-04T00:00:00Z',
     });
   });
 
@@ -44,6 +48,10 @@ describe('Teams client coverage gate', () => {
       returnedCount: TEAMS_MESSAGE_RESULT_CAP,
       allEventsRegistered: false,
       nextCheckpointIso: '2026-08-04T00:00:00Z',
-    }).status).toBe('saturated');
+    })).toEqual({
+      status: 'saturated',
+      shouldAdvanceCheckpoint: false,
+      nextCheckpointIso: null,
+    });
   });
 });
