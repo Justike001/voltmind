@@ -61,7 +61,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'source-audit', 'import', 'export', 'files', 'file-refs', 'client-roots', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'provision-personal', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages', 'projects']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'source-audit', 'import', 'export', 'files', 'file-refs', 'client-roots', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'provision-personal', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'put-local', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages', 'projects']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'extract',
@@ -93,7 +93,7 @@ const CLI_ONLY_SELF_HELP = new Set([
   'salience', 'anomalies', 'whoknows', 'calibration',
   'takes',
   'extract', 'transcripts', 'enrich',
-  'conversation-parser',
+  'conversation-parser', 'put-local',
   'recall', 'forget', 'candidates',
   'self-upgrade',
   'source-audit',
@@ -1014,6 +1014,67 @@ function refuseThinClient(command: string, mcpUrl: string): never {
   process.exit(1);
 }
 
+/**
+ * Write a canonical page and durable pending receipt without contacting a
+ * remote Host. This is the automation-safe local half of client-first ingest;
+ * the ordinary `put` command retains its thin-client remote forwarding.
+ */
+async function runPutLocal(args: string[]): Promise<void> {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log('Usage: voltmind put-local <slug> [--content MARKDOWN | --file PATH | < page.md]');
+    console.log('Writes and validates the local client vault, creates a pending receipt, and never contacts the Host.');
+    return;
+  }
+  const slug = args.find((arg, index) =>
+    !arg.startsWith('--') && args[index - 1] !== '--content' && args[index - 1] !== '--file',
+  );
+  if (!slug) {
+    console.error('Usage: voltmind put-local <slug> [--content MARKDOWN | --file PATH | < page.md]');
+    process.exit(2);
+  }
+
+  const contentIndex = args.indexOf('--content');
+  const fileIndex = args.indexOf('--file');
+  let content: string | undefined;
+  if (contentIndex >= 0 && args[contentIndex + 1]) {
+    content = args[contentIndex + 1];
+  } else if (fileIndex >= 0 && args[fileIndex + 1]) {
+    content = readFileSync(args[fileIndex + 1], 'utf8');
+  } else if (!process.stdin.isTTY) {
+    content = readFileSync(0, 'utf8');
+  }
+  if (!content) {
+    console.error('put-local requires Markdown via --content, --file, or stdin.');
+    process.exit(2);
+  }
+
+  const cfg = loadConfig();
+  if (!cfg) {
+    console.error('put-local requires an initialized VoltMind client configuration.');
+    process.exit(1);
+  }
+  try {
+    const { writeClientFirstPage } = await import('./core/client-first-page-writer.ts');
+    const receipt = await writeClientFirstPage(cfg, { slug, content });
+    process.stdout.write(JSON.stringify({
+      status: receipt.status,
+      slug: receipt.slug,
+      content_sha256: receipt.content_sha256,
+      bytes: receipt.bytes,
+      remote_sync: 'deferred',
+    }) + '\n');
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === 'ClientFirstPageWriteError' && 'code' in e) {
+      const err = e as Error & { code: string; suggestion?: string };
+      console.error(`Error [${err.code}]: ${err.message}`);
+      if (err.suggestion) console.error(`  Fix: ${err.suggestion}`);
+    } else {
+      console.error(e instanceof Error ? e.message : String(e));
+    }
+    process.exit(1);
+  }
+}
+
 async function handleCliOnly(command: string, args: string[]) {
   // Thin-client guard: refuse DB-bound commands cleanly with a pinpoint
   // hint instead of letting them fail later inside connectEngine or
@@ -1030,6 +1091,10 @@ async function handleCliOnly(command: string, args: string[]) {
   if (command === 'schema') {
     const { runSchema } = await import('./commands/schema.ts');
     await runSchema(args);
+    return;
+  }
+  if (command === 'put-local') {
+    await runPutLocal(args);
     return;
   }
   if (command === 'client-roots') {
@@ -2312,6 +2377,7 @@ SETUP
 PAGES
   get <slug>                         Read a page
   put <slug> [< file.md]             Write local vault first, then sync remote in thin-client mode
+  put-local <slug> [< file.md]       Write local vault + pending receipt; never contact Host
   delete <slug>                      Delete a page
   restore <slug>                     Restore a deleted page
   list [--type T] [--tag T] [-n N]   List pages
@@ -2495,5 +2561,3 @@ main().catch(e => {
   console.error(e.message || e);
   process.exit(1);
 });
-
-
