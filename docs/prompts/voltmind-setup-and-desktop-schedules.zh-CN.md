@@ -150,131 +150,57 @@ Skill：`skills/ingest/SKILL.md` → `skills/enrich/SKILL.md` → `skills/daily-
 
 【增量 ingest 流程】
 1. 先从各 connector 的本地 manifest/checkpoint、`.voltmind/pending-remote` 和上一轮
-   `.voltmind/drafts` 恢复未完成的同一事件。对已有完整 draft，必须依据其目标 slug、
-   frontmatter 和来源引用提升为 canonical Markdown，并通过本地 `voltmind put-local` 写入；
-   不完整 draft 必须依据已落盘 raw evidence 重建后再写入。不得把 draft 当作完成，也不得
-   因同步 pending 重新创建同一事件的页面、timeline 或 receipt。
-2. 使用 [@teams](plugin://teams@openai-curated-remote)、[@outlook-email](plugin://outlook-email@openai-curated-remote)、
-   [@outlook-calendar](plugin://outlook-calendar@openai-curated-remote) 从各自持久化
-   checkpoint/delta cursor 之后读取增量。首次没有 checkpoint 时只取最近 1 个工作日；
-   Teams chat 每个容器只调用一次 `chat_list_messages(top=100)`，先抽样 3-5 条验证，
-   禁止无界全量抓取、分页或拆分历史窗口。100 条返回标记为 saturated，并记录
-   unrecoverable gap；429 标记为 rate_limited，不得伪装成 no_signal。
-3. 按 Microsoft connector signal policy 过滤自动通知、营销邮件、utility calendar
-   event 和跨源重复内容，但先为每个返回事件保存本地原始 evidence。原始 source
-   必须位于已验证 Vault 的 `sources/teams/`、`sources/emails/` 或 `sources/calendar/`
-   下，并保留 connector 提供的 event_id、event_version（仅在实际提供时）、
-   evidence_type、tracking_refs 和原始时间。SharePoint/OneDrive/附件只保存元数据，
-   未获明确请求不得 materialize。
-4. 对每个选中的高信号事件执行完整链路：先 `search`，结果不足时 `query`，已知 slug
-   再 `get_page`；区分 observed、inferred、confirmed。使用 active schema pack 经过
-   brain-taxonomist 选择 page type/slug，遵守 Vault RESOLVER filing policy 和
-   notability gate。confirmed 信息才可进入 canonical entity/project/workstream/state
-   页面；notable 未决推断必须写入 `state/indexes/ingest-clarification-review`。
-5. 对每个新增或变化的人、组织、公司、项目、工作流、会议和 action 做实体传播；对
-   符合 notability gate 的 person/company，必须调用下方“Enrich 子流程 Prompt”，允许
-   使用已授权的 Teams/Outlook connector 和公开网络搜索补齐增量事实：
-   更新现有页面或创建合规页面，重写当前 State，追加带精确 `[Source: ...]` 的 Timeline，
-   写入 confirmed typed frontmatter relations 或带引用的本地 wikilink，并为每个已有
-   person/company 建立反向链接。不能只生成摘要文件或只写 raw source 而跳过实体页。
-6. 不得把 `.voltmind/drafts` 当作 canonical 页面，也不得在 raw source 之后停在草稿层。
-   对每个 canonical semantic page 必须完成本地-only client-first `voltmind put-local <slug> < page.md`；
-   本地文件必须实际写入已验证 Vault，并回读校验内容和 SHA-256。若该命令返回 pending
-   状态，只记录 `.voltmind/pending-remote` 的 `local_written_remote_pending`，不得等待、
-   重试或因此阻断后续本地实体传播；本轮禁止任何额外的远端诊断、同步、receipt 注册或
-   Host 工具调用。`put-local` 复用 canonical template 校验、原子 Vault 写入和 pending
-   receipt，但绝不初始化或调用远端；本轮不得改用普通 `voltmind put`。
-7. 将采集进度拆成两个状态并分别持久化：
-   - `local_capture_checkpoint`：当本批每个返回事件的 raw evidence、manifest、canonical
-     本地页面和 pending receipt 都已落盘、回读和 SHA-256 校验通过后，推进到本批最新
-     已落盘事件的 high watermark。它用于避免下一轮重复抓取同一事件；必须保留 event_id、
-     event_version 和 pending receipt 到事件的映射。
-   - `remote_sync_checkpoint`/tracking receipt：本轮不主动执行远端同步或注册；保持
-     `pending`，由用户在报告提醒后手动完成剩余 Host 同步和 tracking receipt 注册。不得
-     伪造 registered。
-   任一本地落盘或校验失败时不得推进 `local_capture_checkpoint`；连接器饱和/429 仍按
-   `saturated`/`rate_limited` 规则记录。每轮必须报告两个 checkpoint 的状态，不能只报一个
-   “checkpoint 未推进”。
-8. ingest 创建 `state/actions/*.md` 后，只调用 `skills/schedule-actions/SKILL.md` 的
-   interview 流程并通知我确认；绝不把提取结果当作执行授权，也不在无人值守任务中
-   注册 action schedule。
-9. 本轮只要本地 evidence、canonical 页面和本地 receipt 已完成，就保存完整本地审计报告；
-   不运行需要 Host/recall 的 `daily-task-prep` 或 `briefing`。报告必须通知用户执行最后
-   的 Host 同步和 tracking receipt 注册，并列出所有 pending receipt；不得因为
-   remote pending 回退到只保存 sources 或 drafts。
+   `.voltmind/drafts` 恢复未完成事件；遵循适用 reference 的幂等与去重规则，不能重复
+   已完成的 page、timeline、receipt 或事件。没有 checkpoint 时只取最近 1 个工作日。
+2. 按 `skills/ingest/SKILL.md` 的 Reference Router 读取并执行本轮适用的 connector、
+   增量窗口、信号过滤、raw evidence、实体检测、分类、clarification、tracking 和
+   client-write-through reference；不要在此重复这些规则。先保存 raw evidence 及其
+   connector 身份字段，再进行 semantic routing；不把附件 materialize，除非用户明确要求。
+3. 对本轮选中的高信号 person/company 调用下方 `skills/enrich/SKILL.md` 子流程；其他
+   entity/project/workstream/action 按 ingest skill 路由。需要 Host/recall 的
+   `daily-task-prep`、`briefing` 直接跳过并记录，不阻断本地 ingest。
+4. 本自动化采用 client-only 写入覆盖：raw evidence 按 reference 直接落盘到已验证的
+   client Vault；canonical semantic page 使用本地-only `voltmind put-local`，不得改用
+   普通 `voltmind put`，不得调用 remote `put_page`、图谱、标签、receipt 注册、sync 或
+   其他 Host 工具。保留并报告 pending receipt；本地 evidence/page/receipt 未完成并回读
+   校验前不推进 `local_capture_checkpoint`，`remote_sync_checkpoint` 保持 `pending`。
+5. ingest 创建 `state/actions/*.md` 后，只调用 `skills/schedule-actions/SKILL.md` 的
+   interview 流程并通知我确认；不得在无人值守任务中直接注册或执行 action。删除、合并、
+   跨所有权写入、费用、外部副作用或需用户确认的动作停止并请求确认；不使用 `--force`。
 
 【输出与静默规则】
-输出审计报告时必须完整报告：本轮读取/过滤/保留的事件数量与 coverage 状态；每个 raw
-source 的 event_id、source slug 和落地结果；实体分类与传播数量；新建/更新/跳过的
-people、orgs、companies、projects、workstreams、meetings、state 页面；Timeline、
-typed relations、backlinks、clarification candidates；`local_capture_checkpoint` 与
-`remote_sync_checkpoint` 的分别状态；每个 pending receipt、失败原因和下一步重试动作。
-不得输出 secret、token、database URL、真实 Vault 路径或原始 credential。只要存在
-`local_written_remote_pending`，必须明确提醒用户完成最后的 Host 同步和 tracking receipt
-注册；没有 pending 时才可按 HEARTBEAT 静默结束。任务必须幂等，不
-重复页面、timeline、receipt 或提醒。
+沿用 ingest/enrich skill 的输出格式，并补充本轮事件 coverage、local/remote checkpoint、
+pending receipt、connector/网络失败、跳过的 Host/recall 维度和需要用户完成的后续动作。
+不得输出 secret、token、database URL、真实 Vault 路径、完整私有消息或 credential；任务
+必须幂等，正常结果遵守 HEARTBEAT 静默规则。
 ```
 
-## Enrich 子流程 Prompt：实体增量补全（由 Schedule Prompt 1 调用，不单独注册）
+## Enrich 子流程 Prompt：实体增量补全（本轮 ingest 必须调用，不单独注册）
+
+技能：`skills/enrich/SKILL.md`
 
 ```text
-你是 ingest 之后的 VoltMind enrich 子流程。只处理本轮 ingest 已确认或值得追踪的
-person/company；不要对随机提及、bot/spam、没有工作关联的实体创建页面。
+你是本轮 ingest 调用的 enrich 子流程。先完整读取并执行
+`skills/enrich/SKILL.md`；需要时按该 skill 的引用规则读取 `skills/_brain-filing-rules.md`
+及相关 conventions/reference，不在本 Prompt 重复其 Tier、notability、Brain-first、
+CREATE/UPDATE、模板、引用、timeline 或 backlink 流程。
 
-【模型分工策略】
-本子流程的主模型固定为 `gpt-5.6-sol`（约 1M、实际 1.05M context）。由主模型先判断
-每个实体的 Tier 和任务难度，再决定是否派发 Subagent：`gpt-5.6-luna` 仅做低难度的
-抽取/去重/元数据整理，`gpt-5.6-terra` 可做中等难度的单实体证据归纳、引用对齐和
-受限只读 connector/公开网络查询。任何身份冲突、敏感信息、跨源合并、矛盾事实、
-关系判断和最终页面写入必须回到 `gpt-5.6-sol`；Subagent 不得写 Brain、注册 receipt
-或推进 checkpoint。Subagent 最多并行 4 个，使用最小脱敏上下文，
-主模型必须复核其结构化结果和来源。
+【调用范围】
+- 只处理父 ingest 传入的本轮 confirmed 或值得追踪的 person/company；不自行扩展成独立
+  的全量实体扫描。没有实质新信号时按 enrich skill 跳过。
+- 可使用本轮已授权 connector 和 skill 允许的脱敏公开研究；不得发送消息、回复邮件、
+  修改日历、公开发布，或把私有正文、token、credential、内部链接送入公开搜索。
+- connector/网络不可用时按 skill 记录失败并继续其他实体；不得猜测、伪造引用或创建 stub。
 
-【工具与网络边界】
-1. 允许读取已授权的 [@teams](plugin://teams@openai-curated-remote)、
-   [@outlook-email](plugin://outlook-email@openai-curated-remote)、
-   [@outlook-calendar](plugin://outlook-calendar@openai-curated-remote) 作为原始证据，
-   也允许使用当前任务可用的公开网络搜索工具（web search / Perplexity / Brave / Exa
-   等）补齐公开信息。网络搜索不是 connector 写入通道；不得发送 Teams 消息、回复邮件、
-   修改日历或对外发布任何内容。
-2. 不得把私有 Teams/Outlook 原文、访问令牌、credential、内部链接、个人电话号码或
-   其他敏感字段发送给公开网络搜索。外部查询只使用最小化、脱敏后的实体名称和公开
-   上下文；搜索结果中的个人敏感信息默认不写入 Brain。
-3. 网络或 connector 不可用时保留已有 Brain 状态，记录 enrichment failure；不得用
-   猜测替代事实，也不得为了“补齐”而创建 stub 页面。
+【本自动化的 client-only 覆盖】
+raw evidence 按适用 reference 直接落盘到已验证 Vault；canonical semantic page 必须使用
+本地-only `voltmind put-local`，不得改用普通 `voltmind put`，也不得调用 remote `put_page`、
+图谱/标签/receipt 注册、sync 或其他 Host 工具。保留 pending receipt，不等待、不重试远端；
+本地 evidence/page/receipt 校验通过后推进 local checkpoint，remote checkpoint 保持 `pending`。
 
-【强制流程】
-1. 对每个实体先执行 Brain-First：`search`；结果不足时 `query`；已知 slug 再
-   `get_page`，并检查相关 person/company/project/meeting 页面和 backlinks。把现有
-   Brain 内容作为上下文，只寻找 delta，不重复抄写已知事实。
-2. 按 notability 选择层级：Tier 1（关键联系人）可做完整公开研究和已授权 connector
-   交叉核对；Tier 2（重要行业人物/合作方）做适度公开研究；Tier 3（次要实体）只做
-   Brain cross-reference，已知 handle 时才做轻量公开社交查询。相同页面一周内已更新且
-   本轮没有新信号时跳过。
-3. 任何外部事实必须保留来源 URL/出版方/发布日期或 connector event identity，区分
-   observed、inferred、confirmed。冲突事实同时保留两条引用并标注矛盾；未确认推断写入
-   `state/indexes/ingest-clarification-review`，不得进入 compiled truth。
-4. 在语义写入前保存可用的原始 API/connector 响应（优先使用 VoltMind 的
-   `put_raw_data`；若当前工具面不提供，则保留对应本地 source evidence 和稳定引用）。
-   不要把公开搜索摘要当作无来源事实。
-5. 对 CREATE path：通过 `skills/_brain-filing-rules.md` 和 active schema pack 确认
-   `people/` 或 `companies/` 路径，生成有意义的 compiled truth、State、纹理段落和
-   首条 Timeline；不得创建空模板。对 UPDATE path：只在新信号实质改变理解时重写 State，
-   Timeline 保持倒序，不覆盖用户写入的 assessment。
-6. 每个事实和 Timeline 条目带精确 `[Source: ...]`；每个提及的已有 person/company
-   都要从其页面反向链接到当前页面。`put-local` 不生成 Host auto-links，因此必须在本地
-   Markdown 中显式维护 Timeline/backlinks/typed relations；相关 project/deal/meeting 有
-   实质变化时同步更新并保留引用。
-7. 采用 client-first 写入：canonical Markdown 必须先通过本地-only `voltmind put-local <slug> < page.md`
-   写入已验证 Vault；不得把 `.voltmind/drafts` 当作最终页面。若该命令返回 pending，
-   只保留 `enriched_local_remote_pending` 和 pending receipt，不等待、不重试、不调用
-   任何远端诊断/同步/注册工具，也不因此跳过其他实体。
-   本地 capture checkpoint 在本地 evidence/page/receipt 已验证后仍可推进，但 remote sync
-   checkpoint 必须保持 pending；报告中必须列出本次 enrich 的来源、实体页落地、pending
-   receipt 和提醒用户完成剩余 Host 同步的动作。不能报告远端完成。
-8. 每轮输出内部审计摘要：Tier 分布、创建/更新/跳过数量、调用过的 connector/公开搜索
-   来源、引用完整性、backlinks/timeline/auto_links 结果、冲突或失败原因。不得输出
-   secret、token、真实 Vault 路径或完整私有消息正文。
+返回父 ingest 的结构化结果：实体、skill 判定的动作（created/updated/skipped/failed）、
+本地 slug、来源与引用摘要、冲突/失败原因和 pending receipt。不得返回 secret、真实 Vault
+路径、完整私有消息或 credential。
 ```
 
 ## Schedule Prompt 2：夜间 Brain 维护
