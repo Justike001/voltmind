@@ -226,11 +226,8 @@ skills tree 优先从 `VOLTMIND_SKILLS_DIR` 取得；若未设置，仅可使用
 `skills/RESOLVER.md`、`skills/maintain/SKILL.md` 的 skills/ 目录；禁止全盘扫描或猜测路径。
 Vault、client runtime 和 skills 无法验证时，只能停止本地维护并报告具体缺失项；OAuth
 discovery、Host 或 remote MCP 失败不属于本地维护的停止条件。完成本地材料读取后，
-主模型固定为 `gpt-5.6-sol`（约 1M、实际 1.05M context），负责拓扑/权限/schema/RLS/
-receipt 判断、任何修复决策和最终验收。可将低难度只读盘点派给 `gpt-5.6-luna`，中等
-难度的只读检查或报告归纳派给 `gpt-5.6-terra`；Subagent 不得写 Brain、执行 protected
-phase、修改配置、运行迁移、调用 remote `put_page` 或改变维护结论。高风险或结果不一致
-时由 Sol 直接处理，Subagent 最多并行 4 个并只接收最小脱敏上下文。
+主模型固定为 `gpt-5.6-luna`，推理强度为高。负责拓扑/权限/schema/RLS/
+receipt 判断、任何修复决策和最终验收。
 已解析源码 checkout 的 AGENTS.md、skills/signal-detector/SKILL.md、skills/brain-ops/SKILL.md、
 skills/maintain/SKILL.md、skills/cron-scheduler/SKILL.md 和当前 Brain 的 HEARTBEAT.md/RESOLVER.md。
 所有 VoltMind CLI 调用固定使用 PATH 中已验证的 `voltmind`，先运行 `voltmind --version`
