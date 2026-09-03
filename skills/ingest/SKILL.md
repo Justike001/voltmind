@@ -85,6 +85,7 @@ this file. Multiple rows may apply to one ingest.
 | Any ingest pass: entity mentions or the user's original thinking | [entity-detection.md](references/entity-detection.md) |
 | Article, video, podcast, PDF, image, meeting transcript, social post, or raw-source storage | [media-and-raw-source.md](references/media-and-raw-source.md) |
 | Client-authored local-first semantic write, remote synchronization, receipt, or incremental Teams checkpoint | [client-write-through.md](references/client-write-through.md) and [client-semantic-relations.md](references/client-semantic-relations.md) |
+| Client-authored project/workstream/state update, receipt completion, registration failure, or tracking retry | [tracking-registration.md](references/tracking-registration.md) |
 | Teams cold start, 100-result cap, saturation, 429, or cold-start manifest | [teams-cold-start.md](references/teams-cold-start.md) |
 <!-- /ingest-reference-router -->
 
@@ -111,7 +112,8 @@ this file. Multiple rows may apply to one ingest.
 - Client-agent ingest may write `projects/`, `workstreams/`, and canonical
   action/decision/commitment/risk pages after Brain-First Lookup. Write raw
   source evidence first, preserve user prose via managed blocks, cite the
-  evidence page, then call `register_tracking_evidence`. The server never
+  evidence page, then complete the explicit registration step in
+  [tracking-registration.md](references/tracking-registration.md). The server never
   repeats this semantic write on the ingest hot path.
 - Client-authored ingest is **local-vault first**: write raw and derived
   Markdown locally, validate it, then synchronize the exact files with remote

@@ -14,6 +14,7 @@ describe('long-running project tracking capability injection', () => {
     expect(operationsByName.get_project_tracking_status?.scope).toBe('read');
     expect(operationsByName.reconcile_project_tracking?.scope).toBe('admin');
     expect(operationsByName.register_tracking_evidence?.scope).toBe('write');
+    expect(operationsByName.register_tracking_evidence?.cliHints?.name).toBe('register-tracking-evidence');
     expect(operationsByName.register_tracking_evidence?.params).not.toHaveProperty('source_id');
     expect(operationsByName.register_tracking_evidence?.params).toHaveProperty('action_assignments');
     expect(operationsByName.submit_ingestion_event?.params).not.toHaveProperty('source_id');
@@ -32,6 +33,7 @@ describe('long-running project tracking capability injection', () => {
 
   test('skills declare matching triggers and runtime tools without client project-write bypasses', () => {
     const ingest = read('skills/ingest/SKILL.md');
+    const registration = read('skills/ingest/references/tracking-registration.md');
     const meeting = read('skills/meeting-ingestion/SKILL.md');
     const project = read('skills/project/SKILL.md');
     const maintain = read('skills/maintain/SKILL.md');
@@ -55,6 +57,10 @@ describe('long-running project tracking capability injection', () => {
     expect(maintain).toContain('references/client.md');
     expect(maintain).toContain('references/host.md');
     expect(ingest).toContain('Client-agent ingest may write `projects/`');
+    expect(ingest).toContain('tracking-registration.md');
+    expect(registration).toContain('voltmind register-tracking-evidence');
+    expect(registration).toContain('does not require a local');
+    expect(registration).toContain('mcp.publish_skills=true');
     expect(meeting).toContain('register_tracking_evidence');
     expect(resolver).toContain('"long-running project tracking", "project tracking", "tracking binding"');
     expect(resolver).toContain('"project tracking health", "failed tracking receipts", "reconcile project tracking"');

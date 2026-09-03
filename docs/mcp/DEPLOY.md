@@ -185,7 +185,7 @@ or host-maintenance surface area.
 | Scope | What it allows |
 |-------|---------------|
 | `read` | `search`, `query`, `get_page`, `list_pages`, graph traversal |
-| `write` | `put_page`, `delete_page`, `add_link`, `add_timeline_entry` |
+| `write` | `put_page`, `delete_page`, `add_link`, `add_timeline_entry`, `register_tracking_evidence` |
 | `admin` | Client management, token revocation, sweep, local-only ops |
 
 ### 5. Publish Host skills (optional)
@@ -221,6 +221,11 @@ voltmind config set mcp.publish_skills false
 After enabling it, verify with an authenticated MCP client: `tools/list` should
 include `list_skills` and `get_skill`; then call `list_skills` followed by
 `get_skill` with a manifest skill name such as `project`.
+
+`register_tracking_evidence` is a core write-scope operation and is independent
+of Host skill publication. A source-bound OAuth client must have `write` (or
+`admin`) scope for the operation to appear in `tools/list`; after rebuilding the
+Host, reconnect the MCP client so it refreshes the tool list.
 
 ## Legacy Bearer Token Setup
 

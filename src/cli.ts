@@ -757,8 +757,22 @@ export function parseOpArgs(op: Operation, args: string[]): Record<string, unkno
       if (paramDef?.type === 'boolean') {
         params[key] = true;
       } else if (i + 1 < args.length) {
-        params[key] = args[++i];
-        if (paramDef?.type === 'number') params[key] = Number(params[key]);
+        const rawValue = args[++i];
+        if (paramDef?.type === 'number') {
+          params[key] = Number(rawValue);
+        } else if (paramDef?.type === 'array' || paramDef?.type === 'object') {
+          // CLI aliases for structured operations accept JSON values. Keep an
+          // invalid value as a string so the operation's normal validator can
+          // return its precise invalid-params error instead of silently
+          // changing the caller's payload.
+          try {
+            params[key] = JSON.parse(rawValue);
+          } catch {
+            params[key] = rawValue;
+          }
+        } else {
+          params[key] = rawValue;
+        }
       }
     } else if (posIdx < positional.length) {
       const key = positional[posIdx++];
@@ -2467,6 +2481,7 @@ P2.1 — LOCAL BRAIN OPERATIONS
   report <...>                       Save or read local audit reports
   source-audit --source-dir <path>   Reconcile a local source with active DB pages (read-only)
   projects tracking status|reconcile  Inspect or replay long-running project tracking receipts
+  register-tracking-evidence         Register a client-authored evidence revision (thin-client safe)
   export <dir>                       Export the brain as markdown
   features [--auto-fix]              Inspect or apply supported feature fixes
   models [doctor]                    Inspect model routing or probe models

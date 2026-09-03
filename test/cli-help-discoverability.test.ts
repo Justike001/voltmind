@@ -94,7 +94,7 @@ describe('VoltMind main `voltmind --help` surface', () => {
 
   test('P2.1 and P2.2 host-local commands are discoverable', () => {
     const { stdout } = runCli(['--help']);
-    for (const command of ['report', 'export', 'features', 'models', 'pages purge-deleted', 'cache', 'lint', 'integrity', 'orphans', 'friction', 'brainstorm', 'lsd', 'book-mirror', 'onboard', 'code-def', 'code-refs', 'code-callers', 'code-callees', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal']) {
+    for (const command of ['report', 'export', 'features', 'models', 'pages purge-deleted', 'projects tracking', 'register-tracking-evidence', 'cache', 'lint', 'integrity', 'orphans', 'friction', 'brainstorm', 'lsd', 'book-mirror', 'onboard', 'code-def', 'code-refs', 'code-callers', 'code-callees', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal']) {
       expect(stdout).toContain(command);
     }
   });

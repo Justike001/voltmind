@@ -3363,6 +3363,10 @@ const register_tracking_evidence: Operation = {
       throw new OperationError('invalid_params', error instanceof Error ? error.message : String(error));
     }
   },
+  // Expose a thin-client-safe CLI alias. The generic CLI dispatcher routes
+  // non-local operations through remote MCP before attempting local engine
+  // connection, so clients without database_url can finish registration.
+  cliHints: { name: 'register-tracking-evidence' },
 };
 
 const reconcile_project_tracking: Operation = {

@@ -52,6 +52,32 @@ The legacy `project_track_progress` handler remains only to drain old jobs and
 never writes project pages. `tracking_maintenance` is protected, source-scoped,
 and cannot be submitted by remote callers.
 
+## Client registration
+
+After the client-first `voltmind put` calls have synchronized the evidence and
+the actual project/workstream/state pages, the client must complete the
+registration step. Agents with the Host MCP tool call
+`register_tracking_evidence` directly. Agents that only have a thin-client shell
+can use the equivalent routed command:
+
+```bash
+voltmind register-tracking-evidence \
+  --evidence-slug <sources/teams/...> \
+  --event-id <provider-event-id> \
+  --event-version <provider-version-or-etag> \
+  --evidence-type teams_thread \
+  --client-outcome applied \
+  --tracking-refs '[{"provider":"teams","resource":"conversation","id":"<conversation-id>"}]' \
+  --affected-pages '["projects/<project-slug>"]'
+```
+
+On a thin client this command uses the configured remote MCP and does not need a
+local `database_url`. `voltmind call` is a local database dispatcher and is not
+the thin-client registration path. If the routed command or MCP tool is absent,
+the Host must be rebuilt/restarted and the source-bound OAuth client must have
+`write` (or `admin`) scope. Keep the local ingest manifest pending until that
+is fixed; the server evidence sweep remains the fallback.
+
 ## Source boundary
 
 Tracking is source-scoped. `register_tracking_evidence` derives source scope
