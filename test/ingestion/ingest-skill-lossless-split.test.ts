@@ -5,7 +5,7 @@ import { describe, expect, test } from 'bun:test';
 const skillPath = 'skills/ingest/SKILL.md';
 // Canonical reconstruction after the authorized Teams latest-100 connector
 // correction; all unrelated pre-split content remains hash-pinned.
-const canonicalSha256 = '8420ca08f750be85ecb011fe018a5d15a3ebf189db3cf86e22240339b322d310';
+const canonicalSha256 = 'a0acc46ea38f4129bdd905d56817ed8cc4d6a76110a3822a238538a5b7374ce8';
 const referenceNames = [
   'clarification-and-semantic-commit',
   'microsoft-connectors',

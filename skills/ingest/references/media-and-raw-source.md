@@ -3,6 +3,13 @@
 Content the user encounters should be captured in the brain. File by PRIMARY
 SUBJECT, not by format (see `skills/_brain-filing-rules.md`).
 
+For Teams, Outlook, and meeting raw evidence, apply the source namespace rule
+in [microsoft-connectors.md](microsoft-connectors.md): use `sources/teams/`,
+`sources/emails/`, `sources/calendar/`, or `sources/meetings/` respectively.
+Those source pages are not semantic drafts and must not be placed under
+`.voltmind/drafts`. The generic media storage rules below apply to other raw
+files and do not override this connector-specific routing.
+
 ### Articles & Web Content
 
 **Input:** URL shared by user, or article mentioned in conversation.
@@ -135,4 +142,3 @@ type: transcript
 - `voltmind files restore <dir>` -- download back to local from cloud storage
 
 Use `put_raw_data` in voltmind to store raw API responses and metadata (JSON, not binary).
-

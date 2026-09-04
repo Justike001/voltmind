@@ -22,6 +22,31 @@ content and non-relay references must remain untouched when a relay refreshes
 the block. `search_file_refs` is preferred for exact path, item ID, service, or
 MIME queries; normal `search`/`query` results also carry hydrated `file_refs`.
 
+### Client-vault raw evidence placement (MANDATORY)
+
+For client-first or recurring ingest, raw evidence is source material, not a
+semantic draft. Write each raw evidence Markdown page directly to the matching
+local source namespace:
+
+| Evidence kind | Required local directory |
+|---|---|
+| Microsoft Teams chat or channel messages | `sources/teams/` |
+| Outlook Email message or thread | `sources/emails/` |
+| Outlook Calendar event or invitation | `sources/calendar/` |
+| Meeting transcript or raw meeting notes | `sources/meetings/` |
+
+Preserve the connector event identity, timestamp, `evidence_type`, and
+`tracking_refs` in the source page when supplied. Derived summaries, project
+state, decisions, risks, actions, and entity pages belong in their canonical
+directories and must reference the source page.
+
+`.voltmind/drafts` is only for incomplete semantic drafts or recovery metadata;
+it is never a valid location for canonical raw evidence. Do not mark an event
+captured until its raw evidence exists under the applicable `sources/...`
+directory. If a draft contains raw evidence during recovery, materialize the
+source page in the correct directory first, preserve its stable identity and
+citations, and keep the draft only as temporary recovery state.
+
 ### Outlook Email And Calendar Signal Policy
 
 When an ingest event comes from Outlook Email or Outlook Calendar, apply the
@@ -119,4 +144,3 @@ and notable timeline entries. Cite durable facts as
    classification, project tracking, citation, and back-linking phases.
 5. Keep validated Outlook attachments and file links as metadata references;
    materialize or analyze the file only after an explicit user request.
-

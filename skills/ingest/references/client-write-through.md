@@ -8,7 +8,11 @@ compatibility. A client-authored run follows this order:
    new semantic page route. The active schema pack remains the machine
    authority; vault resolver/schema/index/README files provide local context.
 2. Read Teams/Outlook evidence with the client connector and persist the raw
-   source Markdown to the local vault.
+   source Markdown directly under the matching `sources/teams/`,
+   `sources/emails/`, or `sources/calendar/` directory. `.voltmind/drafts` is
+   reserved for incomplete semantic drafts or recovery metadata and must never
+   be used as the canonical raw-evidence location. Do not advance acquisition
+   or captured state until the source page exists in the correct directory.
 3. Run Brain-First Lookup; write confirmed semantic pages locally and persist
    ambiguous project candidates or generic clarification candidates in their
    durable review indexes. Do not wait for human review to continue raw capture
