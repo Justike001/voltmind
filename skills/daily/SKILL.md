@@ -1,11 +1,10 @@
 ---
 name: daily
 version: 1.0.0
-description: Personal daily planning, review, briefing, and follow-up workflow.
+description: Personal daily journaling, planning, review, and follow-up workflow.
 triggers:
   - "daily plan"
   - "daily review"
-  - "today brief"
   - "tomorrow plan"
   - "每日"
   - "今日计划"
@@ -32,6 +31,9 @@ Use this skill for private daily work context. Read
 `docs/drafts/personal-brain-scaffold/schema.md`, and
 `docs/drafts/personal-brain-scaffold/policy/privacy-policy.md` before writing
 until the scaffold is promoted into `voltmind init` output.
+
+For a read-only today brief or current task report, route to
+`skills/briefing/SKILL.md`. This skill owns private journal/plan/review writes.
 
 ## Contract
 

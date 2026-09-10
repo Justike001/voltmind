@@ -56,11 +56,11 @@ the agent skill dispatcher.
 | Trigger | Skill |
 |---------|-------|
 | Phase 1 meeting page preparation, reviewed meeting extraction, inherited meeting enrichment | `skills/meeting/SKILL.md` |
-| Phase 1 private daily plan/review, today brief, tomorrow plan | `skills/daily/SKILL.md` |
+| Phase 1 private daily journal/plan/review, tomorrow plan | `skills/daily/SKILL.md` |
 | Review, approve, reject, or edit proposed Personal Brain page writes | `skills/review/SKILL.md` |
 | Task add/remove/complete/defer/review | `skills/daily-task-manager/SKILL.md` |
 | Morning prep, meeting context, day planning | `skills/daily-task-prep/SKILL.md` |
-| Daily briefing, "what's happening today" | `skills/briefing/SKILL.md` |
+| Daily briefing, "today brief", "what's happening today", "今日要事", "当日任务报告", "今天有什么要紧事", "刷新今日报告", user-visible ingest completion | `skills/briefing/SKILL.md` |
 | Cron scheduling, quiet hours, job staggering | `skills/cron-scheduler/SKILL.md` |
 | Ingest produced local `state/actions/*.md`, recover omitted action details from cited Teams/Outlook evidence, schedule pending actions, collect remaining execution details and exact execution time | `skills/schedule-actions/SKILL.md` (action + raw source Markdown first; DB/MCP index is optional) |
 | Save or load reports | `skills/reports/SKILL.md` |
@@ -113,7 +113,11 @@ When multiple skills could match:
 1. Prefer the most specific skill (meeting-ingestion over ingest)
 2. If the user mentions a URL, route by content type (link → idea-ingest, video → media-ingest)
 3. If the user mentions a person/company, check if enrich or query fits better
-4. Chaining is explicit in each skill's Phases section
+4. Chaining is explicit in each skill's Phases section. User-visible ingest
+   (including directly invoked specialized ingestion) finishes through
+   `skills/ingest/references/post-ingest-briefing.md`: one briefing per request,
+   then action scheduling. Daily owns journal/plan writes; briefing owns the
+   current daily report; daily-task-prep adds meeting preparation to briefing.
 5. For ingest ambiguity, preserve raw evidence and route the question through
    `skills/clarification-review/SKILL.md`; ask immediately only for its
    high-impact gates. For other blocking ambiguity, use

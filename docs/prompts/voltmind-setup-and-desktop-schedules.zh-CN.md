@@ -6,7 +6,7 @@
 ## 使用边界
 
 - `test/fixtures/openclaw-mixed-merge/skills/RESOLVER.md` 是合并行为测试夹具，只能验证路由语义；实际运行以仓库根目录 `AGENTS.md`、`skills/RESOLVER.md` 和目标 Brain 的 `brain/RESOLVER.md` 为准。
-- `brain/RESOLVER.md` 是 Personal Brain 的归档权威，不是周期任务清单。它只明确：ingest 创建 `state/actions/*.md` 后，应把每个 action 交给 `skills/schedule-actions/SKILL.md` 做一次性或用户确认后的重复调度。
+- `brain/RESOLVER.md` 是 Personal Brain 的归档权威，不是周期任务清单。用户可见的 ingest 完成后，先把本轮请求交给 `skills/briefing/SKILL.md` 生成一份当日要事报告，再把已创建的 `state/actions/*.md` 交给 `skills/schedule-actions/SKILL.md` 做一次性或用户确认后的重复调度；这两个阶段不能互相替代。
 - 当前 `HEARTBEAT.md` 要求默认静默：后台可以检查和维护，但普通早报、日报、周报不主动通知；只有关键截止、阻塞、需用户决策、安全/隐私/数据损坏风险、重大项目变化或重大机会异常才通知。
 - 三个 Microsoft 插件的统一引用：
   - `[@teams](plugin://teams@openai-curated-remote)`
@@ -126,6 +126,7 @@ Skill：`skills/ingest/SKILL.md` → `skills/enrich/SKILL.md` → `skills/daily-
 3. 从 `VOLTMIND_SKILLS_DIR` 指向的 client-local skills tree（或上述已验证的当前项目
    skills/ 目录）只读 AGENTS.md、CLAUDE.md、skills/RESOLVER.md、
    skills/signal-detector/SKILL.md、skills/brain-ops/SKILL.md、skills/ingest/SKILL.md、
+   skills/briefing/SKILL.md、skills/ingest/references/post-ingest-briefing.md、
    skills/ingest/references/microsoft-connectors.md、skills/ingest/references/
    outlook-email-timeline-reconciliation.md、skills/ingest/references/
    teams-chat-list-messages.md、skills/ingest/references/client-write-through.md、
@@ -157,20 +158,29 @@ Skill：`skills/ingest/SKILL.md` → `skills/enrich/SKILL.md` → `skills/daily-
    client-write-through reference；不要在此重复这些规则。先保存 raw evidence 及其
    connector 身份字段，再进行 semantic routing；不把附件 materialize，除非用户明确要求。
 3. 对本轮选中的高信号 person/company 调用下方 `skills/enrich/SKILL.md` 子流程；其他
-   entity/project/workstream/action 按 ingest skill 路由。需要 Host/recall 的
-   `daily-task-prep`、`briefing` 直接跳过并记录，不阻断本地 ingest。
+   entity/project/workstream/action 按 ingest skill 路由。先完成本轮适用的 evidence、
+   semantic routing 和本地写入准备，不因等待报告或 action interview 改变 ingest 的证据顺序。
 4. 本自动化采用 client-only 写入覆盖：raw evidence 按 reference 直接落盘到已验证的
    client Vault；canonical semantic page 使用本地-only `voltmind put-local`，不得改用
    普通 `voltmind put`，不得调用 remote `put_page`、图谱、标签、receipt 注册、sync 或
    其他 Host 工具。保留并报告 pending receipt；本地 evidence/page/receipt 未完成并回读
    校验前不推进 `local_capture_checkpoint`，`remote_sync_checkpoint` 保持 `pending`。
-5. ingest 创建 `state/actions/*.md` 后，只调用 `skills/schedule-actions/SKILL.md` 的
-   interview 流程并通知我确认；不得在无人值守任务中直接注册或执行 action。删除、合并、
+5. 完成本地 evidence/page/receipt 校验后，必须显式调用 `skills/briefing/SKILL.md`，并按
+   `skills/ingest/references/post-ingest-briefing.md` 生成一份当日要事报告；这是 ingest
+   的完成阶段，不是可选的 reference 路由。每个外层请求/批次只生成一份，零 action、无
+   新信号或仅重复证据也必须生成。`daily-task-prep` 只负责额外的会议准备，不替代 briefing。
+   Host/recall 不可用时仍先用已验证的本地和可访问来源生成报告，并明确写出不可覆盖的
+   数据范围、时间截点和失败项；不得以不可用为理由静默跳过 briefing。
+6. briefing 报告交付后，若 ingest 创建了 `state/actions/*.md`，再调用
+   `skills/schedule-actions/SKILL.md` 的 interview 流程并通知我确认；不得在无人值守任务中
+   直接注册或执行 action。删除、合并、
    跨所有权写入、费用、外部副作用或需用户确认的动作停止并请求确认；不使用 `--force`。
 
 【输出与静默规则】
 沿用 ingest/enrich skill 的输出格式，并补充本轮事件 coverage、local/remote checkpoint、
-pending receipt、connector/网络失败、跳过的 Host/recall 维度和需要用户完成的后续动作。
+pending receipt、connector/网络失败、briefing 报告是否已生成及其覆盖缺口、跳过的
+Host/recall 维度和需要用户完成的后续动作。briefing 报告必须先于 action interview 出现；
+报告建议不等于执行同意。
 不得输出 secret、token、database URL、真实 Vault 路径、完整私有消息或 credential；任务
 必须幂等，正常结果遵守 HEARTBEAT 静默规则。
 ```

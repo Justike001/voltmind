@@ -168,6 +168,13 @@ actual `affected_pages`. A review-index-only candidate uses
 sweeps evidence pages missing a receipt, and queues generic repair only for
 incomplete or ambiguous records.
 
+## Completion handoff
+
+For a user-visible ingest, read
+`skills/ingest/references/post-ingest-briefing.md`. The outermost request emits
+one current daily report before action scheduling, including zero-action runs.
+When invoked inside ingest, return results to its owner without a second report.
+
 ## Output Format
 
 Meeting page created. Report: "Meeting ingested: {N} attendees enriched, {N} entities

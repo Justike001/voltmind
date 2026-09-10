@@ -43,6 +43,13 @@ Primary pages hold context. State pages hold structured operational status and b
 4. Risk, blocker, concern, or watch item -> `state/risks/`
 5. Derived operational view or generated index -> `state/indexes/`
 
+User-visible ingest completion first routes through
+`skills/ingest/references/post-ingest-briefing.md` to the read-only
+`skills/briefing/SKILL.md`, even when no actions were created. Displaying a report
+does not create a page. If saving is requested, apply this filing authority:
+a saved report deliverable belongs in `artifacts/`, a live derived index in
+`state/indexes/`, and a private journal/plan in `daily/`. Do not overwrite a journal.
+
 After ingest creates one or more open `state/actions/` pages, route their
 execution-detail interview and ChatGPT desktop scheduling to
 `skills/schedule-actions/SKILL.md`. The action remains filed in `state/actions/`;

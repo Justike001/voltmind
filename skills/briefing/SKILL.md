@@ -1,10 +1,15 @@
 ---
 name: briefing
-description: Compile daily briefing with meeting context, active deals, and citation tracking
+description: Compile or refresh today's actionable report across meetings, projects, tasks, and commitments, including after ingest. Daily owns journaling; schedule-actions owns execution arrangements.
 triggers:
   - "daily briefing"
   - "morning briefing"
+  - "today brief"
   - "what's happening today"
+  - "今日要事"
+  - "当日任务报告"
+  - "今天有什么要紧事"
+  - "刷新今日报告"
 tools:
   - search
   - query
@@ -14,139 +19,175 @@ tools:
 mutating: false
 ---
 
-# Briefing Skill
-
-Compile a daily briefing from brain context.
-
-> **Filing rule:** When the briefing creates or updates brain pages,
-> follow `skills/_brain-filing-rules.md`.
+# Briefing — Today's Actionable Report
 
 ## Contract
 
-- Every fact in the briefing includes an inline `[Source: slug, updated DATE]` citation.
-- Meeting participants are resolved against the brain; gaps are explicitly flagged.
-- Active deals and action items include deadlines and recency context.
-- The briefing is read-only: no brain pages are created or modified unless the user explicitly requests it.
-- Stale alerts surface pages relevant to today's context, not just all stale pages.
+- Produce a current prioritized view of all known important work for the day
+  within the sources checked, not just the latest ingest summary.
+- Cover meetings, approaching project milestones, actions, both directions of
+  commitment, and blockers requiring attention today. Explain why each matters
+  today and what to do next.
+- Cite each factual item with `[Source: brain:source:slug, updated DATE]` and a
+  usable page/evidence link. Use returned source identities. Label recommended
+  priorities and next steps as suggestions, not confirmed commitments.
+- Read-only by default: no status changes, new actions, messages, scheduling, or
+  saved pages. Explicit save requests use reports plus active vault filing and
+  privacy policy; never overwrite the user's daily journal.
+- Disclose missing coverage, stale information, conflicts, and unknown dates.
+  An unavailable calendar is not an empty calendar.
+
+> **Brain-first:** Read `skills/brain-ops/SKILL.md` and
+> `skills/conventions/brain-routing.md` before context loading. Check the brain
+> before external APIs. Resolve the local vault through its configured private
+> environment setting; never infer it from repository examples.
 
 ## Phases
 
-0. **Hot memory pulse (v0.32).** Before composing anything else, run:
+### 1. Establish date and scope
 
-   ```bash
-   voltmind recall --since-last-run --supersessions --pending --rollup --json
-   ```
+Resolve the user's timezone and current local date; show timezone and generation
+time. If unavailable, disclose the environment-timezone assumption. Today spans
+local midnight to the next midnight, not the last 24 hours. Recompute the date
+at generation if ingest crossed midnight. Default deadline lookahead is seven
+calendar days; longer-range work qualifies only if it needs attention today.
 
-   Fold the result into the briefing under a "Brain pulse" section at the top:
-   1. **Contradictions resolved overnight** — the `--supersessions` output. Lead
-      with these because they're new corrections to your model of the world.
-   2. **Top mentions** — `top_entities` from `--rollup` (top 5 entity slugs by
-      fact count in the window).
-   3. **New facts since last briefing** — group the `facts` array under each
-      entity from the rollup; include `kind`, `notability`, and `confidence`.
-   4. **Pending consolidation footer** — when `pending_consolidation_count > 0`,
-      note `N facts await dream-cycle consolidation` so the operator can decide
-      whether to run `voltmind dream` before reading further.
+Resolve the user from configured context; unknown ownership remains unknown.
+Enumerate relevant authorized brain/source scopes and disclose unchecked scopes.
+Do not silently broaden access or publish a mixture of team/private information.
+Ingest's changed pages and receipt failures are a freshness overlay, not the
+complete set of today's work.
 
-   The `--since-last-run` flag advances `~/.voltmind/recall-cursors/<source>.json`
-   so the next briefing picks up exactly where this one left off. If you're
-   running this as a cron job, pass `--source <slug>` or set `VOLTMIND_SOURCE`
-   explicitly — cron doesn't start in your repo-root cwd, so dotfile resolution
-   may miss the right source. Thin-client installs (`voltmind init --mcp-only`)
-   route through the remote brain transparently.
+### 2. Collect candidates with coverage
 
-1. **Today's meetings.** For each meeting on the calendar:
-   - Search voltmind for each participant by name
-   - Read their pages from voltmind for compiled_truth context
-   - Summarize: who they are, recent timeline, relationship to you
-2. **Active deals.** List deal pages in voltmind filtered to active status:
-   - Deadlines approaching in the next 7 days
-   - Recent timeline entries (last 7 days)
-3. **Time-sensitive threads.** Open items from timeline entries:
-   - Items with deadlines in the next 48 hours
-   - Follow-ups that are overdue
-4. **Recent changes.** Pages updated in the last 24 hours:
-   - What changed and why (read timeline entries from voltmind)
-5. **People in play.** List person pages in voltmind sorted by recency:
-   - Updated in last 7 days
-   - Have high activity (many recent timeline entries)
-6. **Stale alerts.** From voltmind health check:
-   - Pages flagged as stale that are relevant to today's meetings
+Use Brain-First Lookup for entities/topics (search → query → known-page read,
+stopping when sufficient). For the daily inventory, use supported scoped page
+listing/filtering, exhaust pagination, and inspect dates, owner, and current
+status. If date filters are unavailable, filter the scoped inventory locally.
+Use only supported operations/flags. Top-k semantic search supplements the
+inventory; it cannot establish completeness.
 
-## voltmind-Native Context Loading
+| Source | Candidates and context |
+|---|---|
+| Calendar and `meetings/` | Today's occurrences, objective, time, attendees, prep, reschedules and cancellations |
+| `projects/`, `workstreams/` | Active milestones in the lookahead, overdue delivery, dependencies needing work today; include active deals where that schema exists |
+| `state/actions/` | User-owned or user-blocking open tasks due/scheduled today, overdue, or prerequisites for upcoming delivery |
+| `state/commitments/` | Promises by/to the user, delivery evidence, due and follow-up dates |
+| `state/risks/`, related timelines | Blockers, pending decisions and unresolved threads affecting today |
 
-Before generating any briefing, load context from voltmind systematically.
+Read current canonical pages and their evidence before trusting summaries.
+In client-first mode, read handed-off local action Markdown and cited raw evidence
+before any DB/MCP action index. Include locally durable changes whose sync is
+pending and label that limitation; stale remote state cannot replace newer local
+evidence. Other knowledge retains the normal brain-first lookup/fallback rules.
+Legacy `ops/tasks` is an optional compatibility source only when present; canonical
+actions remain authoritative. Deduplicate overlapping legacy entries.
 
-### Before a meeting
+After brain lookup, refresh today's calendar through an available authorized
+connector when needed. Resolve recurring-event exceptions and paginate supported
+results. If unavailable, present known meetings with their freshness and an
+explicit calendar coverage gap. Transcript mentions do not prove an occurrence.
+Load attendee brain context and meeting-related open threads for useful prep.
 
-For every attendee on the calendar invite:
-- `voltmind search "<attendee name>"` -- find their brain page
-- `voltmind get <slug>` -- load compiled truth, recent timeline, relationship context
-- If no page exists, note the gap ("No brain page for Sarah Chen -- consider enrichment")
+Record per-source cutoffs and coverage. Failed reads, limits, missing permissions,
+and timeouts mean partial coverage, not zero items. Deliver useful findings without
+unbounded retries. Do not claim exhaustive coverage if enumeration was incomplete.
 
-### Before an email reply
+### 3. Reconcile, select, and prioritize
 
-Before drafting or triaging any email:
-- `voltmind search "<sender name>"` -- load sender context
-- Read their compiled truth to understand who they are, what they care about, and
-  your relationship history. This turns a cold reply into an informed one.
+Resolve revisions by stable identity and explicit effective dates. Cancellation,
+completion, or revised deadlines supersede older evidence; ingestion time alone
+does not establish truth. Exclude completed/cancelled work from open lists but
+show material removals in changes. Conflicting evidence remains visibly unresolved.
 
-### Daily briefing queries
+Preserve date precision: date-only deadlines stay date-only, without an invented
+execution hour. Resolve relative dates against the source timestamp/timezone.
+Unknown dates are not automatically overdue. Separate delivery deadlines from
+execution appointments: a missed appointment does not prove a broken promise.
+Past meetings today may be marked ended, but attendance/outcomes require evidence.
 
-Run these queries to populate the briefing sections:
-- `voltmind query "active deals status"` -- deal pipeline snapshot
-- `voltmind query "meetings this week"` -- recent meeting pages with insights
-- `voltmind query "pending commitments follow-ups"` -- open threads and action items
-- `voltmind search --type person --sort updated --limit 10` -- people in play
+Include today's meetings/prep, open due-today and overdue work, future deadlines
+requiring action today, and undated blockers with demonstrated impact today.
+Exclude unrelated recent updates, high-mention people and the general backlog.
+Flag stale evidence according to operational relevance; silence is not completion.
+
+Split commitments into **I owe others** and **Others owe me**. Show promisor,
+recipient, deliverable, due date, fulfillment evidence, and next follow-up.
+Never assign another person's promise to the user or treat a proposal as a promise.
+Unknown owner/direction goes under needs confirmation.
+
+Deduplicate by brain + source + canonical identity and explicit relationships.
+An action fulfilling a commitment on a project is one primary work item with
+context links, not three tasks. Cross-reference elsewhere without double counting.
+Similar titles alone are insufficient to merge identities.
+
+Rank by hard timing, delay consequences, dependency impact and preparation lead
+time, respecting explicit priorities. Lead with up to three priorities but retain
+all known urgent/today items in details. For upcoming milestones show remaining
+calendar days, blockers and today's recommended step. Label uncertain lead time.
+
+### 4. Compose and refresh
+
+Use the user's language. Each item includes owner, due/event time (or unknown),
+status, why today matters, next step and evidence. Meetings are chronological;
+surface known overlaps and deadline/execution conflicts.
+
+Render one report per user-visible ingest request/batch, even with zero actions
+or no new signal. Same-day refreshes recompute the current view and add a short
+changes section; retain the complete current report. Compare only against an
+available prior report or explicit ingest revisions. Without a baseline, describe
+observed ingest changes without claiming a full diff. No-change runs still return
+the report with a no-material-change note.
+
+Optional brain pulse belongs after today's work, only when relevant. It must not
+delay the report or launch maintenance. Do not use cursor-advancing
+`recall --since-last-run` in this read-only workflow; use supported read-only
+retrieval instead.
 
 ## Output Format
 
+```text
+Today's report — YYYY-MM-DD (timezone), generated HH:MM
+Coverage: sources checked, data cutoffs, material gaps
+
+Top priorities (up to 3)
+- Recommended step — why today, owner, deadline, evidence
+
+Meetings today
+- Time / meeting / status — objective, prep, attendees, conflicts, evidence
+
+Approaching project deadlines
+- Project / milestone / due / days remaining — blocker, today's step, evidence
+
+Today's tasks and overdue work
+- Action / owner / due or scheduled time / status — next step, evidence
+
+Commitments
+- I owe others: recipient / deliverable / due / status / next step / evidence
+- Others owe me: promisor / deliverable / due / status / follow-up / evidence
+
+Changes from ingest or refresh
+- Added, revised, completed, cancelled, or no material change
+
+Needs confirmation / coverage gaps
+- Unknown or conflicting fact and practical impact
 ```
-DAILY BRIEFING -- [date]
-========================
 
-MEETINGS TODAY
-- [time] [meeting name]
-  Participants: [name] (slug: people/name, [key context])
-
-ACTIVE DEALS
-- [deal name] -- [status], deadline: [date]
-  Recent: [latest timeline entry]
-
-ACTION ITEMS
-- [item] -- due [date], related to [slug]
-
-RECENT CHANGES (24h)
-- [slug] -- [what changed]
-
-PEOPLE IN PLAY
-- [name] -- [why they're active]
-```
-
-## Back-Linking During Briefing
-
-If the briefing creates or updates any brain pages (e.g., new meeting prep
-pages, updated entity pages), the back-linking iron law applies: every entity
-mentioned must have a back-link from their page. See `skills/_brain-filing-rules.md`.
-
-## Citation in Briefings
-
-When presenting facts from brain pages, include inline citations:
-- "Jane is CTO of Acme [Source: people/jane-doe, updated 2026-04-01]"
-- This lets the user trace any claim back to the brain page and assess freshness
+For empty sections distinguish checked-and-empty from unavailable. Explain
+coverage in ordinary language; omit tool logs and retrieval mechanics.
 
 ## Anti-Patterns
 
-- **Briefing without brain queries.** Never generate a briefing from memory alone; always query voltmind for current data.
-- **Uncited facts.** Every claim must include `[Source: slug, updated DATE]`. A fact without a citation is unverifiable.
-- **Stale context presented as current.** If a page hasn't been updated in 30+ days, flag the staleness explicitly rather than presenting it as fresh.
-- **Modifying brain pages unprompted.** The briefing is read-only by default. Do not create or update pages unless the user explicitly requests it.
-- **Ignoring coverage gaps.** When a meeting participant has no brain page, say so. Silence about gaps hides ignorance.
+- Reporting only newly ingested tasks or the first page of search results.
+- Letting scheduling interviews postpone today's report.
+- Treating inferred owners, tentative dates, or mentions as confirmed facts.
+- Repeating one obligation as separate project/action/commitment tasks.
+- Claiming complete coverage when sources are missing.
+- Automatically saving, sending, scheduling, or changing operational state.
 
 ## Tools Used
 
-- Search voltmind by name (query)
-- Read a page from voltmind (get_page)
-- List pages in voltmind by type (list_pages)
-- Check voltmind health (get_health)
-- View timeline entries in voltmind (get_timeline)
+- search / query: discover brain context before external reads.
+- list_pages: scoped inventory with supported filters and pagination.
+- get_page / get_timeline: verify current state, evidence, and revisions.
+- Authorized calendar connector when available: refresh today's occurrences.

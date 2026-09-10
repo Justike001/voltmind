@@ -72,6 +72,13 @@ Format: `- **YYYY-MM-DD** | Referenced in [page title](path) — brief context`
 
 6. **Sync.** `voltmind sync` to update the index.
 
+## Completion handoff
+
+For a user-visible ingest, read
+`skills/ingest/references/post-ingest-briefing.md`. The outermost request emits
+one current daily report before action scheduling, including zero-action runs.
+When invoked inside ingest, return results to its owner without a second report.
+
 ## Output Format
 
 ```markdown

@@ -38,7 +38,7 @@
     {
       "name": "briefing",
       "path": "briefing/SKILL.md",
-      "description": "Compile daily briefing with meeting context, active deals, and citation tracking"
+      "description": "Compile or refresh today's actionable report across meetings, projects, tasks, and commitments, including after ingest."
     },
     {
       "name": "migrate",
@@ -98,7 +98,7 @@
     {
       "name": "daily",
       "path": "daily/SKILL.md",
-      "description": "Personal daily planning, review, briefing, and follow-up workflow."
+      "description": "Personal daily journaling, planning, review, and follow-up workflow."
     },
     {
       "name": "project",

@@ -77,6 +77,7 @@ this file. Multiple rows may apply to one ingest.
 
 | Ingest signal or operation | Required reference |
 |---|---|
+| Every user-visible ingest completion, including zero-action and batch runs | [post-ingest-briefing.md](references/post-ingest-briefing.md) |
 | Ambiguous or incomplete notable signal; clarification before semantic commit | [clarification-and-semantic-commit.md](references/clarification-and-semantic-commit.md) |
 | Teams, Outlook Email, Outlook Calendar, Microsoft relay, or Microsoft file reference | [microsoft-connectors.md](references/microsoft-connectors.md) |
 | Outlook Email acquisition, reply/forward history, rolling announcement, semantic timeline write, revision, deduplication, or chronological reconciliation | [outlook-email-timeline-reconciliation.md](references/outlook-email-timeline-reconciliation.md) |
@@ -236,7 +237,12 @@ Every fact written to a brain page must carry an inline `[Source: ...]` citation
 7. **Create cross-reference links.** Link entities in voltmind for every entity pair mentioned together, using the appropriate relationship type.
 8. **Back-link all entities.** Update EVERY mentioned entity's page with a back-link to this page (Iron Law).
 9. **Timeline merge.** The same event appears on ALL mentioned entities' timelines. If Alice met Bob at Acme Corp, the event goes on Alice's page, Bob's page, and Acme Corp's page.
-10. **Schedule executable actions.** After all canonical local
+10. **Deliver today's report.** Read
+    [post-ingest-briefing.md](references/post-ingest-briefing.md) and invoke
+    `skills/briefing/SKILL.md` once for this user-visible request, including
+    zero-action runs. Report current daily context before scheduling interviews;
+    disclose partial coverage and pending ingest work.
+11. **Schedule executable actions.** After all canonical local
     `state/actions/*.md` pages from this ingest are durable, invoke
     `skills/schedule-actions/SKILL.md` in interview mode. Hand off the exact
     local file paths and action slugs; do not read a database or remote action
