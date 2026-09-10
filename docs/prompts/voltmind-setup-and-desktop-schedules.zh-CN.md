@@ -136,7 +136,8 @@ Skill：`skills/ingest/SKILL.md` → `skills/enrich/SKILL.md` → `skills/daily-
    skills/ingest/references/teams-cold-start.md、skills/_brain-filing-rules.md、
    skills/conventions/quality.md、skills/conventions/brain-first.md、
    skills/conventions/page-template-contract.md；再读取当前 Vault 的 index.md、
-   RESOLVER.md、schema.md、README.md 以及 active schema pack 声明的目录 README。
+   RESOLVER.md、schema.md 以及 active schema pack 声明。前置校验只适用于此处列出的文件，
+   清单之外的说明文档不构成 ingest 的硬性前置条件，也不得因其缺失而停止 ingest。
 4. 所有 VoltMind CLI 调用固定使用 PATH 中已验证的 `voltmind`；先运行
    `voltmind --version`，确认版本满足 active schema pack，再执行其他命令。不得静默
    使用旧版本，也不得为了定位 skills 去寻找或访问 Host checkout。
