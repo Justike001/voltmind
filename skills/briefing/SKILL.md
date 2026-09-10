@@ -1,6 +1,6 @@
 ---
 name: briefing
-description: Compile or refresh today's actionable report across meetings, projects, tasks, and commitments, including after ingest. Daily owns journaling; schedule-actions owns execution arrangements.
+description: Independently compile requested or scheduled daily briefings from current and historical Host source context across meetings, projects, tasks, and commitments. Not an automatic ingest completion step.
 triggers:
   - "daily briefing"
   - "morning briefing"
@@ -11,6 +11,8 @@ triggers:
   - "今天有什么要紧事"
   - "刷新今日报告"
 tools:
+  - whoami
+  - recall
   - search
   - query
   - get_page
@@ -42,6 +44,15 @@ mutating: false
 > before external APIs. Resolve the local vault through its configured private
 > environment setting; never infer it from repository examples.
 
+## Invocation
+
+Run on an explicit briefing request or a separate scheduled reporting task.
+Ingest returns its own receipt and does not load or invoke briefing automatically.
+A request explicitly asking for both may run briefing after ingest completes.
+For scheduler setup, use
+[the Desktop schedules prompt](../../docs/prompts/voltmind-setup-and-desktop-schedules.zh-CN.md).
+Daily owns journaling; schedule-actions owns execution arrangements.
+
 ## Phases
 
 ### 1. Establish date and scope
@@ -53,19 +64,23 @@ at generation if ingest crossed midnight. Default deadline lookahead is seven
 calendar days; longer-range work qualifies only if it needs attention today.
 
 Resolve the user from configured context; unknown ownership remains unknown.
-Enumerate relevant authorized brain/source scopes and disclose unchecked scopes.
-Do not silently broaden access or publish a mixture of team/private information.
+Pin the configured Host connection and the user's intended source. Verify MCP
+identity/scope before retrieval; access to multiple sources is not a request to
+report all of them. Broader reports require explicitly requested scopes.
 Ingest's changed pages and receipt failures are a freshness overlay, not the
 complete set of today's work.
 
 ### 2. Collect candidates with coverage
 
+Read [context-pull.md](references/context-pull.md) completely and execute its
+source preflight, pre-briefing pulls and historical retrieval sequence before
+drafting. It maps actual MCP operations, optional capabilities and limitations.
 Use Brain-First Lookup for entities/topics (search → query → known-page read,
-stopping when sufficient). For the daily inventory, use supported scoped page
-listing/filtering, exhaust pagination, and inspect dates, owner, and current
-status. If date filters are unavailable, filter the scoped inventory locally.
-Use only supported operations/flags. Top-k semantic search supplements the
-inventory; it cannot establish completeness.
+stopping when sufficient). Build a scoped inventory plus targeted historical
+searches. Current list_pages caps at 100 and has no pagination; never invent
+cursors, deadline filters or source selectors. Top-k search cannot establish
+completeness. Mark capped inventories partial and inspect dates/owner/status
+on the retrieved pages.
 
 | Source | Candidates and context |
 |---|---|
@@ -76,10 +91,12 @@ inventory; it cannot establish completeness.
 | `state/risks/`, related timelines | Blockers, pending decisions and unresolved threads affecting today |
 
 Read current canonical pages and their evidence before trusting summaries.
-In client-first mode, read handed-off local action Markdown and cited raw evidence
-before any DB/MCP action index. Include locally durable changes whose sync is
-pending and label that limitation; stale remote state cannot replace newer local
-evidence. Other knowledge retains the normal brain-first lookup/fallback rules.
+Independent scheduled reports retrieve Host history without an ingest handoff
+or loading ingest references. If newer local evidence is explicitly available,
+read those exact pages and their raw evidence as a freshness overlay and label
+pending sync. Do not assume local changes are remotely visible, or let an
+overlay replace historical Host retrieval. Other knowledge follows the normal
+brain-first lookup/fallback rules.
 Legacy `ops/tasks` is an optional compatibility source only when present; canonical
 actions remain authoritative. Deduplicate overlapping legacy entries.
 
@@ -108,7 +125,9 @@ Past meetings today may be marked ended, but attendance/outcomes require evidenc
 
 Include today's meetings/prep, open due-today and overdue work, future deadlines
 requiring action today, and undated blockers with demonstrated impact today.
-Exclude unrelated recent updates, high-mention people and the general backlog.
+Keep unrelated updates and the general backlog out of today's action list.
+Relevant high-activity people and material changes may appear in brief context
+sections without becoming invented tasks.
 Flag stale evidence according to operational relevance; silence is not completion.
 
 Split commitments into **I owe others** and **Others owe me**. Show promisor,
@@ -132,23 +151,30 @@ Use the user's language. Each item includes owner, due/event time (or unknown),
 status, why today matters, next step and evidence. Meetings are chronological;
 surface known overlaps and deadline/execution conflicts.
 
-Render one report per user-visible ingest request/batch, even with zero actions
+Render one report per explicit request or scheduled run, even with zero actions
 or no new signal. Same-day refreshes recompute the current view and add a short
 changes section; retain the complete current report. Compare only against an
-available prior report or explicit ingest revisions. Without a baseline, describe
-observed ingest changes without claiming a full diff. No-change runs still return
+available prior successful report or explicit revisions. Without a baseline,
+describe trailing 24-hour observed updates without claiming a full diff.
+No-change runs still return
 the report with a no-material-change note.
 
-Optional brain pulse belongs after today's work, only when relevant. It must not
-delay the report or launch maintenance. Do not use cursor-advancing
-`recall --since-last-run` in this read-only workflow; use supported read-only
-retrieval instead.
+Lead with a short Brain pulse when verified corrections affect today's decisions,
+then top priorities. Group available new facts and top mentions from the retrieved
+sample, retaining provenance and meaningful kind/notability/confidence. Include
+relevant activity, people in play and anomalies only from a supported detector.
+Optional unavailable pulls must not delay today's work. Pending consolidation
+is a footer, not a maintenance trigger. Do not use cursor-advancing
+`recall --since-last-run`; follow the source-safe alternatives in context-pull.
 
 ## Output Format
 
 ```text
 Today's report — YYYY-MM-DD (timezone), generated HH:MM
 Coverage: sources checked, data cutoffs, material gaps
+
+Brain pulse (when available)
+- Material corrections / new facts / top mentions with evidence and window
 
 Top priorities (up to 3)
 - Recommended step — why today, owner, deadline, evidence
@@ -166,8 +192,14 @@ Commitments
 - I owe others: recipient / deliverable / due / status / next step / evidence
 - Others owe me: promisor / deliverable / due / status / follow-up / evidence
 
-Changes from ingest or refresh
+Recent changes (24h, or verified prior-report cutoff)
 - Added, revised, completed, cancelled, or no material change
+
+People in play / relevant activity / anomalies (when available)
+- Context affecting today's work, evidence, freshness
+
+Stale context / pending consolidation (when available)
+- Relevant stale evidence and impact; returned pending count
 
 Needs confirmation / coverage gaps
 - Unknown or conflicting fact and practical impact
@@ -178,7 +210,9 @@ coverage in ordinary language; omit tool logs and retrieval mechanics.
 
 ## Anti-Patterns
 
-- Reporting only newly ingested tasks or the first page of search results.
+- Auto-invoking briefing from ingest or depending on its conversation context.
+- Reporting only recent updates while missing older open work.
+- Treating capped listings as exhaustive or copying unsupported upstream flags.
 - Letting scheduling interviews postpone today's report.
 - Treating inferred owners, tentative dates, or mentions as confirmed facts.
 - Repeating one obligation as separate project/action/commitment tasks.
@@ -188,6 +222,8 @@ coverage in ordinary language; omit tool logs and retrieval mechanics.
 ## Tools Used
 
 - search / query: discover brain context before external reads.
-- list_pages: scoped inventory with supported filters and pagination.
+- whoami: verify authenticated source boundaries before reads.
+- recall: optional hot facts; follow visibility restrictions in context-pull.
+- list_pages: capped scoped inventory with supported type/tag/update filters.
 - get_page / get_timeline: verify current state, evidence, and revisions.
 - Authorized calendar connector when available: refresh today's occurrences.

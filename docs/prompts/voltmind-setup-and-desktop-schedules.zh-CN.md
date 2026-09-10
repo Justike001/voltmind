@@ -1,12 +1,12 @@
 # VoltMind 初始化与 ChatGPT Desktop 周期任务 Prompt
 
-更新时间：2026-08-26
+更新时间：2026-09-10
 默认时区：`Asia/Shanghai`
 
 ## 使用边界
 
 - `test/fixtures/openclaw-mixed-merge/skills/RESOLVER.md` 是合并行为测试夹具，只能验证路由语义；实际运行以仓库根目录 `AGENTS.md`、`skills/RESOLVER.md` 和目标 Brain 的 `brain/RESOLVER.md` 为准。
-- `brain/RESOLVER.md` 是 Personal Brain 的归档权威，不是周期任务清单。用户可见的 ingest 完成后，先把本轮请求交给 `skills/briefing/SKILL.md` 生成一份当日要事报告，再把已创建的 `state/actions/*.md` 交给 `skills/schedule-actions/SKILL.md` 做一次性或用户确认后的重复调度；这两个阶段不能互相替代。
+- `brain/RESOLVER.md` 是 Personal Brain 的归档权威，不是周期任务清单。用户可见的 ingest 完成后，先交付本轮 ingest receipt，再把已创建的 `state/actions/*.md` 交给 `skills/schedule-actions/SKILL.md` 做一次性或用户确认后的重复调度。
 - 当前 `HEARTBEAT.md` 要求默认静默：后台可以检查和维护，但普通早报、日报、周报不主动通知；只有关键截止、阻塞、需用户决策、安全/隐私/数据损坏风险、重大项目变化或重大机会异常才通知。
 - 三个 Microsoft 插件的统一引用：
   - `[@teams](plugin://teams@openai-curated-remote)`
@@ -70,7 +70,8 @@
 
 | 类型 | 周期 | Skill | 是否注册 | Microsoft 插件 |
 |---|---|---|---|---|
-| 工作日增量采集与关键事项巡检 | 周一至周五 08:35 | `ingest` → `enrich` → `daily-task-prep` + `briefing` | 是 | Teams、Outlook Email、Outlook Calendar、网络搜索 |
+| 工作日增量采集与关键事项巡检 | 周一至周五 08:35 | `ingest` → `enrich` → `daily-task-prep` | 是 | Teams、Outlook Email、Outlook Calendar、网络搜索 |
+| 独立每日要事报告 | 按用户配置 | `briefing` | 按用户配置 | Host MCP 的 search/query/list_pages/get_page/get_timeline |
 | 夜间 Brain 维护 | 每天 02:15 | `maintain` → `references/client.md`（仅本地 Vault 维护；远端维度跳过） | 是 | 不需要；不得为了凑插件而读取外部数据 |
 | action 执行 | 每个 action 的确认时间 | `schedule-actions` | 否，不能做固定周期 | 按 action 的原始 Teams/Outlook 证据需要 |
 | 报告存储 | 随产生报告的任务执行 | `reports` | 否，它是被调用的存储 helper | 继承上游任务 |
@@ -80,7 +81,7 @@
 ## Schedule Prompt 1：工作日增量 Ingest 与关键事项巡检
 
 周期：周一至周五 08:35，`Asia/Shanghai`
-Skill：`skills/ingest/SKILL.md` → `skills/enrich/SKILL.md` → `skills/daily-task-prep/SKILL.md`、`skills/briefing/SKILL.md`
+Skill：`skills/ingest/SKILL.md` → `skills/enrich/SKILL.md` → `skills/daily-task-prep/SKILL.md`
 插件：`[@teams](plugin://teams@openai-curated-remote)`、`[@outlook-email](plugin://outlook-email@openai-curated-remote)`、`[@outlook-calendar](plugin://outlook-calendar@openai-curated-remote)`
 
 ```text
@@ -126,7 +127,6 @@ Skill：`skills/ingest/SKILL.md` → `skills/enrich/SKILL.md` → `skills/daily-
 3. 从 `VOLTMIND_SKILLS_DIR` 指向的 client-local skills tree（或上述已验证的当前项目
    skills/ 目录）只读 AGENTS.md、CLAUDE.md、skills/RESOLVER.md、
    skills/signal-detector/SKILL.md、skills/brain-ops/SKILL.md、skills/ingest/SKILL.md、
-   skills/briefing/SKILL.md、skills/ingest/references/post-ingest-briefing.md、
    skills/ingest/references/microsoft-connectors.md、skills/ingest/references/
    outlook-email-timeline-reconciliation.md、skills/ingest/references/
    teams-chat-list-messages.md、skills/ingest/references/client-write-through.md、
@@ -160,31 +160,63 @@ Skill：`skills/ingest/SKILL.md` → `skills/enrich/SKILL.md` → `skills/daily-
    connector 身份字段，再进行 semantic routing；不把附件 materialize，除非用户明确要求。
 3. 对本轮选中的高信号 person/company 调用下方 `skills/enrich/SKILL.md` 子流程；其他
    entity/project/workstream/action 按 ingest skill 路由。先完成本轮适用的 evidence、
-   semantic routing 和本地写入准备，不因等待报告或 action interview 改变 ingest 的证据顺序。
+    semantic routing 和本地写入准备，不因等待下游 action interview 改变 ingest 的证据顺序。
 4. 本自动化采用 client-only 写入覆盖：raw evidence 按 reference 直接落盘到已验证的
    client Vault；canonical semantic page 使用本地-only `voltmind put-local`，不得改用
    普通 `voltmind put`，不得调用 remote `put_page`、图谱、标签、receipt 注册、sync 或
    其他 Host 工具。保留并报告 pending receipt；本地 evidence/page/receipt 未完成并回读
    校验前不推进 `local_capture_checkpoint`，`remote_sync_checkpoint` 保持 `pending`。
-5. 完成本地 evidence/page/receipt 校验后，必须显式调用 `skills/briefing/SKILL.md`，并按
-   `skills/ingest/references/post-ingest-briefing.md` 生成一份当日要事报告；这是 ingest
-   的完成阶段，不是可选的 reference 路由。每个外层请求/批次只生成一份，零 action、无
-   新信号或仅重复证据也必须生成。`daily-task-prep` 只负责额外的会议准备，不替代 briefing。
-   Host/recall 不可用时仍先用已验证的本地和可访问来源生成报告，并明确写出不可覆盖的
-   数据范围、时间截点和失败项；不得以不可用为理由静默跳过 briefing。
-6. briefing 报告交付后，若 ingest 创建了 `state/actions/*.md`，再调用
+5. 完成本地 evidence/page/receipt 校验后，交付本轮 ingest receipt，并保留 pending
+   receipt、connector/网络失败和 local/remote checkpoint 状态；不要在此运行独立报告流程。
+6. 若 ingest 创建了 `state/actions/*.md`，再调用
    `skills/schedule-actions/SKILL.md` 的 interview 流程并通知我确认；不得在无人值守任务中
    直接注册或执行 action。删除、合并、
    跨所有权写入、费用、外部副作用或需用户确认的动作停止并请求确认；不使用 `--force`。
 
 【输出与静默规则】
 沿用 ingest/enrich skill 的输出格式，并补充本轮事件 coverage、local/remote checkpoint、
-pending receipt、connector/网络失败、briefing 报告是否已生成及其覆盖缺口、跳过的
-Host/recall 维度和需要用户完成的后续动作。briefing 报告必须先于 action interview 出现；
-报告建议不等于执行同意。
+pending receipt、connector/网络失败、跳过的 Host 维度和需要用户完成的后续动作。
+从 evidence 提取出的 action 建议不等于执行同意。
 不得输出 secret、token、database URL、真实 Vault 路径、完整私有消息或 credential；任务
 必须幂等，正常结果遵守 HEARTBEAT 静默规则。
 ```
+
+## Schedule Prompt 2：独立每日要事报告
+
+周期和时间：按用户在 ChatGPT Desktop 中配置，建议与 ingest 错开
+Skill：`skills/briefing/SKILL.md`
+数据连接：已授权的 Host MCP；只使用任务配置指定的 brain/source
+
+```text
+独立生成我的每日要事报告，不依赖本次对话、最近一次 ingest 或 ingest 的上下文。
+
+先读取 `skills/briefing/SKILL.md` 和 `skills/briefing/references/context-pull.md`，
+然后执行其中的检索和汇报流程。目标连接是任务配置中已验证的 Host MCP，brain 是
+`<brain-id>`，source 是 `<source-id>`；使用 `Asia/Shanghai`，除非任务配置明确指定
+其他时区。先调用可用的 `whoami` 验证 source scope；无法验证时报告阻塞，不要静默
+切换到 default source 或扩大到其他 source。
+
+使用 Host MCP 的 `search`、`query`、`list_pages`、`get_page`、`get_timeline` 查询
+当前事项和历史上的未完成内容，包括会议参与者背景、项目/交易节点、逾期 action、
+承诺双方和阻塞项。先做 scoped inventory，再读取选中页面及时间线核实状态、owner、
+deadline、证据和修订；不要只看最近 ingest 或最近更新的页面。严格遵守实际工具 schema、
+source/visibility 限制和 list_pages 的上限，不伪造分页或上游 gbrain 不存在的参数。
+
+按优先级输出：今日要务、今日会议与准备、未来 7 天关键节点、逾期和到期 action、
+“我欠别人”和“别人欠我”的承诺、过去 24 小时（或上次成功报告 cutoff 后）的变化、
+相关人物/活动、与今日有关的陈旧证据和覆盖缺口。每条事实给出 `[Source: ...]`、
+日期、owner、状态和建议的下一步；建议不能写成已确认承诺。区分“已检查为空”和
+“工具不可用/覆盖不完整”，保留生成时间和数据截点。
+
+这是只读报告任务：不要调用 ingest、写 Brain 页面、推进 recall cursor、运行维护、
+发送消息、安排 action 或发起用户采访。即使无变化也返回完整报告；没有上次成功报告
+时不要声称完成 since-last-run diff。工具失败时交付已验证的部分，并明确缺失范围。
+```
+
+启用前先手动运行一次：确认报告能查到一条较早但仍未完成的事项、一条近期变化，并且
+严格遵守 source 边界；当某个工具不可用时，应返回已验证部分和覆盖缺口。调度注册是
+单独的 Desktop automation 设置动作，不要把 token、真实 Vault 路径或 Host clone 路径
+写进 prompt。
 
 ## Enrich 子流程 Prompt：实体增量补全（本轮 ingest 必须调用，不单独注册）
 
@@ -214,7 +246,7 @@ raw evidence 按适用 reference 直接落盘到已验证 Vault；canonical sema
 路径、完整私有消息或 credential。
 ```
 
-## Schedule Prompt 2：夜间 Brain 维护
+## Schedule Prompt 3：夜间 Brain 维护
 
 周期：每天 02:15，`Asia/Shanghai`
 Skill：`skills/maintain/SKILL.md`

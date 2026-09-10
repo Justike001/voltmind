@@ -38,7 +38,7 @@
     {
       "name": "briefing",
       "path": "briefing/SKILL.md",
-      "description": "Compile or refresh today's actionable report across meetings, projects, tasks, and commitments, including after ingest."
+      "description": "Independently compile requested or scheduled daily briefings from current and historical Host source context across meetings, projects, tasks, and commitments."
     },
     {
       "name": "migrate",

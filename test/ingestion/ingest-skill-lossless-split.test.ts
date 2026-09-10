@@ -3,9 +3,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 
 const skillPath = 'skills/ingest/SKILL.md';
-// Canonical reconstruction including the authorized post-ingest daily report
-// handoff before action scheduling; reference bodies remain hash-pinned.
-const canonicalSha256 = '7664dadeb387a56f415f4cfbe8836e93f7c1b5625b52d32cb35d5abe3b471f93';
+// Canonical reconstruction after separating daily briefing from ingest.
+// Evidence and action handoffs remain pinned across the reference split.
+const canonicalSha256 = '1ac6743c26bb35b99bafed9ba388203c3f3be268ece3ea8cc87c6c3846edd0b4';
 const referenceNames = [
   'clarification-and-semantic-commit',
   'microsoft-connectors',
@@ -16,7 +16,7 @@ const referenceNames = [
   'teams-cold-start',
 ] as const;
 const additiveReferenceNames = [
-  'post-ingest-briefing',
+  'completion-handoff',
   'outlook-email-timeline-reconciliation',
   'client-semantic-relations',
   'teams-chat-list-messages',

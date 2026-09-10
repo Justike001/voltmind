@@ -171,9 +171,9 @@ incomplete or ambiguous records.
 ## Completion handoff
 
 For a user-visible ingest, read
-`skills/ingest/references/post-ingest-briefing.md`. The outermost request emits
-one current daily report before action scheduling, including zero-action runs.
-When invoked inside ingest, return results to its owner without a second report.
+`skills/ingest/references/completion-handoff.md`. The outermost request returns
+one ingest receipt and hands off durable actions. When invoked inside ingest,
+return results to its owner without a second receipt.
 
 ## Output Format
 
