@@ -54,6 +54,49 @@ Choose the mode from the current turn:
 
 ## Interview Workflow
 
+### Fast local CLI path (preferred)
+
+Use `voltmind actions schedule` for mechanical queue and decision work instead
+of generating PowerShell/Python edits on each turn. This CLI reads only local
+Markdown and never opens a database, calls a model, executes an action, or
+registers an automation. Select the exact source repository as `--vault`; do
+not infer a private path. On Windows resolve the user-scoped
+`VOLTMIND_LOCAL_BRAIN_VAULT` into the process environment without printing it.
+
+In a source checkout, prefer `bun scripts/action-schedule.ts <subcommand>`
+to avoid the main CLI import graph. Windows agents can use
+`powershell -NoProfile -File scripts/action-schedule.ps1 <subcommand>`;
+the wrapper resolves the user-scoped vault environment variable automatically.
+Both entrypoints accept the same arguments and JSON decision files. See
+`docs/guides/action-schedule-cli.md` for examples.
+
+1. `voltmind actions schedule queue --vault <vault>` returns sorted candidates
+   and content hashes. Reminder-only decisions are omitted from subsequent
+   interviews while the action remains open.
+2. `voltmind actions schedule show state/actions/<slug> --vault <vault>` returns
+   the full action and hash. Read cited raw evidence as described below before
+   the decision gate. Retain the packet across the user reply; do not rebuild
+   the queue or repeat unchanged evidence reads after every answer.
+3. Save the user's answer as UTF-8 JSON, then call
+   `voltmind actions schedule decide --file decision.json --vault <vault>`.
+   JSON fields: `slug`, `expected_sha256` from show, `decision`, `source`
+   (dated user confirmation citation), optional `note`, `run_at`, `timezone`.
+   Choices map to `update`, `reminder`, `obsolete`, `skip`. `update` requires
+   a current-status note and future ISO time with offset plus IANA timezone.
+   Use `--dry-run` to preview. Writes preserve unrelated fields and body,
+   append a cited decision, and reject stale hashes or concurrent CLI writes.
+4. Use the returned `next` directly. Carry skipped slugs via
+   `--exclude state/actions/a,state/actions/b` for the current interview only.
+   Skip does not modify the action. Each decision remains individually authorized.
+
+An update saves a requested schedule with status open; it does not confirm a
+contract or fabricate registration/approval. Continue the safety and Desktop
+registration steps below. Existing automation IDs require reconciliation through
+the Desktop tool before CLI decisions. Remote synchronization is deferred in the
+receipt: perform the exact-file best-effort write-through after the durable local
+write, and report failures without reopening local Postgres. This path is also
+the preferred ingest completion handoff.
+
 ### 1. Build the queue
 
 1. Resolve the local vault root. Prefer the configured client vault path; then

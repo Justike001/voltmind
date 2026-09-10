@@ -20,6 +20,11 @@ versions, resolved brain/source identities and receipt status to action handling
 Do not expose private vault paths in public artifacts. High-impact clarification
 gates still apply before dependent canonical writes.
 
+Prefer the `voltmind actions schedule` local CLI fast path in that skill for
+queue discovery and persisting each user decision. Reuse the returned next item
+and retained evidence packet instead of rescanning or generating an edit script
+after each answer. The CLI does not register Desktop automations.
+
 ## Batch and reporting boundary
 
 The outermost user-visible request owns one receipt; nested specialized skills

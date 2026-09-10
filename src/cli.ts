@@ -1090,6 +1090,11 @@ async function runPutLocal(args: string[]): Promise<void> {
 }
 
 async function handleCliOnly(command: string, args: string[]) {
+  if (command === 'actions' && args[0] === 'schedule') {
+    const { runActionSchedule } = await import('./commands/action-schedule.ts');
+    await runActionSchedule(args.slice(1));
+    return;
+  }
   // Thin-client guard: refuse DB-bound commands cleanly with a pinpoint
   // hint instead of letting them fail later inside connectEngine or
   // mid-handler. v0.31.1 routes through `refuseThinClient` so every
@@ -2533,6 +2538,7 @@ SKILL PLATFORM
 
 ACTION SYSTEM
   actions scan                       Index state/actions/*.md
+  actions schedule                   Local action interview queue and decisions (no DB)
   actions list [--due]               List action tasks by risk/status
   actions approve <slug>             Approve a gated action
   actions run <slug> [--execute]     Prepare or execute an agent action

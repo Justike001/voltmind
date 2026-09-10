@@ -16,6 +16,7 @@ function printHelp(): void {
   console.log(`voltmind actions - scan, review, and prepare agent-assisted actions
 
 USAGE
+  voltmind actions schedule queue|show|decide --help
   voltmind actions scan [--repo PATH]
   voltmind actions list [--status open|on_schedule|in_progress|blocked|canceled] [--risk low|medium|high|restricted] [--due] [--limit N] [--json]
   voltmind actions get <slug> [--json]
