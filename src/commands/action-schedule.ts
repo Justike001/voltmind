@@ -2,13 +2,14 @@
 import { readFileSync, readdirSync, realpathSync, writeFileSync, renameSync, unlinkSync, openSync, closeSync } from 'node:fs';
 import { resolve, relative, isAbsolute, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { parseArgs } from 'node:util';
 import { safeLoad, safeDump } from 'js-yaml';
 
 type Fields = Record<string, any>;
 export interface ScheduleDecision {
   slug: string;
   expected_sha256: string;
-  decision: 'update' | 'reminder' | 'obsolete' | 'skip';
+  decision: 'update' | 'reminder' | 'obsolete' | 'complete' | 'skip';
   source: string;
   note?: string;
   run_at?: string;
@@ -38,24 +39,44 @@ function readAction(root: string, slug: string) {
   return { path, raw, fields, body: raw.slice(match[0].length), sha256: hash(raw) };
 }
 function candidate(f: Fields): boolean {
-  return !f.archived && (f.status === 'open' || (f.status === 'on_schedule' && !f.automation?.desktop_automation_id))
+  return !f.archived && !f.automation?.desktop_automation_id && ['open', 'on_schedule'].includes(f.status)
     && f.automation?.interview_status !== 'reminder_only';
 }
-export function scheduleQueue(vault: string, exclude: string[] = []) {
+export function scanScheduleQueue(vault: string, exclude: string[] = []) {
   const root = realpathSync(vault);
+  const warnings: { slug: string; code: string }[] = [];
   let names: string[];
   try { names = readdirSync(confined(root, join(root, 'state/actions'))); }
-  catch (e: any) { if (e.code === 'ENOENT') return []; throw e; }
+  catch (e: any) { if (e.code === 'ENOENT') return { items: [], warnings }; throw e; }
   const rank: Record<string, number> = { high: 0, medium: 1, low: 2 };
   const due = (value: unknown) => { const n = Date.parse(String(value ?? '')); return Number.isFinite(n) ? n : Infinity; };
-  return names.filter(n => /^[a-zA-Z0-9_-]+\.md$/.test(n)).map(n => {
+  const items = names.filter(n => /^[a-zA-Z0-9_-]+\.md$/.test(n) && !/^(readme|index)\.md$/i.test(n)).flatMap(n => {
     const slug = 'state/actions/' + n.slice(0, -3);
-    const a = readAction(root, slug);
-    return { slug, sha256: a.sha256, title: a.fields.title, status: a.fields.status,
-      due: a.fields.due ?? a.fields.due_at, priority: a.fields.priority, fields: a.fields };
-  }).filter(a => candidate(a.fields) && !exclude.includes(a.slug))
+    if (exclude.includes(slug)) return [];
+    try {
+      const a = readAction(root, slug);
+      if (!candidate(a.fields) || (a.fields.type && a.fields.type !== 'action')) return [];
+      return [{ slug, sha256: a.sha256, title: a.fields.title, status: a.fields.status,
+        due: a.fields.due ?? a.fields.due_at, priority: a.fields.priority,
+        objective: a.fields.agent_contract?.objective ?? null }];
+    } catch {
+      // A bad sibling must not prevent processing valid actions or hide a committed receipt.
+      // Do not include filesystem error messages: they may expose private absolute paths.
+      warnings.push({ slug, code: 'unreadable_action' });
+      return [];
+    }
+  })
     .sort((a, b) => (due(a.due) - due(b.due) || (rank[a.priority] ?? 3) - (rank[b.priority] ?? 3) || a.slug.localeCompare(b.slug)))
-    .map(({ fields, ...summary }) => summary);
+  return { items, warnings };
+}
+
+export function scheduleQueue(vault: string, exclude: string[] = []) {
+  return scanScheduleQueue(vault, exclude).items;
+}
+
+export function nextScheduleCard(vault: string, exclude: string[] = []) {
+  const { items, warnings } = scanScheduleQueue(vault, exclude);
+  return { next: items[0] ?? null, remaining: items.length, warnings, evidence_status: 'not_loaded' };
 }
 
 export function schedulePacket(vault: string, slug: string) {
@@ -67,18 +88,30 @@ export function schedulePacket(vault: string, slug: string) {
 
 export function applyScheduleDecision(vault: string, input: ScheduleDecision, dryRun = false) {
   const root = realpathSync(vault);
-  if (!['update', 'reminder', 'obsolete', 'skip'].includes(input.decision)) throw new Error('Unknown decision');
+  if (!input || !['update', 'reminder', 'obsolete', 'complete', 'skip'].includes(input.decision)) throw new Error('Unknown decision');
+  if (typeof input.expected_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(input.expected_sha256)) throw new Error('expected_sha256 from the action card or show is required');
+  for (const field of ['source', 'note', 'run_at', 'timezone'] as const) {
+    if (input[field] !== undefined && typeof input[field] !== 'string') throw new Error(`${field} must be a string`);
+  }
+  const requestHash = hash(JSON.stringify([input.slug, input.expected_sha256, input.decision, input.source, input.note, input.run_at, input.timezone]));
   const path = actionPath(root, input.slug);
   const lock = path + '.schedule.lock';
   const fd = openSync(lock, 'wx');
   let temp: string | undefined;
   try {
     const a = readAction(root, input.slug);
+    if (a.fields.schedule_decision?.request_sha256 === requestHash) {
+      return { slug: input.slug, status: a.fields.status, changed: false, replayed: true,
+        sha256: a.sha256, remote_sync: 'deferred', next_step: 'already_applied' };
+    }
     if (a.sha256 !== input.expected_sha256) throw new Error('Action changed; read it again before applying the decision');
     if (input.decision === 'skip') return { slug: input.slug, status: 'skipped', changed: false, sha256: a.sha256 };
-    if (!candidate(a.fields)) throw new Error('Action is not an interview candidate');
     if (!input.source?.trim() || /[\r\n\]]/.test(input.source)) throw new Error('A single-line user confirmation source is required');
     if (a.fields.automation?.desktop_automation_id) throw new Error('Reconcile the existing Desktop automation before changing this action');
+    // An explicit completion/closure also applies to manual reminders and blocked actions.
+    const terminalDecision = input.decision === 'complete' || input.decision === 'obsolete';
+    const closable = !a.fields.archived && ['open', 'blocked', 'on_schedule'].includes(a.fields.status);
+    if (!(terminalDecision ? closable : candidate(a.fields))) throw new Error('Action is not an interview candidate');
     const f = a.fields;
     const automation = f.automation ??= {};
     if (input.decision === 'update') {
@@ -95,15 +128,16 @@ export function applyScheduleDecision(vault: string, input: ScheduleDecision, dr
       automation.interview_status = 'schedule_requested';
       // Choosing a time does not approve an execution contract or register a task.
     } else {
-      f.status = input.decision === 'obsolete' ? 'canceled' : 'open';
+      f.status = input.decision === 'obsolete' ? 'canceled' : input.decision === 'complete' ? 'done' : 'open';
       automation.eligible = false;
       automation.mode = 'manual';
-      automation.interview_status = input.decision === 'obsolete' ? 'obsolete' : 'reminder_only';
+      automation.interview_status = input.decision === 'obsolete' ? 'obsolete' : input.decision === 'complete' ? 'completed' : 'reminder_only';
       delete automation.run_at;
       delete automation.schedule;
       delete automation.idempotency_key;
     }
     f.updated = new Date().toISOString().slice(0, 10);
+    f.schedule_decision = { request_sha256: requestHash, decision: input.decision, applied_at: new Date().toISOString() };
     const note = (input.note ?? '').replace(/\r?\n/g, ' ');
     const body = a.body.replace(/\r\n/g, '\n') + `\n- ${new Date().toISOString()} | Schedule decision: ${input.decision}${note ? ' — ' + note : ''} [Source: ${input.source}]\n`;
     const content = '---\n' + safeDump(f, { noRefs: true, lineWidth: -1 }) + '---\n' + body;
@@ -125,37 +159,105 @@ export function applyScheduleDecision(vault: string, input: ScheduleDecision, dr
   }
 }
 
+/** Direct terminal interaction avoids a model/tool round trip for every lifecycle choice. */
+export async function reviewScheduleQueue(vault: string, io: {
+  question: (prompt: string) => Promise<string>;
+  report: (text: string) => void;
+}, exclude: string[] = []) {
+  const { items, warnings } = scanScheduleQueue(vault, exclude);
+  const changed: string[] = [];
+  const executionRequested: string[] = [];
+  const skipped: string[] = [];
+  const choices: Record<string, ScheduleDecision['decision']> = { '1': 'complete', '2': 'obsolete', '3': 'reminder', '4': 'skip' };
+  for (const item of items) {
+    while (true) {
+      const answer = (await io.question(`${item.title ?? item.slug}\n${item.slug}\n1 Complete | 2 Obsolete | 3 Manual reminder | 4 Skip | 5 Arrange with agent | q Quit\n> `)).trim();
+      if (answer === 'q') return { changed, execution_requested: executionRequested, skipped, warnings, remote_sync: 'deferred' };
+      if (answer === '5') {
+        executionRequested.push(item.slug);
+        io.report('Execution preparation requested; continue this action with the agent. No task registered.');
+        break;
+      }
+      const choice = choices[answer];
+      if (!choice) { io.report('Choose 1-5 or q.'); continue; }
+      try {
+        const receipt = applyScheduleDecision(vault, { slug: item.slug, expected_sha256: item.sha256,
+          decision: choice, source: `User via local review, ${new Date().toISOString()}` });
+        if (receipt.changed) changed.push(item.slug);
+        if (choice === 'skip') skipped.push(item.slug);
+        io.report(`${receipt.status}: ${item.slug}`);
+      } catch (error) {
+        // Do not refresh the SHA and auto-apply a decision to an unseen revision.
+        warnings.push({ slug: item.slug, code: 'decision_failed' });
+        io.report(error instanceof Error ? error.message : String(error));
+      }
+      break;
+    }
+  }
+  return { changed, execution_requested: executionRequested, skipped, warnings, remote_sync: 'deferred' };
+}
+
 export async function runActionSchedule(args: string[]): Promise<void> {
-  if (!args.length || args.some(a => ['help', '--help', '-h'].includes(a))) {
+  const started = performance.now();
+  const { values, positionals } = parseArgs({ args, allowPositionals: true, strict: true, options: {
+    vault: { type: 'string' }, file: { type: 'string' }, exclude: { type: 'string' },
+    decision: { type: 'string' }, expect: { type: 'string' }, source: { type: 'string' },
+    note: { type: 'string' }, 'run-at': { type: 'string' }, timezone: { type: 'string' },
+    next: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' },
+    help: { type: 'boolean', short: 'h' },
+  } });
+  if (!args.length || values.help || positionals[0] === 'help') {
     console.log(`voltmind actions schedule — local Markdown, no database or model calls
   queue --vault PATH [--exclude SLUG,SLUG]
+  next --vault PATH [--exclude SLUG,SLUG]
+  review --vault PATH                 Interactive terminal lifecycle review (no model)
   show SLUG --vault PATH
-  decide --file decision.json --vault PATH [--dry-run] [--exclude SLUG,SLUG]
+  decide SLUG --decision complete|obsolete|reminder|skip|update --expect SHA256
+    --source "User, YYYY-MM-DD" [--note TEXT] [--run-at ISO --timezone IANA]
+    [--vault PATH] [--next] [--exclude SLUG,SLUG] [--dry-run]
+  decide --file decision.json [--vault PATH] [--next] [--dry-run]
 
-All results are JSON. --vault defaults to VOLTMIND_LOCAL_BRAIN_VAULT.
+Results are JSON except interactive review prompts. --vault defaults to VOLTMIND_LOCAL_BRAIN_VAULT.
 Decision JSON: {slug, expected_sha256, decision, source, note?, run_at?, timezone?}
-Decisions: update, reminder, obsolete, skip. update saves a requested time;
+Decisions: update, reminder, obsolete, complete, skip. update saves a requested time;
 the agent must confirm the contract and use the Desktop automation tool.
-decide returns the next queue item. Carry skipped slugs with --exclude.
+decide returns a receipt without scanning the queue. --next adds a compact next card.
+next cards are for lifecycle triage; raw evidence is read only when planning execution.
+Exact decision retries return replayed:true without a second write.
 Choose the exact source repository as --vault; this command never guesses a source.`);
     return;
   }
-  const value = (flag: string) => { const i = args.indexOf(flag); return i < 0 ? undefined : args[i + 1]; };
-  const allowed = new Set(['--vault', '--file', '--exclude', '--dry-run', '--json']);
-  for (const arg of args) if (arg.startsWith('--') && !allowed.has(arg)) throw new Error(`Unknown option: ${arg}`);
-  const vault = value('--vault') ?? process.env.VOLTMIND_LOCAL_BRAIN_VAULT;
+  const vault = values.vault ?? process.env.VOLTMIND_LOCAL_BRAIN_VAULT;
   if (!vault) throw new Error('Set VOLTMIND_LOCAL_BRAIN_VAULT or pass --vault (exact source repository)');
-  const exclude = (value('--exclude') ?? '').split(',').filter(Boolean);
+  const exclude = (values.exclude ?? '').split(',').filter(Boolean);
   let result: unknown;
-  if (args[0] === 'queue') result = scheduleQueue(vault, exclude);
-  else if (args[0] === 'show') result = schedulePacket(vault, args[1]);
-  else if (args[0] === 'decide') {
-    const file = value('--file');
-    if (!file) throw new Error('decide requires --file decision.json');
-    const input = JSON.parse(readFileSync(file, 'utf8').replace(/^\uFEFF/, '')) as ScheduleDecision;
-    const receipt = applyScheduleDecision(vault, input, args.includes('--dry-run'));
-    const queue = scheduleQueue(vault, [...exclude, input.slug]);
-    result = { receipt, next: queue[0] ?? null, remaining: queue.length };
-  } else throw new Error('Expected queue, show, or decide');
+  if (positionals[0] === 'queue') result = { ...scanScheduleQueue(vault, exclude), elapsed_ms: performance.now() - started };
+  else if (positionals[0] === 'next') result = { ...nextScheduleCard(vault, exclude), elapsed_ms: performance.now() - started };
+  else if (positionals[0] === 'show') result = schedulePacket(vault, positionals[1]);
+  else if (positionals[0] === 'review') {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('review requires an interactive terminal; agents should use next/decide');
+    if (values['dry-run'] || values.file || values.decision) throw new Error('review takes interactive choices only');
+    const { createInterface } = await import('node:readline/promises');
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try { result = await reviewScheduleQueue(vault, { question: prompt => rl.question(prompt), report: message => console.log(message) }, exclude); }
+    finally { rl.close(); }
+  }
+  else if (positionals[0] === 'decide') {
+    if (values.file && (positionals[1] || ['decision', 'expect', 'source', 'note', 'run-at', 'timezone'].some(k => values[k as keyof typeof values] !== undefined))) {
+      throw new Error('Use either --file or direct decision arguments, not both');
+    }
+    const input = values.file
+      ? JSON.parse(readFileSync(values.file, 'utf8').replace(/^\uFEFF/, '')) as ScheduleDecision
+      : { slug: positionals[1], expected_sha256: values.expect!, decision: values.decision as ScheduleDecision['decision'],
+        source: values.source!, note: values.note, run_at: values['run-at'], timezone: values.timezone };
+    const receipt = applyScheduleDecision(vault, input, values['dry-run']);
+    let continuation: unknown = {};
+    if (values.next && !values['dry-run']) {
+      try { continuation = nextScheduleCard(vault, [...exclude, input.slug]); }
+      catch { continuation = { next: null, remaining: null, warnings: [{ code: 'next_unavailable' }] }; }
+    }
+    // Never let a derived queue failure turn an already committed decision into an error.
+    result = { receipt, ...continuation as object, elapsed_ms: performance.now() - started };
+  } else throw new Error('Expected queue, next, show, decide, or review');
   console.log(JSON.stringify(result, null, 2));
 }

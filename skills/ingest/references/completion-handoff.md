@@ -12,7 +12,7 @@ meeting/media/idea ingestion. It owns the receipt and action handoff.
    or registration. Preserve evidence links and coverage cutoffs. A partial
    ingest is not complete; durable local evidence remains durable on sync failure.
 3. Continue skills/schedule-actions/SKILL.md for durable local action candidates,
-   preserving its raw-evidence-first handoff and consent requirements. Extraction
+   preserving its lifecycle triage and execution consent requirements. Extraction
    and receipt delivery do not constitute execution consent.
 
 Pass exact local action paths/slugs, raw source references, event identities and
@@ -21,9 +21,13 @@ Do not expose private vault paths in public artifacts. High-impact clarification
 gates still apply before dependent canonical writes.
 
 Prefer the `voltmind actions schedule` local CLI fast path in that skill for
-queue discovery and persisting each user decision. Reuse the returned next item
-and retained evidence packet instead of rescanning or generating an edit script
-after each answer. The CLI does not register Desktop automations.
+queue discovery and persisting each user decision. Start with `next`; use direct
+`decide SLUG --decision ... --expect SHA --source ... --next` for lifecycle
+answers. Complete, obsolete, reminder-only, and skip replies do not need new
+Evidence Recheck, put-local, or automation-memory writes. Reuse the returned
+card; load raw evidence only if the user proceeds with execution preparation.
+Batch decision sync and required memory updates at the interview boundary.
+The CLI does not register Desktop automations.
 
 ## Batch and reporting boundary
 

@@ -124,6 +124,14 @@ Stop at the first step that gives enough context.
 After creating or updating any brain page on disk, sync immediately so the index
 stays current:
 
+**Local action interview exception:** `voltmind actions schedule decide` writes
+validated, cited lifecycle receipts to canonical local Markdown. During the
+interactive queue, defer remote synchronization to one pass when the interview
+ends or pauses; preserve pending receipts on interruption. Do not add per-choice
+`put-local`, Evidence Recheck, or automation-memory writes. Load raw evidence
+when preparing execution, not merely to record the user's completion/closure.
+See `skills/schedule-actions/SKILL.md` for this specific local path.
+
 ```bash
 voltmind sync --no-pull --no-embed
 ```

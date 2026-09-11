@@ -18,7 +18,7 @@
     {
       "name": "schedule-actions",
       "path": "schedule-actions/SKILL.md",
-      "description": "Re-read local Teams/Outlook evidence to enrich each executable action, clarify only remaining gaps, persist its execution contract and exact time, and register an idempotent ChatGPT desktop scheduled task."
+      "description": "Triage local actions and persist lifecycle decisions with one CLI call; review raw evidence and confirm execution contracts before registering Desktop schedules."
     },
     {
       "name": "query",
