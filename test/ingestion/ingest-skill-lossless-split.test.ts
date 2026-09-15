@@ -5,7 +5,7 @@ import { describe, expect, test } from 'bun:test';
 const skillPath = 'skills/ingest/SKILL.md';
 // Canonical reconstruction after separating daily briefing from ingest.
 // Evidence and action handoffs remain pinned across the reference split.
-const canonicalSha256 = '1ac6743c26bb35b99bafed9ba388203c3f3be268ece3ea8cc87c6c3846edd0b4';
+const canonicalSha256 = '3f4f3799237138bfb05f5b7a86d285b8abe0251f3ab9dfc3f901b8abf264b94c';
 const referenceNames = [
   'clarification-and-semantic-commit',
   'microsoft-connectors',

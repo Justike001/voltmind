@@ -36,7 +36,9 @@ The two surfaces are **not interchangeable**. Pick by op, not by preference.
 
 Use for any operation that has an MCP equivalent: `search`, `query`,
 `put_page`, `get_page`, `find_experts`, `find_orphans`, `find_anomalies`,
-`get_recent_salience`, `find_trajectory`, and so on. The canonical list is
+`get_recent_salience`, `find_trajectory`, `entity`, `synthesize`,
+`list_link_sources`, and so on. `entity` is the zero-LLM structured lookup;
+`synthesize` is the separate slow, paid, LLM-backed reasoning surface. The canonical list is
 the set of ops in `src/core/operations.ts` whose `localOnly` flag is unset
 (or `false`).
 
@@ -143,6 +145,9 @@ proxy for worker env.
 | Operation | Surface | Why |
 |---|---|---|
 | `search` / `query` | HTTP MCP via thin-client | Has MCP op; OAuth-scoped. |
+| `entity` / `synthesize` | HTTP MCP via thin-client | Read-scoped; distinct zero-LLM vs paid-LLM contracts. |
+| `list_link_sources` | HTTP MCP via thin-client | Read-only provenance counts scoped to both link endpoints. |
+| `advisor` | HTTP MCP via thin-client | Admin-scoped, read-only brain diagnostics; workspace diagnostics stay in the local CLI. |
 | `get_page` / `list_pages` | HTTP MCP | Same. |
 | `put_page` | HTTP MCP | Same; respects subagent allow-list when applicable. |
 | `find_experts` / `find_orphans` | HTTP MCP | Same. |

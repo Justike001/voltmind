@@ -44,10 +44,10 @@ describe('BRAIN_TOOL_ALLOWLIST', () => {
     expect(missing).toEqual([]);
   });
 
-  test('contains the v0.15 read-only 10 + put_page + retrieval enrichment readouts', () => {
+  test('contains the v0.15 read-only set + put_page + retrieval and provenance readouts', () => {
     // Retrieval enrichment adds get_recent_salience, find_anomalies, and
     // get_recent_transcripts as read-only tools.
-    expect(BRAIN_TOOL_ALLOWLIST.size).toBe(14);
+    expect(BRAIN_TOOL_ALLOWLIST.size).toBe(15);
     expect(BRAIN_TOOL_ALLOWLIST.has('query')).toBe(true);
     expect(BRAIN_TOOL_ALLOWLIST.has('search')).toBe(true);
     expect(BRAIN_TOOL_ALLOWLIST.has('get_page')).toBe(true);
@@ -56,6 +56,7 @@ describe('BRAIN_TOOL_ALLOWLIST', () => {
     expect(BRAIN_TOOL_ALLOWLIST.has('get_recent_salience')).toBe(true);
     expect(BRAIN_TOOL_ALLOWLIST.has('find_anomalies')).toBe(true);
     expect(BRAIN_TOOL_ALLOWLIST.has('get_recent_transcripts')).toBe(true);
+    expect(BRAIN_TOOL_ALLOWLIST.has('list_link_sources')).toBe(true);
   });
 
   test('does NOT contain destructive ops', () => {

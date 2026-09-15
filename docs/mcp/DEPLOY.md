@@ -188,6 +188,12 @@ or host-maintenance surface area.
 | `write` | `put_page`, `delete_page`, `add_link`, `add_timeline_entry`, `register_tracking_evidence` |
 | `admin` | Client management, token revocation, sweep, local-only ops |
 
+Read-scoped thin clients can call `entity`, `synthesize`, and
+`list_link_sources`. `entity` is zero-LLM; `synthesize` may spend against the
+Host's configured chat provider. `advisor` is read-only but requires `admin`
+because its brain report includes operational health state. Its MCP response
+never includes local workspace diagnostics.
+
 ### 5. Publish Host skills (optional)
 
 Remote skill publication is **off by default**. The `list_skills` and `get_skill`

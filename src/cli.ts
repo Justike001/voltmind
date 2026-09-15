@@ -61,7 +61,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'source-audit', 'import', 'export', 'files', 'file-refs', 'client-roots', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'provision-personal', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'put-local', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages', 'projects']);
+const CLI_ONLY = new Set(['init', 'reinit-pglite', 'upgrade', 'post-upgrade', 'check-update', 'self-upgrade', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'source-audit', 'import', 'export', 'files', 'file-refs', 'client-roots', 'embed', 'serve', 'call', 'config', 'doctor', 'advisor', 'migrate', 'eval', 'sync', 'extract', 'extract-conversation-facts', 'enrich', 'features', 'autopilot', 'graph-query', 'jobs', 'actions', 'agent', 'apply-migrations', 'skillpack-check', 'skillpack', 'resolvers', 'integrity', 'repair-jsonb', 'orphans', 'sources', 'mounts', 'dream', 'check-resolvable', 'routing-eval', 'skillify', 'smoke-test', 'providers', 'storage', 'repos', 'code-def', 'code-refs', 'reindex', 'reindex-code', 'reindex-frontmatter', 'reindex-multimodal', 'backfill', 'code-callers', 'code-callees', 'frontmatter', 'auth', 'friction', 'provision-personal', 'claw-test', 'book-mirror', 'takes', 'think', 'salience', 'anomalies', 'whoknows', 'calibration', 'transcripts', 'models', 'remote', 'recall', 'forget', 'candidates', 'edges-backfill', 'cache', 'ze-switch', 'founder', 'brainstorm', 'lsd', 'schema', 'capture', 'put-local', 'onboard', 'conversation-parser', 'status', 'daemon', 'pages', 'projects']);
 
 const INTERNAL_MIGRATION_CLI = new Set([
   'extract',
@@ -104,6 +104,7 @@ const CLI_ONLY_SELF_HELP = new Set([
   // runCapture saw --help. brainstorm + lsd were already in the set;
   // capture was the holdout.
   'capture',
+  'advisor',
   // v0.37 fix wave (Lane D.4 + CDX2-12): sync's --no-embed flag was
   // unreachable via help because the dispatcher's generic CLI-only
   // short-circuit fired before runSync could print its own usage block.
@@ -1095,6 +1096,39 @@ async function handleCliOnly(command: string, args: string[]) {
     await runActionSchedule(args.slice(1));
     return;
   }
+  if (command === 'advisor') {
+    const { runAdvisorCli } = await import('./commands/advisor.ts');
+    if (args.includes('--help') || args.includes('-h')) {
+      await runAdvisorCli(null, args);
+      return;
+    }
+    const cfg = loadConfig();
+    if (isThinClient(cfg)) {
+      let brain: import('./core/advisor.ts').AdvisorReport;
+      try {
+        const raw = await callRemoteTool(cfg!, 'advisor', {});
+        brain = unpackToolResult<import('./core/advisor.ts').AdvisorReport>(raw);
+      } catch (error) {
+        brain = {
+          schema_version: 1,
+          surface: 'brain',
+          status: 'warnings',
+          findings: [{
+            id: 'brain:advisor-unavailable',
+            surface: 'brain',
+            severity: 'warn',
+            title: 'Remote brain advisor is unavailable',
+            detail: error instanceof Error ? error.message : String(error),
+            next_step: { surface: 'host_cli', command: 'voltmind upgrade' },
+          }],
+          diagnostics: { remote_advisor: 'unavailable' },
+        };
+      }
+      const result = await runAdvisorCli(null, args, brain);
+      process.exitCode = result.exitCode;
+      return;
+    }
+  }
   // Thin-client guard: refuse DB-bound commands cleanly with a pinpoint
   // hint instead of letting them fail later inside connectEngine or
   // mid-handler. v0.31.1 routes through `refuseThinClient` so every
@@ -1949,6 +1983,12 @@ async function handleCliOnly(command: string, args: string[]) {
         // eslint-disable-next-line no-unreachable
         break;
       }
+      case 'advisor': {
+        const { runAdvisorCli } = await import('./commands/advisor.ts');
+        const result = await runAdvisorCli(engine, args);
+        process.exitCode = result.exitCode;
+        break;
+      }
       // v0.38 — Capture: single human-facing entrypoint for ingestion.
       case 'capture': {
         const { runCapture } = await import('./commands/capture.ts');
@@ -2391,6 +2431,7 @@ SETUP
   status [--json]                    Runtime status snapshot
   daemon start|status|stop           Local PGLite daemon
   doctor [--json] [--fast]           Health check
+  advisor [--json]                   Brain diagnostics + local workspace checks
   apply-migrations --yes             Apply schema migrations
 
 PAGES
@@ -2456,6 +2497,7 @@ INSIGHTS
   calibration [--holder H] [--json]  Calibration profile and controls
 
 JUDGMENT READOUTS
+  entity <name>                      Compact entity card (zero LLM)
   takes <slug> [--json]              Read active takes for a page
   takes search <query> [--json]      Search takes without mutating them
   recall [entity] [--json]           One-shot memory recall with provenance
@@ -2466,6 +2508,7 @@ JUDGMENT READOUTS
   conversation-parser list-builtins  Inspect built-in parser patterns
 
 SYNTHESIS
+  synthesize <question>              Read-only cross-page synthesis for agents
   think <question> [--anchor s]      Multi-hop synthesis with cited answer
         [--save] [--take] [--model M]
 

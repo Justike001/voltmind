@@ -289,6 +289,82 @@
       "name": "eiirp",
       "path": "eiirp/SKILL.md",
       "description": "Everything In Its Right Place — post-work organizer. 7-phase audit: inventory, taxonomy, schema check, file, skill graph audit, verify, report."
+    },
+    {
+      "name": "data-loss-gate",
+      "path": "data-loss-gate/SKILL.md",
+      "description": "Require target inspection, impact analysis, recovery planning, and explicit confirmation before destructive bulk operations."
+    },
+    {
+      "name": "draft-in-voice",
+      "path": "draft-in-voice/SKILL.md",
+      "description": "Draft text from a validated voice profile without authorizing publication."
+    },
+    {
+      "name": "fact-check",
+      "path": "fact-check/SKILL.md",
+      "description": "Verify claims against brain evidence and, when the harness provides it, independent web sources."
+    },
+
+    {
+      "name": "two-tier-extraction",
+      "path": "two-tier-extraction/SKILL.md",
+      "description": "Triage large corpora with a utility model and route valuable items to deeper extraction with client-first writes."
+    },
+    {
+      "name": "brain-ingest-gate",
+      "path": "brain-ingest-gate/SKILL.md",
+      "description": "Gate new brain content through entity cards, semantic deduplication, filing, and client-first writes."
+    },
+    {
+      "name": "citation-graph-ingest",
+      "path": "citation-graph-ingest/SKILL.md",
+      "description": "Build typed citation edges and verify their provenance with the source-scoped link diagnostics surface."
+    },
+    {
+      "name": "resolve-before-asking",
+      "path": "resolve-before-asking/SKILL.md",
+      "description": "Use entity cards and cross-page synthesis before asking the user to identify an entity."
+    },
+    {
+      "name": "voltmind-advisor",
+      "path": "voltmind-advisor/SKILL.md",
+      "description": "Read-only brain diagnostics over MCP plus local workspace diagnostics through the VoltMind CLI."
+    },
+    {
+      "name": "blog-ingest",
+      "path": "blog-ingest/SKILL.md",
+      "description": "Ingest a public blog, feed, or newsletter archive using harness-provided web access and client-first semantic writes."
+    },
+    {
+      "name": "brain-link-discipline",
+      "path": "brain-link-discipline/SKILL.md",
+      "description": "Produce verified clickable brain-page links using an authorized local Git or publishing workflow."
+    },
+    {
+      "name": "bulk-ingestion",
+      "path": "bulk-ingestion/SKILL.md",
+      "description": "Run resumable, sampled, checkpointed corpus ingestion with explicit Host and local-harness boundaries."
+    },
+    {
+      "name": "company-brainify",
+      "path": "company-brainify/SKILL.md",
+      "description": "Create a sanitized company brain through an explicitly authorized Host/local Git workflow."
+    },
+    {
+      "name": "context-audit",
+      "path": "context-audit/SKILL.md",
+      "description": "Audit the local always-loaded context stack using harness-provided read and shell tools."
+    },
+    {
+      "name": "measure-before-you-fix",
+      "path": "measure-before-you-fix/SKILL.md",
+      "description": "Measure Host or local-harness latency and freshness before proposing operational fixes."
+    },
+    {
+      "name": "research-compendium",
+      "path": "research-compendium/SKILL.md",
+      "description": "Build a cited multi-source research compendium using harness web tools and explicit Host-only storage or LSD steps."
     }
   ],
   "excluded_skills": [
@@ -303,6 +379,34 @@
     {
       "name": "voltmind-action-runtime",
       "reason": "Internal Craft headless runtime contract loaded by its adapter, not a user-routed skill."
+    },
+    {
+      "name": "chat-connectors",
+      "reason": "The ChatGPT and Claude connector runtime and credential plane are not present in this VoltMind version."
+    },
+    {
+      "name": "conversation-archive",
+      "reason": "Transcript ingest/status and conversation fact extraction are Host-only or absent from thin-client MCP."
+    },
+    {
+      "name": "correction-pipeline",
+      "reason": "Core page repair is usable locally, but the upstream remember and identity-bootstrap command assumptions need adaptation."
+    },
+    {
+      "name": "db-repair",
+      "reason": "Host database repair commands are not implemented in this VoltMind runtime and must never be exposed as thin-client repair tools."
+    },
+    {
+      "name": "google-loops",
+      "reason": "Google connector and open_loops, loops_close, loops_mute, and context_pack operations are not implemented; entity is available independently."
+    },
+    {
+      "name": "postgres-adopt",
+      "reason": "Host engine adoption commands are not implemented in this VoltMind runtime; thin clients do not own the engine."
+    },
+    {
+      "name": "skill-autobench",
+      "reason": "Depends on repo-side transcript mining, skillopt, and eval commands that are not thin-client MCP operations."
     }
   ],
   "dependencies": {

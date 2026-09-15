@@ -47,6 +47,7 @@ import {
 import * as db from './db.ts';
 import { VERSION } from '../version.ts';
 import { hasScope } from './scope.ts';
+import { memoryVerbOperations } from './memory-verbs.ts';
 import {
   getProjectTrackingStatus,
   listProjectTrackingReceipts,
@@ -2113,6 +2114,36 @@ const get_backlinks: Operation = {
   cliHints: { name: 'backlinks', positional: ['slug'] },
 };
 
+const list_link_sources: Operation = {
+  name: 'list_link_sources',
+  description: 'List distinct link provenance sources with edge counts inside the caller\'s authorized source scope.',
+  params: {},
+  scope: 'read',
+  handler: async (ctx) => {
+    const scope = sourceScopeOpts(ctx);
+    const base = `SELECT COALESCE(l.link_source, 'legacy') AS link_source, COUNT(*)::int AS edge_count
+      FROM links l
+      JOIN pages f ON f.id = l.from_page_id
+      JOIN pages t ON t.id = l.to_page_id`;
+    const visible = `f.deleted_at IS NULL AND t.deleted_at IS NULL`;
+    const tail = `GROUP BY COALESCE(l.link_source, 'legacy') ORDER BY edge_count DESC, link_source ASC`;
+    if (scope.sourceIds) {
+      return ctx.engine.executeRaw(
+        `${base} WHERE ${visible} AND f.source_id = ANY($1::text[]) AND t.source_id = ANY($1::text[]) ${tail}`,
+        [scope.sourceIds],
+      );
+    }
+    if (scope.sourceId) {
+      return ctx.engine.executeRaw(
+        `${base} WHERE ${visible} AND f.source_id = $1 AND t.source_id = $1 ${tail}`,
+        [scope.sourceId],
+      );
+    }
+    return ctx.engine.executeRaw(`${base} WHERE ${visible} ${tail}`);
+  },
+  cliHints: { name: 'link-sources' },
+};
+
 /**
  * Hard cap on traverse_graph depth from MCP callers. Each recursive CTE iteration
  * grows a `visited` array per path; in `direction=both` the join is `OR`-based and
@@ -2366,6 +2397,18 @@ const run_doctor: Operation = {
   handler: async (ctx) => {
     const { doctorReportRemote } = await import('../commands/doctor.ts');
     return doctorReportRemote(ctx.engine);
+  },
+  scope: 'admin',
+  localOnly: false,
+};
+
+const advisor: Operation = {
+  name: 'advisor',
+  description: 'Read-only brain diagnostics for thin clients. Returns ranked health findings and Host CLI next steps; never reads the Host agent workspace and never applies fixes.',
+  params: {},
+  handler: async (ctx) => {
+    const { runBrainAdvisor } = await import('./advisor.ts');
+    return runBrainAdvisor(ctx.engine);
   },
   scope: 'admin',
   localOnly: false,
@@ -6105,11 +6148,11 @@ export const operations: Operation[] = [
   // Tags
   add_tag, remove_tag, get_tags,
   // Links
-  add_link, remove_link, get_links, get_backlinks, traverse_graph,
+  add_link, remove_link, get_links, get_backlinks, list_link_sources, traverse_graph,
   // Timeline
   add_timeline_entry, get_timeline,
   // Admin
-  get_stats, get_health, run_doctor, get_versions, revert_version,
+  get_stats, get_health, run_doctor, advisor, get_versions, revert_version,
   // v0.31.1 (Issue #734): thin-client banner identity packet (read-scope, banner-only)
   get_brain_identity,
   // v0.41.19.0: thin-client `voltmind status` payload (admin-scope, sync + cycle only)
@@ -6143,7 +6186,7 @@ export const operations: Operation[] = [
   // v0.36.1.0 (T7) — Hindsight calibration wave: read profile via MCP
   get_calibration_profile,
   // v0.28: Takes + think
-  takes_list, takes_search, think,
+  takes_list, takes_search, think, ...memoryVerbOperations,
   // v0.30: calibration aggregates over takes
   takes_scorecard, takes_calibration,
   // v0.28: whoami + scoped sources management
